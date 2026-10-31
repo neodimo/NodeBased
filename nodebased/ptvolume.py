@@ -55,6 +55,15 @@ EMIT_CELLS_DEEP = 16.0      # ... and on a flight that starts at a smoke vertex 
 EMIT_TAU = 0.5              # a step's optical depth at the region's extinction bound never exceeds this: dense smoke is sampled finer
 EMIT_TAU_CAP = 6.0          # a flight whose optical depth passes this adds nothing more (exp(-6) < 2.5e-3)
 EMIT_SELF = 0.75            # share of the sample's own extinction in the optical depth back to the step's start; the rest is the previous one's
+ENABLE_FIRE_NEE = True      # False leaves the fire reaching smoke only by phase-sampled continuation rays (the baseline the measurements compare against)
+NEE_STREAM = 31             # hashed-number stream ids of the fire sampling at a smoke vertex (cell and point) and of its ratio tracking
+NEE_RATIO_STREAM = 32      # (only `ratio_transmittance`, the unbiased reference, draws from it)
+NEE_DELTA_CELLS = 2.0       # the step the multiple-importance weights assume for the phase-sampled glow, in voxels (any step keeps the sum unbiased; set by the variance sweep)
+NEE_STEP_CELLS = 4.0        # the fire shadow ray's quadrature: one midpoint step per this many voxels ...
+NEE_TAU = 1.0               # ... and per this much optical depth at the volume's extinction bound, at most NEE_MAX_STEPS in all
+NEE_MAX_STEPS = 48
+NEE_HALO = 0.05             # share of the neighbouring cells' emission a cell's sampling weight also holds (trilinear reads one voxel beyond a cell)
+NEE_FLOOR = 1e-3            # share of the samples drawn uniformly over the grid, so no cell the fine field could glow in has zero probability
 ENABLE_SKIP = True          # False keeps the box as the whole majorant (the baseline the measurements compare against)
 MAJORANT_TILE = 16          # voxels along one edge of a cell of the fine majorant grid
 MAJORANT_RATIO = 4          # fine cells along one edge of a cell of the coarse level above it
@@ -75,6 +84,7 @@ class VolumeLayer:
     excl: object = None        # light linking: per volume, the bit mask of the lights it excludes (None: no volume excludes any)
     counts: dict = field(default_factory=lambda: {"tentative": 0, "real": 0, "hops": 0})   # free flight's tallies
     _levels: dict = field(default_factory=dict)
+    _emitter: object = field(default=False, repr=False)
 
     def __len__(self):
         return len(self.preps)
@@ -87,6 +97,63 @@ class VolumeLayer:
         if vi not in self._levels:
             self._levels[vi] = majorant_levels(self.preps[vi].volume, self.majorant[vi])
         return self._levels[vi]
+
+
+    def emitter(self, ignore_switch=False):
+        """The `FireEmitter` that smoke vertices draw next-event fire samples from, or None: next-event sampling needs one volume
+        (`_expected`), a fire-light gain above zero and a fire; its multiple-importance partner is the glow `expected_emission` gathers.
+        `ENABLE_FIRE_NEE` False gives None unless `ignore_switch` (the GPU packs the table and applies its own switch)."""
+        if self._emitter is False:
+            self._emitter = None
+            if _expected(self) and self.settings.fire_light > 0:
+                self._emitter = FireEmitter.build(self.preps[0], self.settings)
+        return self._emitter if (ENABLE_FIRE_NEE or ignore_switch) else None
+
+    def smoke_majorant(self, vi):
+        """A bound on the extinction alone (the glow-carrying `majorant` also holds the flame's peak), for ratio tracking."""
+        return self.settings.density_scale * self.max_density[vi] * self.sigma_t_unit
+
+
+class FireEmitter:
+    """The fire as a light for next-event sampling at smoke vertices (lane 6, fire-in-smoke step).
+
+    The distribution is the coarse emission grid `volumerender.fire_coarse_emission` (the grid `fire_light_grid` blurs), unblurred:
+    each cell's weight is its emission plus a small share of its 3 x 3 x 3 neighbourhood's (trilinear reads one voxel past a cell)
+    plus a uniform floor, so every cell the fine emission could be positive in has a probability. A point is a cell drawn by that
+    probability and a uniform position in it; its density per world volume is `density_at`."""
+
+    def __init__(self, prep, cells, factor, pmf):
+        self.prep = prep
+        self.cells = np.asarray(cells, np.int64)
+        self.factor = factor
+        self.pmf = pmf                                    # (cells,) float64 flat, x-major, sums to 1
+        self.cdf = np.cumsum(pmf)
+        self.cdf[-1] = 1.0
+        self.cell_object = factor * prep.volume.voxel_size
+        self.cell_world = self.cell_object * abs(np.linalg.det(prep.m[:3, :3])) ** (1 / 3)
+        self.delta = NEE_DELTA_CELLS * prep.volume.voxel_size      # the step in the multiple-importance weights (see NEE_DELTA_CELLS)
+
+    @classmethod
+    def build(cls, prep, settings):
+        got = vr.fire_coarse_emission(prep.volume, settings)
+        if got is None:
+            return None
+        coarse, factor = got
+        lum = coarse.sum(axis=-1)
+        padded = np.pad(lum, 1)
+        halo = sum(padded[i:i + lum.shape[0], j:j + lum.shape[1], k:k + lum.shape[2]]
+                   for i in range(3) for j in range(3) for k in range(3)) / 27.0
+        weight = lum + NEE_HALO * halo
+        weight = weight + NEE_FLOOR * weight.mean()
+        return cls(prep, lum.shape, factor, (weight / weight.sum()).reshape(-1))
+
+    def density_at(self, q_object):
+        """Probability density per world volume of drawing object-space points `q_object` (N, 3); 0 outside the grid."""
+        cell = np.floor((q_object - self.prep.box_min) / self.cell_object).astype(np.int64)
+        inside = ((cell >= 0) & (cell < self.cells)).all(axis=1)
+        flat = (np.clip(cell[:, 0], 0, self.cells[0] - 1) * self.cells[1] + np.clip(cell[:, 1], 0, self.cells[1] - 1)) * self.cells[2] \
+            + np.clip(cell[:, 2], 0, self.cells[2] - 1)
+        return np.where(inside, self.pmf[flat], 0.0) / self.cell_world ** 3
 
 
 def build(scene, settings=None):
@@ -261,14 +328,16 @@ def _uniform(keys, turn, volume, step, slot, pcg, rand):
     return rand(key, step * 4 + slot)
 
 
-def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None):
+def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None, mis=None):
     """Delta tracking of unit-direction rays from `o` up to distance `t_end` (per ray; may be inf).
 
     Returns `(t_event, emission, owner)`: the distance of each ray's first real collision (inf for none), the fire's
     contribution along the ray, (N, 3), before the path throughput multiplies it, and the index of the volume
     that collision happened in (-1 for none). Absorption and scattering are the caller's. With one volume the fire's
     contribution is `expected_emission` over the whole flight (`deep` marks the rays that start at a smoke vertex); with several
-    it is summed at the tentative collisions up to the first real one."""
+    it is summed at the tentative collisions up to the first real one. `mis` is `(on, pdf)` per ray: the rays that leave a smoke
+    vertex whose fire was also sampled by next-event estimation (`fire_nee`), with the phase pdf their direction was drawn with;
+    their glow is weighted against that sampling (`expected_emission`)."""
     from .pathtrace import pcg, rand
     n = len(o)
     t_event = np.full(n, np.inf)
@@ -340,7 +409,7 @@ def free_flight(layer, o, d, t_end, keys, turn, cancel=None, deep=None):
         keep = t <= t_event[ray]
         np.add.at(emission, ray[keep], weight[keep])
     if _expected(layer):
-        emission = expected_emission(layer, 0, o, d, t_end, keys, turn, np.zeros(n, bool) if deep is None else deep, cancel)
+        emission = expected_emission(layer, 0, o, d, t_end, keys, turn, np.zeros(n, bool) if deep is None else deep, cancel, mis)
     return t_event, emission, owner
 
 
@@ -349,16 +418,21 @@ def _expected(layer):
     return ENABLE_EXPECTED_EMISSION and len(layer.preps) == 1 and layer.fire_table is not None
 
 
-def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None):
+def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None, mis=None):
     """The fire's emission along rays of one volume up to `t_end`, weighted by the smoke's transmittance from the ray's start
     (N, 3): the expected value of what delta tracking's tentative collisions add, found by jittered quadrature over the same
     regions (a region with a zero majorant holds neither collision nor glow). One sample per `EMIT_CELLS` voxels (`EMIT_CELLS_DEEP`
     where `deep`), stratified with the same hashed numbers as the shader's `vol_emission`, which this mirrors line for line.
     Used for one volume; with several the other volumes' transmittance is unknown here and `free_flight` sums the glow at the
-    collisions as before."""
+    collisions as before. `mis` (`on`, `pdf`) marks the rays that leave a smoke vertex which also sampled the fire as a light
+    (`fire_nee`): a sample at distance t is weighted `pdf / (pdf + p_V delta t^2)` against that sampling, `pdf` being the phase pdf the
+    ray's direction was drawn with, `p_V` the emitter's density per world volume at the sample and `delta` the quadrature step."""
     from .pathtrace import pcg, rand
     n = len(o)
     out = np.zeros((n, 3))
+    emitter = layer.emitter() if mis is not None else None
+    mis_on = np.zeros(n, bool) if emitter is None else np.asarray(mis[0], bool)
+    mis_pdf = None if emitter is None else np.asarray(mis[1], np.float64)
     settings = layer.settings
     prep = layer.preps[vi]
     volume = prep.volume
@@ -416,6 +490,12 @@ def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None):
                     e += tint * (settings.flame_intensity * np.maximum(_trilinear(volume.flame, g), 0.0))[:, None]
                 sigma_t = layer.sigma_t_unit * sigma
                 blend = EMIT_SELF * sigma_t + (1.0 - EMIT_SELF) * sigma_prev[r]
+                if mis_on[r].any():
+                    on = mis_on[r]
+                    pv = emitter.density_at(prep.to_object(o[r] + d[r] * t[:, None]))
+                    ph = mis_pdf[r]
+                    weight = ph / np.maximum(ph + pv * emitter.delta * t * t, 1e-300)
+                    e = e * np.where(on, weight, 1.0)[:, None]
                 out[r] += e * (hh * np.exp(-(tau[r] + blend * hh * ju)))[:, None]
                 tau[r] += sigma_t * hh
                 sigma_prev[r] = sigma_t
@@ -426,6 +506,135 @@ def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None):
         position[alive] = np.maximum(leave, here) + 1e-5
         alive = alive[~done & (position[alive] < t1[alive])]
     return out
+
+
+def _emission_at(layer, vi, g):
+    """The fire's emission (N, 3) at grid-space points `g` of volume `vi`: what `expected_emission` weights at a sample."""
+    settings = layer.settings
+    volume = layer.preps[vi].volume
+    sigma = settings.density_scale * _trilinear(volume.density, g)
+    e = np.zeros((len(g), 3))
+    if settings.fire_intensity > 0 and volume.temperature is not None:
+        kelvin = settings.temperature_scale * _trilinear(volume.temperature, g)
+        glow = (kelvin > settings.fire_threshold) & (sigma > 0)
+        if glow.any():
+            e[glow] += vr.fire_radiance(layer.fire_table, kelvin[glow]) * (settings.fire_intensity * sigma[glow])[:, None]
+    if settings.flame_intensity > 0 and volume.flame is not None:
+        follow = bool(settings.flame_follow) and volume.temperature is not None
+        tint = vr.flame_colour(settings, layer.fire_table, _trilinear(volume.temperature, g) if follow else None)
+        e += tint * (settings.flame_intensity * np.maximum(_trilinear(volume.flame, g), 0.0))[:, None]
+    return e
+
+
+def fire_nee_sample(layer, pos, keys, turn):
+    """One fire point per smoke vertex `pos` (N, 3): a cell by the emitter's probability, a uniform position in it.
+    Returns `(point, wi, dist, e, pv)`: the world point, the unit direction from the vertex to it, the distance, the fire's
+    emission there (N, 3) and the point's density per world volume. `e` is zero for points outside the volume's box.
+    The numbers are hashed from the path key like the shader's `vol_fire_sample`."""
+    from .pathtrace import pcg, rand
+    emitter = layer.emitter()
+    prep = layer.preps[0]
+    n = len(pos)
+    u = [_uniform(keys, turn, NEE_STREAM, 0, slot, pcg, rand) for slot in range(4)]
+    cell = np.minimum(np.searchsorted(emitter.cdf, u[0], side="right"), len(emitter.cdf) - 1)
+    gy, gz = int(emitter.cells[1]), int(emitter.cells[2])
+    index = np.stack((cell // (gy * gz), (cell // gz) % gy, cell % gz), axis=1).astype(np.float64)
+    q = prep.box_min + emitter.cell_object * (index + np.stack(u[1:], axis=1))
+    point = q @ prep.m[:3, :3].T + prep.m[:3, 3]
+    inside = ((q >= prep.box_min) & (q <= prep.box_max)).all(axis=1)
+    e = np.zeros((n, 3))
+    if inside.any():
+        e[inside] = _emission_at(layer, 0, prep.to_grid(q[inside]))
+    to = point - pos
+    dist = np.linalg.norm(to, axis=1)
+    return point, to / np.maximum(dist, 1e-12)[:, None], dist, e, emitter.pmf[cell] / emitter.cell_world ** 3
+
+
+def fire_transmittance(layer, vi, o, d, dist):
+    """`exp(-tau)` through volume `vi` along rays (unit `d`, up to `dist`) by the midpoint rule: one step per `NEE_STEP_CELLS`
+    voxels, more where the extinction bound would put more than `NEE_TAU` of optical depth in a step. Deterministic, like the
+    shadow rays of the lights; the shader's `vol_fire_transmittance` mirrors it. (Ratio tracking, `ratio_transmittance`, has the
+    same mean but ran 2.8 to 3.7 times noisier per fire sample through a dense flame: see docs/FLUIDS_SPIKE.md.)"""
+    n = len(o)
+    out = np.ones(n)
+    prep = layer.preps[vi]
+    volume = prep.volume
+    mu = layer.smoke_majorant(vi)
+    if not n or mu <= 1e-12:
+        return out
+    near, far = _clip(prep, o, d)
+    length = np.clip(np.minimum(far, dist) - near, 0.0, None)
+    steps = np.clip(np.ceil(np.maximum(length / (NEE_STEP_CELLS * volume.voxel_size), length * mu / NEE_TAU)), 1, NEE_MAX_STEPS)
+    total = np.zeros(n)
+    for j in range(int(steps.max()) if n else 0):
+        live = (j < steps) & (length > 0)
+        if not live.any():
+            continue
+        t = near[live] + (j + 0.5) / steps[live] * length[live]
+        g = prep.to_grid(prep.to_object(o[live] + d[live] * t[:, None]))
+        total[live] += _trilinear(volume.density, g) * (length[live] / steps[live])
+    return np.exp(-layer.sigma_t_unit * layer.settings.density_scale * total)
+
+
+def ratio_transmittance(layer, vi, o, d, dist, keys, turn, cancel=None):
+    """Transmittance of volume `vi` along rays (unit `d`, up to `dist`) by ratio tracking: delta tracking's tentative collisions
+    against a bound on the extinction (the local bound where there is a majorant grid, otherwise the smoke's alone) each multiply
+    the estimate by `1 - sigma_t / bound`. Unbiased, with a mean of `exp(-tau)`; it is the reference `fire_transmittance` is tested
+    against, not what the tracers use (no shader twin)."""
+    from .pathtrace import pcg, rand
+    n = len(o)
+    out = np.ones(n)
+    prep = layer.preps[vi]
+    volume = prep.volume
+    settings = layer.settings
+    mu_all = layer.smoke_majorant(vi)
+    if not n or mu_all <= 1e-12:
+        return out
+    levels = layer.levels(vi)
+    t0, t1 = _clip(prep, o, d)
+    t1 = np.minimum(t1, dist)
+    alive = np.flatnonzero(t1 > t0)
+    position = t0.copy()
+    if levels is not None:
+        o_cells = (prep.to_object(o) - prep.box_min) / volume.voxel_size
+        d_cells = (d @ prep.inv[:3, :3].T) / volume.voxel_size
+    for step in range(MAX_COLLISIONS):
+        if not len(alive):
+            break
+        raytrace._cancel(cancel)
+        here = position[alive]
+        if levels is None:
+            mu, leave = np.full(len(alive), mu_all), t1[alive]
+        else:
+            mu, leave = local_majorant(levels, o_cells[alive] + d_cells[alive] * here[:, None], d_cells[alive], here)
+            leave = np.minimum(leave, t1[alive])
+        u_step = _uniform(keys[alive], turn, NEE_RATIO_STREAM, step, 0, pcg, rand)
+        candidate = here - np.log1p(-np.minimum(u_step, 1 - 1e-12)) / np.where(mu > 0, mu, 1.0)
+        tentative = (mu > 0) & (candidate < leave)
+        hop = ~tentative
+        position[alive[hop]] = leave[hop] + 1e-5
+        carry = np.zeros(len(alive), bool)
+        carry[hop] = position[alive[hop]] < t1[alive[hop]]
+        ray = alive[tentative]
+        if len(ray):
+            position[ray] = candidate[tentative]
+            g = prep.to_grid(prep.to_object(o[ray] + d[ray] * position[ray][:, None]))
+            sigma_t = layer.sigma_t_unit * settings.density_scale * _trilinear(volume.density, g)
+            out[ray] *= np.clip(1.0 - sigma_t / mu[tentative], 0.0, 1.0)
+            carry[tentative] = True
+        alive = alive[carry]
+    return out
+
+
+def fire_nee_value(layer, wi, dist, e, pv, cosine_pdf, transmittance):
+    """What a fire point adds at a smoke vertex, before the path throughput, the smoke colour and the fire-light gain:
+    `phase * e * T / (pv r^2)` weighted `pv delta r^2 / (pv delta r^2 + phase)` against the phase-sampled continuation ray that
+    could also reach it, which reduces to `phase * e * T * delta / (pv delta r^2 + phase)`. `cosine_pdf` is the phase function
+    at the direction to the point."""
+    delta = layer.emitter().delta
+    denominator = pv * delta * dist * dist + cosine_pdf
+    scale = np.where(denominator > 0, cosine_pdf * delta * transmittance / np.maximum(denominator, 1e-300), 0.0)
+    return e * scale[:, None]
 
 
 # --- shadow rays ---------------------------------------------------------------------------------------------

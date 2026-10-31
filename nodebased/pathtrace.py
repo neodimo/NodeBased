@@ -1158,7 +1158,9 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         if ps.volumes is not None:
             # smoke: the next real collision along each ray, and the fire the ray sees on the way to it
             t_end = np.minimum(t, np.where(vd >= 1, t_light, np.inf))
-            t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel, deep=vd >= 1)
+            # a ray leaving a smoke vertex shares the fire with that vertex's next-event sample: its glow is weighted against it
+            mis = (prev_shape[rows] <= -3, prev_pdf[rows]) if _fire_nee_on(ps) else None
+            t_event, glow, in_volume = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel, deep=vd >= 1, mis=mis)
             evented = t_event < t_end
             smoke_run[rows[~evented]] = 0
             if glow.any():
@@ -1357,6 +1359,12 @@ def _liquid_event(ps, keys, r, sh, ns, wd, pos, o, d, medium, alive, counts, cls
 _VOL_ABSORB_DIM = _BSDF_DIM + 4
 
 
+def _fire_nee_on(ps):
+    """Whether smoke vertices sample the fire as a light (`ptvolume.FireEmitter`): one volume that glows, a fire-light gain above
+    zero, and no splats (their shadows are not traced toward the fire)."""
+    return ps.volumes is not None and ps.splats is None and ps.volumes.emitter() is not None
+
+
 def _volume_reaches(ps, owner, bit):
     """Per smoke vertex (`owner` is its volume), whether light `bit` lights it (light linking)."""
     return ps.reaches(-3 - owner, bit)
@@ -1437,6 +1445,19 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         weight = ps.mis(bit, pdf_l[idx], f) / pdf_l[idx]
         weight = weight * _splat_light(ps, pos[idx], wi[idx], np.full(len(idx), np.inf), none[idx], zero[idx], cancel, bit)
         direct[idx] += (f * weight)[:, None] * radiance[idx]
+    if _fire_nee_on(ps):
+        # the fire as a light: a point of the glowing volume drawn by the emitter, its shadow ray, the smoke between by the midpoint rule, and
+        # the multiple-importance weight against the phase-sampled continuation ray that would also reach it (`volume_fire_light` is its gain)
+        turn = (dim - _DIM_BASE) // _DIM_STRIDE
+        _, fire_wi, fire_dist, fire_e, fire_pv = ptvolume.fire_nee_sample(layer, pos, key, turn)
+        live = np.flatnonzero(fire_e.max(axis=1) > 0)
+        if len(live):
+            live = live[~occluded(ps, pos[live], fire_wi[live], fire_dist[live] * (1 - 1e-4), cancel, None)]
+        if len(live):
+            f = ptvolume.phase(g, _dot(fire_wi[live], wd[live]))
+            fire_t = ptvolume.fire_transmittance(layer, 0, pos[live], fire_wi[live], fire_dist[live])
+            direct[live] += layer.settings.fire_light * ptvolume.fire_nee_value(layer, fire_wi[live], fire_dist[live],
+                                                                                fire_e[live], fire_pv[live], f, fire_t)
     tint = layer.color
     tp = throughput[r] * np.where(run == 1, 1.0 + layer.settings.multi_scatter, 1.0)[:, None]
     gathered = tp * tint * direct

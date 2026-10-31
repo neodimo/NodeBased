@@ -376,12 +376,12 @@ def _sparse_coarse_emission(volume, settings, factor):
     return flat.reshape(cells + [3])
 
 
-def fire_light_grid(volume, settings):
-    """(grid, cell): the light the fire casts on the smoke around it, or None. `grid` is (gx, gy, gz, 3) float32
-    on cubic cells of `cell` object-space units starting at the volume's `origin` (a cell holds the blurred, scaled
-    emission field; see the module docstring), None when the volume does not glow or `fire_light` is 0. A sparse
-    volume builds the same grid from its stored tiles and rest values without expanding to a dense array."""
-    if not settings.glows(volume) or settings.fire_light <= 0:
+def fire_coarse_emission(volume, settings):
+    """(coarse, factor): the fire's emission averaged over cells of `factor` voxels per side (at most `FIRE_LIGHT_CELLS`
+    cells a side), (gx, gy, gz, 3) float64, or None when the volume does not glow or holds no emission. This is the
+    grid `fire_light_grid` blurs and the path tracer's next-event sampling draws its fire points from. A sparse volume builds
+    it from its stored tiles and rest values without expanding to a dense array."""
+    if not settings.glows(volume):
         return None
     factor = max(1, int(math.ceil(max(volume.shape) / FIRE_LIGHT_CELLS)))
     if getattr(volume, "sparse", None) is not None:
@@ -397,6 +397,20 @@ def fire_light_grid(volume, settings):
                               padded_shape[2] // factor, factor, 3).mean(axis=(1, 3, 5))
     if not coarse.any():
         return None
+    return coarse, factor
+
+
+def fire_light_grid(volume, settings):
+    """(grid, cell): the light the fire casts on the smoke around it, or None. `grid` is (gx, gy, gz, 3) float32
+    on cubic cells of `cell` object-space units starting at the volume's `origin` (a cell holds the blurred, scaled
+    emission field; see the module docstring), None when the volume does not glow or `fire_light` is 0. A sparse
+    volume builds the same grid from its stored tiles and rest values without expanding to a dense array."""
+    if settings.fire_light <= 0:
+        return None
+    got = fire_coarse_emission(volume, settings)
+    if got is None:
+        return None
+    coarse, factor = got
     cell = factor * volume.voxel_size
     side = float(max(volume.shape) * volume.voxel_size)
     radius = FIRE_LIGHT_RADIUS * side                                    # object units

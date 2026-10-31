@@ -66,6 +66,7 @@ def reuse_counters():
     uniform buffers created, readback buffers made, command buffers submitted."""
     return dict(COUNTERS)
 COUNT_COLLISIONS = False   # compile the volume counting variant: a render's rgb is the mean (tentative, real, region hops) per path
+ENABLE_FIRE_NEE = True            # False leaves the fire reaching smoke only by phase-sampled continuation rays again (the baseline the smoke-grain evidence compares against)
 ENABLE_EXPECTED_EMISSION = True   # False sums the fire's glow at delta tracking's collisions again (the baseline the fire-grain evidence compares against)
 ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
 STACK = 64
@@ -80,7 +81,7 @@ _OUTPUT_CODES = {"rgba": 0, "diffuse": 1, "specular": 2, "emission": 3, "albedo"
 _KIND_CODES = {"Directional": 0, "Point": 1, "Spot": 2, "Rect": 3, "Disc": 4, "Sphere": 5}
 LIGHT_VECS = 6
 SPLAT_VECS = 9
-VOL_VECS = 10
+VOL_VECS = 16
 SHAPE_VECS = 13
 TRI_VECS = 8
 
@@ -936,8 +937,10 @@ fn splat_shape(i: u32) -> Shape {
 // temperature high bits), 7 coarse-majorant offset low/high and tile edge, 8 a sparse volume's tile index offset
 // low/high, 1 when the grids are tile atlases, and the value of an empty tile, 9 the coarse majorant offset low/high and the
 // number of fine cells along a coarse cell; see splat_info for why
-// integer offsets are not raw bit patterns.
-const VOL_VECS: u32 = 10u;
+// integer offsets are not raw bit patterns. The fire as a light (ptvolume.FireEmitter): 10 the smoke's own extinction bound, the
+// emitter table offset low/high and its cell count (0: none), 11 the cell grid (x, y, z) and a cell's edge in object units, 12 a
+// cell's edge in world units and the multiple-importance step, 13..15 the object-to-world rows.
+const VOL_VECS: u32 = 16u;
 const MAX_COLLISIONS: u32 = 4096u;
 const VOL_ABSORB_DIM: u32 = 54u;
 const FIRE_KNOTS: f32 = 64.0;
@@ -1163,7 +1166,9 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
 const EMIT_CELLS: f32 = 4.0;
 const EMIT_TAU: f32 = 0.5;          // a step's optical depth at the region's extinction bound never exceeds this: dense smoke is sampled finer
 const EMIT_CELLS_DEEP: f32 = 16.0;    // flights that start at a smoke vertex: their glow is weighted down by the albedo and the fire-light gain
-fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u32, cells: f32,
+// `mis_pdf` >= 0 marks a flight that leaves a smoke vertex whose fire `vol_fire_light` also sampled, with the phase pdf its direction was
+// drawn with: a sample at distance t is weighted pdf / (pdf + p_V delta t^2), p_V the emitter's density at the sample.
+fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u32, cells: f32, mis_pdf: f32,
                 glow: ptr<function, vec3<f32>>) {
   let head = vh(vi, 1u);
   if (head.w <= 1e-8) { return; }
@@ -1210,6 +1215,9 @@ fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: 
           }
           e += tint * (params.vp3.z * max(trilinear(bases.z, dims, sp, g), 0.0));
         }
+        if (mis_pdf >= 0.0) {
+          e = e * (mis_pdf / max(mis_pdf + vol_fire_density(oo + dd * t) * vh(0u, 12u).y * t * t, 1e-30));
+        }
         let sigma_t = params.vp0.x * sigma;
         // the integrand e * exp(-tau) at the sample, with the optical depth from the step's start to it taken at a blend of the
         // previous sample's extinction (a quarter) and this sample's (three quarters). This sample's alone is correlated with its
@@ -1228,7 +1236,7 @@ fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: 
 }
 
 // the first real collision of every volume (independent processes), and the fire seen on the way to it
-fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, deep: bool,
+fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, deep: bool, mis_pdf: f32,
                   glow: ptr<function, vec3<f32>>) -> f32 {
   let n = params.h.x;
   let fire = (params.h.w & 2u) != 0u;
@@ -1236,7 +1244,7 @@ fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, d
   if (n == 1u && (params.h.w & 4u) != 0u) { return vol_flight(0u, o, d, t_end, key, turn, fire, glow); }
   if (n == 1u) {
     let t_one = vol_flight(0u, o, d, t_end, key, turn, false, glow);
-    if (fire) { vol_emission(0u, o, d, t_end, key, turn, select(EMIT_CELLS, EMIT_CELLS_DEEP, deep), glow); }
+    if (fire) { vol_emission(0u, o, d, t_end, key, turn, select(EMIT_CELLS, EMIT_CELLS_DEEP, deep), mis_pdf, glow); }
     return t_one;
   }
   var t_event = INF;
@@ -1281,6 +1289,122 @@ fn vol_transmittance(o: vec3<f32>, d: vec3<f32>, dist: f32) -> f32 {
     out = out * exp(-tau);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------- the fire as a light
+// Next-event sampling of the fire at a smoke vertex (ptvolume.FireEmitter, `fire_nee_sample`, `fire_transmittance`, `fire_nee_value`,
+// which this mirrors): a cell of the emitter table by its cumulative probability, a uniform point in it, a mesh shadow ray, the smoke
+// between by the midpoint rule, and the weight against the phase-sampled continuation ray whose glow `vol_emission` weights the other way.
+const NEE_STREAM: u32 = 31u;
+
+// the fire's emission at grid-space point `g`: the per-sample term of `vol_emission`
+fn vol_emission_at(vi: u32, g: vec3<f32>) -> vec3<f32> {
+  let dims = vec3<i32>(vh(vi, 5u).xyz);
+  let bases = vol_bases(vi);
+  let sp = vh(vi, 8u);
+  let has_temp = bases.y != 0xFFFFFFFFu;
+  let has_flame = bases.z != 0xFFFFFFFFu && params.vp3.z > 0.0;
+  let sigma = params.vp0.w * trilinear(bases.x, dims, sp, g);
+  var e = vec3<f32>(0.0);
+  if (has_temp) {
+    let kelvin = params.vp2.x * trilinear(bases.y, dims, sp, g);
+    if (kelvin > params.vp2.y && sigma > 0.0) { e += fire_radiance(kelvin) * (params.vp2.z * sigma); }
+  }
+  if (has_flame) {
+    var tint = fire_radiance(abs(params.vp3.w));
+    if (params.vp3.w < 0.0 && has_temp) {
+      let flame_kelvin = params.vp2.x * trilinear(bases.y, dims, sp, g);
+      tint = select(vec3<f32>(0.0), fire_radiance(flame_kelvin), flame_kelvin > params.vp2.y);
+    }
+    e += tint * (params.vp3.z * max(trilinear(bases.z, dims, sp, g), 0.0));
+  }
+  return e;
+}
+
+// the emitter's probability per world volume at the object-space point `q` (0 outside its grid): a flight sample's partner weight
+fn vol_fire_density(q: vec3<f32>) -> f32 {
+  let n = u32(vh(0u, 10u).w);
+  if (n == 0u) { return 0.0; }
+  let dims = vh(0u, 11u);
+  let cell = vec3<i32>(floor((q - vh(0u, 0u).xyz) / dims.w));
+  if (any(cell < vec3<i32>(0)) || any(cell >= vec3<i32>(dims.xyz))) { return 0.0; }
+  let base = u32(vh(0u, 10u).y) + (u32(vh(0u, 10u).z) << 24u);
+  let flat = u32((cell.x * i32(dims.y) + cell.y) * i32(dims.z) + cell.z);
+  let cw = vh(0u, 12u).x;
+  return fenv(base + flat * 2u + 1u) / (cw * cw * cw);
+}
+
+// exp(-tau) through volume `vi` along a ray up to `dist` by the midpoint rule (ptvolume.fire_transmittance): one step per
+// NEE_STEP_CELLS voxels, more where the extinction bound would put more than NEE_TAU of optical depth in a step
+const NEE_STEP_CELLS: f32 = 4.0;
+const NEE_TAU: f32 = 1.0;
+const NEE_MAX_STEPS: f32 = 48.0;
+fn vol_fire_transmittance(vi: u32, o: vec3<f32>, d: vec3<f32>, dist: f32) -> f32 {
+  let mu = vh(vi, 10u).x;
+  if (mu <= 1e-12) { return 1.0; }
+  let clip = vol_clip(vi, o, d);
+  let len = max(min(clip.y, dist) - clip.x, 0.0);
+  if (len <= 0.0) { return 1.0; }
+  let bmin = vh(vi, 0u).xyz;
+  let voxel = vh(vi, 0u).w;
+  let dims = vec3<i32>(vh(vi, 5u).xyz);
+  let base = vol_bases(vi).x;
+  let sp = vh(vi, 8u);
+  let oo = vol_object(vi, o);
+  let dd = vol_object_dir(vi, d);
+  let steps = clamp(ceil(max(len / (NEE_STEP_CELLS * voxel), len * mu / NEE_TAU)), 1.0, NEE_MAX_STEPS);
+  var total = 0.0;
+  for (var j = 0u; f32(j) < steps; j++) {
+    let t = clip.x + (f32(j) + 0.5) / steps * len;
+    total += trilinear(base, dims, sp, (oo + dd * t - bmin) / voxel - vec3<f32>(0.5));
+  }
+  return exp(-params.vp0.x * params.vp0.w * total * (len / steps));
+}
+
+// What a fire point adds at the smoke vertex `pos` (arrived along `d`, anisotropy `g`) before the path throughput, the smoke
+// colour and the fire-light gain; zero where the point is hidden or outside the grid.
+fn vol_fire_light(pos: vec3<f32>, d: vec3<f32>, g: f32, key: u32, turn: u32) -> vec3<f32> {
+  let n = u32(vh(0u, 10u).w);
+  if (n == 0u) { return vec3<f32>(0.0); }
+  let u0 = vol_uniform(key, turn, NEE_STREAM, 0u, 0u);
+  let base = u32(vh(0u, 10u).y) + (u32(vh(0u, 10u).z) << 24u);
+  var lo = 0u;
+  var hi = n;
+  while (lo < hi) {
+    let mid = (lo + hi) >> 1u;
+    if (fenv(base + mid * 2u) > u0) { hi = mid; } else { lo = mid + 1u; }
+  }
+  let cell = min(lo, n - 1u);
+  let pmf = fenv(base + cell * 2u + 1u);
+  let dims = vh(0u, 11u);
+  let gy = u32(dims.y);
+  let gz = u32(dims.z);
+  let idx = vec3<f32>(f32(cell / (gy * gz)), f32((cell / gz) % gy), f32(cell % gz));
+  let u = vec3<f32>(vol_uniform(key, turn, NEE_STREAM, 0u, 1u), vol_uniform(key, turn, NEE_STREAM, 0u, 2u),
+                    vol_uniform(key, turn, NEE_STREAM, 0u, 3u));
+  let bmin = vh(0u, 0u).xyz;
+  let q = bmin + dims.w * (idx + u);
+  if (any(q < bmin) || any(q > vh(0u, 1u).xyz)) { return vec3<f32>(0.0); }
+  let e = vol_emission_at(0u, (q - bmin) / vh(0u, 0u).w - vec3<f32>(0.5));
+  if (max(e.x, max(e.y, e.z)) <= 0.0) { return vec3<f32>(0.0); }
+  let r0 = vh(0u, 13u);
+  let r1 = vh(0u, 14u);
+  let r2 = vh(0u, 15u);
+  let point = vec3<f32>(dot(r0.xyz, q) + r0.w, dot(r1.xyz, q) + r1.w, dot(r2.xyz, q) + r2.w);
+  let to = point - pos;
+  let dist = length(to);
+  let wi = to / max(dist, 1e-12);
+//#if LINKS
+  shadow_bit = 99u;
+//#endif
+  if (intersect(pos, wi, 0.0, dist * (1.0 - 1e-4), true).shape >= 0) { return vec3<f32>(0.0); }
+  let ph = hg_phase(g, dot(wi, d));
+  let t = vol_fire_transmittance(0u, pos, wi, dist);
+  let cw = vh(0u, 12u).x;
+  let delta = vh(0u, 12u).y;
+  let denominator = pmf / (cw * cw * cw) * delta * dist * dist + ph;
+  if (!(denominator > 0.0)) { return vec3<f32>(0.0); }
+  return e * (ph * delta * t / denominator);
 }
 
 fn hg_phase(g: f32, cosine: f32) -> f32 {
@@ -1468,7 +1592,8 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       var t_end = h.t;
       if (vdepth >= 1u) { t_end = min(t_end, t_light); }
       var glow = vec3<f32>(0.0);
-      t_event = vol_flight_all(o, d, t_end, key, turn, vdepth >= 1u, &glow);
+      t_event = vol_flight_all(o, d, t_end, key, turn, vdepth >= 1u,
+                               select(-1.0, prev_pdf, smoke_run > 0u && (params.h.w & 8u) != 0u), &glow);
       evented = t_event < t_end;
       if (max(glow.x, max(glow.y, glow.z)) > 0.0) {
         // fire seen from a smoke vertex is the fire lighting the smoke: `volume_fire_light` is its gain
@@ -1569,6 +1694,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
           }
         }
       }
+      if ((params.h.w & 8u) != 0u) { direct += params.vp3.y * vol_fire_light(pos, d, g, key, turn); }
       let gathered = thr * params.vp1.xyz * direct;
       if (vdepth == 0u) { (*acc).diffuse += gathered; } else { add_class(acc, cls, vdepth + 1u, gathered); }
       let ps = hg_sample(g, d, rnd(key, dim + BSDF_DIM + 1u), rnd(key, dim + BSDF_DIM + 2u));
@@ -2613,6 +2739,19 @@ def _pack_aux(packed, ps):
                 flame = add_floats(np.ascontiguousarray(grid.data["flame"] if sparse else volume.flame, "f4"))
                 headers[vi, 5, 3] = flame & 0xFFFFFF
                 headers[vi, 9, 3] = flame >> 24
+        # the fire as a light: the emitter's table (cumulative probability, probability per cell) and the grid it lives on, for one volume
+        # that glows, without splats (their shadows are not traced toward the fire)
+        emitter = smoke.emitter(ignore_switch=True) if packed.splat_count == 0 else None
+        for vi, prep in enumerate(smoke.preps):
+            headers[vi, 10, 0] = smoke.smoke_majorant(vi)
+            headers[vi, 13:16, :3] = prep.m[:3, :3]
+            headers[vi, 13:16, 3] = prep.m[:3, 3]
+        if emitter is not None:
+            table = add_floats(np.stack((emitter.cdf, emitter.pmf), axis=1))
+            headers[0, 10, 1:4] = (table & 0xFFFFFF, table >> 24, len(emitter.pmf))
+            headers[0, 11] = (*emitter.cells, emitter.cell_object)
+            headers[0, 12, :2] = (emitter.cell_world, emitter.delta)
+            packed.flags |= 8
         packed.volume_count, packed.volume_base = len(smoke), add(headers)
         if smoke.fire_table is not None:
             table = np.zeros((len(smoke.fire_table), 4), "f4")
@@ -2691,7 +2830,7 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     # bit 4: sum the fire's glow at delta tracking's collisions (ENABLE_EXPECTED_EMISSION off); set here, not in the packed scene,
     # because the packed scene is reused between renders
     h = np.array([packed.volume_count, packed.volume_base, packed.fire_base,
-                  packed.flags | (0 if ENABLE_EXPECTED_EMISSION else 4)], "u4")
+                  (packed.flags & ~(0 if ENABLE_FIRE_NEE and ENABLE_EXPECTED_EMISSION else 8)) | (0 if ENABLE_EXPECTED_EMISSION else 4)], "u4")
     f32 = np.zeros((16, 4), "f4")
     right, up, forward = view[0], view[1], -view[2]
     f32[0, :3], f32[0, 3] = right, width / max(height, 1)
