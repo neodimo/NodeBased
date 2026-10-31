@@ -1,3 +1,20 @@
+## 2026-10-31, 1:20 AM PDT — Lane 6 fire shape (step B of 2)
+
+The fire shot's flame now has a bright core at the fuel and separate tongues; the flame glow can take its colour from the gas temperature.
+**Evidence (measured, RTX 3080 Ti, 64 cells, frames 8 to 24, `benchmarks/fire_shot/fire-shape-2026-10-31.json`):** core in the lowest third of the flame in 17 of 17 frames
+(6 of 17 before), tongues per slice 0.53 to 1.13, bake 8.4 s, a 128-sample frame 0.495 / 0.440 / 0.417 s (0.372 / 0.337 / 0.336 s before). The committed pre-step fire document renders
+bit for bit the same (fields and pixels, frames 8, 16, 24). 348 targeted tests pass on the RTX, the Radeon and llvmpipe.
+**What changed.** Render3D `volume_flame_follow_temperature` (off by default; wired through the CPU and GPU raymarchers, both path tracers and the fire-light grid by
+`volumerender.flame_colour`); `fluid3d.shape_turbulence_lattice` keeps the shape-turbulence noise draws (a turbulence bake 40 s to 9 s, bit-identical); the shot
+(`make_shot.SHAPED_SOLVER`, `SHAPED_RENDER`) cools its gas (cooling 1.0, vorticity 1.0, burn expansion 1.25, flame follows temperature, scale 900, flame 1.0, fire 0.02);
+`examples/fire_shot/flame_metrics.py` and `render_evidence.py --flame / --flame-sweep` measure it. No schema bump (the new parameter defaults to 0).
+**Inference / not verified.** The stills (docs/images/fire_shot/fire-shape-before-after-2026-10-31.png) are read from saved images, not the real display; no Windows run;
+no full suite. **Did not move the right way:** smoke vorticity 185 to 68 and density contrast 0.77 to 0.44 (calmer smoke, no visible eddies); the image-row measures on an emission pass
+(core 0.25 to 0.65 of the height; tongues per row 1.0 to 1.0); the green-over-red ratio does not fall with height; grain at frame 16 rose 0.0056 to 0.0141.
+**Next owner + artifact.** Gonzo: judge the before/after sheet on the real display and decide whether smoke eddies, grain or a Windows run is the next step; `docs/FLUIDS_SPIKE.md`
+"Fluids 13 B shape" has the sweep and the failure notes. **Failure modes recorded:** vorticity confinement of 3 diverges and 2 grows without bound after frame 30 in some mixes
+(the shot uses 1.0, baked to frame 60); turbulence of 3 or more turns the smoke to dust and cost 30 s of bake until the noise was kept.
+
 ## Lane 2 fidelity step N — NoTimeBlur and Root (12:15 AM on 2026-10-31 PDT)
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (12:49 AM on 2026-10-31 PDT)
