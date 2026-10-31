@@ -435,15 +435,35 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             first, last = min(selected), max(selected) + 1
             if spec.width * spec.height * (last - first) > 128 * 1024 * 1024:
                 raise ValueError('Selected channel span exceeds the 512 MiB decode limit')
+            # The half-upload experiment used to decode float32 and then make a second full-frame
+            # float16 copy solely for the GPU.  On 1080p EXRs that copy took longer than the upload
+            # saving.  For an exact half EXR in the working space, ask OIIO for the native words once
+            # and widen them once for the evaluator.  Layered files retain the existing shared float
+            # decode: their beauty/layer ownership makes the compact shortcut unsafe.
+            formats = list(spec.channelformats) or [spec.format]
+            half_channels = bool(formats) and all(str(fmt).lower() == 'half' for fmt in formats)
+            space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
+            half_upload_enabled = os.environ.get('NODEBASED_GPU2D_HALF_UPLOAD') == '1'
+            native_half = (half_upload_enabled and shared_channels is None and ext == '.exr'
+                           and half_channels and space in color.PASSTHROUGH)
             pixels = (shared_channels[..., first:last] if shared_channels is not None else
-                      source.read_image(subimage, 0, first, last, oiio.FLOAT))
+                      source.read_image(subimage, 0, first, last,
+                                        oiio.HALF if native_half else oiio.FLOAT))
             if pixels is None:
                 raise ValueError('Image decode failed: ' + source.geterror())
-            rgba = np.ones((spec.height, spec.width, 4), dtype=np.float32)
-            rgba[..., :3] = _select_rgb(pixels, rgb, first)
-            if alpha is not None:
-                rgba[..., 3] = pixels[..., alpha - first]
-            space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
+            if native_half:
+                pixels = np.ascontiguousarray(pixels, dtype=np.float16)
+            direct_rgba = (native_half and pixels.shape[-1] == 4
+                           and rgb == [first, first + 1, first + 2] and alpha == first + 3)
+            if direct_rgba:
+                # The hot path: exactly one widening allocation and the same contiguous half
+                # buffer becomes Raster.half below.
+                rgba = pixels.astype(np.float32)
+            else:
+                rgba = np.ones((spec.height, spec.width, 4), dtype=np.float32)
+                rgba[..., :3] = _select_rgb(pixels, rgb, first)
+                if alpha is not None:
+                    rgba[..., 3] = pixels[..., alpha - first]
             associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
             rgba = to_working(rgba, space, associated, in_place=True)
             if alpha is None and not auto_alpha:
@@ -478,26 +498,30 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         # Uploading the original half words is exact only when decoding neither changes colour
         # nor unpremultiplies a partial-alpha image. Keep the optional compact copy on the decode
         # thread; every derived Raster starts with ``half = None`` in Raster.__init__.
-        formats = list(spec.channelformats) or [spec.format]
-        half_channels = bool(formats) and all(str(fmt).lower() == 'half' for fmt in formats)
-        # The compact hint costs a second full-frame conversion during decode. Three fresh
-        # 1080p playback passes on the integrated Radeon dropped from 18.2–18.8 fps to
-        # 13.2–13.3 fps even though the bus transfer was smaller. Keep the exact upload
-        # path available for explicit experiments until decode can retain native half data.
-        half_upload_enabled = os.environ.get('NODEBASED_GPU2D_HALF_UPLOAD') == '1'
-        if (half_upload_enabled and not layers_only and ext == '.exr'
-                and half_channels and space in color.PASSTHROUGH):
+        # `pixels` above is native half only on the exact candidate path.  Build the compact
+        # RGBA representation before widening for reordered channels or alpha fill, then retain it
+        # only when colour/alpha processing cannot have changed a word.  Derived Rasters still
+        # clear the hint in Raster.__init__.
+        if (not layers_only and native_half):
             opaque = bool(np.all(rgba[..., 3] == 1.0))
             if opaque:
-                # No colour or alpha arithmetic touched the decoded half values.
-                raster.half = rgba.astype(np.float16)
+                half_rgba = pixels if direct_rgba else np.ones((spec.height, spec.width, 4), dtype=np.float16)
+                if not direct_rgba:
+                    half_rgba[..., :3] = _select_rgb(pixels, rgb, first)
+                    if alpha is not None:
+                        half_rgba[..., 3] = pixels[..., alpha - first]
+                # Passthrough opaque ingest only widens these exact words.
+                raster.half = half_rgba
             elif not associated:
                 # Straight alpha is premultiplied in to_working. A product of two half
                 # values is not necessarily a half value, so prove this particular frame
                 # can round-trip before giving it an exact-upload hint.
-                compact = rgba.astype(np.float16)
-                if np.array_equal(compact.astype(np.float32).view(np.uint32), rgba.view(np.uint32)):
-                    raster.half = compact
+                half_rgba = np.ones((spec.height, spec.width, 4), dtype=np.float16)
+                half_rgba[..., :3] = _select_rgb(pixels, rgb, first)
+                if alpha is not None:
+                    half_rgba[..., 3] = pixels[..., alpha - first]
+                if np.array_equal(half_rgba.astype(np.float32).view(np.uint32), rgba.view(np.uint32)):
+                    raster.half = half_rgba
         return raster
     finally:
         source.close()

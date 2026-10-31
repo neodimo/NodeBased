@@ -22,11 +22,15 @@ class HalfEligibilityTests(unittest.TestCase):
         enabled.start()
         self.addCleanup(enabled.stop)
 
-    def write(self, name, pixels, fmt, channels=("R", "G", "B", "A"), space="ACEScg"):
+    def write(self, name, pixels, fmt, channels=("R", "G", "B", "A"), space="ACEScg",
+              x=0, y=0, full=None):
         path = pathlib.Path(self.directory.name, name)
         spec = oiio.ImageSpec(pixels.shape[1], pixels.shape[0], pixels.shape[2], fmt)
         spec.channelnames = list(channels)
         spec.attribute("oiio:ColorSpace", space)
+        spec.x, spec.y = x, y
+        if full:
+            spec.full_x, spec.full_y, spec.full_width, spec.full_height = full
         out = oiio.ImageOutput.create(str(path))
         self.assertTrue(out and out.open(str(path), spec), oiio.geterror())
         self.assertTrue(out.write_image(np.ascontiguousarray(pixels, np.float32)), out.geterror())
@@ -62,6 +66,35 @@ class HalfEligibilityTests(unittest.TestCase):
         path = self.write("layers.exr", pixels, oiio.HALF,
                           channels=("crypto.R", "crypto.G", "crypto.B", "crypto.A"))
         self.assertIsNone(read_media_raster(str(path)).half)
+
+    def test_native_half_decode_is_bit_equal_to_float_decode_for_safe_and_unsafe_cases(self):
+        """Native OIIO half decode changes acquisition, never the Raster contract."""
+        opaque = np.array([[[.3, .5, .75, 1.], [-.25, 2., .125, 1.], [4., .01, .9, 1.]],
+                           [[.2, .4, .6, 1.], [.9, .7, .5, 1.], [.1, .8, .3, 1.]]], np.float16)
+        partial = opaque.copy(); partial[..., 3] = np.float16(.3)
+        cases = [
+            ("beauty.exr", opaque, oiio.HALF, ("R", "G", "B", "A"), "ACEScg", {}, True),
+            ("reordered.exr", opaque[..., [1, 0, 2, 3]], oiio.HALF, ("G", "R", "B", "A"), "ACEScg", {}, True),
+            ("missing-alpha.exr", opaque[..., :3], oiio.HALF, ("R", "G", "B"), "ACEScg", {}, True),
+            ("associated.exr", partial, oiio.HALF, ("R", "G", "B", "A"), "ACEScg", {}, False),
+            ("straight.exr", partial, oiio.HALF, ("R", "G", "B", "A"), "ACEScg", {"alpha_mode": "Straight"}, False),
+            ("float.exr", opaque.astype(np.float32), oiio.FLOAT, ("R", "G", "B", "A"), "ACEScg", {}, False),
+            ("converted.exr", opaque, oiio.HALF, ("R", "G", "B", "A"), "Linear Rec.709 (sRGB)", {}, False),
+            ("overscan.exr", opaque, oiio.HALF, ("R", "G", "B", "A"), "ACEScg",
+             {"x": -1, "y": 2, "full": (0, 0, 5, 6)}, True),
+        ]
+        for name, pixels, fmt, channels, space, kwargs, expect_hint in cases:
+            with self.subTest(name=name):
+                read_kwargs = {k: v for k, v in kwargs.items() if k == "alpha_mode"}
+                write_kwargs = {k: v for k, v in kwargs.items() if k != "alpha_mode"}
+                path = self.write(name, pixels, fmt, channels, space, **write_kwargs)
+                native = read_media_raster(str(path), **read_kwargs)
+                with patch.dict(os.environ, {"NODEBASED_GPU2D_HALF_UPLOAD": "0"}):
+                    floating = read_media_raster(str(path), **read_kwargs)
+                np.testing.assert_array_equal(native.pixels.view(np.uint32), floating.pixels.view(np.uint32))
+                self.assertEqual(native.data, floating.data)
+                self.assertEqual(native.display, floating.display)
+                self.assertEqual(native.half is not None, expect_hint)
 
 
 class HalfUploadTests(unittest.TestCase):
