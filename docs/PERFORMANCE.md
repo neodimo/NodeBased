@@ -1223,6 +1223,20 @@ The half-upload path saves Radeon island upload time (5.2 to 3.5 ms/frame) and h
 
 The final default does **not** meet 24 fps: the Radeon measured 18.14 to 18.90 fps. The largest evaluating-thread item is the plate Read/decode wait (about 23 ms per frame), ahead of upload (5.4 ms), island kernels (4.8 ms) and download (about 3 ms). The decode pipeline remains the next performance gate. RTX 4070 laptop, A6000, Windows and 240-frame playback remain unverified. The default GPU-node/decode-worker counts and all node knobs are unchanged.
 
+### R6-2: Native-half EXR decode (10/31)
+
+Eligible passthrough half EXRs now decode once as native OIIO half data. Direct RGBA reuses that contiguous array for upload and widens it once for the evaluator; reordered channels and alpha fill build half RGBA before widening. Converted colour, float EXR and named-layer paths retain the safe float decode. Exact bit comparisons cover opaque/reordered/missing-alpha/partial-alpha/float/converted/named-layer/odd-size/overscan cases, and GPU widening passed on Radeon, RTX and llvmpipe.
+
+| Tier | float32 upload fps / p95 ms | native half fps / p95 ms |
+|---|---|---|
+| Radeon 8060S | 18.214–18.746 / 60.886–64.001 | 19.176–20.563 / 56.544–64.884 |
+| RTX 3080 Ti | 6.000–6.377 / 222.783–272.839 | 9.463–10.173 / 133.562–170.942 |
+| Four-core Radeon | 9.859–9.902 / 109.906–114.039 | 10.285–10.361 / 104.931–110.517 |
+
+Native half sends 41,590,055 bytes/frame versus 74,767,655 and reduces mean upload time Radeon 5.193→3.623 ms, RTX 92.016→46.059 ms, four-core 4.534→3.101 ms. Plate decode microbenchmark: 18.008→15.097 ms median. The win is repeatable on every measured tier, so eligible native-half upload is the default; `NODEBASED_GPU2D_HALF_UPLOAD=0` keeps the comparison path. The Radeon 24 fps and 41.67 ms p95 gate remains unmet on all three rows. Evidence: `benchmarks/2d-gpu/R6-1/playback-nativehalf-1031.json`; raw frames/timelines are deliberate scratch at `scratch/nb-lanes/run/bench-L8-native-half/`.
+
+Rerun: start a private X server, then under `flock -w 1800 /tmp/nb-gpu.lock` run `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :N --backend gpu2d --force-adapter integrated --island-adapter integrated --label radeon --frame-range 48 --passes 3 --budget-mb 512 --no-sampler --stages --out-dir "$NB_RUN/native"`, repeating with `NODEBASED_GPU2D_HALF_UPLOAD=0`, default adapter for RTX, and `--cpus 0-3 --env QT_SCALE_FACTOR=2` for the stand-in.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)

@@ -48,9 +48,11 @@ class HalfEligibilityTests(unittest.TestCase):
                                                        space="Linear Rec.709 (sRGB)"))).half)
         self.assertIsNone(read_media_raster(str(self.write("plain.png", pixels, oiio.UINT8))).half)
 
-    def test_compact_hint_is_off_by_default_after_playback_regression(self):
+    def test_compact_hint_is_on_by_default_and_can_be_disabled_for_comparison(self):
         pixels = np.array([[[.3, .5, .75, 1.]]], np.float32)
         half = self.write("default.exr", pixels, oiio.HALF)
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIsNotNone(read_media_raster(str(half)).half)
         with patch.dict(os.environ, {"NODEBASED_GPU2D_HALF_UPLOAD": "0"}):
             self.assertIsNone(read_media_raster(str(half)).half)
 

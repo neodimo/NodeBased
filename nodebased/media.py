@@ -443,7 +443,9 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             formats = list(spec.channelformats) or [spec.format]
             half_channels = bool(formats) and all(str(fmt).lower() == 'half' for fmt in formats)
             space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
-            half_upload_enabled = os.environ.get('NODEBASED_GPU2D_HALF_UPLOAD') == '1'
+            # Native-half decode is the measured default for eligible files.  `=0` remains a
+            # diagnostic escape hatch for comparing the float32 upload path.
+            half_upload_enabled = os.environ.get('NODEBASED_GPU2D_HALF_UPLOAD', '1') != '0'
             native_half = (half_upload_enabled and shared_channels is None and ext == '.exr'
                            and half_channels and space in color.PASSTHROUGH)
             pixels = (shared_channels[..., first:last] if shared_channels is not None else

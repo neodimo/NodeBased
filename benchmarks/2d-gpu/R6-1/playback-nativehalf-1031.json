@@ -1,0 +1,13 @@
+{
+  "method": "1080p realistic playback, 48-frame uncached first lap, three interleaved safe/native passes per tier; real Qt window under private Xvfb; gpu2d, 512 MiB, no sampler, stage trace",
+  "source": "native OIIO half decode, enabled by default for eligible passthrough half EXRs",
+  "raw_local_scratch": "scratch/nb-lanes/run/bench-L8-native-half/ (deliberate scratch, not committed)",
+  "rows": {
+    "radeon_8060s": {"safe": {"fps": [18.507, 18.746, 18.214], "interval_p95_ms": [60.886, 61.261, 64.001]}, "native_half": {"fps": [19.176, 20.194, 20.563], "interval_p95_ms": [64.884, 58.078, 56.544]}},
+    "rtx_3080_ti": {"safe": {"fps": [6.377, 6.131, 6.0], "interval_p95_ms": [225.347, 222.783, 272.839]}, "native_half": {"fps": [10.173, 9.797, 9.463], "interval_p95_ms": [133.562, 166.641, 170.942]}},
+    "four_core_radeon": {"safe": {"fps": [9.867, 9.902, 9.859], "interval_p95_ms": [112.212, 114.039, 109.906]}, "native_half": {"fps": [10.285, 10.321, 10.361], "interval_p95_ms": [105.256, 110.517, 104.931]}}
+  },
+  "mean_upload_bytes_per_frame": {"safe": 74767655, "native_half": 41590055},
+  "mean_upload_ms": {"radeon_8060s": [5.193, 3.623], "rtx_3080_ti": [92.016, 46.059], "four_core_radeon": [4.534, 3.101]},
+  "gate": {"radeon_24_fps": false, "radeon_p95_le_41_67_ms": false, "scope": "Linux 48-frame rows only; no 240-frame or Windows inference"}
+}
