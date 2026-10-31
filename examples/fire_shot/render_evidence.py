@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-import fcntl
 import json
 from pathlib import Path
 import subprocess
@@ -22,8 +21,17 @@ ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parents[1]
 
 
+try:
+    import fcntl
+except ImportError:  # Windows has no flock; the GPU lock is a Linux workstation convention
+    fcntl = None
+
+
 @contextmanager
 def gpu_lock():
+    if fcntl is None:
+        yield
+        return
     with open('/tmp/nb-gpu.lock', 'a+b') as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
         try:

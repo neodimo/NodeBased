@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-import fcntl
 import json
 import time
 from pathlib import Path
@@ -21,9 +20,18 @@ COMPARE_FRAMES = (1, 60, 120)
 STILL_FRAMES = (60, 90, 120)
 
 
+try:
+    import fcntl
+except ImportError:  # Windows has no flock; the GPU lock is a Linux workstation convention
+    fcntl = None
+
+
 @contextmanager
 def gpu_lock():
     """Release the shared card between the bake, comparisons, and each showcase frame."""
+    if fcntl is None:
+        yield
+        return
     with open("/tmp/nb-gpu.lock", "a+b") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
