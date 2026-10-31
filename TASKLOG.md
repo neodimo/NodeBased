@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step B of 2: the flame has a hot core and licking tongues (integrator tick)
+
+- **What was done:** `main` `a2db7871` -> `9583035e` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `9583035e`: Ran 7589 tests in 540.903 s, OK (skipped=36), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31, 1:20 AM PDT — Lane 6 fire shape, step B of 2: the flame has a hot core and tongues
 
 - **What was done — evidence:** swept the existing solver controls on the 64-cell shot (21 rows, `benchmarks/fire_shot/fire-shape-sweep-2026-10-31.json`; cooling is the strongest lever, burn expansion and confinement add tongues, turbulence of 3 or more makes dust, confinement of 3 diverges); found the temperature term is already a blackbody and the flat part is the flame glow's single kelvin, so added the off-by-default Render3D `volume_flame_follow_temperature` on both raymarchers, both path tracers and the fire-light grid; kept the shape-turbulence noise draws (bake 40 s to 9 s, bit-identical); retuned the shot. Gate numbers on the RTX 3080 Ti: core in the lowest third 6 to 17 of 17 frames, tongues per slice 0.53 to 1.13, bake 8.4 s, frame 0.495 / 0.440 / 0.417 s. The pre-step fire document renders bit for bit the same. 348 targeted tests pass on the RTX 3080 Ti, AMD Radeon 8060S and llvmpipe.

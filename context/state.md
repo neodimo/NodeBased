@@ -1,5 +1,26 @@
 ## 2026-10-31, 1:20 AM PDT — Lane 6 fire shape (step B of 2)
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (1:29 AM on 2026-10-31 PDT)
+
+`main` moved `a2db7871` -> `9583035e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `9583035e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-0119.log`, started 1:19 AM): **Ran 7589 tests in 540.903 s, OK (skipped=36), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step B of 2: the flame has a hot core and licking tongues.** Commits:
+  - `9f19c8eb` context: record Lane 6 fire shape step
+  - `525e6320` Fire shot: a flame with a bright core and tongues (gas cools, glow follows temperature), flame-shape measurements, before-and-after evidence and a solver-control sweep
+  - `28f21aaf` Render3D: the flame glow can take its colour from the gas temperature (off by default), on both raymarchers, both path tracers and the fire-light grid; the shape turbulence keeps its noise draws
+  Diff: 32 files changed, 4886 insertions(+), 42 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The fire shot's flame now has a bright core at the fuel and separate tongues; the flame glow can take its colour from the gas temperature.
 **Evidence (measured, RTX 3080 Ti, 64 cells, frames 8 to 24, `benchmarks/fire_shot/fire-shape-2026-10-31.json`):** core in the lowest third of the flame in 17 of 17 frames
 (6 of 17 before), tongues per slice 0.53 to 1.13, bake 8.4 s, a 128-sample frame 0.495 / 0.440 / 0.417 s (0.372 / 0.337 / 0.336 s before). The committed pre-step fire document renders
