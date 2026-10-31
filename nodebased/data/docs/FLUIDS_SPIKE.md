@@ -2244,6 +2244,96 @@ estimator on and off and in a thin plume, the means at many samples, the coverag
 **Not verified.** Windows; the real display; scenes with several volumes or splats (they keep the previous estimator); adaptive-sampling renders (each pixel's samples
 stay consecutive, so a run of any length is spread evenly, but no benchmark was run); a plume denser than the test volume's knot.
 
+### Fluids 13 B smoke up-res: eddy-scale detail from the up-res node, off by default (2026-10-31)
+
+The fire shot's smoke is a smooth haze with soft vertical streaks; the 64-cell solver cannot supply eddies (the shape step's sweep: vorticity confinement of 2.5 or more
+diverges, turbulence turns the smoke to dust and costs bake time, and the cooling that shapes the flame calms the smoke, vorticity 185 to 68). This step puts the existing
+`FluidUpres3D` between the fire cache and the render and measures what it gives. **Result: the smoke gains eddy-scale structure (density contrast over the smoke 0.44 to
+0.91, visible billows in the stills), the grain stays under its gate (0.0060) and the bake takes 17.3 s, but a 128-sample frame takes 2.4 to 3.7 s against 0.80 to 0.90 s
+(gate: under 0.75 s), so the up-res is not the shot's default.** `make_shot.build_document(smoke_upres=True)` (or a dict of up-res settings) builds the shot with it;
+the committed `fire_shot.nbcomp` is unchanged.
+
+**A bug the step had to fix first (reported separately).** `FluidUpres3D` as built never took anything new from the coarse cache after its first frame: from frame 2 on
+each fine field was the previous fine field carried along the guide, and the density was then rescaled to the coarse mass. On the fire shot that dropped the flame and the
+temperature (the fine flame sum was 0.004 against the coarse 0.17 at frame 16) and left a thin, dark remnant of the first frame's smoke: the first still of the step showed
+no fire at all. The pass now reinjects the coarse cache every frame (`fluid_upres.upres_sparse_grid(..., previous_source=, frame=)`, `cached_upres(..., previous_source=,
+reinject=)`, which the evaluator sets):
+
+- Each channel is `coarse now (sampled on the fine grid) + carried fine - carried coarse`, so the smooth part of every field (flame, temperature, fuel, smoke) comes from
+  the coarse frame, and what is carried along the guide is only the detail left over from before. The carried coarse copy uses the same kernels as the fine one, so there
+  are no new shaders and the three adapters agree.
+- New detail is seeded into the smoke that arrived this frame: `density += detail x noise x max(coarse now - coarse carried, 0)`, with a curl-noise pattern drawn
+  per frame (`seed + 7919 x frame`) and carried from then on, so smoke is never re-seeded and a stationary plume does not flicker. The noise is evaluated on a lattice two
+  voxels apart (shifted off the noise's own lattice nodes, where its curl is zero) and interpolated: about 8 x fewer evaluations and one third of the noise's work
+  per point (`_curl_y` is the y component of `particles.turbulence_field` alone, equal to it exactly).
+- The density is still rescaled to the coarse mass, and the older carry-only pass is what `upres_sparse_grid` does when `frame` is not given (its tests are unchanged).
+- Cached up-res frames from before this fix are not served again (the cache key carries a `reinject` marker).
+- Smaller fix in the same place: the evaluator read the coarse frames of the up-res's loop through a disabled cache (`self._sim_memory`), which solved the whole coarse
+  simulation a second time on every bake (8.5 s of 28). It now reads them through the node's own store, so the bake is the coarse solve once plus the up-res pass.
+
+**Sweep** (`render_evidence.py --upres-sweep`, RTX 3080 Ti, the shaped 64-cell shot, factor 2 unless stated, fixed seeds, frames 8 to 24; bake is the whole bake to frame 24 with the
+8.4 s coarse solve; "contrast" is the rms of density minus its box blur over the smoke, in units of its mean, with the blur covering the same physical size at every
+resolution; "core" is the number of frames whose brightest emission is in the lowest third of the flame):
+
+| Up-res settings | Bake | Core in lowest third | Tongues per slice | Smoke vorticity | Smoke contrast |
+| --- | --- | --- | --- | --- | --- |
+| none (the shot as it was) | 8.4 s | 17 / 17 | 1.13 | 68 | 0.44 |
+| x2, no turbulence | 13.5 s | 15 / 17 | 1.12 | 47 | 0.33 |
+| x2, turbulence 1, swirl 3 | 17.0 s | 15 / 17 | 1.12 | 47 | 0.63 |
+| x2, turbulence 1, swirl 4 | 16.9 s | 15 / 17 | 1.12 | 47 | 0.63 |
+| x2, turbulence 1, swirl 6 | 19.1 s | 15 / 17 | 1.12 | 47 | 0.70 |
+| x2, turbulence 1, swirl 8 | 17.2 s | 16 / 17 | 1.12 | 47 | 0.73 |
+| x2, turbulence 2, swirl 4 | 17.3 s | 15 / 17 | 1.12 | 47 | 0.84 |
+| **x2, turbulence 2, swirl 8** | **18.0 s** | 16 / 17 | 1.12 | 47 | **0.91** |
+| x2, turbulence 2, swirl 16 | 17.1 s | 16 / 17 | 1.12 | 46 | 0.87 |
+| x2, turbulence 2, swirl 8, grain 3 | 20.4 s | 16 / 17 | 1.12 | 47 | 0.92 |
+| x4, turbulence 2, swirl 8 | 75.1 s | 17 / 17 | 1.09 | 55 | 0.96 |
+
+Reading it: turbulence is what adds contrast (0.33 without, 0.63 to 0.92 with it), and the swirl size sets the scale (8 fine voxels gives the most; 4 gives finer wisps in the
+stills). Factor 4 costs 75 s to bake, over the gate by 2.5 x, for 0.96. Vorticity does not rise: the up-res node adds no velocity detail (its fine velocity is the coarse
+one sampled on the fine grid, and the fine-grid curl of that is a little lower), so only the contrast counts as the eddy measure here. The picked row is turbulence 2, swirl
+size 8, grain 2.
+
+**Comparison** (`render_evidence.py --upres`, 960 x 540, 128 samples, seeds 1 and 2, frames 8, 16, 24; times are the median of five warm renders in a process of their own):
+
+| | Without | With the up-res (x2, turbulence 2, swirl 8) | Gate |
+| --- | --- | --- | --- |
+| Smoke density contrast / vorticity (frames 8 to 24) | 0.44 / 68 | **0.91** / 47 | contrast clearly up: **met** |
+| Smoke structure in the image (15-pixel high-pass shared by both seeds, frames 8 / 16 / 24) | 0.065 / 0.084 / 0.080 | 0.069 / 0.085 / 0.081 | |
+| Same at 31 and 63 pixels, frame 16 | 0.160 / 0.304 | 0.173 / 0.321 | |
+| Grain at frame 16 (frames 8 / 24) | 0.0065 (0.0066 / 0.0066) | **0.0061** (0.0060 / 0.0060) | at most 0.0071: **met** |
+| Flame field core (burn-rate peak) in the lowest third | 17 / 17 frames | 17 / 17 | not worse: met |
+| Flame tongues per slice (burn-rate field) | 1.13 | 1.12 | not worse: met (1.3 % lower) |
+| Image: core row / tongues per row at frames 8 / 16 / 24 | 0.70, 0.65, 0.73 / 1.00, 1.02, 1.00 | 0.69, 0.62, 0.73 / 1.08, 1.03, 1.00 | not worse: met |
+| Emission-luminance core in the lowest third | 17 / 17 frames | 16 / 17 | one frame (22: a noise-brightened hot-smoke cell outshines the core) |
+| Mean image brightness, frames 8 / 16 / 24 | 0.0963 / 0.0889 / 0.0872 | 0.0899 / 0.0860 / 0.0844 | image 3 to 7 % darker |
+| Bake to frame 24 | 8.5 s | 17.3 s (coarse 8.3 s + up-res 9.0 s) | under 30 s: **met** |
+| 128-sample frame, frames 8 / 16 / 24 | 0.90 / 0.82 / 0.80 s | **2.41 / 3.54 / 3.67 s** | under 0.75 s: **not met** |
+
+Numbers per frame, with every flame measure: `benchmarks/fire_shot/fire-smoke-upres-2026-10-31.json`; the sweep: `benchmarks/fire_shot/fire-smoke-upres-sweep-2026-10-31.json`.
+
+![Without the up-res above, with it below: frames 8, 16, 24 at 128 samples](images/fire_shot/fire-smoke-upres-before-after-2026-10-31.png)
+![The upper plume at frame 16, enlarged three times without smoothing: without the up-res above, with it below](images/fire_shot/fire-smoke-upres-before-after-zoom-2026-10-31.png)
+
+**Reading the stills** (the saved images, not the real display; **Gonzo to judge**). With the up-res the plume has billows and darker gaps at a scale of 20 to 40 pixels
+in place of the smooth haze with vertical streaks, and the flame is unchanged. These are mottled clouds that move with the flow (the detail is carried along the guide),
+not curls: the node paints noise into the density and does not add swirling motion. The image measure agrees that the change is modest: the pattern both seeds share
+is 1 to 8 % stronger depending on the pixel scale, since a ray through 128 voxels of independent noise averages most of it away; the density field's contrast doubles.
+
+**Why the frame is slower.** Without turbulence the up-res frame already takes 1.6 to 2.0 s against 0.85 to 0.90 s, from the finer grid (twice the voxels per axis, more
+occupied tiles); the noise's density peaks (4 to 6 x the coarse maximum) most likely raise the density bound that the stratified first collision and the delta-tracked flights
+use to step, which would add the rest (3.3 to 4.8 s); that cause was not isolated. Without the up-res the shot already misses the 0.75 s gate (0.80 to 0.90 s since the strat step), so the gate cannot be met by this
+route without a cheaper volume path; the sparse volume path-tracing work (`docs/FLUIDS_SPIKE.md`, "N2" and "H2") is where that would be done.
+
+**Adapters.** The fire, fire-shot, flame-metric, up-res, sparse-volume and fluid-edit modules (209 tests; `tests/test_fluid_upres_reinject.py` adds 7: the flame, temperature
+and fuel follow the coarse cache each frame, the older pass kept the first frame's flame, smoke that arrives later is kept and mass matches, detail is seeded once and
+a stationary plume does not flicker, new smoke gets new detail each frame, the card against the CPU for a reinjected frame, and the evaluator through the fire shot;
+`tests/test_flame_metrics.py` adds 7 for the scale-matched measures and the image structure; `tests/test_fire_shot.py` adds 3 for the shot option) pass on the RTX 3080 Ti, on the AMD
+Radeon 8060S (`force-adapter.py integrated`) and on llvmpipe (`cpu`).
+
+**Not verified.** Windows; the real display; factor 4 beyond its bake time (no render); a solver or `FluidUpres3D` default (none changed); the older carry-only pass for old
+documents with up-res nodes now reinjects too (their cached up-res frames are rebuilt); a cheaper render path that would let the up-res meet the frame-time gate.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up

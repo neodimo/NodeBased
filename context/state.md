@@ -1,3 +1,13 @@
+## 2026-10-31, 11:10 AM PDT — Lane 6 smoke up-res: the fire shot's smoke through FluidUpres3D (default stays off)
+
+**Evidence.** Targeted tests on this branch (`nodebased/fluid_upres.py`, `nodebased/imaging.py`, the fire-shot example and tests): 209 tests (fire, fire-shot, flame-metrics, up-res, up-res reinjection, sparse volumes, fluid edits) pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe; `tests.test_knowledge` passes. Measurements on the RTX 3080 Ti at 960 x 540, 128 samples: `benchmarks/fire_shot/fire-smoke-upres-2026-10-31.json` (comparison) and `fire-smoke-upres-sweep-2026-10-31.json` (11 settings).
+
+**What changed.** `FluidUpres3D` now reinjects the coarse cache every frame (the shipped pass dropped the flame and temperature of a continuing fire after frame 1): fine = coarse sampled on the fine grid + carried detail; new smoke is seeded with curl-noise detail once. The evaluator's up-res loop reads coarse frames through the node's store (it solved the coarse simulation twice). `make_shot.build_document(smoke_upres=...)` adds the node to the shot (off by default). Measures are scale-matched for up-res volumes (`flame_metrics.cell_scale_of`).
+
+**Gate.** Smoke density contrast 0.44 to 0.91 (met); grain at frame 16 0.0061 (at most 0.0071: met); bake 17.3 s (under 30 s: met for factor 2, factor 4 takes 75 s); flame-field core 17/17 and tongues 1.12 against 1.13 (met); **128-sample frame 2.4 to 3.7 s against 0.80 to 0.90 s (under 0.75 s: not met; the shot without up-res already misses it)**. The up-res is not the shot's default.
+
+**Limits.** Linux only; Windows not run; stills read from saved images, not the real display (Gonzo to judge); factor 4 not rendered; the cause of the noise's extra render time is not isolated; vorticity does not rise (the node adds no velocity detail).
+
 ## 2026-10-31, 9:30 AM PDT — Lane 8 decode-ahead worker sweep
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (9:39 AM on 2026-10-31 PDT)
