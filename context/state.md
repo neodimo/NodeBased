@@ -1,3 +1,7 @@
+## Lane 2 fidelity step M — Write: TIFF, JPEG, DPX and Nuke's EXR options (8:00 PM on 2026-10-30 PDT)
+
+Write (Image row 2) writes TIFF, JPEG and DPX beside EXR and PNG, and takes the EXR options of Nuke's Write. **What changed.** `nodebased/writeformats.py` writes the three stills through OpenImageIO after the Write's output transform and premultiplied handling (`writenode.straight_output`): TIFF 8, 16 and 32-bit float with none, PackBits, LZW or Deflate; JPEG with quality and 4:1:1, 4:2:2 or 4:4:4 sampling (colour over black, no alpha); DPX 8, 10, 12 and 16-bit with fill, endianness and the Transfer header. Integer files are clamped to 0 to 1 and then rounded; float TIFF is not clamped. `media.write_exr(options=...)` adds the autocrop data window, the metadata choice, one part per layer (`interleave` = channels, with `first_part` and `write_full_layer_names`), channel-name truncation and the DWAA/DWAB level; `writenode.exr_options` returns None at the defaults so an old Write calls the unchanged writer. Properties hides the knobs of formats the Write is not set to write. **Evidence.** `tests/test_write_formats.py` reads every file back with OpenImageIO; the Write, render, knob, panel, slider, audit and knowledge modules pass. **Fidelity.** Write stays 67.2, overall 90.4: the reference data does not count per-format option tabs, so the fifteen paired knobs move no number. **Limits.** `exr_standard_layer_name_format` changes no byte with one view (unpaired); DPX `fill` follows the guide's wording; float TIFF carries no colour-space tag; no Windows run. Schema unchanged (28).
+
 ## 2026-10-30, 9:10 PM PDT — Lane 6 fire look (step B)
 
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (7:59 PM on 2026-10-30 PDT)
@@ -3071,7 +3075,7 @@ The production 256³/192³, 120-frame Radeon run completed with 0.49 median FPS 
   lies behind it from the camera and is itself zero colour, zero alpha and no depth, position, normal, uv or object id: CPU raster,
   CPU ray-traced (with the lens), CPU path tracer (with a shutter), GPU raster, GPU ray-traced, GPU path tracer, plus Cryptomatte,
   splats, particles and smoke (CPU modes and both path tracers). Shadows follow Cast shadows; reflections, refractions and bounces do
-  not meet it. `tests/test_3d_holdout.py` (46 tests) OK on the RTX 3080 Ti, the Radeon 8060S and llvmpipe; 1644 `test_3d_*` tests and
+  not meet it. `tests/test_3d_holdout.py` (47 tests) OK on the RTX 3080 Ti, the Radeon 8060S and llvmpipe; 1644 `test_3d_*` tests and
   125 knob, tier, core, bypass, catalog, knowledge, label and motion-blur tests OK on the RTX; the existing GPU modules (260 tests) OK on
   all three except nine adapter-routing mock tests that only `force-adapter.py` breaks.
 - **Artifacts:** docs/3D_FOUNDATION.md "Holdouts" (bundled copy identical), `docs/images/holdout_recipe.png`,
@@ -6474,7 +6478,7 @@ the stacked tip `c53b318` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/
 Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
 real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
 
-## Continuous mode merge: Lane 4 (rendering) (8:05 PM on 2026-09-25 PDT)
+## Continuous mode merge: Lane 4 (rendering) (8:00 PM on 2026-09-25 PDT)
 
 `main` moved `e246a16` -> `a38dbeb` (lane commits cherry-picked onto main in lane order) and then to this
 docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
