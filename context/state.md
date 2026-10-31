@@ -1,3 +1,7 @@
+## 2026-10-30, 9:10 PM PDT — Lane 6 fire look (step B)
+
+The fire shot is 64 cells, 128 samples and a seeded 0.10 sideways source wobble; evidence is in `benchmarks/fire_shot/fire-{look,curl,look-shot}-2026-10-30.json`, `docs/images/fire_shot/` and `docs/FLUIDS_SPIKE.md` ("Fluids 13 B look"). Grid sets the picture's structure, samples set the grain. Real-display verdict owed by Gonzo; no solver change.
+
 ## 2026-10-30, 7:50 PM PDT — Lane 6 sparse fire lights
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5) (7:39 PM on 2026-10-30 PDT)
