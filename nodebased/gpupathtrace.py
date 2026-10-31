@@ -939,7 +939,7 @@ fn splat_shape(i: u32) -> Shape {
 // number of fine cells along a coarse cell; see splat_info for why
 // integer offsets are not raw bit patterns. The fire as a light (ptvolume.FireEmitter): 10 the smoke's own extinction bound, the
 // emitter table offset low/high and its cell count (0: none), 11 the cell grid (x, y, z) and a cell's edge in object units, 12 a
-// cell's edge in world units and the multiple-importance step, 13..15 the object-to-world rows.
+// cell's edge in world units, the multiple-importance step and the near-field fade distance, 13..15 the object-to-world rows.
 const VOL_VECS: u32 = 16u;
 const MAX_COLLISIONS: u32 = 4096u;
 const VOL_ABSORB_DIM: u32 = 54u;
@@ -1166,6 +1166,17 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
 const EMIT_CELLS: f32 = 4.0;
 const EMIT_TAU: f32 = 0.5;          // a step's optical depth at the region's extinction bound never exceeds this: dense smoke is sampled finer
 const EMIT_CELLS_DEEP: f32 = 16.0;    // flights that start at a smoke vertex: their glow is weighted down by the albedo and the fire-light gain
+// The share of a fire point at distance `dist` from a smoke vertex that goes to the sampled fire (`vol_fire_light`), the phase-sampled
+// continuation keeping the rest: the balance heuristic pv delta r^2 / (pv delta r^2 + phase), faded in as (r / near)^2 over the first
+// `near` world units (ptvolume.sampled_share; `pv` is the emitter's density per world volume at the point).
+fn vol_fire_share(pv: f32, dist: f32, phase: f32) -> f32 {
+  let balance = pv * vh(0u, 12u).y * dist * dist;
+  var fade = 1.0;
+  let near = vh(0u, 12u).z;
+  if (near > 0.0) { fade = min(1.0, (dist / near) * (dist / near)); }
+  return balance / max(balance + phase, 1e-30) * fade;
+}
+
 // `mis_pdf` >= 0 marks a flight that leaves a smoke vertex whose fire `vol_fire_light` also sampled, with the phase pdf its direction was
 // drawn with: a sample at distance t is weighted pdf / (pdf + p_V delta t^2), p_V the emitter's density at the sample.
 fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u32, cells: f32, mis_pdf: f32,
@@ -1216,7 +1227,7 @@ fn vol_emission(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: 
           e += tint * (params.vp3.z * max(trilinear(bases.z, dims, sp, g), 0.0));
         }
         if (mis_pdf >= 0.0) {
-          e = e * (mis_pdf / max(mis_pdf + vol_fire_density(oo + dd * t) * vh(0u, 12u).y * t * t, 1e-30));
+          e = e * (1.0 - vol_fire_share(vol_fire_density(oo + dd * t), t, mis_pdf));
         }
         let sigma_t = params.vp0.x * sigma;
         // the integrand e * exp(-tau) at the sample, with the optical depth from the step's start to it taken at a blend of the
@@ -1404,7 +1415,10 @@ fn vol_fire_light(pos: vec3<f32>, d: vec3<f32>, g: f32, key: u32, turn: u32) -> 
   let delta = vh(0u, 12u).y;
   let denominator = pmf / (cw * cw * cw) * delta * dist * dist + ph;
   if (!(denominator > 0.0)) { return vec3<f32>(0.0); }
-  return e * (ph * delta * t / denominator);
+  var fade = 1.0;
+  let near = vh(0u, 12u).z;
+  if (near > 0.0) { fade = min(1.0, (dist / near) * (dist / near)); }
+  return e * (ph * delta * fade * t / denominator);
 }
 
 fn hg_phase(g: f32, cosine: f32) -> f32 {
@@ -2750,7 +2764,7 @@ def _pack_aux(packed, ps):
             table = add_floats(np.stack((emitter.cdf, emitter.pmf), axis=1))
             headers[0, 10, 1:4] = (table & 0xFFFFFF, table >> 24, len(emitter.pmf))
             headers[0, 11] = (*emitter.cells, emitter.cell_object)
-            headers[0, 12, :2] = (emitter.cell_world, emitter.delta)
+            headers[0, 12, :3] = (emitter.cell_world, emitter.delta, emitter.near)
             packed.flags |= 8
         packed.volume_count, packed.volume_base = len(smoke), add(headers)
         if smoke.fire_table is not None:

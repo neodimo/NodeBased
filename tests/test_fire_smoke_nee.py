@@ -111,10 +111,12 @@ class VertexEstimatorTests(unittest.TestCase):
     VERTEX = np.array([-0.6, -0.3, -0.2])
     ARRIVING = np.array([0.0, 0.0, -1.0])
 
-    def estimates(self):
+    INSIDE = np.array([-0.36, -0.06, 0.04])     # the middle of the dense knot of fire
+
+    def estimates(self, vertex=None):
         la = layer()
         n = self.N
-        pos, arriving, key = np.tile(self.VERTEX, (n, 1)), np.tile(self.ARRIVING, (n, 1)), keys(n)
+        pos, arriving, key = np.tile(self.VERTEX if vertex is None else vertex, (n, 1)), np.tile(self.ARRIVING, (n, 1)), keys(n)
         _, wi, dist, e, pv = ptvolume.fire_nee_sample(la, pos, key, 3)
         phase = ptvolume.phase(0.0, (wi * arriving).sum(1))
         sampled = ptvolume.fire_nee_value(la, wi, dist, e, pv, phase, ptvolume.fire_transmittance(la, 0, pos, wi, dist)).mean(1)
@@ -133,6 +135,20 @@ class VertexEstimatorTests(unittest.TestCase):
     def test_the_two_strategies_together_are_much_quieter_than_the_continuation_alone(self):
         sampled, weighed, plain = self.estimates()
         self.assertLess(float((sampled + weighed).std()), 0.6 * float(plain.std()))
+
+    def test_inside_the_fire_the_sampled_fire_is_no_noisier_than_the_continuation_alone(self):
+        """A point beside the vertex is better found by the continuation ray, which integrates the glow along its short flight:
+        without the fade the draw from the whole knot made a vertex in the middle of it 3.6 times noisier."""
+        sampled, weighed, plain = self.estimates(self.INSIDE)
+        together = sampled + weighed
+        self.assertLess(float(together.std()), 1.5 * float(plain.std()))
+        self.assertAlmostEqual(float(together.mean()), float(plain.mean()), delta=max(0.04 * float(plain.mean()), 5 * float(together.std()) / np.sqrt(self.N)))
+
+    def test_the_fade_is_zero_at_the_vertex_and_whole_beyond_its_distance(self):
+        emitter = layer().emitter()
+        near = emitter.near
+        self.assertEqual(near, ptvolume.NEE_NEAR_CELLS * 0.075)
+        np.testing.assert_allclose(ptvolume.near_fade(emitter, np.array([0.0, near / 2, near, 3 * near])), [0.0, 0.25, 1.0, 1.0])
 
     def test_the_continuation_hands_the_far_field_to_the_sampled_fire_and_never_gains(self):
         _, weighed, plain = self.estimates()

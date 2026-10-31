@@ -25,7 +25,10 @@ medium instead of marching it:
 * Fire emits `fire_intensity * Le(K) * sigma` per unit length where `temperature * temperature_scale`
   exceeds `fire_threshold` (`Le` the raymarch's blackbody or ramp table). It is added at every tentative
   collision as `emission / majorant` (a track-length estimator), so a path that reaches the fire from a mesh or
-  from a splat picks its light up and fire lights everything its paths touch, the smoke included.
+  from a splat picks its light up and fire lights everything its paths touch, the smoke included. At a smoke vertex the fire is also
+  a sampled light (one volume, `volume_fire_light` above 0, no splats): a point is drawn from the coarse emission grid
+  (`FireEmitter`), shaded through the smoke by the midpoint rule, and shares the fire with the phase-sampled continuation ray by the balance
+  heuristic (`fire_nee_sample`, `fire_nee_value`, `expected_emission`'s `mis`), so the fire's light on smoke has the mean it had and less noise.
 * Shadow rays (light sampling) take the deterministic transmittance `exp(-tau)` of the raymarch's shadow rays,
   `tau = shadow_density * sigma_t_unit * density_scale * integral(density)` by the midpoint rule with
   `shadow_steps` segments per volume; `shadow_density` 0 makes the smoke cast no shadow.
@@ -59,6 +62,7 @@ ENABLE_FIRE_NEE = True      # False leaves the fire reaching smoke only by phase
 NEE_STREAM = 31             # hashed-number stream ids of the fire sampling at a smoke vertex (cell and point) and of its ratio tracking
 NEE_RATIO_STREAM = 32      # (only `ratio_transmittance`, the unbiased reference, draws from it)
 NEE_DELTA_CELLS = 2.0       # the step the multiple-importance weights assume for the phase-sampled glow, in voxels (any step keeps the sum unbiased; set by the variance sweep)
+NEE_NEAR_CELLS = 4.0        # inside this many voxels of a smoke vertex the sampled fire's share fades in as (r / this)^2, the continuation keeping the rest (0: no fade)
 NEE_STEP_CELLS = 4.0        # the fire shadow ray's quadrature: one midpoint step per this many voxels ...
 NEE_TAU = 1.0               # ... and per this much optical depth at the volume's extinction bound, at most NEE_MAX_STEPS in all
 NEE_MAX_STEPS = 48
@@ -132,6 +136,7 @@ class FireEmitter:
         self.cell_object = factor * prep.volume.voxel_size
         self.cell_world = self.cell_object * abs(np.linalg.det(prep.m[:3, :3])) ** (1 / 3)
         self.delta = NEE_DELTA_CELLS * prep.volume.voxel_size      # the step in the multiple-importance weights (see NEE_DELTA_CELLS)
+        self.near = NEE_NEAR_CELLS * prep.volume.voxel_size        # world distance the sampled share fades in over (0: no fade)
 
     @classmethod
     def build(cls, prep, settings):
@@ -494,8 +499,7 @@ def expected_emission(layer, vi, o, d, t_end, keys, turn, deep, cancel=None, mis
                     on = mis_on[r]
                     pv = emitter.density_at(prep.to_object(o[r] + d[r] * t[:, None]))
                     ph = mis_pdf[r]
-                    weight = ph / np.maximum(ph + pv * emitter.delta * t * t, 1e-300)
-                    e = e * np.where(on, weight, 1.0)[:, None]
+                    e = e * np.where(on, 1.0 - sampled_share(emitter, pv, t, ph), 1.0)[:, None]
                 out[r] += e * (hh * np.exp(-(tau[r] + blend * hh * ju)))[:, None]
                 tau[r] += sigma_t * hh
                 sigma_prev[r] = sigma_t
@@ -626,14 +630,29 @@ def ratio_transmittance(layer, vi, o, d, dist, keys, turn, cancel=None):
     return out
 
 
+def near_fade(emitter, dist):
+    """How much of the sampled fire a point at distance `dist` from a smoke vertex keeps: 1, faded to 0 over the first
+    `NEE_NEAR_CELLS` voxels as (r / that)^2 (a point beside the vertex is better found by the continuation ray, which integrates the
+    glow along its short flight, than by a draw from the whole fire)."""
+    if emitter.near <= 0:
+        return np.ones_like(np.asarray(dist, np.float64))
+    return np.minimum(1.0, (dist / emitter.near) ** 2)
+
+
+def sampled_share(emitter, pv, dist, cosine_pdf):
+    """The share of a fire point at distance `dist` that goes to the sampled fire, the continuation ray keeping the rest: the balance
+    heuristic `pv delta r^2 / (pv delta r^2 + phase)` times `near_fade`."""
+    balance = pv * emitter.delta * dist * dist
+    return balance / np.maximum(balance + cosine_pdf, 1e-300) * near_fade(emitter, dist)
+
+
 def fire_nee_value(layer, wi, dist, e, pv, cosine_pdf, transmittance):
     """What a fire point adds at a smoke vertex, before the path throughput, the smoke colour and the fire-light gain:
-    `phase * e * T / (pv r^2)` weighted `pv delta r^2 / (pv delta r^2 + phase)` against the phase-sampled continuation ray that
-    could also reach it, which reduces to `phase * e * T * delta / (pv delta r^2 + phase)`. `cosine_pdf` is the phase function
-    at the direction to the point."""
-    delta = layer.emitter().delta
-    denominator = pv * delta * dist * dist + cosine_pdf
-    scale = np.where(denominator > 0, cosine_pdf * delta * transmittance / np.maximum(denominator, 1e-300), 0.0)
+    `phase * e * T / (pv r^2)` times `sampled_share`, which reduces to `phase * e * T * delta * fade / (pv delta r^2 + phase)`.
+    `cosine_pdf` is the phase function at the direction to the point."""
+    emitter = layer.emitter()
+    denominator = pv * emitter.delta * dist * dist + cosine_pdf
+    scale = np.where(denominator > 0, cosine_pdf * emitter.delta * near_fade(emitter, dist) * transmittance / np.maximum(denominator, 1e-300), 0.0)
     return e * scale[:, None]
 
 
