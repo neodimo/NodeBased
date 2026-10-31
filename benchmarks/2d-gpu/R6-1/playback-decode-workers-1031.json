@@ -1,0 +1,145 @@
+{
+  "method": "Three fresh, interleaved 48-frame 1080p passes per Radeon matrix row; native-half EXR decode, three source workers, 512 MiB GPU budget, no harness sampler.",
+  "gate": {
+    "fps_at_least": 24,
+    "interval_p95_ms_at_most": 41.67
+  },
+  "radeon_matrix": [
+    {
+      "tier": "radeon",
+      "workers": 1,
+      "lead_frames": 1,
+      "fps": 20.38,
+      "interval_p95_ms": 59.682,
+      "node_evaluation_p50_ms": 36.569,
+      "decode_thread_busy_ms_per_accepted_frame": 33.634,
+      "walk_read_ms_per_accepted_frame": 11.614,
+      "peak_in_flight_bytes": 201326592,
+      "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/radeon"
+    },
+    {
+      "tier": "radeon",
+      "workers": 1,
+      "lead_frames": 2,
+      "fps": 21.806,
+      "interval_p95_ms": 53.634,
+      "node_evaluation_p50_ms": 28.277,
+      "decode_thread_busy_ms_per_accepted_frame": 29.931,
+      "walk_read_ms_per_accepted_frame": 7.504,
+      "peak_in_flight_bytes": 201326592,
+      "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/radeon"
+    },
+    {
+      "tier": "radeon",
+      "workers": 2,
+      "lead_frames": 1,
+      "fps": 21.786,
+      "interval_p95_ms": 53.817,
+      "node_evaluation_p50_ms": 35.563,
+      "decode_thread_busy_ms_per_accepted_frame": 47.12,
+      "walk_read_ms_per_accepted_frame": 5.548,
+      "peak_in_flight_bytes": 201326592,
+      "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/radeon"
+    },
+    {
+      "tier": "radeon",
+      "workers": 2,
+      "lead_frames": 2,
+      "fps": 21.313,
+      "interval_p95_ms": 54.761,
+      "node_evaluation_p50_ms": 34.619,
+      "decode_thread_busy_ms_per_accepted_frame": 45.057,
+      "walk_read_ms_per_accepted_frame": 4.494,
+      "peak_in_flight_bytes": 201326592,
+      "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/radeon"
+    },
+    {
+      "tier": "radeon",
+      "workers": 3,
+      "lead_frames": 1,
+      "fps": 21.682,
+      "interval_p95_ms": 54.627,
+      "node_evaluation_p50_ms": 35.465,
+      "decode_thread_busy_ms_per_accepted_frame": 47.785,
+      "walk_read_ms_per_accepted_frame": 4.836,
+      "peak_in_flight_bytes": 201326592,
+      "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/radeon"
+    },
+    {
+      "tier": "radeon",
+      "workers": 3,
+      "lead_frames": 2,
+      "fps": 20.532,
+      "interval_p95_ms": 55.641,
+      "node_evaluation_p50_ms": 36.638,
+      "decode_thread_busy_ms_per_accepted_frame": 44.962,
+      "walk_read_ms_per_accepted_frame": 3.923,
+      "peak_in_flight_bytes": 201326592,
+      "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/radeon"
+    }
+  ],
+  "tier_validation": {
+    "rtx3080ti": {
+      "today": {
+        "tier": "rtx",
+        "workers": 1,
+        "lead_frames": 1,
+        "fps": 10.77,
+        "interval_p95_ms": 134.487,
+        "node_evaluation_p50_ms": 80.646,
+        "decode_thread_busy_ms_per_accepted_frame": 65.878,
+        "walk_read_ms_per_accepted_frame": 4.621,
+        "peak_in_flight_bytes": 201326592,
+        "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/rtx"
+      },
+      "radeon_winner": {
+        "tier": "rtx",
+        "workers": 1,
+        "lead_frames": 2,
+        "fps": 10.403,
+        "interval_p95_ms": 146.633,
+        "node_evaluation_p50_ms": 81.754,
+        "decode_thread_busy_ms_per_accepted_frame": 66.966,
+        "walk_read_ms_per_accepted_frame": 4.633,
+        "peak_in_flight_bytes": 201326592,
+        "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/rtx"
+      }
+    },
+    "four_core_standin": {
+      "today": {
+        "tier": "fourcore",
+        "workers": 0,
+        "lead_frames": 1,
+        "fps": 10.33,
+        "interval_p95_ms": 105.887,
+        "node_evaluation_p50_ms": 92.806,
+        "decode_thread_busy_ms_per_accepted_frame": 0,
+        "walk_read_ms_per_accepted_frame": 10.021,
+        "peak_in_flight_bytes": 67108864,
+        "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/fourcore"
+      },
+      "radeon_winner": {
+        "tier": "fourcore",
+        "workers": 1,
+        "lead_frames": 2,
+        "fps": 11.885,
+        "interval_p95_ms": 103.329,
+        "node_evaluation_p50_ms": 49.283,
+        "decode_thread_busy_ms_per_accepted_frame": 57.551,
+        "walk_read_ms_per_accepted_frame": 19.044,
+        "peak_in_flight_bytes": 67108864,
+        "raw_trace_dir": "scratch/nb-lanes/run/bench-L8-decode-workers-1031/fourcore"
+      }
+    }
+  },
+  "decision": {
+    "automatic_decode_workers": "one worker at four CPUs and above; no worker at three CPUs or fewer",
+    "automatic_decode_lead": "one full-size frame remains the default because the two-frame Radeon winner regressed on RTX",
+    "radeon_gate": "unmet"
+  },
+  "limits": [
+    "Linux only",
+    "48-frame behavior only",
+    "No Windows or 240-frame inference"
+  ]
+}

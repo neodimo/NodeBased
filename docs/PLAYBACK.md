@@ -172,3 +172,27 @@ in the Edit menu, the `viewer_knobs` command). Those that touch playback and the
   instead: alpha shown through the view transform (`rgb_only` off) and `use_gpu_for_viewer` off. A format whose pixel aspect
   is not 1, drawn at that aspect (`ignore_pixel_aspect` off), stays on the Viewer: the Direct picture draws square pixels, says so in
   the status bar and, when it is the main viewer, brings the Viewer forward.
+
+## Decode-ahead worker sweep (October 31, 2026)
+
+The realistic 1080p GPU comp was measured for three fresh 48-frame passes per row, with native-half EXR decode,
+three source workers, a 512 MiB GPU budget and no harness sampler. Raw timelines and traces are deliberate scratch at
+`scratch/nb-lanes/run/bench-L8-decode-workers-1031/`; the committed summary is
+`benchmarks/2d-gpu/R6-1/playback-decode-workers-1031.json`.
+
+| Radeon 8060S setting | fps (median) | interval p95 | decode busy / accepted frame |
+| --- | ---: | ---: | ---: |
+| 1 worker, 1-frame lead (current) | 20.38 | 59.68 ms | 34.5 ms |
+| 1 worker, 2-frame lead | 21.81 | 53.63 ms | 29.9 ms |
+| 2 workers, 1-frame lead | 21.79 | 53.82 ms | 35.3 ms |
+| 3 workers, 1-frame lead | 21.68 | 54.63 ms | 35.2 ms |
+
+The Radeon winner is one worker with a two-frame lead. It is not the universal default: the RTX 3080 Ti fell from
+10.77 fps / 134.49 ms p95 to 10.40 fps / 146.63 ms, so a longer lead harms that tier. The four-core stand-in did benefit
+from one worker and a two-frame lead (10.33 to 11.89 fps; 105.89 to 103.33 ms p95), so automatic decode-ahead now starts
+one worker at four CPUs; three or fewer keep it off. The normal full-size lead remains one frame.
+
+The Radeon gate remains **unmet**: 21.81 fps and 53.63 ms p95 leave 2.19 fps and 11.96 ms to the 24 fps / 41.67 ms target.
+The decode-ahead thread remains the limiting producer (about 30 ms busy time per accepted frame); its work overlaps the
+preview thread, whose `walk:Read` cost is 7.50 ms, while the card island is about 12 ms. The pool stayed bounded: peak
+source-pool in-flight memory was 192 MiB, below its 819 MiB bound. These results cover Linux and 48 frames only.

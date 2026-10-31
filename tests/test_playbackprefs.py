@@ -65,7 +65,7 @@ class DefaultsTests(unittest.TestCase):
         self.assertFalse(playbackprefs.gpu_nodes_wanted(None))
 
     def test_automatic_counts_follow_the_cpu_rules_the_window_used_before_the_settings(self):
-        for cpus, decode, source in ((2, 0, 0), (3, 0, 0), (4, 0, 1), (6, 1, 3), (16, 1, 3)):
+        for cpus, decode, source in ((2, 0, 0), (3, 0, 0), (4, 1, 1), (6, 1, 3), (16, 1, 3)):
             self.assertEqual(playbackprefs.decode_workers(None, cpus=cpus), decode, cpus)
             self.assertEqual(playbackprefs.source_workers(None, cpus=cpus), source, cpus)
 

@@ -6,7 +6,7 @@ Each setting has one default, here, and flipping a default is a one-line change 
 * `DEFAULT_GPU_NODES` -- whether Grade, Transform, Blur and Merge run on the graphics card (the resident
   island of `gpu2d.py`) instead of the CPU kernels. Off: every node on the CPU kernels, as before.
 * `DEFAULT_DECODE_WORKERS` -- threads that decode the Read frames ahead of the playhead
-  (`decodepool.DecodeAheadPool`). `None` is automatic: one thread, none at four CPUs or fewer.
+  (`decodepool.DecodeAheadPool`). `None` is automatic: none at three CPUs or fewer, one above that.
 * `DEFAULT_SOURCE_WORKERS` -- threads that compute the independent sources of one frame side by side
   (`sourcepool.SourcePool`). `None` is automatic: none at three CPUs or fewer, one at four, up to three beyond.
 * `DEFAULT_ROTO_DRAWER` -- which drawer rasterises the Roto and RotoPaint shapes: `"fast"` (`rotofast.py`) or
@@ -106,9 +106,9 @@ def gpu_nodes_forced(environ=None):
 
 
 def automatic_decode_workers(cpus):
-    """Today's rule: one decode thread, none at four CPUs or fewer (the stand-in lost throughput to it)."""
+    """One decode thread from four CPUs up; fewer CPUs keep the preview worker alone."""
     from . import decodepool
-    return 0 if cpus <= 4 else decodepool.DEFAULT_WORKERS
+    return 0 if cpus <= 3 else decodepool.DEFAULT_WORKERS
 
 
 def automatic_source_workers(cpus):

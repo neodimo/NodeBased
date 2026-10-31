@@ -1,3 +1,11 @@
+## 2026-10-31 — Lane 8 GPU playback: decode-ahead worker sweep
+
+- **What was done — evidence:** Ran three fresh interleaved 48-frame 1080p passes for each Radeon native-half matrix row (one, two and three decode workers; one- and two-frame lead). One worker/two-frame lead won there at 21.806 fps median and 53.634 ms p95, against 20.380 fps and 59.682 ms for today. The same setting regressed RTX 3080 Ti (10.403 fps / 146.633 ms versus 10.770 / 134.487) and improved the four-core stand-in (11.885 / 103.329 versus 10.330 / 105.887). Automatic decode workers therefore start at four CPUs; the normal full-size lead remains one frame. `tests.test_playbackprefs` and `tests.test_knowledge` pass (39 tests).
+- **Artifacts:** `benchmarks/2d-gpu/R6-1/playback-decode-workers-1031.json`, `docs/PLAYBACK.md` and bundled copy, `nodebased/playbackprefs.py`, `tests/test_playbackprefs.py`; raw traces are deliberate scratch at `scratch/nb-lanes/run/bench-L8-decode-workers-1031/`. All tracked artifacts are uncommitted at this note; raw traces are deliberate scratch.
+- **State:** DONE. Radeon gate is unmet: 2.194 fps and 11.964 ms p95 remain. Decode-ahead stays the limiting producer (29.931 ms busy per accepted frame); the 192 MiB peak in-flight source-pool allocation remains inside its 819 MiB cap. Linux/48-frame evidence only; Windows and 240-frame behavior unverified.
+- **Next owner + concrete artifact:** Gonzo integrates the branch tip and uses `benchmarks/2d-gpu/R6-1/playback-decode-workers-1031.json` for the next playback decision.
+- **Failure mode:** A Radeon-only longer decode lead looked globally attractive. RTX measurements showed it worsens both fps and p95, so the lead default was retained.
+
 ## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step A of 1: the smoke above the fire stops looking like sand (finish 1) (integrator tick)
 
 - **What was done:** `main` `7e8a6983` -> `b7525282` plus this docs commit. Evidence and per-lane commit
