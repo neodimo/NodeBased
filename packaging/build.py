@@ -111,10 +111,12 @@ def main():
         shutil.copy2(ROOT / 'assets' / 'nodebased-icon.png', appdir / 'nodebased-icon.png')
         (appdir / 'AppRun').chmod(0o755)
         tool = ROOT / 'build' / 'appimagetool.AppImage'
-        url = 'https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'
-        # Digest from the upstream GitHub release API on 2026-10-04, verified
-        # against the downloaded 15,092,216-byte asset before updating the pin.
-        expected = '95cbe7cce9717fce90c484e34052ee7c7f1d7635b33c12525b4776826a7d29b6'
+        # The tagged 1.9.1 release, not "continuous": upstream rebuilds continuous without notice
+        # (2026-10-04 and again 2026-10-29), which failed the 0.48.0 preview on this pin.
+        url = 'https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage'
+        # Digest from the upstream GitHub release API on 2026-10-30, verified against the
+        # downloaded 15,092,216-byte asset (reports git 8c8c91f, build 296) before pinning.
+        expected = 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0'
         with urlopen(url, timeout=60) as response, tool.open('wb') as output:
             shutil.copyfileobj(response, output)
         if hashlib.sha256(tool.read_bytes()).hexdigest() != expected:
