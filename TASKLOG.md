@@ -965,3 +965,10 @@
 - **State:** Integration recovery done; feature step partial/in progress. Exact half-float qualification/upload, three-adapter before/after playback measurements, Radeon 24 fps gate, Windows CI, and real-display QA remain unverified. Other GPT lanes are parked while Lane 8 works.
 - **Next owner + concrete artifact:** Lane 8 finish worker follows `scratch/nb-lanes/auto/briefs/finish-L8-1029-2339.md` and writes its completion report; Gonzo/integrator checks that report, the lane commit and exact-tip suite before merging. The 10-minute tick watches the running worker.
 - **Failure mode:** A benchmark that times CPU kernels must stop expecting a per-node CPU row when that node moves into the resident GPU island. The first worker also searched for generated EXR plates inside its Git worktree; they are in workspace scratch. The model-credit exhaustion left the launch wake unanswered overnight until the reset.
+## 2026-10-31 — Lane 8 native-half EXR decode
+
+- **What was done:** Eligible passthrough half EXRs now decode as native OIIO half samples, widen once for evaluation, and reuse the contiguous RGBA half buffer for GPU upload. Reordered channels/alpha fill build exact half RGBA; converted, float and named-layer paths keep float decode. The upload default is enabled because all three measured tiers improved.
+- **Artifacts:** Commits `a414a7ba` and `a4e758ec`; committed evidence `benchmarks/2d-gpu/R6-1/playback-nativehalf-1031.json`; raw timelines and X-server logs are deliberate scratch at `scratch/nb-lanes/run/bench-L8-native-half/`.
+- **State:** Partial. Radeon native half reached 19.176–20.563 fps with p95 56.544–64.884 ms, so the 24 fps / 41.67 ms gate remains unmet. RTX and four-core rows also improved; 240-frame and Windows behaviour remain unverified.
+- **Next owner + concrete artifact:** Gonzo uses `benchmarks/2d-gpu/R6-1/playback-nativehalf-1031.json` and `docs/PERFORMANCE.md` to select the next playback bottleneck.
+- **Failure mode:** The earlier half path added a float32-to-float16 full-frame copy during decode, erasing its transfer saving. Native OIIO half decode removes that copy.
