@@ -1,3 +1,10 @@
+## 2026-10-31, 12:45 PM PDT — Lane 6 smoke up-res, finish 1: factor 4 rendered (default stays off)
+
+Factor 4 (turbulence 2, swirl 8, grain 2) rendered on the RTX 3080 Ti at 960 x 540, 128 samples: bake 73 s, frame time 6.5 s / 43.9 s / 79.7 s at frames 8 / 16 / 24
+(without: 0.89 / 0.82 / 0.79 s), grain 0.0067, image smoke structure up 14 to 24 %, no curls. Gate not met; the shot's default stays off. New: `render_evidence.py --upres-render`,
+`--timing-from`; benchmark `benchmarks/fire_shot/fire-smoke-upres-render-x4-2026-10-31.json`. Left: Windows, the real display, curls (the up-res node adds no velocity detail).
+Next: Gonzo judges the x4 stills, then a cheaper volume render path or velocity swirl in `FluidUpres3D`.
+
 ## 2026-10-31, 11:10 AM PDT — Lane 6 smoke up-res: the fire shot's smoke through FluidUpres3D (default stays off)
 
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (11:30 AM on 2026-10-31 PDT)
