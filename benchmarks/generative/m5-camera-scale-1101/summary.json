@@ -1,0 +1,363 @@
+{
+ "summary": "errors are the mean over frames 2..N of the verifier's camera check (largest in 'max'); frame 1 is the reference picture and is reported separately as first_frame_fit",
+ "s_dolly": 0.5,
+ "scale_sweep_dolly": [
+  {
+   "path": "dolly",
+   "translation_scale_setting": 1.0,
+   "translation_scale_used": 1.0,
+   "translation_scale_source": "explicit setting",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 3.411898388034986,
+    "max": 9.973277253361479,
+    "last": 9.973277253361479
+   },
+   "position_error": {
+    "mean": 1.1778475563351265,
+    "max": 2.24190998933917,
+    "last": 1.7174143486026983
+   },
+   "fov_error_degrees_mean": 4.6348694229572365,
+   "commanded_travel": 0.999999906584683,
+   "fitted_travel_last": 2.2724318588091195,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "first_frame_fit": {
+    "position_error": 0.2676316089321255,
+    "rotation_error_degrees": 0.2766074246941973
+   },
+   "model_seconds": 29.72,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 178.4
+  },
+  {
+   "path": "dolly",
+   "translation_scale_setting": 0.5,
+   "translation_scale_used": 0.5,
+   "translation_scale_source": "explicit setting",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 0.835213936429753,
+    "max": 3.1316715778532775,
+    "last": 1.8007075215432409
+   },
+   "position_error": {
+    "mean": 0.5735842882482673,
+    "max": 1.7851811829376945,
+    "last": 0.9563798447979949
+   },
+   "fov_error_degrees_mean": 2.004785111883374,
+   "commanded_travel": 0.999999906584683,
+   "fitted_travel_last": 0.1047741541189773,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "first_frame_fit": {
+    "position_error": 0.10259955713919239,
+    "rotation_error_degrees": 0.21539189256167413
+   },
+   "model_seconds": 29.79,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 178.9
+  },
+  {
+   "path": "dolly",
+   "translation_scale_setting": 0.25,
+   "translation_scale_used": 0.25,
+   "translation_scale_source": "explicit setting",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 1.0964634439268184,
+    "max": 2.730501804944186,
+    "last": 2.730501804944186
+   },
+   "position_error": {
+    "mean": 0.9329931378493929,
+    "max": 1.8128564730792138,
+    "last": 1.8128564730792138
+   },
+   "fov_error_degrees_mean": 4.4600039280283115,
+   "commanded_travel": 0.999999906584683,
+   "fitted_travel_last": 2.7984678788997885,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "first_frame_fit": {
+    "position_error": 0.16080937493216363,
+    "rotation_error_degrees": 0.14856808811017355
+   },
+   "model_seconds": 29.77,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 178.1
+  },
+  {
+   "path": "dolly",
+   "translation_scale_setting": 0.125,
+   "translation_scale_used": 0.125,
+   "translation_scale_source": "explicit setting",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 0.6598396160315619,
+    "max": 1.5805404882715415,
+    "last": 1.5805404882715415
+   },
+   "position_error": {
+    "mean": 1.0197463564462839,
+    "max": 3.733568767831465,
+    "last": 1.3798223920503536
+   },
+   "fov_error_degrees_mean": 3.3395218806858527,
+   "commanded_travel": 0.999999906584683,
+   "fitted_travel_last": -0.3593665852091078,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "first_frame_fit": {
+    "position_error": 0.21515236753064454,
+    "rotation_error_degrees": 0.13700927551029238
+   },
+   "model_seconds": 29.76,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 178.0
+  },
+  {
+   "path": "dolly",
+   "translation_scale_setting": 0.0625,
+   "translation_scale_used": 0.0625,
+   "translation_scale_source": "explicit setting",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 1.1493926241028232,
+    "max": 4.255543308173951,
+    "last": 2.672615528909556
+   },
+   "position_error": {
+    "mean": 1.7855866519346308,
+    "max": 5.677997292094607,
+    "last": 3.810765306006318
+   },
+   "fov_error_degrees_mean": 5.1175414941396795,
+   "commanded_travel": 0.999999906584683,
+   "fitted_travel_last": -2.7781899643202403,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "first_frame_fit": {
+    "position_error": 0.24560732508739333,
+    "rotation_error_degrees": 0.08752030837317064
+   },
+   "model_seconds": 29.78,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 178.1
+  }
+ ],
+ "default_scale_runs": [
+  {
+   "path": "dolly",
+   "translation_scale_setting": null,
+   "translation_scale_used": 0.49999340894082855,
+   "translation_scale_source": "DISTANCE_SCALE_K / median depth of the reference frame",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 0.8531161733636047,
+    "max": 3.3681148213568215,
+    "last": 1.9605617840431895
+   },
+   "position_error": {
+    "mean": 0.6240265458078255,
+    "max": 1.9210337291377784,
+    "last": 0.8663346843864747
+   },
+   "fov_error_degrees_mean": 2.3573619933144134,
+   "commanded_travel": 0.999999906584683,
+   "fitted_travel_last": 0.21250674288994187,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "first_frame_fit": {
+    "position_error": 0.08871944890143141,
+    "rotation_error_degrees": 0.21674548728081006
+   },
+   "model_seconds": 29.75,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 178.2
+  },
+  {
+   "path": "pan",
+   "translation_scale_setting": null,
+   "translation_scale_used": 0.49999340894082855,
+   "translation_scale_source": "DISTANCE_SCALE_K / median depth of the reference frame",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 0.7213504340454232,
+    "max": 1.9881799695675046,
+    "last": 1.53357482475499
+   },
+   "position_error": {
+    "mean": 0.2938069513909589,
+    "max": 0.9057111004572528,
+    "last": 0.16230659320487695
+   },
+   "fov_error_degrees_mean": 1.403309919965519,
+   "commanded_travel": 0.0,
+   "fitted_travel_last": 0.16230659320487695,
+   "static_camera_reference": {
+    "position_error_mean": 0.0,
+    "position_error_last": 0.0,
+    "rotation_error_degrees_mean": 10.319120797635675,
+    "rotation_error_degrees_last": 19.811803683939647
+   },
+   "first_frame_fit": {
+    "position_error": 0.07769036861598627,
+    "rotation_error_degrees": 0.20135981477077045
+   },
+   "model_seconds": 29.81,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 181.2
+  },
+  {
+   "path": "pandolly",
+   "translation_scale_setting": null,
+   "translation_scale_used": 0.49999340894082855,
+   "translation_scale_source": "DISTANCE_SCALE_K / median depth of the reference frame",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 1.4692418398402338,
+    "max": 4.849461250706631,
+    "last": 4.849461250706631
+   },
+   "position_error": {
+    "mean": 0.6423985506339761,
+    "max": 2.465082825336435,
+    "last": 1.2822265334557037
+   },
+   "fov_error_degrees_mean": 3.3206382627371007,
+   "commanded_travel": 0.999999906584683,
+   "fitted_travel_last": 2.173294878178897,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 10.319120797635675,
+    "rotation_error_degrees_last": 19.811803683939647
+   },
+   "first_frame_fit": {
+    "position_error": 0.1037364219112202,
+    "rotation_error_degrees": 0.2044117619089322
+   },
+   "model_seconds": 29.78,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 181.6
+  },
+  {
+   "path": "truck",
+   "translation_scale_setting": null,
+   "translation_scale_used": 0.49999340894082855,
+   "translation_scale_source": "DISTANCE_SCALE_K / median depth of the reference frame",
+   "reference_median_depth": 11.840156078338623,
+   "rotation_error_degrees": {
+    "mean": 2.7019022204182797,
+    "max": 6.206295531355083,
+    "last": 0.2635308297642854
+   },
+   "position_error": {
+    "mean": 1.1706075606130384,
+    "max": 3.028286834085019,
+    "last": 0.0006099507875895954
+   },
+   "fov_error_degrees_mean": 4.89074487205698,
+   "commanded_travel": 1.0000000201963528,
+   "fitted_travel_last": 1.0004872313778543,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333334,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "first_frame_fit": {
+    "position_error": 0.046136727235247685,
+    "rotation_error_degrees": 0.33313242131409043
+   },
+   "model_seconds": 29.78,
+   "peak_vram_allocated_mib": 6349.9,
+   "wall_seconds_export_and_generate": 175.3
+  }
+ ],
+ "perfect_follower_floor": {
+  "dolly": {
+   "exported_beauty": {
+    "rotation_error_degrees": {
+     "mean": 0.030425069170554014,
+     "max": 0.030760286978599095,
+     "last": 0.030313852219487587
+    },
+    "position_error": {
+     "mean": 0.0,
+     "max": 0.0,
+     "last": 0.0
+    },
+    "fov_error_degrees_mean": 0.0
+   },
+   "srgb8_round_trip": {
+    "rotation_error_degrees": {
+     "mean": 0.033539880777972424,
+     "max": 0.04899476242151164,
+     "last": 0.021630330704029258
+    },
+    "position_error": {
+     "mean": 0.007447494864900259,
+     "max": 0.012750320992503165,
+     "last": 0.00690968266148357
+    },
+    "fov_error_degrees_mean": 0.02516577183030518
+   }
+  },
+  "truck": {
+   "exported_beauty": {
+    "rotation_error_degrees": {
+     "mean": 0.030314271051505647,
+     "max": 0.030323971888313577,
+     "last": 0.03028347289912914
+    },
+    "position_error": {
+     "mean": 0.0,
+     "max": 0.0,
+     "last": 0.0
+    },
+    "fov_error_degrees_mean": 0.0
+   },
+   "srgb8_round_trip": {
+    "rotation_error_degrees": {
+     "mean": 0.052972817320662856,
+     "max": 0.06677751939727665,
+     "last": 0.06060309193180043
+    },
+    "position_error": {
+     "mean": 0.009649926483396612,
+     "max": 0.0160536552371568,
+     "last": 0.011452382207222667
+    },
+    "fov_error_degrees_mean": 0.022434937154354923
+   }
+  }
+ }
+}
