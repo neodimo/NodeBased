@@ -155,6 +155,15 @@ class TaskTests(unittest.TestCase):
         self.assertFalse(waiter.is_alive())
 
 
+def drained(pool, timeout=2.0):
+    """The pool's stats once its workers have let go of every task. A worker marks its task done before it
+    returns the task's bytes to the budget, so a caller woken by the result can read `in_flight` a moment early."""
+    deadline = time.monotonic() + timeout
+    while pool.stats()["in_flight"] and time.monotonic() < deadline:
+        time.sleep(0.005)
+    return pool.stats()
+
+
 class EvaluatorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -224,7 +233,7 @@ class EvaluatorTests(unittest.TestCase):
                 pooled.evaluate_raster(doc, "colorcorrect", frame=2)
             self.assertIs(type(got.exception), type(expected.exception))
             self.assertEqual(str(got.exception), str(expected.exception), broken)
-            self.assertEqual(pooled.source_pool.stats()["in_flight"], 0)
+            self.assertEqual(drained(pooled.source_pool)["in_flight"], 0)
 
     def test_an_error_earlier_in_the_walk_wins_over_a_failing_source(self):
         doc = copy.deepcopy(self.doc)
@@ -253,7 +262,7 @@ class EvaluatorTests(unittest.TestCase):
                 for frame in range(1, FRAMES + 1):         # fresh frames, so each walk decodes
                     pooled.evaluate_raster(self.doc, "colorcorrect", cancel=cancel, frame=frame)
         self.assertTrue(entered.is_set())
-        stats = pooled.source_pool.stats()
+        stats = drained(pooled.source_pool)
         self.assertEqual(stats["in_flight"], 0)
         self.assertEqual(stats["queued"], 0)
         cancelled = threading.Event()
