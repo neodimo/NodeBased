@@ -106,6 +106,84 @@ class PoseRowTests(unittest.TestCase):
             ctrl.pose_rows([camera(), None], 576, 320)
 
 
+class TranslationScaleTests(unittest.TestCase):
+    MOVE = [camera(), camera(position=(1, 0, 0), target=(1, 0, -1))]
+
+    def test_scale_one_gives_the_unscaled_rows_exactly(self):
+        self.assertEqual(ctrl.pose_rows(self.MOVE, 576, 320, 1.0), ctrl.pose_rows(self.MOVE, 576, 320))
+
+    def test_half_scale_halves_the_travel_of_the_plus_x_move(self):
+        rows = ctrl.pose_rows(self.MOVE, 576, 320, 0.5)
+        np.testing.assert_allclose(w2c_of(rows[1])[:, 3], [-0.5, 0, 0], atol=1e-9)
+        np.testing.assert_allclose(relative_poses(rows)[1][:3, 3], [0.5, 0, 0], atol=1e-9)
+        np.testing.assert_allclose(w2c_of(rows[0]), w2c_of(ctrl.pose_rows(self.MOVE, 576, 320)[0]), atol=1e-12)
+
+    def test_scaling_is_about_the_first_cameras_position_not_the_origin(self):
+        cameras = [camera(position=(2, 1, 5), target=(2, 1, 4)), camera(position=(2, 1, 4), target=(2, 1, 3))]
+        for scale in (0.25, 2.0):
+            rows = ctrl.pose_rows(cameras, 576, 320, scale)
+            np.testing.assert_allclose(w2c_of(rows[0]), w2c_of(ctrl.pose_rows(cameras, 576, 320)[0]), atol=1e-12)
+            np.testing.assert_allclose(relative_poses(rows)[1][:3, 3], [0, 0, scale], atol=1e-9)
+
+    def test_rotation_rows_are_identical_for_any_scale(self):
+        cameras = [camera(), camera(position=(1, 0, -1), target=(0, 0, -3)), camera(position=(2, 1, -2), target=(-4, 1, -2))]
+        base = ctrl.pose_rows(cameras, 576, 320)
+        for scale in (0.0625, 0.5, 3.0):
+            rows = ctrl.pose_rows(cameras, 576, 320, scale)
+            for row, reference in zip(rows, base):
+                np.testing.assert_allclose(w2c_of(row)[:, :3], w2c_of(reference)[:, :3], atol=1e-12)
+                self.assertEqual(row[:7], reference[:7])
+
+    def test_a_pure_pan_is_unchanged_by_any_scale(self):
+        pan = [camera(), camera(target=(-1, 0, -1)), camera(target=(-1, 0, 0))]
+        relative = relative_poses(ctrl.pose_rows(pan, 576, 320))
+        for scale in (0.1, 5.0):
+            for got, want in zip(relative_poses(ctrl.pose_rows(pan, 576, 320, scale)), relative):
+                np.testing.assert_allclose(got, want, atol=1e-9)
+
+    def test_a_scale_of_zero_or_below_or_not_a_number_is_refused_by_name(self):
+        for bad in (0, 0.0, -1, -0.5, float("nan"), float("inf"), True, "2"):
+            with self.assertRaisesRegex(ctrl.TranslationScaleError, "translation_scale"):
+                ctrl.pose_rows(self.MOVE, 576, 320, bad)
+            with self.assertRaises(ValueError):
+                ctrl.resolve_settings({"translation_scale": bad})
+
+    def test_setting_resolves_with_the_other_four_and_defaults_to_the_depth_choice(self):
+        self.assertIsNone(ctrl.resolve_settings({})["translation_scale"])
+        self.assertIsNone(ctrl.resolve_settings({"translation_scale": None})["translation_scale"])
+        resolved = ctrl.resolve_settings({"translation_scale": 0.25, "fps": 8})
+        self.assertEqual((resolved["translation_scale"], resolved["fps"], resolved["steps"]), (0.25, 8, 25))
+        self.assertEqual(resolved, ctrl.resolve_settings(resolved))
+        with self.assertRaises(ValueError):
+            ctrl.resolve_settings({"translation": 1})
+
+    def test_default_scale_is_the_constant_over_the_median_valid_depth(self):
+        depth = np.full((8, 10, 1), 4.0, np.float32)
+        depth[0, :, 0] = 0.0          # background: no depth
+        depth[1, :4, 0] = np.inf
+        depth[2, :3, 0] = np.nan
+        depth[3, :2, 0] = 400.0       # a few far pixels do not move the median
+        scale, provenance = ctrl.choose_translation_scale(None, depth)
+        self.assertAlmostEqual(scale, ctrl.DISTANCE_SCALE_K / 4.0, places=12)
+        self.assertEqual(provenance["reference_median_depth"], 4.0)
+        self.assertIn("median depth", provenance["translation_scale_source"])
+        doubled = ctrl.choose_translation_scale(None, depth * 2)[0]
+        self.assertAlmostEqual(doubled, scale / 2, places=12)
+
+    def test_explicit_scale_overrides_the_default_and_says_so(self):
+        depth = np.full((4, 4, 1), 4.0, np.float32)
+        scale, provenance = ctrl.choose_translation_scale(0.3, depth)
+        self.assertEqual(scale, 0.3)
+        self.assertEqual(provenance["translation_scale_source"], "explicit setting")
+
+    def test_no_usable_depth_falls_back_to_one_and_says_so(self):
+        for depth in (None, np.zeros((4, 4, 1), np.float32), np.full((4, 4, 1), np.nan, np.float32)):
+            scale, provenance = ctrl.choose_translation_scale(None, depth)
+            self.assertEqual(scale, 1.0)
+            self.assertIsNone(provenance["reference_median_depth"])
+            self.assertIn("fallback 1.0", provenance["translation_scale_source"])
+
+
 class CameraCtrlProviderTests(unittest.TestCase):
     def test_description_accepts_the_camera_and_reports_the_rest_ignored(self):
         desc = ProviderDescription.load("cameractrl_svd")
@@ -181,6 +259,18 @@ class CameraCtrlProviderTests(unittest.TestCase):
                 self.assertEqual(result["honoured"].count("camera_pose"), 1)
                 self.assertEqual(result["run"]["peak_vram_allocated_mib"], 1)
                 self.assertEqual(result["run"]["checkpoint"], "CameraCtrl_svdxt.ckpt")
+                run = result["run"]
+                self.assertGreater(run["translation_scale"], 0)
+                self.assertTrue(run["translation_scale_source"])
+                self.assertIn("reference_median_depth", run)
+                manifest = json.loads((root / "out" / "frame.provider.json").read_text())
+                self.assertEqual(manifest["run"]["translation_scale"], run["translation_scale"])
+                explicit = generate(bundle, state, root / "out2" / "frame.####.exr", "cameractrl_svd", seed=3,
+                                    sampler_settings={"fps": 8, "translation_scale": 0.5})
+                self.assertEqual(explicit["run"]["translation_scale"], 0.5)
+                self.assertEqual(explicit["run"]["translation_scale_source"], "explicit setting")
+                self.assertEqual(explicit["sampler_settings"]["translation_scale"], 0.5)
+                self.assertNotEqual(explicit["artifact_id"], result["artifact_id"])
                 self.assertTrue(any("denoising step" in message for _, message in seen))
                 options = {"manifest_path": str(bundle), "scene_state_path": str(state),
                            "output_pattern": str(root / "worker" / "frame.####.exr"),

@@ -29,15 +29,70 @@ VARIANTS = {"xt": {"snapshot": "svd-xt", "ckpt": "CameraCtrl_svdxt.ckpt", "frame
                     "config": "configs/train_cameractrl/svd_320_576_cameractrl.yaml"}}
 DEFAULT_PYTHON = str(Path.home() / ".openclaw/workspace/scratch/nb-lanes/run/big-L4/venv-cameractrl/bin/python")
 GL_TO_CV = np.diag([1.0, -1.0, -1.0, 1.0])
+# The default translation scale is DISTANCE_SCALE_K / d, where d is the reference frame's median depth in scene units.
+# Fitted on one benchmark: the one-unit dolly of the demo shot (examples/demo_shot/benchmark_camera_following.py,
+# results in benchmarks/generative/m5-camera-scale-1101). Of the scales 1 to 1/16 the lowest mean position error was at
+# 0.5, and the demo reference frame's median depth is 11.84 scene units, so K = 0.5 * 11.84 = 5.92.
+DISTANCE_SCALE_K = 5.92
+FALLBACK_TRANSLATION_SCALE = 1.0
+
+
+class TranslationScaleError(ValueError):
+    """`translation_scale` must be a finite number above zero."""
+
+
+def check_translation_scale(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise TranslationScaleError(f"translation_scale must be a finite number above zero, got {value!r}")
+    return float(value)
 
 
 def resolve_settings(settings):
-    """The same four sampler settings and bounds as svd_image_video."""
+    """The same four sampler settings and bounds as svd_image_video, plus `translation_scale`.
+
+    `translation_scale` multiplies the camera's travel before it reaches the model (see `pose_rows`). Left out
+    (or None) it is chosen per scene from the reference frame's depth, see `choose_translation_scale`; the
+    resolved settings then keep None, and the scale actually used is reported in the run's provenance.
+    """
     from .svd_image_video import resolve_settings as resolve
-    return resolve(settings)
+    settings = dict(settings or {})
+    scale = settings.pop("translation_scale", None)
+    result = resolve(settings)
+    result["translation_scale"] = None if scale is None else check_translation_scale(scale)
+    return result
 
 
-def pose_rows(cameras, width, height):
+def median_depth(depth):
+    """Median of the valid (finite, positive) values of a depth plane in scene units, or None when there are none."""
+    if depth is None:
+        return None
+    values = np.asarray(getattr(depth, "values", depth), dtype=np.float64)
+    if values.ndim == 3:
+        values = values[..., 0]
+    valid = values[np.isfinite(values) & (values > 0)]
+    return float(np.median(valid)) if valid.size else None
+
+
+def choose_translation_scale(explicit, depth):
+    """The scale used for a run and where it came from: `(scale, provenance)`.
+
+    An explicit setting wins. Otherwise the scale is `DISTANCE_SCALE_K / d` with `d` the median depth of the
+    reference frame (the first frame of the video); with no usable depth pass the scale is 1.0 and the
+    provenance says the fallback was used.
+    """
+    if explicit is not None:
+        return check_translation_scale(explicit), {"translation_scale_source": "explicit setting",
+                                                   "reference_median_depth": median_depth(depth)}
+    d = median_depth(depth)
+    if d is None:
+        return FALLBACK_TRANSLATION_SCALE, {
+            "translation_scale_source": "fallback 1.0: no depth pass was exported for the reference frame",
+            "reference_median_depth": None}
+    return DISTANCE_SCALE_K / d, {"translation_scale_source": "DISTANCE_SCALE_K / median depth of the reference frame",
+                                  "reference_median_depth": d}
+
+
+def pose_rows(cameras, width, height, translation_scale=1.0):
     """RealEstate10K rows `[t, fx, fy, cx, cy, 0, 0, w2c (3 x 4, row-major)]`, one per camera.
 
     `width` and `height` are the size the video is generated at, which fixes the intrinsics' aspect.
@@ -49,7 +104,9 @@ def pose_rows(cameras, width, height):
     The poses are absolute: CameraCtrl makes them relative to the first frame itself
     (`get_relative_pose(..., zero_first_frame_scale=True)`). Translation is in scene units; the model was
     trained on RealEstate10K, whose scale is arbitrary (structure from motion), so a unit of distance in
-    a NodeBased scene is not a distance the model has learned.
+    a NodeBased scene is not a distance the model has learned. `translation_scale` multiplies every camera
+    position about the first camera's position before the rows are built, so frame 0 and every rotation are
+    unchanged and only the travel is: the model's distance scale is its training data's, not the scene's.
 
     Intrinsics are normalised by image size. `fov` is the vertical field of view, so
     `fy = 0.5 / tan(radians(fov) / 2)`, `fx = fy * height / width` (square pixels) and `cx = cy = 0.5`.
@@ -57,14 +114,20 @@ def pose_rows(cameras, width, height):
     rescale is then a no-op.
     """
     from .. import scene3d
+    translation_scale = check_translation_scale(translation_scale)
     rows = []
+    origin = None
     for index, camera in enumerate(cameras):
         if not isinstance(camera, scene3d.Camera):
             raise ValueError("camera_pose needs a Camera on every frame of the SceneState")
         eye, view = scene3d._view_basis(camera)
+        eye = np.asarray(eye, np.float64)
+        if origin is None:
+            origin = eye
+        eye = origin + (eye - origin) * translation_scale
         c2w_gl = np.eye(4)
         c2w_gl[:3, :3] = np.asarray(view, np.float64).T
-        c2w_gl[:3, 3] = np.asarray(eye, np.float64)
+        c2w_gl[:3, 3] = eye
         w2c = np.linalg.inv(c2w_gl @ GL_TO_CV)
         fy = 0.5 / math.tan(math.radians(camera.fov) / 2)
         fx = fy * height / width
@@ -109,13 +172,17 @@ def run_frames(controls, *, cameras, reference_frames, seed, sampler_settings, w
     np.save(workdir / "reference.npy", _reference_image(controls, reference_frames))
     gen_width, gen_height = GENERATION_SIZE
     spec = VARIANTS[name]
+    settings = resolve_settings(sampler_settings)
+    scale, provenance = choose_translation_scale(settings.pop("translation_scale"), controls[0].depth)
+    print(f"translation_scale {scale:.6g} ({provenance['translation_scale_source']}; "
+          f"reference median depth {provenance['reference_median_depth']})", flush=True)
     job = {"model_dir": str((Path(model_dir) / spec["snapshot"]).resolve()),
            "checkpoint": str((Path(model_dir) / "cameractrl" / spec["ckpt"]).resolve()),
            "source": str(Path(source).resolve()), "config": spec["config"],
            "reference": str(workdir / "reference.npy"), "result_dir": str(workdir),
-           "poses": pose_rows(cameras, gen_width, gen_height), "frames": len(controls),
+           "poses": pose_rows(cameras, gen_width, gen_height, scale), "frames": len(controls),
            "width": width, "height": height, "generation_size": [gen_width, gen_height],
-           "seed": seed, "settings": resolve_settings(sampler_settings), "decode_chunk_size": 2,
+           "seed": seed, "settings": settings, "decode_chunk_size": 2,
            "info": str(workdir / "info.json")}
     job_path = workdir / "job.json"
     job_path.write_text(json.dumps(job), encoding="utf-8")
@@ -161,6 +228,8 @@ def run_frames(controls, *, cameras, reference_frames, seed, sampler_settings, w
             raise RuntimeError(f"CameraCtrl model process failed (exit {code}): " + " | ".join(tail[-8:])[-1200:])
     info = json.loads(Path(job["info"]).read_text(encoding="utf-8"))
     info["checkpoint"] = spec["ckpt"]
+    info["translation_scale"] = scale
+    info.update(provenance)
     if os.environ.get(RUN_INFO_ENV):
         Path(os.environ[RUN_INFO_ENV]).write_text(json.dumps(info, indent=2), encoding="utf-8")
     from .sdxl_controlnet import srgb_to_acescg

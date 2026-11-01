@@ -13,7 +13,7 @@
     "text": {"accepted": false, "note": "SVD-XT has no text conditioning"},
     "reference_frames": {"accepted": true, "role": "exactly one RGB reference image is the first frame of the video; if omitted, the first ControlBundle beauty frame is used"},
     "seed": {"accepted": true, "role": "CUDA generator seed for the video"},
-    "sampler_settings": {"accepted": true, "role": "steps, fps, motion_bucket_id and noise_aug_strength; unknown keys refused"}
+    "sampler_settings": {"accepted": true, "role": "steps, fps, motion_bucket_id, noise_aug_strength and translation_scale; unknown keys refused", "translation_scale": "float above zero; multiplies the camera's travel before it reaches the model; the model's distance scale is its training data's, not the scene's. Default: a constant divided by the reference frame's median depth (1.0 when no depth pass is exported)"}
   },
   "limits": {"max_resolution": [576, 320], "max_frames": 25},
   "color_spaces": ["ACEScg"],

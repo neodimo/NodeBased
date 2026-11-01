@@ -313,6 +313,10 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
                   "options": {"text": text,
                               "reference_frames": [hashlib.sha256(Path(item).read_bytes()).hexdigest()
                                                    for item in (reference_frames or [])]}}
+    if desc.name == "cameractrl_svd" and run_info is not None:
+        # deterministic given the SceneState, unlike timings and memory, so it belongs to the artifact
+        generation["provider_provenance"] = {key: run_info[key] for key in (
+            "translation_scale", "translation_scale_source", "reference_median_depth") if key in run_info}
     sequence_files = {Path(output).name: output for output in outputs}
     sequence_files[GENERATION_MANIFEST] = (json.dumps(generation, sort_keys=True, indent=2) + "\n").encode("utf-8")
     sequence_id = store.put_files(sequence_files, "generated_sequence", {
