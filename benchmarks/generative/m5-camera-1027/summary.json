@@ -1,0 +1,137 @@
+{
+ "summary": "errors are the mean over frames 2..N of the verifier's camera check; frame 1 is the reference picture",
+ "runs": {
+  "cameractrl-dolly": {
+   "provider": "cameractrl_svd",
+   "frames": 25,
+   "plate": [
+    576,
+    320
+   ],
+   "solved_frames": 24,
+   "rotation_error_degrees": {
+    "mean": 3.411898388034986,
+    "max": 9.973277253361479,
+    "last": 9.973277253361479
+   },
+   "position_error": {
+    "mean": 1.1778475563351265,
+    "max": 2.24190998933917,
+    "last": 1.7174143486026983
+   },
+   "fov_error_degrees_mean": 4.6348694229572365,
+   "static_camera_reference": {
+    "position_error_mean": 0.5208333333333335,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "model_seconds": 29.84,
+   "load_seconds": 1.35,
+   "peak_vram_allocated_mib": 6349.9,
+   "peak_vram_reserved_mib": 6874.0,
+   "wall_seconds_export_and_generate": 179.6,
+   "mean_landmarks": 15.72,
+   "mean_reprojection_rms_pixels": 5.317322581918759
+  },
+  "cameractrl-pan": {
+   "provider": "cameractrl_svd",
+   "frames": 25,
+   "plate": [
+    576,
+    320
+   ],
+   "solved_frames": 24,
+   "rotation_error_degrees": {
+    "mean": 0.7213504340454232,
+    "max": 1.9881799695675046,
+    "last": 1.53357482475499
+   },
+   "position_error": {
+    "mean": 0.2938069513909589,
+    "max": 0.9057111004572528,
+    "last": 0.16230659320487695
+   },
+   "fov_error_degrees_mean": 1.403309919965519,
+   "static_camera_reference": {
+    "position_error_mean": 0.0,
+    "position_error_last": 0.0,
+    "rotation_error_degrees_mean": 10.319120797635675,
+    "rotation_error_degrees_last": 19.811803683939647
+   },
+   "model_seconds": 29.79,
+   "load_seconds": 1.45,
+   "peak_vram_allocated_mib": 6349.9,
+   "peak_vram_reserved_mib": 6874.0,
+   "wall_seconds_export_and_generate": 181.5,
+   "mean_landmarks": 17.08,
+   "mean_reprojection_rms_pixels": 1.4630807307879665
+  },
+  "svd-dolly": {
+   "provider": "svd_image_video",
+   "frames": 8,
+   "plate": [
+    576,
+    324
+   ],
+   "solved_frames": 7,
+   "rotation_error_degrees": {
+    "mean": 2.194225747671346,
+    "max": 4.328254155110562,
+    "last": 1.1375290434168126
+   },
+   "position_error": {
+    "mean": 0.7294395261330539,
+    "max": 1.4485308051826244,
+    "last": 0.1584891160188704
+   },
+   "fov_error_degrees_mean": 4.275231515409678,
+   "static_camera_reference": {
+    "position_error_mean": 0.5714285714285715,
+    "position_error_last": 1.0,
+    "rotation_error_degrees_mean": 0.0,
+    "rotation_error_degrees_last": 0.0
+   },
+   "model_seconds": 36.39,
+   "load_seconds": 0.19,
+   "peak_vram_allocated_mib": 4654.6,
+   "peak_vram_reserved_mib": 6208.0,
+   "wall_seconds_export_and_generate": 88.7,
+   "mean_landmarks": 15.875,
+   "mean_reprojection_rms_pixels": 5.571673935202425
+  },
+  "svd-pan": {
+   "provider": "svd_image_video",
+   "frames": 8,
+   "plate": [
+    576,
+    324
+   ],
+   "solved_frames": 7,
+   "rotation_error_degrees": {
+    "mean": 4.253108485220273,
+    "max": 9.32679664454908,
+    "last": 9.32679664454908
+   },
+   "position_error": {
+    "mean": 1.8770898484393126,
+    "max": 7.3376008124565635,
+    "last": 1.3203875966645455
+   },
+   "fov_error_degrees_mean": 5.028359861853572,
+   "static_camera_reference": {
+    "position_error_mean": 0.0,
+    "position_error_last": 0.0,
+    "rotation_error_degrees_mean": 11.321494839077817,
+    "rotation_error_degrees_last": 19.811803683939647
+   },
+   "model_seconds": 36.41,
+   "load_seconds": 0.18,
+   "peak_vram_allocated_mib": 4654.6,
+   "peak_vram_reserved_mib": 6208.0,
+   "wall_seconds_export_and_generate": 88.4,
+   "mean_landmarks": 14.25,
+   "mean_reprojection_rms_pixels": 6.513885370755097
+  }
+ }
+}

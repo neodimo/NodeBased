@@ -1,0 +1,117 @@
+{
+ "model": "svd",
+ "provider": "svd_image_video",
+ "path": "pan",
+ "seed": 7,
+ "plate_size": [
+  576,
+  324
+ ],
+ "frame_count": 8,
+ "camera_honoured": false,
+ "generate_and_export_wall_seconds": 88.4,
+ "model_run": {
+  "load_seconds": 0.18,
+  "generate_seconds": 36.41,
+  "peak_vram_allocated_mib": 4654.6,
+  "peak_vram_reserved_mib": 6208.0
+ },
+ "generated_sequence": "cccc21a1b59c20eca89effbb3daaf9e8bd03034a9827d619b72ca69f5c57b836",
+ "scene_state": "0cab041908c0d3d745a327daffbf91e5305643d9ae2e83474fd44e5bc7abcc0e",
+ "verification_report": "4f38e210e3717faa82e27aeee9405149be093a1a61e425392c0da1ea8c2c005f",
+ "camera": {
+  "frames": 8,
+  "solved_frames": 7,
+  "rotation_error_degrees": {
+   "mean": 4.253108485220273,
+   "max": 9.32679664454908,
+   "last": 9.32679664454908
+  },
+  "position_error": {
+   "mean": 1.8770898484393126,
+   "max": 7.3376008124565635,
+   "last": 1.3203875966645455
+  },
+  "fov_error_degrees_mean": 5.028359861853572,
+  "per_frame": [
+   {
+    "frame": 1,
+    "position_error": 1.0258168742704388,
+    "rotation_error_degrees": 1.990206399225935,
+    "fov_error_degrees": 3.8717550292240404,
+    "tracker_landmarks": 12,
+    "reprojection_rms_pixels": 1.7304047769798727,
+    "reason": "provider does not honour camera pose"
+   },
+   {
+    "frame": 2,
+    "position_error": 7.3376008124565635,
+    "rotation_error_degrees": 3.9107221485251342,
+    "fov_error_degrees": 19.822112472586213,
+    "tracker_landmarks": 14,
+    "reprojection_rms_pixels": 3.147079757079027,
+    "reason": "provider does not honour camera pose"
+   },
+   {
+    "frame": 3,
+    "position_error": 0.4356799317297753,
+    "rotation_error_degrees": 2.3601452609041758,
+    "fov_error_degrees": 0.8908234743281369,
+    "tracker_landmarks": 20,
+    "reprojection_rms_pixels": 7.554436898586899,
+    "reason": "provider does not honour camera pose"
+   },
+   {
+    "frame": 4,
+    "position_error": 1.264534503921127,
+    "rotation_error_degrees": 2.305733615598258,
+    "fov_error_degrees": 4.792361193585862,
+    "tracker_landmarks": 16,
+    "reprojection_rms_pixels": 6.735132963604297,
+    "reason": "provider does not honour camera pose"
+   },
+   {
+    "frame": 5,
+    "position_error": 0.7715262373760998,
+    "rotation_error_degrees": 3.3525090180000277,
+    "fov_error_degrees": 4.391456876993537,
+    "tracker_landmarks": 14,
+    "reprojection_rms_pixels": 7.547246102289669,
+    "reason": "provider does not honour camera pose"
+   },
+   {
+    "frame": 6,
+    "position_error": 0.857121361418924,
+    "rotation_error_degrees": 5.314590339059593,
+    "fov_error_degrees": 0.22648823136280782,
+    "tracker_landmarks": 13,
+    "reprojection_rms_pixels": 6.308524064427588,
+    "reason": "provider does not honour camera pose"
+   },
+   {
+    "frame": 7,
+    "position_error": 1.1527784955081528,
+    "rotation_error_degrees": 3.2012623699056473,
+    "fov_error_degrees": 4.06868060225667,
+    "tracker_landmarks": 14,
+    "reprojection_rms_pixels": 7.74095352416392,
+    "reason": "provider does not honour camera pose"
+   },
+   {
+    "frame": 8,
+    "position_error": 1.3203875966645455,
+    "rotation_error_degrees": 9.32679664454908,
+    "fov_error_degrees": 1.0065961818617737,
+    "tracker_landmarks": 11,
+    "reprojection_rms_pixels": 4.833419508154409,
+    "reason": "provider does not honour camera pose"
+   }
+  ]
+ },
+ "static_camera_reference": {
+  "position_error_mean": 0.0,
+  "position_error_last": 0.0,
+  "rotation_error_degrees_mean": 11.321494839077817,
+  "rotation_error_degrees_last": 19.811803683939647
+ }
+}
