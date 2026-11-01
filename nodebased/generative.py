@@ -228,7 +228,12 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         svd_image_video.resolve_settings(sampler_settings)
         if reference_frames is not None and len(reference_frames) != 1:
             raise ValueError("SVD accepts exactly one reference image")
-    if desc.name not in ("reproject", "null", "sdxl_controlnet", "svd_image_video"):
+    if desc.name == "cameractrl_svd":
+        from .providers import cameractrl_svd
+        cameractrl_svd.resolve_settings(sampler_settings)
+        if reference_frames is not None and len(reference_frames) != 1:
+            raise ValueError("CameraCtrl accepts exactly one reference image")
+    if desc.name not in ("reproject", "null", "sdxl_controlnet", "svd_image_video", "cameractrl_svd"):
         raise ValueError(f"No local implementation for provider {desc.name}")
     pictures, run_info = None, None
     if desc.name == "sdxl_controlnet":
@@ -252,6 +257,16 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
             pictures, run_info = svd_image_video.run_frames(
                 controls, reference_frames=reference_frames, seed=seed, sampler_settings=sampler_settings,
                 workdir=work, progress=progress, cancelled=cancelled)
+    if desc.name == "cameractrl_svd":
+        from .providers import cameractrl_svd
+        sampler_settings = cameractrl_svd.resolve_settings(sampler_settings)
+        cameras = cameractrl_svd.cameras_for(controls, scene_state_path)
+        import tempfile
+        Path(output_pattern).parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="cameractrl-svd-", dir=Path(output_pattern).parent) as work:
+            pictures, run_info = cameractrl_svd.run_frames(
+                controls, cameras=cameras, reference_frames=reference_frames, seed=seed,
+                sampler_settings=sampler_settings, workdir=work, progress=progress, cancelled=cancelled)
     outputs = []
     for index, frame in enumerate(controls):
         if progress:

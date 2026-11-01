@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "name": "cameractrl_svd",
+  "version": "1.0",
+  "locality": "local",
+  "local_gpu": true,
+  "accepts": {
+    "depth": {"accepted": false, "note": "CameraCtrl on SVD-XT does not consume the exported metric depth"},
+    "normals": {"accepted": false, "note": "CameraCtrl on SVD-XT does not consume normals"},
+    "motion": {"accepted": false, "note": "the exported motion vectors are not consumed; the camera path is the motion control"},
+    "ids": {"accepted": false, "note": "CameraCtrl on SVD-XT does not consume object IDs"},
+    "camera_pose": {"accepted": true, "role": "per-frame camera from the exported scene camera, relative to the first frame"},
+    "text": {"accepted": false, "note": "SVD-XT has no text conditioning"},
+    "reference_frames": {"accepted": true, "role": "exactly one RGB reference image is the first frame of the video; if omitted, the first ControlBundle beauty frame is used"},
+    "seed": {"accepted": true, "role": "CUDA generator seed for the video"},
+    "sampler_settings": {"accepted": true, "role": "steps, fps, motion_bucket_id and noise_aug_strength; unknown keys refused"}
+  },
+  "limits": {"max_resolution": [576, 320], "max_frames": 25},
+  "color_spaces": ["ACEScg"],
+  "color": "ACEScg beauty is converted through OCIO to an sRGB reference image; external references are RGB images. The model generates 576 by 320 sRGB frames, resized to the requested plate and converted through OCIO to ACEScg OpenEXR.",
+  "environment": {"interpreter_variable": "NODEBASED_CAMERACTRL_PYTHON", "source_variable": "NODEBASED_CAMERACTRL_SRC", "model_dir_variable": "NODEBASED_CAMERACTRL_MODEL_DIR", "gpu": "NVIDIA CUDA with model CPU offload and chunked VAE decode"},
+  "returns": {"frames": "OpenEXR RGBA sequence; beauty only", "honoured": ["camera_pose", "reference_frames", "seed", "sampler_settings"]}
+}
