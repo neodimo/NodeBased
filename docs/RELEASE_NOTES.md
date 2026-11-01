@@ -1,3 +1,30 @@
+# NodeBased 0.49.0 — Write in TIFF, JPEG and DPX, NoTimeBlur, faster half-float playback, and a cleaner fire
+
+## What changed since 0.48.0
+
+- **Write saves TIFF, JPEG and DPX.** Beside EXR and PNG, Write now delivers TIFF (8, 16 or 32-bit float; none, PackBits, LZW or Deflate), JPEG (quality and 4:1:1, 4:2:2 or 4:4:4 sampling) and DPX (8, 10, 12 or 16-bit, with fill, endianness and the Transfer header), after the Write's output transform. Integer files are clamped to 0 to 1; float TIFF is not. EXR gains Nuke's options: autocrop, metadata, interleave, first part, full layer names, truncated names and DWA level.
+- **A NoTimeBlur node.** It rounds the frame requests that reach it (rint, floor, ceil or none, plus Nuke's "use single frame"), so a TimeBlur above it samples whole frames, as in Nuke. Found under Time in the node toolbar.
+- **The project settings count as Nuke's Root.** Frame range, frame rate, colour config, view and proxy are paired with Root's knobs; the rest are listed as unsupported with a reason. The 2D fidelity score rose from 90.4 to 90.9.
+- **Half-float EXRs play faster on the GPU.** Plain half-float EXRs now stay half through decode and upload to the graphics card without an extra full-frame copy; this upload is on by default. Radeon playback rose from about 18.5 to 19.2–20.6 fps, and RTX and four-core machines improved too.
+- **Read frames decode ahead on four-core machines.** The decode-ahead thread now starts at four CPUs (three or fewer stay off). On the four-core stand-in playback rose from 10.3 to 11.9 fps.
+- **The fire stops sparkling.** The path tracer integrates the fire's glow along each ray instead of adding it at random collisions, samples the fire as a light where rays hit the smoke, and spreads each camera ray's first smoke collision evenly. At 128 samples the fire shot's grain fell from 0.0142 to about 0.0065, at roughly the same render time, with the long-run average unchanged. Both the GPU and CPU tracers do this.
+- **A flame with a core and tongues.** Render3D can colour the flame glow by the gas temperature (off by default). With it, the fire shot's gas cools as it rises, so the flame has a bright core at the fuel and separate tongues. Older fire documents render bit for bit the same.
+- **Smoke up-res takes the fire with it.** FluidUpres3D now carries the flame, temperature and new smoke from the coarse cache on every frame, and the fire shot has an optional up-res pass for its smoke (off by default).
+- The fire and Hot pour example scripts now run on Windows.
+
+## Known limits
+
+- The smoke above the fire does not curl yet. The up-res pass adds density detail only, so the smoke looks mottled rather than swirling. At factor 4 it is far too slow for the shot (frames of 6 to 80 s, a 73 s bake), so it stays off.
+- GPU half-float playback is still short of 24 fps on the Radeon (about 21.8 fps at best, against a 41.7 ms frame budget). These numbers come from 48-frame Linux runs; Windows and longer runs were not measured.
+- NoTimeBlur's "use single frame" follows our reading of Nuke's guide; it was not compared with a real Nuke render. A whole-frame TimeOffset between a TimeBlur and a NoTimeBlur hides the frame from it.
+- Write's new formats and the fire changes were not checked against Nuke, on Windows, or on the real display.
+
+## Moved to 0.50.0
+
+- Real curls in the smoke: velocity-level swirl inside FluidUpres3D, or a cheaper render path for a finer volume.
+- Find the next GPU playback bottleneck toward 24 fps; decode ahead is now the limit.
+- Measure the 2D rows, Write's formats and NoTimeBlur against real Nuke renders.
+
 # NodeBased 0.48.0 — TVIScale, GPU ColorCorrect and cached fire that lights its surroundings
 
 ## What changed since 0.47.0
