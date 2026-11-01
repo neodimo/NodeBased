@@ -1,0 +1,518 @@
+{
+ "dolly": {
+  "tolerances": {
+   "camera_position_m": 0.4,
+   "camera_rotation_degrees": 0.5,
+   "profile": "generative"
+  },
+  "frames_total": 25,
+  "camera_moving_frames": {
+   "frames": 24,
+   "position_mean": 0.6240265458078255,
+   "position_max": 1.9210337291377784,
+   "rotation_mean": 0.8531161733636047,
+   "rotation_max": 3.3681148213568215,
+   "pass_fraction": 0.041666666666666664,
+   "position_rotation_pass_fraction": 0.2916666666666667,
+   "position_pass_fraction": 0.5,
+   "rotation_pass_fraction": 0.4583333333333333,
+   "fov_error_mean_degrees": 2.3573619933144134,
+   "fov_pass_fraction": 0.041666666666666664
+  },
+  "camera_all_frames": {
+   "frames": 25,
+   "position_mean": 0.6026142619315696,
+   "position_max": 1.9210337291377784,
+   "rotation_mean": 0.8276613459202928,
+   "rotation_max": 3.3681148213568215,
+   "pass_fraction": 0.04,
+   "position_rotation_pass_fraction": 0.32,
+   "position_pass_fraction": 0.52,
+   "rotation_pass_fraction": 0.48,
+   "fov_error_mean_degrees": 2.2776499027217616,
+   "fov_pass_fraction": 0.04
+  },
+  "camera_unsolved_frames": 0,
+  "camera_pass_all_frames_fraction": 0.04,
+  "score_card": {
+   "camera": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "depth": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "lighting": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "motion": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "normals": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "objects": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   }
+  },
+  "verdict": "FAIL",
+  "temporal": {
+   "mean": 2.091,
+   "p95": 10.6685,
+   "threshold_mean": 4.0,
+   "threshold_p95": 12.0,
+   "pass": true,
+   "pairs_measured": 24,
+   "compared_fraction": 0.9919
+  },
+  "determinism": {
+   "provider": "cameractrl_svd",
+   "sampler_settings": {
+    "fps": 7,
+    "motion_bucket_id": 127,
+    "noise_aug_strength": 0.02,
+    "steps": 25,
+    "translation_scale": null
+   },
+   "seed": 7,
+   "seed_honoured": true,
+   "version": "1.0"
+  },
+  "report_id": "3baa7be75021cbe7de74b26d2cd81b4b582221fea05ecaf10107722ca7e4c965",
+  "lighting": {
+   "light_direction_error_degrees": {
+    "mean": 12.524050226620774,
+    "max": 35.726870374097956
+   },
+   "shadow_direction_error_degrees": null,
+   "colour_balance_error": {
+    "mean": 0.01986818676174509,
+    "max": 0.027387730691171796
+   },
+   "frames_passing": 0.52
+  },
+  "objects": {
+   "entries": 150,
+   "measured": 25,
+   "error_pixels_mean": 2.736846418404131,
+   "error_pixels_max": 10.948728553664713,
+   "pass_fraction": 0.64,
+   "statuses": [
+    "None",
+    "not conditioned"
+   ],
+   "objects_per_frame": 6,
+   "tracked_per_frame": 1.0
+  },
+  "motion": {
+   "statuses": [
+    "not conditioned"
+   ],
+   "pass_values": [
+    "None"
+   ],
+   "mean_pixels": [
+    null,
+    null
+   ]
+  }
+ },
+ "truck": {
+  "tolerances": {
+   "camera_position_m": 0.4,
+   "camera_rotation_degrees": 0.5,
+   "profile": "generative"
+  },
+  "frames_total": 25,
+  "camera_moving_frames": {
+   "frames": 24,
+   "position_mean": 1.1706075606130384,
+   "position_max": 3.028286834085019,
+   "rotation_mean": 2.7019022204182797,
+   "rotation_max": 6.206295531355083,
+   "pass_fraction": 0.0,
+   "position_rotation_pass_fraction": 0.08333333333333333,
+   "position_pass_fraction": 0.20833333333333334,
+   "rotation_pass_fraction": 0.16666666666666666,
+   "fov_error_mean_degrees": 4.89074487205698,
+   "fov_pass_fraction": 0.041666666666666664
+  },
+  "camera_all_frames": {
+   "frames": 25,
+   "position_mean": 1.1256287272779268,
+   "position_max": 3.028286834085019,
+   "rotation_mean": 2.6071514284541126,
+   "rotation_max": 6.206295531355083,
+   "pass_fraction": 0.04,
+   "position_rotation_pass_fraction": 0.12,
+   "position_pass_fraction": 0.24,
+   "rotation_pass_fraction": 0.2,
+   "fov_error_mean_degrees": 4.696182229688236,
+   "fov_pass_fraction": 0.08
+  },
+  "camera_unsolved_frames": 0,
+  "camera_pass_all_frames_fraction": 0.04,
+  "score_card": {
+   "camera": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "depth": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "lighting": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "motion": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "normals": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "objects": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   }
+  },
+  "verdict": "FAIL",
+  "temporal": {
+   "mean": 6.7349,
+   "p95": 50.5461,
+   "threshold_mean": 4.0,
+   "threshold_p95": 12.0,
+   "pass": false,
+   "pairs_measured": 24,
+   "compared_fraction": 0.9911
+  },
+  "determinism": {
+   "provider": "cameractrl_svd",
+   "sampler_settings": {
+    "fps": 7,
+    "motion_bucket_id": 127,
+    "noise_aug_strength": 0.02,
+    "steps": 25,
+    "translation_scale": null
+   },
+   "seed": 7,
+   "seed_honoured": true,
+   "version": "1.0"
+  },
+  "report_id": "cef0d17aab06a0cee9e709394e21f682ad8d666e936c5b931d309f6f4d403d73",
+  "lighting": {
+   "light_direction_error_degrees": {
+    "mean": 23.742234821312717,
+    "max": 38.752615963502286
+   },
+   "shadow_direction_error_degrees": null,
+   "colour_balance_error": {
+    "mean": 0.022790167070425957,
+    "max": 0.03678227688432044
+   },
+   "frames_passing": 0.08
+  },
+  "objects": {
+   "entries": 150,
+   "measured": 16,
+   "error_pixels_mean": 10.689044018866458,
+   "error_pixels_max": 21.220080155223656,
+   "pass_fraction": 0.1875,
+   "statuses": [
+    "None",
+    "not conditioned"
+   ],
+   "objects_per_frame": 6,
+   "tracked_per_frame": 0.64
+  },
+  "motion": {
+   "statuses": [
+    "not conditioned"
+   ],
+   "pass_values": [
+    "None"
+   ],
+   "mean_pixels": [
+    null,
+    null
+   ]
+  }
+ },
+ "pan": {
+  "tolerances": {
+   "camera_position_m": 0.4,
+   "camera_rotation_degrees": 0.5,
+   "profile": "generative"
+  },
+  "frames_total": 25,
+  "camera_moving_frames": {
+   "frames": 24,
+   "position_mean": 0.2938069513909589,
+   "position_max": 0.9057111004572528,
+   "rotation_mean": 0.7213504340454232,
+   "rotation_max": 1.9881799695675046,
+   "pass_fraction": 0.0,
+   "position_rotation_pass_fraction": 0.2916666666666667,
+   "position_pass_fraction": 0.7083333333333334,
+   "rotation_pass_fraction": 0.3333333333333333,
+   "fov_error_mean_degrees": 1.403309919965519,
+   "fov_pass_fraction": 0.041666666666666664
+  },
+  "camera_all_frames": {
+   "frames": 25,
+   "position_mean": 0.28516228807996,
+   "position_max": 0.9057111004572528,
+   "rotation_mean": 0.700550809274437,
+   "rotation_max": 1.9881799695675046,
+   "pass_fraction": 0.0,
+   "position_rotation_pass_fraction": 0.32,
+   "position_pass_fraction": 0.72,
+   "rotation_pass_fraction": 0.36,
+   "fov_error_mean_degrees": 1.3562532423271016,
+   "fov_pass_fraction": 0.04
+  },
+  "camera_unsolved_frames": 0,
+  "camera_pass_all_frames_fraction": 0.0,
+  "score_card": {
+   "camera": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "depth": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "lighting": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "motion": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "normals": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "objects": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   }
+  },
+  "verdict": "FAIL",
+  "temporal": {
+   "mean": 1.7036,
+   "p95": 6.9561,
+   "threshold_mean": 4.0,
+   "threshold_p95": 12.0,
+   "pass": true,
+   "pairs_measured": 24,
+   "compared_fraction": 0.9725
+  },
+  "determinism": {
+   "provider": "cameractrl_svd",
+   "sampler_settings": {
+    "fps": 7,
+    "motion_bucket_id": 127,
+    "noise_aug_strength": 0.02,
+    "steps": 25,
+    "translation_scale": null
+   },
+   "seed": 7,
+   "seed_honoured": true,
+   "version": "1.0"
+  },
+  "report_id": "21b37c0dc240dc4f6ae7f9631daedbe32201ffb6aec58d59c7591513eeeb9dcb",
+  "lighting": {
+   "light_direction_error_degrees": {
+    "mean": 8.637256115926354,
+    "max": 14.585731234672531
+   },
+   "shadow_direction_error_degrees": null,
+   "colour_balance_error": {
+    "mean": 0.015920066027681593,
+    "max": 0.020937529336270806
+   },
+   "frames_passing": 0.36
+  },
+  "objects": {
+   "entries": 150,
+   "measured": 25,
+   "error_pixels_mean": 0.7591150635334788,
+   "error_pixels_max": 2.0818513316959093,
+   "pass_fraction": 0.96,
+   "statuses": [
+    "None",
+    "not conditioned"
+   ],
+   "objects_per_frame": 6,
+   "tracked_per_frame": 1.0
+  },
+  "motion": {
+   "statuses": [
+    "not conditioned"
+   ],
+   "pass_values": [
+    "None"
+   ],
+   "mean_pixels": [
+    null,
+    null
+   ]
+  }
+ },
+ "pandolly": {
+  "tolerances": {
+   "camera_position_m": 0.4,
+   "camera_rotation_degrees": 0.5,
+   "profile": "generative"
+  },
+  "frames_total": 25,
+  "camera_moving_frames": {
+   "frames": 24,
+   "position_mean": 0.6423985506339761,
+   "position_max": 2.465082825336435,
+   "rotation_mean": 1.4692418398402338,
+   "rotation_max": 4.849461250706631,
+   "pass_fraction": 0.0,
+   "position_rotation_pass_fraction": 0.16666666666666666,
+   "position_pass_fraction": 0.4166666666666667,
+   "rotation_pass_fraction": 0.20833333333333334,
+   "fov_error_mean_degrees": 3.3206382627371007,
+   "fov_pass_fraction": 0.041666666666666664
+  },
+  "camera_all_frames": {
+   "frames": 25,
+   "position_mean": 0.6208520654850659,
+   "position_max": 2.465082825336435,
+   "rotation_mean": 1.4186486367229818,
+   "rotation_max": 4.849461250706631,
+   "pass_fraction": 0.0,
+   "position_rotation_pass_fraction": 0.2,
+   "position_pass_fraction": 0.44,
+   "rotation_pass_fraction": 0.24,
+   "fov_error_mean_degrees": 3.2016575959247864,
+   "fov_pass_fraction": 0.04
+  },
+  "camera_unsolved_frames": 0,
+  "camera_pass_all_frames_fraction": 0.0,
+  "score_card": {
+   "camera": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "depth": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "lighting": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   },
+   "motion": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "normals": {
+    "pass": null,
+    "status": "not conditioned",
+    "lock_state": "locked"
+   },
+   "objects": {
+    "pass": false,
+    "status": null,
+    "lock_state": "locked"
+   }
+  },
+  "verdict": "FAIL",
+  "temporal": {
+   "mean": 1.7596,
+   "p95": 7.2407,
+   "threshold_mean": 4.0,
+   "threshold_p95": 12.0,
+   "pass": true,
+   "pairs_measured": 24,
+   "compared_fraction": 0.9782
+  },
+  "determinism": {
+   "provider": "cameractrl_svd",
+   "sampler_settings": {
+    "fps": 7,
+    "motion_bucket_id": 127,
+    "noise_aug_strength": 0.02,
+    "steps": 25,
+    "translation_scale": null
+   },
+   "seed": 7,
+   "seed_honoured": true,
+   "version": "1.0"
+  },
+  "report_id": "b563f2a5ae77b71bdc3d080a8ced83aa157b46f084af47541d69e4353b0a1fe6",
+  "lighting": {
+   "light_direction_error_degrees": {
+    "mean": 12.340746567849042,
+    "max": 40.54021076310127
+   },
+   "shadow_direction_error_degrees": null,
+   "colour_balance_error": {
+    "mean": 0.01854813444002185,
+    "max": 0.02476426855885853
+   },
+   "frames_passing": 0.44
+  },
+  "objects": {
+   "entries": 150,
+   "measured": 25,
+   "error_pixels_mean": 2.163405729181911,
+   "error_pixels_max": 10.603501488290048,
+   "pass_fraction": 0.72,
+   "statuses": [
+    "None",
+    "not conditioned"
+   ],
+   "objects_per_frame": 6,
+   "tracked_per_frame": 1.0
+  },
+  "motion": {
+   "statuses": [
+    "not conditioned"
+   ],
+   "pass_values": [
+    "None"
+   ],
+   "mean_pixels": [
+    null,
+    null
+   ]
+  }
+ }
+}

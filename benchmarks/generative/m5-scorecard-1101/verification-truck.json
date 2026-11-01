@@ -1,0 +1,4688 @@
+{
+ "determinism": {
+  "provider": "cameractrl_svd",
+  "sampler_settings": {
+   "fps": 7,
+   "motion_bucket_id": 127,
+   "noise_aug_strength": 0.02,
+   "steps": 25,
+   "translation_scale": null
+  },
+  "seed": 7,
+  "seed_honoured": true,
+  "version": "1.0"
+ },
+ "frames": [
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 0.026678812838383692,
+     "lock_state": "locked",
+     "pass": true,
+     "position_error_m": 0.046136727235247685,
+     "rotation_error_degrees": 0.33313242131409043,
+     "tracker_landmarks": 19,
+     "tracker_reprojection_rms_pixels": 1.0014875852342897
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.011765439960354614,
+     "dominant_light_direction": [
+      0.4076687752206929,
+      0.6376212990916258,
+      0.653639999276947
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 0.6844673113022439,
+     "lock_state": "locked",
+     "pass": true,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 0.29539248959295294,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       297.1109222596943,
+       215.75146381586038
+      ],
+      "pass": true,
+      "reference_centroid": [
+       297.3456115722656,
+       215.57208251953125
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       425.79974365234375,
+       159.53680419921875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       157.90501403808594,
+       180.80447387695312
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       297.4812316894531,
+       51.84867858886719
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       237.2266845703125,
+       190.45516967773438
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       361.0639953613281,
+       183.268798828125
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 1
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 0.792283340232089,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.29717690424407445,
+     "rotation_error_degrees": 0.17588558298688056,
+     "tracker_landmarks": 19,
+     "tracker_reprojection_rms_pixels": 1.1743340929514587
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.01322524329260579,
+     "dominant_light_direction": [
+      0.35532822438272954,
+      0.6547858355027054,
+      0.6670812263750497
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 3.0689120170605713,
+     "lock_state": "locked",
+     "pass": true,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 1.1107841620260668,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       288.43396752185356,
+       215.69019970039537
+      ],
+      "pass": true,
+      "reference_centroid": [
+       287.4178161621094,
+       216.1388397216797
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       418.7207946777344,
+       159.79171752929688
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       149.2158660888672,
+       180.9568634033203
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       291.7533874511719,
+       52.28992462158203
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       225.762939453125,
+       190.69871520996094
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       351.3583679199219,
+       183.57601928710938
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 2
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 2.3643656052564523,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.2032710527318609,
+     "rotation_error_degrees": 2.7600268308075444,
+     "tracker_landmarks": 18,
+     "tracker_reprojection_rms_pixels": 4.139431565328647
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.010070741495505117,
+     "dominant_light_direction": [
+      -0.10827060058294502,
+      0.699367304709789,
+      0.706514578867537
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 30.059612952304278,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 7.250195669430288,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       280.96868896484375,
+       215.46722124309446
+      ],
+      "pass": false,
+      "reference_centroid": [
+       288.0228576660156,
+       213.79269409179688
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       415.7508850097656,
+       158.86358642578125
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       160.332275390625,
+       181.39559936523438
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       295.3600158691406,
+       52.821693420410156
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       230.3815155029297,
+       190.9915008544922
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       346.46014404296875,
+       183.39500427246094
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 3
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 4.452684759100308,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.1750909478747138,
+     "rotation_error_degrees": 5.618909308544275,
+     "tracker_landmarks": 16,
+     "tracker_reprojection_rms_pixels": 4.956026316163149
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.012459050649575162,
+     "dominant_light_direction": [
+      -0.1926116559089723,
+      0.6779894246073153,
+      0.7093878277279961
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 34.970847612048615,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 21.220080155223656,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       302.6718769556422,
+       208.55852881403484
+      ],
+      "pass": false,
+      "reference_centroid": [
+       285.143798828125,
+       220.51922607421875
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       419.8675231933594,
+       159.6177978515625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       158.6650390625,
+       189.97268676757812
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       294.9546203613281,
+       61.50432586669922
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       221.6063232421875,
+       197.53726196289062
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       346.0622863769531,
+       186.33277893066406
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 4
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 5.862839107298548,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.2149193433321583,
+     "rotation_error_degrees": 0.45735765985708815,
+     "tracker_landmarks": 17,
+     "tracker_reprojection_rms_pixels": 6.28620014743097
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.017757617679342502,
+     "dominant_light_direction": [
+      -0.189259697692901,
+      0.6739780995656729,
+      0.7140968338643126
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 34.789884102258696,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 17.400251008202773,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       294.0603942871094,
+       210.0667835181454
+      ],
+      "pass": false,
+      "reference_centroid": [
+       277.6656188964844,
+       215.89602661132812
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       408.8985290527344,
+       158.9807891845703
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       141.783447265625,
+       179.66629028320312
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       285.1040954589844,
+       54.38953399658203
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       214.09942626953125,
+       190.67323303222656
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       342.12451171875,
+       183.38706970214844
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 5
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 5.049392210758775,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.9624938405031139,
+     "rotation_error_degrees": 0.37318102942194653,
+     "tracker_landmarks": 13,
+     "tracker_reprojection_rms_pixels": 8.071979319015735
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.01824545055176853,
+     "dominant_light_direction": [
+      -0.22005173735573613,
+      0.6436993222931826,
+      0.7329586723451873
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 36.7341809381567,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 7.32449631387565,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       279.1062316894531,
+       206.28707885742188
+      ],
+      "pass": false,
+      "reference_centroid": [
+       280.96453857421875,
+       213.37191772460938
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       410.1948547363281,
+       157.55174255371094
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       145.6149444580078,
+       178.20172119140625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       286.7944641113281,
+       53.894309997558594
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       218.7711639404297,
+       188.25503540039062
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       344.5736083984375,
+       181.09475708007812
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 6
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 2.920440839820955,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.718429221336573,
+     "rotation_error_degrees": 6.206295531355083,
+     "tracker_landmarks": 9,
+     "tracker_reprojection_rms_pixels": 5.67651620284041
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.011363905172586338,
+     "dominant_light_direction": [
+      0.005133559239905766,
+      0.5573408674636439,
+      0.8302679109928334
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 25.903999677853896,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 17.343082632782327,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       285.79534188991795,
+       225.59912839589595
+      ],
+      "pass": false,
+      "reference_centroid": [
+       288.18902587890625,
+       208.42202758789062
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       407.80584716796875,
+       163.43096923828125
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       154.38856506347656,
+       179.97067260742188
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       287.875244140625,
+       67.906494140625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       233.16380310058594,
+       181.170166015625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       347.164794921875,
+       177.0653076171875
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 7
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 10.915339390642679,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 2.2735062090850344,
+     "rotation_error_degrees": 6.018212621131006,
+     "tracker_landmarks": 8,
+     "tracker_reprojection_rms_pixels": 7.243417790668724
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.023776765930058657,
+     "dominant_light_direction": [
+      0.004823177799437795,
+      0.4365900400175382,
+      0.8996476387527506
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 29.982628102063295,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       284.65203857421875,
+       208.16773986816406
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       407.4216003417969,
+       155.39630126953125
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       138.93423461914062,
+       177.33238220214844
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       280.8994445800781,
+       64.73306274414062
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       219.58602905273438,
+       179.17510986328125
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       351.5768127441406,
+       171.8267822265625
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 8
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 18.90689970017398,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 3.028286834085019,
+     "rotation_error_degrees": 5.028842904566081,
+     "tracker_landmarks": 10,
+     "tracker_reprojection_rms_pixels": 7.258084189532859
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.022388911691294217,
+     "dominant_light_direction": [
+      -0.2301181843679292,
+      0.5715601951806063,
+      0.7876322520747325
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 38.18175190074262,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       281.510986328125,
+       211.25424194335938
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       413.1485595703125,
+       153.49102783203125
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       155.9296875,
+       180.6744384765625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       291.0233154296875,
+       69.66617584228516
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       213.45985412597656,
+       185.140625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       347.1758728027344,
+       174.7801513671875
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 9
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 0.24524866423834624,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.2896021729341816,
+     "rotation_error_degrees": 2.7270309335413865,
+     "tracker_landmarks": 12,
+     "tracker_reprojection_rms_pixels": 6.557415255775101
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.021283322985393226,
+     "dominant_light_direction": [
+      0.3857422667132891,
+      0.4217897353921923,
+      0.8205463562704292
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 16.377976476281003,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       280.6976318359375,
+       214.24948120117188
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       409.16094970703125,
+       153.2135009765625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       143.32421875,
+       182.37884521484375
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       281.4732666015625,
+       46.49168014526367
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       219.06777954101562,
+       192.19522094726562
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       342.2348327636719,
+       181.0509490966797
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 10
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 1.9993610708201075,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.5555619656171439,
+     "rotation_error_degrees": 0.5198145910628429,
+     "tracker_landmarks": 13,
+     "tracker_reprojection_rms_pixels": 8.324405006305986
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.021465267059458382,
+     "dominant_light_direction": [
+      0.3148446337504927,
+      0.560171218412288,
+      0.7662121525145701
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 9.89566889631585,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       276.9502868652344,
+       218.17039489746094
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       409.9762268066406,
+       159.43826293945312
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       138.89105224609375,
+       183.62020874023438
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       283.1445617675781,
+       52.949161529541016
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       213.2678680419922,
+       193.37997436523438
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       340.92120361328125,
+       184.70237731933594
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 11
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 6.318925089008054,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.185906156642487,
+     "rotation_error_degrees": 2.5785347598467045,
+     "tracker_landmarks": 12,
+     "tracker_reprojection_rms_pixels": 7.719953610045408
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.02120299648633498,
+     "dominant_light_direction": [
+      0.10340030064132984,
+      0.6199138887348651,
+      0.777827196992301
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 18.94997861576396,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 10.860529573079026,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       283.64143123337726,
+       208.38097895308454
+      ],
+      "pass": false,
+      "reference_centroid": [
+       278.50531005859375,
+       217.9502716064453
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       405.80926513671875,
+       159.70074462890625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       144.2145538330078,
+       181.14219665527344
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       283.778564453125,
+       53.187713623046875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       216.68411254882812,
+       195.08567810058594
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       341.3587341308594,
+       186.9288330078125
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 12
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 0.05504984625535769,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.17909342885710766,
+     "rotation_error_degrees": 1.4429764982830433,
+     "tracker_landmarks": 13,
+     "tracker_reprojection_rms_pixels": 7.097917662510476
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.01967285963627278,
+     "dominant_light_direction": [
+      0.10429154815928862,
+      0.6153067806143765,
+      0.7813583292654596
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 19.00910725609131,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 13.261710394879115,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       284.89693828243765,
+       207.12974686595453
+      ],
+      "pass": false,
+      "reference_centroid": [
+       273.4948425292969,
+       213.90213012695312
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       405.821044921875,
+       155.91946411132812
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       139.09304809570312,
+       182.4473876953125
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       280.8514404296875,
+       52.123775482177734
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       210.97018432617188,
+       189.71849060058594
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       335.08172607421875,
+       180.2855224609375
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 13
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 9.27636124568292,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 2.518495026461136,
+     "rotation_error_degrees": 2.6928006450694197,
+     "tracker_landmarks": 12,
+     "tracker_reprojection_rms_pixels": 7.1882521625064735
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.02078924137616448,
+     "dominant_light_direction": [
+      0.11457906000046356,
+      0.6117832913361249,
+      0.7826831053825987
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 18.521729125477663,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       267.68170166015625,
+       213.51071166992188
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       403.24102783203125,
+       154.60885620117188
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       130.30007934570312,
+       179.61920166015625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       276.29986572265625,
+       37.01927185058594
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       207.01678466796875,
+       190.12814331054688
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       328.2396240234375,
+       181.56448364257812
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 14
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 3.3016470041338906,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.0223333185476777,
+     "rotation_error_degrees": 1.485848239912216,
+     "tracker_landmarks": 11,
+     "tracker_reprojection_rms_pixels": 7.250055052762299
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.018085825680666672,
+     "dominant_light_direction": [
+      0.0783229896420505,
+      0.6208012426344511,
+      0.780045720735043
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 20.33541543659802,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 15.687636379861527,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       280.7302886920986,
+       205.28707885742188
+      ],
+      "pass": false,
+      "reference_centroid": [
+       268.70062255859375,
+       215.35629272460938
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       400.755859375,
+       164.185546875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       136.64219665527344,
+       179.97866821289062
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       281.7185363769531,
+       55.27482986450195
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       209.38380432128906,
+       189.18983459472656
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       329.6275329589844,
+       184.83929443359375
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 15
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 3.098188579993412,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.632449061818469,
+     "rotation_error_degrees": 2.498092569238387,
+     "tracker_landmarks": 12,
+     "tracker_reprojection_rms_pixels": 7.548827926419406
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.02141015947549735,
+     "dominant_light_direction": [
+      0.08746536131892817,
+      0.636912952466113,
+      0.7659580285826687
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 19.493569273633113,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 13.985824798913317,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       280.5242628585704,
+       214.08648775090052
+      ],
+      "pass": false,
+      "reference_centroid": [
+       266.5390319824219,
+       214.2153778076172
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       399.94281005859375,
+       163.24725341796875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       135.2064971923828,
+       178.37957763671875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       281.7014465332031,
+       60.03175735473633
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       204.4544677734375,
+       186.69155883789062
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       329.5022277832031,
+       182.63790893554688
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 16
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 9.390667291908755,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 2.7163247941510464,
+     "rotation_error_degrees": 3.7880415443284936,
+     "tracker_landmarks": 12,
+     "tracker_reprojection_rms_pixels": 6.547230524497923
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.01972778812373633,
+     "dominant_light_direction": [
+      0.04736830051669894,
+      0.5909146306626728,
+      0.8053422523219284
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 22.751191514062008,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 10.030961502402418,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       273.4037506266504,
+       213.9074252659833
+      ],
+      "pass": false,
+      "reference_centroid": [
+       263.37310791015625,
+       213.98739624023438
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       403.26373291015625,
+       164.70758056640625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       133.03414916992188,
+       178.2244873046875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       285.07806396484375,
+       50.56114196777344
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       203.78558349609375,
+       186.27426147460938
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       323.99676513671875,
+       183.49240112304688
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 17
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 2.436224955964107,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.5504851800963751,
+     "rotation_error_degrees": 2.8729427961074534,
+     "tracker_landmarks": 14,
+     "tracker_reprojection_rms_pixels": 8.514465987417315
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.0273492776596936,
+     "dominant_light_direction": [
+      -0.006294508929695739,
+      0.7447067727746102,
+      0.6673621218955711
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 24.39390129991994,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 1.9455214465008306,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       265.6564636230469,
+       213.76998546665428
+      ],
+      "pass": true,
+      "reference_centroid": [
+       264.1661682128906,
+       215.02061462402344
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       398.8055419921875,
+       161.86904907226562
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       124.39433288574219,
+       174.98171997070312
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       276.1922912597656,
+       45.53882598876953
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       202.61203002929688,
+       188.1043701171875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       328.5088806152344,
+       184.54632568359375
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 18
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 6.626201506703744,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.4972048267608606,
+     "rotation_error_degrees": 4.854907836859688,
+     "tracker_landmarks": 13,
+     "tracker_reprojection_rms_pixels": 4.192126924483193
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.028540487561665016,
+     "dominant_light_direction": [
+      -0.23091286987123774,
+      0.5422262164458328,
+      0.8078799271715233
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 38.752615963502286,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 7.436771726430276,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       257.60148511381897,
+       213.65901791407072
+      ],
+      "pass": false,
+      "reference_centroid": [
+       263.8154296875,
+       217.74465942382812
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       398.85284423828125,
+       165.7776641845703
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       115.38017272949219,
+       177.66297912597656
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       270.989501953125,
+       46.25988006591797
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       202.562255859375,
+       188.86248779296875
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       329.9647216796875,
+       186.1693572998047
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 19
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 2.6358136284257228,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.523248216232266,
+     "rotation_error_degrees": 1.1359827582617816,
+     "tracker_landmarks": 16,
+     "tracker_reprojection_rms_pixels": 6.915966208312891
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.03040078835896623,
+     "dominant_light_direction": [
+      0.045771813292163,
+      0.649241115916716,
+      0.7592041323064337
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 21.653777738763278,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 12.032220450538702,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       249.08713251980834,
+       213.53786323068033
+      ],
+      "pass": false,
+      "reference_centroid": [
+       261.01953125,
+       215.08453369140625
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       395.47259521484375,
+       159.7824249267578
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       129.98568725585938,
+       180.77496337890625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       275.767578125,
+       55.916099548339844
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       197.6379852294922,
+       189.60189819335938
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       323.0311279296875,
+       182.62408447265625
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 20
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 6.856291835664614,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.5153701891786355,
+     "rotation_error_degrees": 2.2820137135011813,
+     "tracker_landmarks": 18,
+     "tracker_reprojection_rms_pixels": 6.293648835707574
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.03518766764983457,
+     "dominant_light_direction": [
+      0.0786347772680459,
+      0.5914688582658475,
+      0.8024843683871354
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 21.038128568055647,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       259.1005554199219,
+       216.86660766601562
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       394.66571044921875,
+       162.3577117919922
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       122.42767333984375,
+       179.88319396972656
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       273.7017517089844,
+       59.73609924316406
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       192.63873291015625,
+       188.97802734375
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       324.9862365722656,
+       183.45053100585938
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 21
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 0.1548215284662504,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.3392961504590392,
+     "rotation_error_degrees": 1.868039383962199,
+     "tracker_landmarks": 17,
+     "tracker_reprojection_rms_pixels": 8.301379768758189
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.03545426455579842,
+     "dominant_light_direction": [
+      -0.06413919971612361,
+      0.6032031466263087,
+      0.7950044823520778
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 28.5523996007529,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       255.19174194335938,
+       215.72613525390625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       394.3740539550781,
+       161.67538452148438
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       120.49138641357422,
+       179.86122131347656
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       273.0726623535156,
+       54.28070068359375
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       190.54689025878906,
+       188.17025756835938
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       319.05267333984375,
+       182.79324340820312
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 22
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 6.0636255575605205,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.275489139432782,
+     "rotation_error_degrees": 3.2979192358327536,
+     "tracker_landmarks": 18,
+     "tracker_reprojection_rms_pixels": 8.701792354842688
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.03678227688432044,
+     "dominant_light_direction": [
+      -0.08654124850608759,
+      0.5788140042481227,
+      0.8108544633861626
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 30.253802695506042,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       254.4287109375,
+       218.41943359375
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       392.4406433105469,
+       164.32029724121094
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       126.07620239257812,
+       175.83497619628906
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       277.2820739746094,
+       52.15126037597656
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       189.94528198242188,
+       192.41989135742188
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       318.1398010253906,
+       189.31076049804688
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 23
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 7.387435980576228,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 1.4199375235435798,
+     "rotation_error_degrees": 3.8984654857969803,
+     "tracker_landmarks": 17,
+     "tracker_reprojection_rms_pixels": 7.249655981469112
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.03665085026134575,
+     "dominant_light_direction": [
+      0.05973118681488234,
+      0.5793398562494513,
+      0.8128945296178038
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 22.393579045534285,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": 13.839245598124394,
+      "lock_state": "locked",
+      "measurement_source": "tracker",
+      "object_id": "24950135",
+      "observed_centroid": [
+       244.97271286555124,
+       223.9753646405483
+      ],
+      "pass": false,
+      "reference_centroid": [
+       256.25958251953125,
+       215.9671630859375
+      ]
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       389.6570739746094,
+       165.87521362304688
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       125.29208374023438,
+       179.93511962890625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       274.1653137207031,
+       67.21664428710938
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       192.089599609375,
+       187.3516082763672
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       320.22430419921875,
+       183.74530029296875
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 24
+  },
+  {
+   "bindings": {
+    "camera": {
+     "fov_error_degrees": 0.2677681906817,
+     "lock_state": "locked",
+     "pass": false,
+     "position_error_m": 0.0006099507875895954,
+     "rotation_error_degrees": 0.2635308297642854,
+     "tracker_landmarks": 15,
+     "tracker_reprojection_rms_pixels": 8.137282585067428
+    },
+    "depth": {
+     "landmarks": 0,
+     "lock_state": "locked",
+     "pass": null,
+     "rank_correlation": null,
+     "reason": "generated sequence carries no depth pass",
+     "status": "not conditioned"
+    },
+    "lighting": {
+     "colour_balance_error": 0.03469797658240967,
+     "dominant_light_direction": [
+      -0.02071928044695636,
+      0.5752057690690089,
+      0.8177463143588544
+     ],
+     "intensity_checked": false,
+     "light_direction_error_degrees": 26.806744412769792,
+     "lock_state": "locked",
+     "pass": false,
+     "shadow_checked": false,
+     "shadow_direction_error_degrees": null
+    },
+    "motion": {
+     "lock_state": "locked",
+     "mean_error_pixels": null,
+     "p95_error_pixels": null,
+     "pass": null,
+     "reason": "generated sequence carries no motion pass",
+     "status": "not conditioned"
+    },
+    "normals": {
+     "lock_state": "locked",
+     "mean_error_degrees": null,
+     "pass": null,
+     "reason": "generated sequence carries no normals pass",
+     "status": "not conditioned"
+    },
+    "objects": [
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "24950135",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       249.9425506591797,
+       216.62100219726562
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "52c1c1f6",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       384.4585266113281,
+       160.45974731445312
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "94ff5ab7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       117.49359130859375,
+       182.67486572265625
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "3e911cb7",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       265.0799560546875,
+       54.24205780029297
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "a8fce865",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       186.57728576660156,
+       191.820068359375
+      ],
+      "status": "not conditioned"
+     },
+     {
+      "error_pixels": null,
+      "lock_state": "locked",
+      "measurement_source": null,
+      "object_id": "74d3ebe9",
+      "observed_centroid": null,
+      "pass": null,
+      "reason": "no ID pass in the generated sequence and no tracked point",
+      "reference_centroid": [
+       311.1570129394531,
+       184.20660400390625
+      ],
+      "status": "not conditioned"
+     }
+    ]
+   },
+   "frame": 25
+  }
+ ],
+ "intensity_checked": false,
+ "scene_state": "shot.scene.json",
+ "schema_version": 1,
+ "score_card": {
+  "bindings": {
+   "camera": {
+    "error": [
+     {
+      "fov_error_degrees": 0.026678812838383692,
+      "position_error_m": 0.046136727235247685,
+      "rotation_error_degrees": 0.33313242131409043
+     },
+     {
+      "fov_error_degrees": 0.792283340232089,
+      "position_error_m": 0.29717690424407445,
+      "rotation_error_degrees": 0.17588558298688056
+     },
+     {
+      "fov_error_degrees": 2.3643656052564523,
+      "position_error_m": 1.2032710527318609,
+      "rotation_error_degrees": 2.7600268308075444
+     },
+     {
+      "fov_error_degrees": 4.452684759100308,
+      "position_error_m": 1.1750909478747138,
+      "rotation_error_degrees": 5.618909308544275
+     },
+     {
+      "fov_error_degrees": 5.862839107298548,
+      "position_error_m": 1.2149193433321583,
+      "rotation_error_degrees": 0.45735765985708815
+     },
+     {
+      "fov_error_degrees": 5.049392210758775,
+      "position_error_m": 0.9624938405031139,
+      "rotation_error_degrees": 0.37318102942194653
+     },
+     {
+      "fov_error_degrees": 2.920440839820955,
+      "position_error_m": 1.718429221336573,
+      "rotation_error_degrees": 6.206295531355083
+     },
+     {
+      "fov_error_degrees": 10.915339390642679,
+      "position_error_m": 2.2735062090850344,
+      "rotation_error_degrees": 6.018212621131006
+     },
+     {
+      "fov_error_degrees": 18.90689970017398,
+      "position_error_m": 3.028286834085019,
+      "rotation_error_degrees": 5.028842904566081
+     },
+     {
+      "fov_error_degrees": 0.24524866423834624,
+      "position_error_m": 0.2896021729341816,
+      "rotation_error_degrees": 2.7270309335413865
+     },
+     {
+      "fov_error_degrees": 1.9993610708201075,
+      "position_error_m": 0.5555619656171439,
+      "rotation_error_degrees": 0.5198145910628429
+     },
+     {
+      "fov_error_degrees": 6.318925089008054,
+      "position_error_m": 1.185906156642487,
+      "rotation_error_degrees": 2.5785347598467045
+     },
+     {
+      "fov_error_degrees": 0.05504984625535769,
+      "position_error_m": 0.17909342885710766,
+      "rotation_error_degrees": 1.4429764982830433
+     },
+     {
+      "fov_error_degrees": 9.27636124568292,
+      "position_error_m": 2.518495026461136,
+      "rotation_error_degrees": 2.6928006450694197
+     },
+     {
+      "fov_error_degrees": 3.3016470041338906,
+      "position_error_m": 1.0223333185476777,
+      "rotation_error_degrees": 1.485848239912216
+     },
+     {
+      "fov_error_degrees": 3.098188579993412,
+      "position_error_m": 0.632449061818469,
+      "rotation_error_degrees": 2.498092569238387
+     },
+     {
+      "fov_error_degrees": 9.390667291908755,
+      "position_error_m": 2.7163247941510464,
+      "rotation_error_degrees": 3.7880415443284936
+     },
+     {
+      "fov_error_degrees": 2.436224955964107,
+      "position_error_m": 0.5504851800963751,
+      "rotation_error_degrees": 2.8729427961074534
+     },
+     {
+      "fov_error_degrees": 6.626201506703744,
+      "position_error_m": 1.4972048267608606,
+      "rotation_error_degrees": 4.854907836859688
+     },
+     {
+      "fov_error_degrees": 2.6358136284257228,
+      "position_error_m": 0.523248216232266,
+      "rotation_error_degrees": 1.1359827582617816
+     },
+     {
+      "fov_error_degrees": 6.856291835664614,
+      "position_error_m": 1.5153701891786355,
+      "rotation_error_degrees": 2.2820137135011813
+     },
+     {
+      "fov_error_degrees": 0.1548215284662504,
+      "position_error_m": 0.3392961504590392,
+      "rotation_error_degrees": 1.868039383962199
+     },
+     {
+      "fov_error_degrees": 6.0636255575605205,
+      "position_error_m": 1.275489139432782,
+      "rotation_error_degrees": 3.2979192358327536
+     },
+     {
+      "fov_error_degrees": 7.387435980576228,
+      "position_error_m": 1.4199375235435798,
+      "rotation_error_degrees": 3.8984654857969803
+     },
+     {
+      "fov_error_degrees": 0.2677681906817,
+      "position_error_m": 0.0006099507875895954,
+      "rotation_error_degrees": 0.2635308297642854
+     }
+    ],
+    "lock_state": "locked",
+    "pass": false
+   },
+   "depth": {
+    "error": [
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     },
+     {
+      "rank_correlation": null
+     }
+    ],
+    "lock_state": "locked",
+    "pass": null,
+    "status": "not conditioned"
+   },
+   "lighting": {
+    "error": [
+     {
+      "colour_balance_error": 0.011765439960354614,
+      "light_direction_error_degrees": 0.6844673113022439,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.01322524329260579,
+      "light_direction_error_degrees": 3.0689120170605713,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.010070741495505117,
+      "light_direction_error_degrees": 30.059612952304278,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.012459050649575162,
+      "light_direction_error_degrees": 34.970847612048615,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.017757617679342502,
+      "light_direction_error_degrees": 34.789884102258696,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.01824545055176853,
+      "light_direction_error_degrees": 36.7341809381567,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.011363905172586338,
+      "light_direction_error_degrees": 25.903999677853896,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.023776765930058657,
+      "light_direction_error_degrees": 29.982628102063295,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.022388911691294217,
+      "light_direction_error_degrees": 38.18175190074262,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.021283322985393226,
+      "light_direction_error_degrees": 16.377976476281003,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.021465267059458382,
+      "light_direction_error_degrees": 9.89566889631585,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.02120299648633498,
+      "light_direction_error_degrees": 18.94997861576396,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.01967285963627278,
+      "light_direction_error_degrees": 19.00910725609131,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.02078924137616448,
+      "light_direction_error_degrees": 18.521729125477663,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.018085825680666672,
+      "light_direction_error_degrees": 20.33541543659802,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.02141015947549735,
+      "light_direction_error_degrees": 19.493569273633113,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.01972778812373633,
+      "light_direction_error_degrees": 22.751191514062008,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.0273492776596936,
+      "light_direction_error_degrees": 24.39390129991994,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.028540487561665016,
+      "light_direction_error_degrees": 38.752615963502286,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.03040078835896623,
+      "light_direction_error_degrees": 21.653777738763278,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.03518766764983457,
+      "light_direction_error_degrees": 21.038128568055647,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.03545426455579842,
+      "light_direction_error_degrees": 28.5523996007529,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.03678227688432044,
+      "light_direction_error_degrees": 30.253802695506042,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.03665085026134575,
+      "light_direction_error_degrees": 22.393579045534285,
+      "shadow_direction_error_degrees": null
+     },
+     {
+      "colour_balance_error": 0.03469797658240967,
+      "light_direction_error_degrees": 26.806744412769792,
+      "shadow_direction_error_degrees": null
+     }
+    ],
+    "lock_state": "locked",
+    "pass": false
+   },
+   "motion": {
+    "error": [
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     },
+     {
+      "mean_error_pixels": null,
+      "p95_error_pixels": null
+     }
+    ],
+    "lock_state": "locked",
+    "pass": null,
+    "status": "not conditioned"
+   },
+   "normals": {
+    "error": [
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     },
+     {
+      "mean_error_degrees": null
+     }
+    ],
+    "lock_state": "locked",
+    "pass": null,
+    "status": "not conditioned"
+   },
+   "objects": {
+    "error": [
+     {
+      "error_pixels": 0.29539248959295294
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 1.1107841620260668
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 7.250195669430288
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 21.220080155223656
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 17.400251008202773
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 7.32449631387565
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 17.343082632782327
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 10.860529573079026
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 13.261710394879115
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 15.687636379861527
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 13.985824798913317
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 10.030961502402418
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 1.9455214465008306
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 7.436771726430276
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 12.032220450538702
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": 13.839245598124394
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     },
+     {
+      "error_pixels": null
+     }
+    ],
+    "lock_state": "locked",
+    "pass": false
+   }
+  },
+  "verdict": "FAIL"
+ },
+ "temporal": {
+  "compared_fraction": 0.9911,
+  "mean": 6.7349,
+  "p95": 50.5461,
+  "pairs": [
+   {
+    "frames": [
+     1,
+     2
+    ],
+    "mean": 6.536,
+    "p95": 51.5676,
+    "pixels": 182717
+   },
+   {
+    "frames": [
+     2,
+     3
+    ],
+    "mean": 7.2446,
+    "p95": 54.8965,
+    "pixels": 182788
+   },
+   {
+    "frames": [
+     3,
+     4
+    ],
+    "mean": 7.0387,
+    "p95": 52.4614,
+    "pixels": 182747
+   },
+   {
+    "frames": [
+     4,
+     5
+    ],
+    "mean": 7.2858,
+    "p95": 54.5286,
+    "pixels": 182384
+   },
+   {
+    "frames": [
+     5,
+     6
+    ],
+    "mean": 7.3149,
+    "p95": 54.8723,
+    "pixels": 182780
+   },
+   {
+    "frames": [
+     6,
+     7
+    ],
+    "mean": 7.5449,
+    "p95": 56.0405,
+    "pixels": 182707
+   },
+   {
+    "frames": [
+     7,
+     8
+    ],
+    "mean": 7.2075,
+    "p95": 52.9028,
+    "pixels": 182786
+   },
+   {
+    "frames": [
+     8,
+     9
+    ],
+    "mean": 7.2877,
+    "p95": 55.3234,
+    "pixels": 182713
+   },
+   {
+    "frames": [
+     9,
+     10
+    ],
+    "mean": 6.772,
+    "p95": 52.0644,
+    "pixels": 182733
+   },
+   {
+    "frames": [
+     10,
+     11
+    ],
+    "mean": 6.7852,
+    "p95": 51.3897,
+    "pixels": 182767
+   },
+   {
+    "frames": [
+     11,
+     12
+    ],
+    "mean": 7.0886,
+    "p95": 54.4798,
+    "pixels": 182162
+   },
+   {
+    "frames": [
+     12,
+     13
+    ],
+    "mean": 7.6025,
+    "p95": 56.9984,
+    "pixels": 182707
+   },
+   {
+    "frames": [
+     13,
+     14
+    ],
+    "mean": 6.9864,
+    "p95": 52.9988,
+    "pixels": 182751
+   },
+   {
+    "frames": [
+     14,
+     15
+    ],
+    "mean": 7.0047,
+    "p95": 52.2788,
+    "pixels": 182780
+   },
+   {
+    "frames": [
+     15,
+     16
+    ],
+    "mean": 6.9855,
+    "p95": 52.8916,
+    "pixels": 182757
+   },
+   {
+    "frames": [
+     16,
+     17
+    ],
+    "mean": 6.6546,
+    "p95": 50.3335,
+    "pixels": 182732
+   },
+   {
+    "frames": [
+     17,
+     18
+    ],
+    "mean": 6.4025,
+    "p95": 48.3315,
+    "pixels": 182258
+   },
+   {
+    "frames": [
+     18,
+     19
+    ],
+    "mean": 6.1992,
+    "p95": 45.9782,
+    "pixels": 182795
+   },
+   {
+    "frames": [
+     19,
+     20
+    ],
+    "mean": 5.711,
+    "p95": 43.6259,
+    "pixels": 182763
+   },
+   {
+    "frames": [
+     20,
+     21
+    ],
+    "mean": 5.8201,
+    "p95": 43.9007,
+    "pixels": 182739
+   },
+   {
+    "frames": [
+     21,
+     22
+    ],
+    "mean": 6.0356,
+    "p95": 45.652,
+    "pixels": 182781
+   },
+   {
+    "frames": [
+     22,
+     23
+    ],
+    "mean": 5.7095,
+    "p95": 42.6675,
+    "pixels": 182757
+   },
+   {
+    "frames": [
+     23,
+     24
+    ],
+    "mean": 5.7308,
+    "p95": 42.6171,
+    "pixels": 182811
+   },
+   {
+    "frames": [
+     24,
+     25
+    ],
+    "mean": 6.6915,
+    "p95": 45.7692,
+    "pixels": 182391
+   }
+  ],
+  "pairs_measured": 24,
+  "pass": false,
+  "threshold_mean": 4.0,
+  "threshold_p95": 12.0,
+  "unit": "8-bit display steps (mean absolute RGB difference per pixel)"
+ },
+ "tolerances": {
+  "camera_position_m": 0.4,
+  "camera_rotation_degrees": 0.5,
+  "profile": "generative"
+ }
+}
