@@ -1,3 +1,9 @@
+## 2026-11-01 — continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) step A of 1: generated footage gets its own camera limit, and the M5 score card on real clips (integrator tick)
+
+- **What was done:** `main` `a0c43634` -> `19b20f60` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `19b20f60`: Ran 7690 tests in 569.048 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-01 — continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) step A of 1: the video model learns the scene's distance scale (integrator tick)
 
 - **What was done:** `main` `c0f78612` -> `ddcd904e` plus this docs commit. Evidence and per-lane commit
