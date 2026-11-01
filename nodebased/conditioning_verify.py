@@ -34,6 +34,18 @@ class Tolerances:
     # as a fraction of the plate's height so the bar does not change with the resolution.
     survey_rms_fraction: float = 0.005
     survey_max_fraction: float = 0.015
+    # Which limits these are: "render" (an exported render, held to render-exact camera limits) or
+    # "generative" (footage a video model redrew); named in every report so a verdict says what it was held to.
+    profile: str = "render"
+
+
+# Limits for generated footage. Basis: the camera check on nine generated first frames of one scene read
+# 0.05 to 0.27 units and 0.09 to 0.33 degrees even where the picture had exactly the right camera
+# (benchmarks/generative/m5-camera-scale-1101/), well above the render limits of 0.01 and 0.25. 0.4 units is
+# about 3 percent of the demo reference frame's 11.84-unit median depth. Every other limit stays at its render
+# value. Approved by DiMo 11/1.
+GENERATIVE_TOLERANCES = replace(Tolerances(), profile="generative",
+                                camera_position_m=0.4, camera_rotation_degrees=0.5)
 
 
 def _rotation_error(a, b):
@@ -714,6 +726,8 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     tolerances = tolerances or Tolerances()
     state = read_scene_state(scene_state_path)
     report = {"schema_version": 1, "scene_state": Path(scene_state_path).name,
+              "tolerances": {"profile": tolerances.profile, "camera_position_m": tolerances.camera_position_m,
+                             "camera_rotation_degrees": tolerances.camera_rotation_degrees},
               "intensity_checked": False, "frames": []}
     if determinism is not None:
         report["determinism"] = dict(determinism)
@@ -903,6 +917,8 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     def metric(value, unit):
         return "unavailable" if value is None else f"{float(value):.3f} {unit}"
     lines = [f"Conditioning verification: {json_path.stem}",
+             f"Tolerance profile: {tolerances.profile} (camera {tolerances.camera_position_m:g} units, "
+             f"{tolerances.camera_rotation_degrees:g} degrees)",
              f"Shot verdict: {report['score_card']['verdict']}",
              "Lighting intensity is not checked."]
     for name, item in report["score_card"]["bindings"].items():

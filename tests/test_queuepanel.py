@@ -180,5 +180,23 @@ class QueuePanelTests(unittest.TestCase):
             finally:
                 panel.close(); queue.close()
 
+    def test_attempt_detail_shows_the_tolerance_profile_next_to_the_verdict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); store = ArtifactStore(root / "artifacts")
+            queue = Queue(root / "queue.sqlite", store, max_workers=1)
+            panel = self._loop_panel(root, queue, store)
+            try:
+                report_id = store.put(json.dumps({"tolerances": {"profile": "generative"}}).encode(), "verification_report")
+                attempt = {"number": 1, "state": "pass", "inputs": [], "outputs": {"verification_report": report_id},
+                           "provider": "null", "version": "1", "seed": 7, "options": {}, "verdict": "PASS",
+                           "spend": 0, "spend_unit": "credits", "error": "", "queue_chain": "none"}
+                panel.selected_loop = "x"
+                with patch.object(panel, "_selected_attempt", return_value=attempt), \
+                        patch("nodebased.queuepanel.QMessageBox.information") as message:
+                    panel.show_attempt_details()
+                self.assertIn("Verdict: PASS (generative limits)", message.call_args.args[2])
+            finally:
+                panel.close(); queue.close()
+
 
 if __name__ == "__main__": unittest.main()

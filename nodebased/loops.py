@@ -253,7 +253,7 @@ def verify_task(options, input_ids, progress, cancelled):
     "not conditioned" and left out of the verdict.
     """
     from .artifacts import ArtifactStore
-    from .conditioning_verify import verify_conditioning
+    from .conditioning_verify import GENERATIVE_TOLERANCES, Tolerances, verify_conditioning
     from .conditioned_read import _read_rgba, read_generated_passes
     from .generative import GENERATION_MANIFEST
     from .scene_state import read_scene_state
@@ -291,7 +291,12 @@ def verify_task(options, input_ids, progress, cancelled):
         determinism=_determinism(sequence_dir/GENERATION_MANIFEST)
         temporal=temporal_measure(frames,{frame:row["beauty"] for frame,row in observations.items()},references)
         report_path=root/"verification.json"
-        report=verify_conditioning(scene_path,observations,report_path,
+        # A sequence with a generation manifest came out of a provider: it is held to the generative camera
+        # limits. An explicit `tolerances` option (a Tolerances, or a dict of its fields, which queue jobs carry) wins.
+        tolerances=options.get("tolerances")
+        if isinstance(tolerances,dict): tolerances=Tolerances(**tolerances)
+        if tolerances is None and (sequence_dir/GENERATION_MANIFEST).is_file(): tolerances=GENERATIVE_TOLERANCES
+        report=verify_conditioning(scene_path,observations,report_path,tolerances=tolerances,
             artifact_ids=[bundle_id,generated_id],artifact_store=store,determinism=determinism,temporal=temporal,
             survey=options.get("survey"))
         if cancelled.is_set(): raise RuntimeError("cancelled")

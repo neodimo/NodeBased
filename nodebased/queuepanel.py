@@ -231,9 +231,14 @@ class QueuePanel(QWidget):
         if match:
             try: worker_log = self.queue.store.get(match.group(1)).decode("utf-8", "replace")[-4000:]
             except (OSError, ValueError): worker_log = "Worker log artifact is unavailable."
+        profile = ""
+        report_id = attempt["outputs"].get("verification_report")
+        if report_id:
+            try: profile = json.loads(self.queue.store.get(report_id)).get("tolerances", {}).get("profile", "")
+            except (OSError, ValueError, KeyError): profile = ""
         detail = "\n".join([f"Attempt {attempt['number']} · {attempt['state']}",
             f"Inputs: {', '.join(attempt['inputs'])}", f"Provider: {attempt['provider']} {attempt['version']}", f"Seed: {attempt['seed']}",
-            f"Options: {json.dumps(attempt['options'], sort_keys=True)}", f"Verdict: {attempt['verdict'] or '—'}",
+            f"Options: {json.dumps(attempt['options'], sort_keys=True)}", f"Verdict: {attempt['verdict'] or '—'}" + (f" ({profile} limits)" if profile else ""),
             f"Estimated spend: {attempt['spend']} {attempt['spend_unit']}",
             f"Failure: {attempt['error'] or '—'}", f"Worker log: {worker_log or '—'}", "Queue links: " + "; ".join(
                 f"{x['name']}={x['state']} ({x['id']}) {x['error']}" for x in links),

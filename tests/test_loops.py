@@ -144,6 +144,17 @@ class LoopTests(unittest.TestCase):
                 self.assertEqual(store.meta(attempt["outputs"]["generated_sequence"])["kind"],"generated_sequence")
                 self.assertEqual(store.meta(attempt["outputs"]["verification_report"])["kind"],"verification_report")
                 self.assertIn(attempt["verdict"],("PASS","FAIL"))
+                # The null provider writes a generation manifest, so the sequence is held to the generative limits.
+                report=json.loads(store.get(attempt["outputs"]["verification_report"]))
+                self.assertEqual(report["tolerances"]["profile"],"generative")
+                self.assertEqual(report["tolerances"]["camera_position_m"],0.4)
+                # A caller that passes tolerances explicitly wins over the generative profile.
+                explicit=runner.create(scene_state_id=scene_id,control_bundle_id=bundle_id,provider_id="null",
+                    provider_options={"tolerances":{"camera_position_m":0.02}},max_attempts=1,max_estimated_spend=.1,
+                    estimated_spend_per_attempt=.01,spend_unit="credits")
+                other=runner.run(explicit)["attempts"][0]
+                report=json.loads(store.get(other["outputs"]["verification_report"]))
+                self.assertEqual((report["tolerances"]["profile"],report["tolerances"]["camera_position_m"]),("render",0.02))
             finally: queue.close()
 
 

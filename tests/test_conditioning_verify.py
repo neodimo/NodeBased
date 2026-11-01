@@ -7,7 +7,7 @@ import json
 import numpy as np
 
 from nodebased import scene3d
-from nodebased.conditioning_verify import main, verify_conditioning
+from nodebased.conditioning_verify import GENERATIVE_TOLERANCES, Tolerances, main, verify_conditioning
 from nodebased.scene_state import write_scene_state
 
 
@@ -54,6 +54,56 @@ class ConditioningVerificationTests(unittest.TestCase):
             self.assertFalse(report["intensity_checked"])
             self.assertEqual(report["score_card"]["verdict"], "PASS")
             self.assertIn("Lighting intensity is not checked", (root / "verify.txt").read_text())
+
+    def _nudged_camera(self, camera, units, degrees):
+        angle = np.radians(degrees)
+        matrix = np.array(camera["world_transform"]) @ np.array((
+            (np.cos(angle), 0, np.sin(angle), 0), (0, 1, 0, 0),
+            (-np.sin(angle), 0, np.cos(angle), 0), (0, 0, 0, 1)))
+        matrix[0, 3] += units
+        return {**camera, "world_transform": matrix.tolist()}
+
+    def test_render_default_limits_are_unchanged(self):
+        self.assertEqual((Tolerances().camera_position_m, Tolerances().camera_rotation_degrees), (0.01, 0.25))
+        self.assertEqual(Tolerances().profile, "render")
+        self.assertEqual((GENERATIVE_TOLERANCES.camera_position_m, GENERATIVE_TOLERANCES.camera_rotation_degrees,
+                          GENERATIVE_TOLERANCES.profile), (0.4, 0.5, "generative"))
+        self.assertEqual(replace(GENERATIVE_TOLERANCES, camera_position_m=0.01, camera_rotation_degrees=0.25,
+                                 profile="render"), Tolerances())
+
+    def test_camera_error_inside_generative_limit_passes_there_and_fails_render(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            state, _ids, _beauty, camera = self._shot(root)
+            nudged = self._nudged_camera(camera, 0.3, 0.4)
+            render = verify_conditioning(state, {1: {"camera": nudged}}, root / "render")
+            generative = verify_conditioning(state, {1: {"camera": nudged}}, root / "generative",
+                                             tolerances=GENERATIVE_TOLERANCES)
+            measured = generative["frames"][0]["bindings"]["camera"]
+            self.assertAlmostEqual(measured["position_error_m"], 0.3, places=3)
+            self.assertAlmostEqual(measured["rotation_error_degrees"], 0.4, places=2)
+            self.assertFalse(render["frames"][0]["bindings"]["camera"]["pass"])
+            self.assertTrue(generative["frames"][0]["bindings"]["camera"]["pass"])
+            # Beyond the generative limit it still fails.
+            far = verify_conditioning(state, {1: {"camera": self._nudged_camera(camera, 0.5, 0.0)}},
+                                      root / "far", tolerances=GENERATIVE_TOLERANCES)
+            self.assertFalse(far["frames"][0]["bindings"]["camera"]["pass"])
+
+    def test_report_names_the_tolerance_profile(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            state, _ids, _beauty, camera = self._shot(root)
+            render = verify_conditioning(state, {1: {"camera": camera}}, root / "render")
+            generative = verify_conditioning(state, {1: {"camera": camera}}, root / "generative",
+                                             tolerances=GENERATIVE_TOLERANCES)
+            self.assertEqual(render["tolerances"], {"profile": "render", "camera_position_m": 0.01,
+                                                    "camera_rotation_degrees": 0.25})
+            self.assertEqual(generative["tolerances"], {"profile": "generative", "camera_position_m": 0.4,
+                                                        "camera_rotation_degrees": 0.5})
+            written = json.loads((root / "generative.json").read_text())
+            self.assertEqual(written["tolerances"]["profile"], "generative")
+            self.assertIn("Tolerance profile: render", (root / "render.txt").read_text())
+            self.assertIn("Tolerance profile: generative", (root / "generative.txt").read_text())
 
     def test_two_degree_camera_nudge_fails_only_camera_binding(self):
         with tempfile.TemporaryDirectory() as folder:
