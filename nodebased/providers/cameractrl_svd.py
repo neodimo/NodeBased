@@ -199,6 +199,20 @@ def _model_main(job_path):
         up_block_types=config["up_block_types"], torch_dtype=half, variant="fp16")
     pose_encoder = CameraPoseEncoder(**config["pose_encoder_kwargs"])
     unet.set_pose_cond_attn_processor(enable_xformers=False, **config["attention_processor_kwargs"])
+    # Without xformers the checkout installs its materialised-scores processors, which need 4 GiB for one spatial
+    # attention at 576 x 320; swap in its own scaled-dot-product variants (same weights, same module names).
+    from cameractrl.models import attention_processor as processors
+    swapped = {}
+    for key, processor in unet.attn_processors.items():
+        if isinstance(processor, processors.PoseAdaptorAttnProcessor):
+            processor = processors.PoseAdaptorAttnProcessor2_0(
+                hidden_size=processor.hidden_size, pose_feature_dim=processor.pose_feature_dim,
+                cross_attention_dim=processor.cross_attention_dim, query_condition=processor.query_condition,
+                key_value_condition=processor.key_value_condition, scale=processor.scale)
+        elif isinstance(processor, processors.AttnProcessor):
+            processor = processors.AttnProcessor2_0()
+        swapped[key] = processor
+    unet.set_attn_processor(swapped)
     checkpoint = torch.load(job["checkpoint"], map_location="cpu", weights_only=True)
     missing, unexpected = pose_encoder.load_state_dict(checkpoint["pose_encoder_state_dict"])
     assert not missing and not unexpected
