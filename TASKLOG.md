@@ -1,3 +1,9 @@
+## 2026-10-31 — continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) step B of 2: a local video model that follows the scene's camera path (integrator tick)
+
+- **What was done:** `main` `db238339` -> `bec1489c` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `bec1489c`: Ran 7673 tests in 576.902 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) step A of 1: the smoke above the fire curls, through the existing up-res node (finish 1) (integrator tick)
 
 - **What was done:** `main` `1ac2f1ad` -> `9602249b` plus this docs commit. Evidence and per-lane commit

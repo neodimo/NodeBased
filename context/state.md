@@ -1,5 +1,26 @@
 ## 2026-10-31, 12:45 PM PDT — Lane 6 smoke up-res, finish 1: factor 4 rendered (default stays off)
 
+## Continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) (10:00 PM on 2026-10-31 PDT)
+
+`main` moved `db238339` -> `bec1489c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `bec1489c` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1031-2150.log`, started 9:50 PM): **Ran 7673 tests in 576.902 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Generative, Claude Sonnet 5.5), step B of 2: a local video model that follows the scene's camera path.** Commits:
+  - `4c898481` generative: camera-following benchmark
+  - `39910928` providers: CameraCtrl worker swaps in the checkout's fused attention processors (the default ones need 4 GiB per attention)
+  - `4ef28f6f` providers: CameraCtrl SVD-XT follows the exported camera
+  Diff: 16 files changed, 1703 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (1:00 PM on 2026-10-31 PDT)
 
 `main` moved `1ac2f1ad` -> `9602249b` (lane commits cherry-picked onto main in lane order) and then to this
