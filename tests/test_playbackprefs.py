@@ -270,7 +270,7 @@ class WindowSettingTests(unittest.TestCase):
         window = self.window
         cpus = sourcepool.available_cpus()
         self.assertIsNone(window.evaluator.gpu2d)
-        self.assertEqual(window.decode_pool.max_workers, 0 if cpus <= 4 else 1)
+        self.assertEqual(window.decode_pool.max_workers, playbackprefs.automatic_decode_workers(cpus))
         self.assertEqual(window.source_pool.max_workers, sourcepool.default_workers(cpus))
         self.assertEqual(window.gpu_nodes_state["error"], None)
 
