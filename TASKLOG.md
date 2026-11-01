@@ -1,3 +1,9 @@
+## 2026-11-01 — continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) step A of 1: the video model learns the scene's distance scale (integrator tick)
+
+- **What was done:** `main` `c0f78612` -> `ddcd904e` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `ddcd904e`: Ran 7683 tests in 569.124 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-10-31 — continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) step B of 2: a local video model that follows the scene's camera path (integrator tick)
 
 - **What was done:** `main` `db238339` -> `bec1489c` plus this docs commit. Evidence and per-lane commit

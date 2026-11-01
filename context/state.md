@@ -1,5 +1,25 @@
 ## 2026-10-31, 12:45 PM PDT — Lane 6 smoke up-res, finish 1: factor 4 rendered (default stays off)
 
+## Continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) (3:40 AM on 2026-11-01 PDT)
+
+`main` moved `c0f78612` -> `ddcd904e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `ddcd904e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1101-0330.log`, started 3:30 AM): **Ran 7683 tests in 569.124 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Generative, Claude Sonnet 5.5), step A of 1: the video model learns the scene's distance scale.** Commits:
+  - `f499168b` generative: distance-scale sweep, held-out paths and the camera-check floor
+  - `e85f7238` providers: CameraCtrl translation scale from the reference frame's depth
+  Diff: 29 files changed, 4808 insertions(+), 32 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) (10:00 PM on 2026-10-31 PDT)
 
 `main` moved `db238339` -> `bec1489c` (lane commits cherry-picked onto main in lane order) and then to this
