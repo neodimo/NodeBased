@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 87.0 / 100** (167 nodes scored, rank-weighted; 89.2 counting only the nodes NodeBased has).
+**Overall fidelity: 87.2 / 100** (167 nodes scored, rank-weighted; 89.4 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.6 (93.9 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.8 (94.1 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -33,7 +33,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
 | Image | 80.9 | 84.7 | 85.9 | 6 |
-| Draw | 72.8 | 58.1 | 83.1 | 17 |
+| Draw | 75.1 | 60.1 | 84.7 | 17 |
 | Time | 96.1 | 78.9 | 96.1 | 13 |
 | Channel | 88.9 | 92.2 | 98.9 | 5 |
 | Color | 93.8 | 77.9 | 94.4 | 34 |
@@ -44,7 +44,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 45 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 30 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 48 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 30 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 270 of the 342 paired knobs probed change the output pixels; 72 change nothing on the fixture (listed per node below). Splits: 7 of the 13 nodes with split knobs in the table split all of them.
 
@@ -70,9 +70,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Roto | `Roto` | supported | 60.9 | 81.8 | 66 (48/75) | - | 100 | 100 | 100 | 0 unchecked | 81 | - | no fixture |
 | 2 | Text | `Text` | supported | 95.4 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 80 | - | no fixture |
-| 3 | Rectangle | `Rectangle` | supported | 93.2 | 98.2 | 100 (13/13) | - | 87 | 100 | 100 | - | 66 | - | no fixture |
-| 4 | Ramp | `Ramp` | supported | 89.5 | 92.2 | 89 (9/10) | - | 83 | 100 | 100 | - | 75 | - | no fixture |
-| 5 | Radial | `Radial` | supported | 84.1 | 84.9 | 74 (9/14) | - | 91 | 100 | 100 | - | 76 | - | no fixture |
+| 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
+| 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
+| 5 | Radial | `Radial` | supported | 98.7 | 98.8 | 100 (14/14) | - | 88 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | Noise | `Noise` | supported | 92.2 | 95.7 | 98 (25/26) | - | 78 | 100 | 100 | - | 75 | - | no fixture |
 | 7 | RotoPaint | `RotoPaint` | supported | 66.8 | 91.3 | 84 (73/88) | - | 100 | 100 | 100 | 0 unchecked | 83 | - | no fixture |
 | 8 | LightWrap | `LightWrap` | supported | 66.1 | 98.6 | 100 (27/27) | 41 (8/27) | 89 | 100 | 100 | 0 unchecked | 89 | - | no fixture |
@@ -84,7 +84,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 11 | Glint | `Glint` | supported | 45.6 | 38.4 | 31 (4/13) | 100 (4/4) | 40 | 100 | 17 | 0 unchecked | 75 | - | no fixture |
 | 11 | Sparkles | `Sparkles` | supported | 40.6 | 22.6 | 9 (2/32) | 100 (2/2) | 0 | 100 | - | 0 unchecked | 100 | - | no fixture |
 | 12 | Dither | `Dither` | supported | 62.6 | 69.3 | 50 (2/4) | 100 (2/2) | 70 | 100 | 100 | 0 unchecked | 100 | - | no fixture |
-| 13 | Grid | `Grid` | supported | 86.5 | 89.6 | 83 (10/14) | - | 92 | 100 | 100 | - | 66 | - | no fixture |
+| 13 | Grid | `Grid` | supported | 92.1 | 98.3 | 100 (14/14) | - | 88 | 100 | 100 | - | 57 | - | no fixture |
 
 ### Time
 
@@ -714,6 +714,33 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `blackoutside_fills_outside_the_box_with_black` | guide | pass | within tolerance | - |
 | `tile_one_by_one_is_the_picture` | convention | pass | within tolerance | - |
 | `tile_rows_and_columns_scale_the_picture_into_tiles` | convention | not scored: the page lists the filters and the knobs but states neither which source pixel an impulse-filtered tile takes (the scaled-down pixel's centre lies on the boundary between two source pixels) nor how the tile edges round off when the size does not divide; tests/test_2d_behaviour_transform.py checks the layout (every tile is the same scaled picture), the mirrors and the filters | - | - |
+| `rectangle_fills_the_area_over_the_input` | convention | pass | within tolerance | - |
+| `rectangle_invert_draws_everything_else` | guide | pass | within tolerance | - |
+| `rectangle_opacity` | guide | pass | within tolerance | - |
+| `rectangle_replace_clears_the_input` | guide | pass | within tolerance | - |
+| `rectangle_ramp_linear` | convention | pass | within tolerance | - |
+| `rectangle_ramp_smooth0_ends_are_the_two_colours` | guide | pass | within tolerance | - |
+| `rectangle_ramp_smooth1_ends_are_the_two_colours` | guide | pass | within tolerance | - |
+| `rectangle_ramp_smooth_ends_are_the_two_colours` | guide | pass | within tolerance | - |
+| `rectangle_ramp_smooth_is_even_at_the_middle` | convention | pass | within tolerance | - |
+| `rectangle_ramp_smooth0_curve` | convention | not scored: the page says only which end smooth0 eases into ('colors in the point 0 end are spread wider') and gives no curve; tests/test_2d_behaviour_draw.py checks the end it favours and that it keeps both end colours | - | - |
+| `rectangle_ramp_smooth1_curve` | convention | not scored: the page says only which end smooth1 eases into ('colors in the point 1 end are spread wider') and gives no curve; tests/test_2d_behaviour_draw.py checks the end it favours and that it keeps both end colours | - | - |
+| `rectangle_softness_falloff` | convention | not scored: the page says only that softness 'sets the softness of the rectangle edges where 0 is a hard edge' (default 1); it gives neither the unit nor the curve, so the soft edge is not scored; tests/test_2d_behaviour_draw.py checks that 0 is a hard edge, that more softness widens the fade and that the fade is symmetric | - | - |
+| `radial_softness_zero_is_a_hard_ellipse` | guide | pass | within tolerance | - |
+| `radial_invert` | guide | pass | within tolerance | - |
+| `radial_opacity` | guide | pass | within tolerance | - |
+| `radial_ramp_linear` | convention | pass | within tolerance | - |
+| `radial_soft_falloff` | convention | not scored: the page says only that the area's centre is the originating point and that 0 is a hard edge; it gives no curve for the soft ramp, so it is not scored; tests/test_2d_behaviour_draw.py checks that it is full at the centre, falls to nothing at the edge and never rises | - | - |
+| `radial_perceptually_linear` | convention | not scored: the page says only that the ramp 'appears more linear to the naked eye'; the transfer curve is not given, so the pixels are not scored; tests/test_2d_behaviour_draw.py checks that the switch changes the ramp, keeps its centre and edge and darkens the middle | - | - |
+| `ramp_linear` | convention | pass | within tolerance | - |
+| `ramp_smooth0_ends_are_the_two_colours` | guide | pass | within tolerance | - |
+| `ramp_smooth1_ends_are_the_two_colours` | guide | pass | within tolerance | - |
+| `ramp_smooth_ends_are_the_two_colours` | guide | pass | within tolerance | - |
+| `ramp_plinear_ends_are_the_two_colours` | guide | pass | within tolerance | - |
+| `ramp_smooth_is_even_at_the_middle` | convention | pass | within tolerance | - |
+| `ramp_smooth0_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
+| `ramp_smooth1_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
+| `ramp_plinear_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
 
 ## Requirements of 2026-11-02, per node
 
@@ -758,15 +785,12 @@ Labels below are NodeBased's, then the guide's.
 - CurveTool (`CurveTool`): 8 of 11 paired knobs in Nuke's order
 - Roto (`Roto`): 8 of 13 paired knobs in Nuke's order
 - Text (`Text`): 27 of 40 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
-- Rectangle (`Rectangle`): 6 of 13 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
-- Ramp (`Ramp`): 6 of 9 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
-- Radial (`Radial`): 6 of 9 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
 - Noise (`Noise`): 16 of 25 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"; `zoffset` reads "Z Slice", Nuke "z"
 - RotoPaint (`RotoPaint`): 8 of 12 paired knobs in Nuke's order
 - LightWrap (`LightWrap`): 21 of 27 paired knobs in Nuke's order
 - Flare (`Flare`): 2 of 3 paired knobs in Nuke's order
 - Glint (`Glint`): 3 of 4 paired knobs in Nuke's order; `repeat` reads "Rays", Nuke "no. of rays"
-- Grid (`Grid`): 6 of 10 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"; `size` reads "Line Width", Nuke "size"
+- Grid (`Grid`): 6 of 14 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"; `size` reads "Line Width", Nuke "size"
 - AppendClip (`AppendClip`): 3 of 5 paired knobs in Nuke's order
 - TimeBlur (`TimeBlur`): 3 of 4 paired knobs in Nuke's order
 - TimeEcho (`TimeEcho`): 1 of 2 paired knobs in Nuke's order; `mode` reads "Method", Nuke "TimeEcho Method"; `framesbehind` reads "Frames", Nuke "Frames to look at"

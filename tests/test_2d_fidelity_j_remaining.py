@@ -28,7 +28,7 @@ def tiled(graph, key):
 class RectangleRampTests(unittest.TestCase):
     def graph(self, **params):
         graph = Graph()
-        graph.add("r", "Rectangle", dict(width=16, height=12, box_x=0.0, box_y=0.0,
+        graph.add("r", "Rectangle", dict(width=16, height=12, legacy_draw_axes=1, box_x=0.0, box_y=0.0,
                                             box_width=16.0, box_height=12.0, **params))
         return graph
 

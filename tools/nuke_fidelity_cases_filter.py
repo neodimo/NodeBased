@@ -224,6 +224,47 @@ def _pin_params(from_pts, to_pts, **more):
 
 
 # ---------------------------------------------------------------------------------------------------------- the cases
+# ----------------------------------------------------------------------------------------------------- Draw group (step C)
+DRAW_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/draw_nodes/"
+# The Draw pages call the ramp's point 0 end "by default, the bottom end" and its point 1 end "the top end", so y counts upwards from the
+# bottom of the format; the pixel's colour is a ramp's value at its centre, a half pixel in (Nuke's coordinates are pixel centres, the
+# Expression node's x and y among them). A reference here works in Nuke's space: x is the column, y the row counted from the bottom.
+
+
+def _nuke_xy(shape):
+    height, width = np.shape(shape)[:2]
+    rows, cols = np.mgrid[0:height, 0:width]
+    return cols.astype(np.float64), (height - 1 - rows).astype(np.float64)
+
+
+def _ramp_t(shape, p0, p1):
+    """Where each pixel's centre lies from point 0 (0) to point 1 (1), clamped."""
+    xs, ys = _nuke_xy(shape)
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    return np.clip(((xs + 0.5 - p0[0]) * dx + (ys + 0.5 - p0[1]) * dy) / (dx * dx + dy * dy), 0.0, 1.0)
+
+
+def _eased(t, kind):
+    """The five ramp types. The page gives the words (smooth0 eases into point 0, smooth1 into point 1, smooth into both) and not the curves."""
+    return {"linear": t, "smooth0": t * t, "smooth1": 1.0 - (1.0 - t) ** 2, "smooth": t * t * (3.0 - 2.0 * t)}[kind]
+
+
+def _blend(c0, c1, w):
+    return np.asarray(c0, np.float64)[None, None, :] * (1.0 - w[..., None]) + np.asarray(c1, np.float64)[None, None, :] * w[..., None]
+
+
+def _over_input(fx, shape):
+    """The shape drawn over the input (premultiplied over), the Draw nodes' compositing."""
+    return shape + fx["A"].astype(np.float64) * (1.0 - shape[..., 3:4])
+
+
+def _in_box(shape, x, y, w, h):
+    """Pixels whose centre lies inside the area x, y, w, h (y from the bottom)."""
+    xs, ys = _nuke_xy(shape)
+    return (xs + 0.5 >= x) & (xs + 0.5 <= x + w) & (ys + 0.5 >= y) & (ys + 0.5 <= y + h)
+
+
+
 def cases():
     from nuke_fidelity_cases import Case
 
@@ -732,4 +773,158 @@ def cases():
                          "scaled-down pixel's centre lies on the boundary between two source pixels) nor how the tile edges round off when the "
                          "size does not divide; tests/test_2d_behaviour_transform.py checks the layout (every tile is the same scaled picture), "
                          "the mirrors and the filters")
+    _draw_cases(Case, out)
     return out
+
+
+def _draw_cases(Case, out):
+    """Rectangle, Radial and Ramp (the Draw group), then Noise and Grid, Grain and Dither."""
+    fmt = {"width": 16, "height": 12}
+
+    def case(id, nuke, nuke_class, nuke_knobs, nb_kind, nb_params, expected, source, statement, unscored="", nb_inputs=("A",)):
+        out.append(Case(id=id, nuke=nuke, nuke_class=nuke_class, nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind=nb_kind,
+                        nb_params={**fmt, **nb_params} if nb_params is not None else None, nb_inputs=nb_inputs, expected=expected,
+                        source=source, statement=statement, unscored=unscored))
+
+    def drawn(make, only=None):
+        """A reference: the shape `make(shape_like)` (premultiplied float64 RGBA) over the input, valid where `only(shape_like)` says."""
+        def expected(fx):
+            like = fx["A"].astype(np.float64)
+            ref = _over_input(fx, make(like))
+            valid = np.ones(like.shape, bool) if only is None else np.broadcast_to(only(like)[..., None], like.shape).copy()
+            return ref, valid
+        return expected
+
+    area = {"box_x": 3.0, "box_y": 2.0, "box_width": 6.0, "box_height": 5.0}
+    colour = (0.25, 0.5, 0.75, 0.8)
+    paint = {"red": colour[0], "green": colour[1], "blue": colour[2], "alpha": colour[3]}
+
+    def solid(coverage):
+        return lambda like: np.concatenate([np.asarray(colour[:3]) * colour[3] * coverage(like)[..., None], (colour[3] * coverage(like))[..., None]], axis=-1)
+
+    def rect_in(like):
+        return _in_box(like, 3, 2, 6, 5).astype(np.float64)
+
+    page = DRAW_GUIDE + "rectangle.html"
+    # ----------------------------------------------------------------------------------------------------------- Rectangle
+    case("rectangle_fills_the_area_over_the_input", "Rectangle", "Rectangle", (("area", "3 2 9 7"), ("color", "0.25 0.5 0.75 0.8")), "Rectangle",
+         {**area, **paint, "softness": 0.0}, drawn(solid(rect_in)), "convention",
+         f"Rectangle: 'Generates a rectangle in a solid color on top of the input image' ({page}); the area counts y from the bottom, "
+         "as Nuke's coordinates do (the Ramp page names the point 0 end the bottom)")
+    case("rectangle_invert_draws_everything_else", "Rectangle", "Rectangle", (("area", "3 2 9 7"), ("invert", True)), "Rectangle",
+         {**area, **paint, "softness": 0.0, "invert": 1}, drawn(solid(lambda like: 1.0 - rect_in(like))), "guide",
+         "Rectangle: invert 'inverts the new rectangle and non-rectangle areas'")
+    case("rectangle_opacity", "Rectangle", "Rectangle", (("area", "3 2 9 7"), ("opacity", 0.5)), "Rectangle",
+         {**area, **paint, "softness": 0.0, "opacity": 0.5}, drawn(solid(lambda like: 0.5 * rect_in(like))), "guide",
+         "Rectangle: opacity 'sets the rectangle opacity where 0 is equal to transparent, and 1 is equal to opaque'")
+    case("rectangle_replace_clears_the_input", "Rectangle", "Rectangle", (("area", "3 2 9 7"), ("replace", True)), "Rectangle",
+         {**area, **paint, "softness": 0.0, "replace": 1},
+         lambda fx: (solid(rect_in)(fx["A"].astype(np.float64)), np.ones(fx["A"].shape, bool)), "guide",
+         "Rectangle: replace 'existing channels are cleared to black before drawing into them'")
+    low, high = (0.1, 0.2, 0.3, 1.0), (0.9, 0.7, 0.5, 1.0)
+    ramp_knobs = {"p0_x": 0.0, "p0_y": 1.0, "p1_x": 0.0, "p1_y": 10.0, "color0_red": low[0], "color0_green": low[1], "color0_blue": low[2],
+                  "color0_alpha": 1.0, "red": high[0], "green": high[1], "blue": high[2], "alpha": 1.0}
+    whole = {"box_x": 0.0, "box_y": 0.0, "box_width": 16.0, "box_height": 12.0, "softness": 0.0}
+
+    def ramped(kind, only=None):
+        def make(like):
+            weight = _eased(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), kind)
+            straight = _blend(low, high, weight)
+            return np.concatenate([straight[..., :3] * straight[..., 3:4], straight[..., 3:4]], axis=-1)
+        return drawn(make, only)
+
+    def outside_ramp(like):
+        xs, ys = _nuke_xy(like)
+        return (ys + 0.5 <= 1.0) | (ys + 0.5 >= 10.0)
+
+    def mid_row(like):
+        xs, ys = _nuke_xy(like)
+        return ys + 0.5 == 5.5
+    case("rectangle_ramp_linear", "Rectangle", "Rectangle", (("ramp", "linear"), ("p0", "0 1"), ("p1", "0 10"), ("color0", "0.1 0.2 0.3 1"), ("color", "0.9 0.7 0.5 1")),
+         "Rectangle", {**whole, **ramp_knobs, "ramp": "linear"}, ramped("linear"), "convention",
+         f"Rectangle ramp linear: 'the ramp changes linearly from one color into another', color 0 at point 0 (the bottom) and color at point 1 ({page}); "
+         "each pixel takes the ramp's value at its centre")
+    for kind in ("smooth0", "smooth1", "smooth"):
+        case(f"rectangle_ramp_{kind}_ends_are_the_two_colours", "Rectangle", "Rectangle",
+             (("ramp", kind), ("p0", "0 1"), ("p1", "0 10")), "Rectangle", {**whole, **ramp_knobs, "ramp": kind}, ramped(kind, outside_ramp), "guide",
+             f"Rectangle ramp {kind}: before point 0 the ramp is color 0 and past point 1 it is color, whatever the easing (compared outside the ramp only)")
+    case("rectangle_ramp_smooth_is_even_at_the_middle", "Rectangle", "Rectangle", (("ramp", "smooth"), ("p0", "0 1"), ("p1", "0 10")), "Rectangle",
+         {**whole, **ramp_knobs, "ramp": "smooth"}, ramped("smooth", mid_row), "convention",
+         "Rectangle ramp smooth: 'the ramp color gradually eases into both ends', so halfway between the points the two colours weigh the same "
+         "(the row of pixels whose centres lie on the midpoint)")
+    for kind in ("smooth0", "smooth1"):
+        case(f"rectangle_ramp_{kind}_curve", "Rectangle", "Rectangle", (("ramp", kind),), "Rectangle", {**whole, **ramp_knobs, "ramp": kind},
+             ramped(kind), "convention", f"Rectangle ramp {kind}: the easing curve",
+             unscored=f"the page says only which end {kind} eases into ('colors in the point {kind[-1]} end are spread wider') and gives no curve; "
+                      "tests/test_2d_behaviour_draw.py checks the end it favours and that it keeps both end colours")
+    case("rectangle_softness_falloff", "Rectangle", "Rectangle", (("area", "3 2 9 7"), ("softness", 2.0)), "Rectangle",
+         {**area, **paint, "softness": 0.5}, drawn(solid(rect_in)), "convention", "Rectangle: the soft edge's width and curve",
+         unscored="the page says only that softness 'sets the softness of the rectangle edges where 0 is a hard edge' (default 1); it gives neither "
+                  "the unit nor the curve, so the soft edge is not scored; tests/test_2d_behaviour_draw.py checks that 0 is a hard edge, that "
+                  "more softness widens the fade and that the fade is symmetric")
+
+    # ------------------------------------------------------------------------------------------------------------- Radial
+    page = DRAW_GUIDE + "radial.html"
+    bx, by, bw, bh = 2.0, 1.0, 12.0, 10.0
+    disc = {"box_x": bx, "box_y": by, "box_width": bw, "box_height": bh}
+
+    def radial_distance(like):
+        xs, ys = _nuke_xy(like)
+        return np.sqrt(((xs + 0.5 - (bx + bw / 2.0)) / (bw / 2.0)) ** 2 + ((ys + 0.5 - (by + bh / 2.0)) / (bh / 2.0)) ** 2)
+
+    case("radial_softness_zero_is_a_hard_ellipse", "Radial", "Radial", (("area", "2 1 14 11"), ("softness", 0.0), ("color", "0.25 0.5 0.75 0.8")), "Radial",
+         {**disc, **paint, "softness": 0.0}, drawn(solid(lambda like: (radial_distance(like) < 1.0).astype(np.float64))), "guide",
+         f"Radial: softness 'sets the softness of the radial ramp edges, where 0 is a hard edge'; the area holds the ramp and its center is the "
+         f"ramp's origin ({page}): a filled ellipse that touches the area's four sides, y counted from the bottom")
+    case("radial_invert", "Radial", "Radial", (("area", "2 1 14 11"), ("softness", 0.0), ("invert", True)), "Radial",
+         {**disc, **paint, "softness": 0.0, "invert": 1}, drawn(solid(lambda like: (radial_distance(like) >= 1.0).astype(np.float64))), "guide",
+         "Radial: invert 'inverts the radial ramp and non-radial ramp areas'")
+    case("radial_opacity", "Radial", "Radial", (("area", "2 1 14 11"), ("softness", 0.0), ("opacity", 0.5)), "Radial",
+         {**disc, **paint, "softness": 0.0, "opacity": 0.5}, drawn(solid(lambda like: 0.5 * (radial_distance(like) < 1.0))), "guide",
+         "Radial: opacity 'sets the radial ramp opacity. 0 is equal to transparent and 1 is equal to opaque'")
+
+    def radial_ramped(like):
+        weight = _eased(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), "linear")
+        straight = _blend(low, high, weight)
+        alpha = straight[..., 3:4] * (radial_distance(like) < 1.0)[..., None]
+        return np.concatenate([straight[..., :3] * alpha, alpha], axis=-1)
+    case("radial_ramp_linear", "Radial", "Radial", (("ramp", "linear"), ("p0", "0 1"), ("p1", "0 10"), ("softness", 0.0)), "Radial",
+         {**disc, **ramp_knobs, "softness": 0.0, "ramp": "linear"}, drawn(radial_ramped), "convention",
+         "Radial ramp linear: a gradient from color 0 at point 0 (the bottom) to color at point 1 across the ellipse, centred sampling")
+    case("radial_soft_falloff", "Radial", "Radial", (("area", "2 1 14 11"), ("softness", 1.0)), "Radial", {**disc, **paint, "softness": 1.0},
+         drawn(solid(lambda like: np.clip(1.0 - radial_distance(like), 0.0, 1.0))), "convention", "Radial: the soft ramp's curve",
+         unscored="the page says only that the area's centre is the originating point and that 0 is a hard edge; it gives no curve for the soft ramp, "
+                  "so it is not scored; tests/test_2d_behaviour_draw.py checks that it is full at the centre, falls to nothing at the edge and never rises")
+    case("radial_perceptually_linear", "Radial", "Radial", (("area", "2 1 14 11"), ("softness", 1.0), ("plinear", True)), "Radial",
+         {**disc, **paint, "softness": 1.0, "plinear": 1}, drawn(solid(lambda like: np.clip(1.0 - radial_distance(like), 0.0, 1.0) ** 2.2)),
+         "convention", "Radial: perceptually linear",
+         unscored="the page says only that the ramp 'appears more linear to the naked eye'; the transfer curve is not given, so the pixels are not "
+                  "scored; tests/test_2d_behaviour_draw.py checks that the switch changes the ramp, keeps its centre and edge and darkens the middle")
+
+    # -------------------------------------------------------------------------------------------------------------- Ramp
+    page = DRAW_GUIDE + "ramp.html"
+    c0, c1 = (0.1, 0.2, 0.3, 1.0), (0.9, 0.7, 0.5, 1.0)
+    ramp_params = {"p0_x": 0.0, "p0_y": 1.0, "p1_x": 0.0, "p1_y": 10.0, "color0_red": c0[0], "color0_green": c0[1], "color0_blue": c0[2],
+                   "color0_alpha": 1.0, "color1_red": c1[0], "color1_green": c1[1], "color1_blue": c1[2], "color1_alpha": 1.0}
+
+    def ramp_ref(kind, only=None):
+        def make(like):
+            straight = _blend(c0, c1, _eased(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), kind))
+            return np.concatenate([straight[..., :3] * straight[..., 3:4], straight[..., 3:4]], axis=-1)
+        return drawn(make, only)
+    case("ramp_linear", "Ramp", "Ramp", (("type", "linear"), ("p0", "0 1"), ("p1", "0 10")), "Ramp", {**ramp_params, "ramp_type": "linear"},
+         ramp_ref("linear"), "convention",
+         f"Ramp linear: 'the ramp has a linear gradient' from point 0 (the bottom end) to point 1 (the top end) ({page}); each pixel takes the "
+         "value at its centre, y counted from the bottom")
+    for kind in ("smooth0", "smooth1", "smooth", "plinear"):
+        case(f"ramp_{kind}_ends_are_the_two_colours", "Ramp", "Ramp", (("type", kind), ("p0", "0 1"), ("p1", "0 10")), "Ramp",
+             {**ramp_params, "ramp_type": kind}, ramp_ref("linear" if kind == "plinear" else kind, outside_ramp), "guide",
+             f"Ramp {kind}: before point 0 the ramp is the point 0 colour and past point 1 the point 1 colour, whatever the type (compared outside the ramp only)")
+    case("ramp_smooth_is_even_at_the_middle", "Ramp", "Ramp", (("type", "smooth"), ("p0", "0 1"), ("p1", "0 10")), "Ramp",
+         {**ramp_params, "ramp_type": "smooth"}, ramp_ref("smooth", mid_row), "convention",
+         "Ramp smooth: 'the ramp gradually eases into both ends', so the middle weighs the two colours alike (the row on the midpoint)")
+    for kind in ("smooth0", "smooth1", "plinear"):
+        case(f"ramp_{kind}_curve", "Ramp", "Ramp", (("type", kind),), "Ramp", {**ramp_params, "ramp_type": kind}, ramp_ref(kind if kind != "plinear" else "linear"),
+             "convention", f"Ramp {kind}: the curve between the points",
+             unscored="the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) "
+                      "but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear")

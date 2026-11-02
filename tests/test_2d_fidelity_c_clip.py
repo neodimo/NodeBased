@@ -131,7 +131,7 @@ class NoClipTests(unittest.TestCase):
     def test_a_rectangle_standing_out_of_the_format_is_drawn_whole_with_no_clip(self):
         shape = dict(box_x=30, box_y=10, box_width=20, box_height=20)
         d = Dispatcher(empty_document())
-        d.execute({"op": "create", "id": "rect", "type": "Rectangle", "params": {"width": W, "height": H, **RECT, **shape}})
+        d.execute({"op": "create", "id": "rect", "type": "Rectangle", "params": {"width": W, "height": H, **RECT, **shape, "legacy_draw_axes": 1}})
         d.execute({"op": "view", "id": "rect"})
         clipped = render(d.document)
         self.assertEqual(clipped.data, FORMAT)

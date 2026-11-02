@@ -49,7 +49,7 @@ class KernelPixelTests(unittest.TestCase):
 
     def test_ramp_horizontal_black_to_white_is_half_at_the_middle_column(self):
         g = Graph()
-        g.add("node", "Ramp", dict(width=11, height=3, p0_x=0.0, p0_y=0.0, p1_x=10.0, p1_y=0.0,
+        g.add("node", "Ramp", dict(width=11, height=3, legacy_draw_axes=1, p0_x=0.0, p0_y=0.0, p1_x=10.0, p1_y=0.0,
                                    color0_red=0.0, color0_green=0.0, color0_blue=0.0, color0_alpha=1.0,
                                    color1_red=1.0, color1_green=1.0, color1_blue=1.0, color1_alpha=1.0))
         out = evaluator_pixels(g.doc, "node")
@@ -69,7 +69,7 @@ class KernelPixelTests(unittest.TestCase):
 
     def test_rectangle_is_one_inside_and_zero_outside_with_softness_zero(self):
         g = Graph()
-        g.add("node", "Rectangle", dict(width=30, height=20, box_x=10.0, box_y=5.0, box_width=8.0,
+        g.add("node", "Rectangle", dict(width=30, height=20, legacy_draw_axes=1, box_x=10.0, box_y=5.0, box_width=8.0,
                                         box_height=6.0, softness=0.0, red=1.0, green=1.0, blue=1.0, alpha=1.0))
         out = evaluator_pixels(g.doc, "node")
         np.testing.assert_allclose(out[5:11, 10:18], 1.0)

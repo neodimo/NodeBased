@@ -31,6 +31,7 @@ from . import tiers
 from . import timeknobs
 from . import tracker
 from . import transformbehaviour as _transformbehaviour
+from . import drawbehaviour as _draw
 from .raster import Raster, as_array, scale_window
 from .tiers import Region
 
@@ -8206,6 +8207,14 @@ class Evaluator:
 
     @staticmethod
     def _ramp_shape(p, x0, y0, w, h):
+        if not _draw.is_legacy(p):
+            # Nuke's Ramp: point 0 to point 1 counted from the bottom of the format, measured at the pixel centre, with the guide's types.
+            c1 = (p["color1_red"], p["color1_green"], p["color1_blue"], p["color1_alpha"])
+            straight = _draw.ramp_colour({**p, "color0_red": p["color0_red"], "color0_green": p["color0_green"],
+                                          "color0_blue": p["color0_blue"], "color0_alpha": p["color0_alpha"]},
+                                         x0, y0, w, h, str(p.get("ramp_type", "linear")), c1)
+            alpha = straight[..., 3:4] * _draw.cover(p, np.ones((h, w, 1)))
+            return np.concatenate([straight[..., :3] * alpha, alpha], axis=-1).astype(np.float32)
         xs = np.arange(x0, x0 + w, dtype=np.float64)
         ys = np.arange(y0, y0 + h, dtype=np.float64)
         xx, yy = np.meshgrid(xs, ys)
@@ -8229,7 +8238,7 @@ class Evaluator:
         outside. The box's valid columns/rows are `[box_x, box_x + box_width)`, the same half-open
         convention `Region` uses everywhere else in this codebase."""
         xs = np.arange(x0, x0 + w, dtype=np.float64)
-        ys = np.arange(y0, y0 + h, dtype=np.float64)
+        ys = _draw.rows(p, y0, h)
         xx, yy = np.meshgrid(xs, ys)
         bx, by = float(p["box_x"]), float(p["box_y"])
         bw, bh = float(p["box_width"]), float(p["box_height"])
@@ -8249,7 +8258,12 @@ class Evaluator:
         dist, bw, bh = Evaluator._box_edge_distance(p, x0, y0, w, h)
         softness = float(p.get("softness", 0.0)) * min(bw, bh) / 2.0
         coverage = (dist >= 0).astype(np.float64) if softness < 1e-9 else np.clip(dist / softness, 0.0, 1.0)
+        coverage = _draw.cover(p, coverage)
         ramp = p.get("ramp", "none")
+        if ramp != "none" and not _draw.is_legacy(p):
+            straight = _draw.ramp_colour(p, x0, y0, w, h, ramp, (p["red"], p["green"], p["blue"], p["alpha"]))
+            alpha = coverage * straight[..., 3]
+            return np.concatenate([straight[..., :3] * alpha[..., None], alpha[..., None]], axis=-1).astype(np.float32)
         if ramp != "none":
             xs = np.arange(x0, x0 + w, dtype=np.float64)
             ys = np.arange(y0, y0 + h, dtype=np.float64)
@@ -8284,15 +8298,19 @@ class Evaluator:
     def _grid_shape(p, x0, y0, w, h):
         cols = Evaluator._grid_lines(np.arange(x0, x0 + w, dtype=np.float64), p["width"], p["spacing_x"],
                                      p["number_x"], p["grid_offset_x"], p["line_width"])
-        rows = Evaluator._grid_lines(np.arange(y0, y0 + h, dtype=np.float64), p["height"], p["spacing_y"],
+        rows = Evaluator._grid_lines(_draw.rows(p, y0, h), p["height"], p["spacing_y"],
                                      p["number_y"], p["grid_offset_y"], p["line_width"])
-        coverage = np.maximum(rows[:, None], cols[None, :])
+        coverage = _draw.cover(p, np.maximum(rows[:, None], cols[None, :]))
+        if str(p.get("ramp", "none")) != "none" and not _draw.is_legacy(p):
+            straight = _draw.ramp_colour(p, x0, y0, w, h, p["ramp"], (p["red"], p["green"], p["blue"], p["alpha"]))
+            alpha = coverage * straight[..., 3]
+            return np.concatenate([straight[..., :3] * alpha[..., None], alpha[..., None]], axis=-1).astype(np.float32)
         return Evaluator._paint_coverage(p, coverage)
 
     @staticmethod
     def _radial_shape(p, x0, y0, w, h):
         xs = np.arange(x0, x0 + w, dtype=np.float64)
-        ys = np.arange(y0, y0 + h, dtype=np.float64)
+        ys = _draw.rows(p, y0, h)
         xx, yy = np.meshgrid(xs, ys)
         bx, by = float(p["box_x"]), float(p["box_y"])
         bw, bh = float(p["box_width"]), float(p["box_height"])
@@ -8301,6 +8319,15 @@ class Evaluator:
         d = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
         softness = float(p.get("softness", 0.0))
         coverage = (d < 1.0).astype(np.float64) if softness < 1e-9 else np.clip((1.0 - d) / softness, 0.0, 1.0)
+        if not _draw.is_legacy(p):
+            if int(p.get("plinear", 0)):
+                coverage = coverage ** _draw.PLINEAR_GAMMA
+            coverage = _draw.cover(p, coverage)
+            ramp = str(p.get("ramp", "none"))
+            if ramp != "none":
+                straight = _draw.ramp_colour(p, x0, y0, w, h, ramp, (p["red"], p["green"], p["blue"], p["alpha"]))
+                alpha = coverage * straight[..., 3]
+                return np.concatenate([straight[..., :3] * alpha[..., None], alpha[..., None]], axis=-1).astype(np.float32)
         return Evaluator._paint_coverage(p, coverage)
 
     @staticmethod

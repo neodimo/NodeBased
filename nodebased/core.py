@@ -214,6 +214,7 @@ from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import filterbehaviour as _filterbehaviour
 from . import transformbehaviour as _transformbehaviour
+from . import drawbehaviour as _drawbehaviour
 from . import timeknobs as _timeknobs
 from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
@@ -641,19 +642,19 @@ SPECS = {
                        "p0_x": 0.0, "p0_y": 0.0, "p1_x": 959.0, "p1_y": 0.0,
                        "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0,
                        "color1_red": 1.0, "color1_green": 1.0, "color1_blue": 1.0, "color1_alpha": 1.0,
-                       "mix": 1.0}},
+                       "mix": 1.0, **_drawbehaviour.new_params("Ramp")}},
     "Radial": {"inputs": [], "optional_inputs": ["image", "mask"],
                "params": {"width": 960, "height": 540,
                          "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
                          "softness": 0.5, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
-                         "mix": 1.0}},
+                         "mix": 1.0, **_drawbehaviour.new_params("Radial")}},
     "Rectangle": {"inputs": [], "optional_inputs": ["image", "mask"],
                   "params": {"width": 960, "height": 540,
                             "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
                             "softness": 0.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
                             "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0,
                             "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0,
-                            "mix": 1.0}},
+                            "mix": 1.0, **_drawbehaviour.new_params("Rectangle")}},
     # Grid (lane L2 step 4c) is Nuke's Draw Grid: vertical and horizontal lines every `spacing_*`
     # pixels, starting at `grid_offset_*`, `line_width` pixels wide. `number_x`/`number_y` above zero
     # switch a direction to "this many lines across the format" (spacing = format size / number),
@@ -663,7 +664,7 @@ SPECS = {
              "params": {"width": 960, "height": 540,
                        "spacing_x": 64.0, "spacing_y": 64.0, "number_x": 0, "number_y": 0,
                        "grid_offset_x": 0.0, "grid_offset_y": 0.0, "line_width": 1.0,
-                       "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "mix": 1.0}},
+                       "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "mix": 1.0, **_drawbehaviour.new_params("Grid")}},
     # NoOp: Nuke's passthrough that, unlike Dot (a wire reroute with no properties), is a real node
     # with a properties panel and a place for user notes. Nothing reads `note`; bypassed or not, the
     # input passes through untouched (`bypass_slot`'s first-input rule).
@@ -716,7 +717,7 @@ SPECS = {
     # generator cannot promise without moving the slice.
     "Noise": {"inputs": [], "optional_inputs": ["image", "mask"],
               "params": {"width": 960, "height": 540, "size": 64.0, "z_slice": 0.0, "octaves": 4,
-                        "lacunarity": 2.0, "gain": 0.5, "gamma": 1.0, "seed": 0, "type": "fBm", "nyquist": 1, "translate_x": 0.0, "translate_y": 0.0, "rotate_x": 0.0, "rotate_y": 0.0, "scaling": 1.0, "skew": 0.0, "center_x": 480.0, "center_y": 270.0, "xrotate": 0.0, "yrotate": 0.0, "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0, "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0, "mix": 1.0}},
+                        "lacunarity": 2.0, "gain": 0.5, "gamma": 1.0, "seed": 0, "type": "fBm", "nyquist": 1, "translate_x": 0.0, "translate_y": 0.0, "rotate_x": 0.0, "rotate_y": 0.0, "scaling": 1.0, "skew": 0.0, "center_x": 480.0, "center_y": 270.0, "xrotate": 0.0, "yrotate": 0.0, "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0, "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0, "mix": 1.0, **_drawbehaviour.new_params("Noise")}},
     # Text renders through Qt's own text rasteriser offscreen (QPainter/QFont on a QImage), so it
     # needs no new dependency. "font" is a family name looked up through Qt's font database, not a
     # file path: whether a given family actually renders depends on what is installed on the
@@ -2257,6 +2258,8 @@ LIMITS.update({"use_precomputed": (0, 1), "range": (0.000001, 1000000.0), "sourc
 CHOICES["curve_type"] = list(_curvetoolknobs.CURVE_TYPES)
 CHOICES["type"] = ["fBm", "turbulence"]
 CHOICES["ramp"] = ["none", "linear", "smooth0", "smooth1", "smooth"]
+CHOICES["ramp_type"] = list(_drawbehaviour.RAMP_TYPES)
+LIMITS.update(_drawbehaviour.LIMITS)
 CHOICES.update({"Quality": ["low", "normal", "high"], "fillRegion": ["Matte Alpha", "Source Alpha"],
                 "detailSource": ["Source", "Detail"]})
 LIMITS.update({"metafps": (0, 1), "use_frame": (0, 1), "meta_from_first": (0, 1), "y_padding": (0.0, 8192.0),

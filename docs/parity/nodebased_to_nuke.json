@@ -507,7 +507,8 @@
     {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"}
    ],
    "skip_default": ["area"]
   },
@@ -536,7 +537,9 @@
     {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["ramp_type"], "nuke": ["type"], "kind": "renamed", "reason": "the ramp type (linear, plinear, smooth0, smooth1, smooth)"}
    ]
   },
   "Radial": {
@@ -560,7 +563,13 @@
     {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["plinear"], "nuke": ["plinear"], "kind": "same"},
+    {"nodebased": ["ramp"], "nuke": ["ramp"], "kind": "same"},
+    {"nodebased": ["p0_x", "p0_y"], "nuke": ["p0"], "kind": "components", "reason": "point stored as scalar coordinates"},
+    {"nodebased": ["p1_x", "p1_y"], "nuke": ["p1"], "kind": "components", "reason": "point stored as scalar coordinates"},
+    {"nodebased": ["color0_red", "color0_green", "color0_blue", "color0_alpha"], "nuke": ["color0"], "kind": "components", "reason": "colour stored as scalar components"}
    ],
    "skip_default": ["area"]
   },
@@ -602,7 +611,8 @@
     {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"}
    ]
   },
   "RotoPaint": {
@@ -896,7 +906,12 @@
     {"nodebased": ["opacity"], "nuke": ["opacity"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"}
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["ramp"], "nuke": ["ramp"], "kind": "same"},
+    {"nodebased": ["p0_x", "p0_y"], "nuke": ["p0"], "kind": "components", "reason": "point stored as scalar coordinates"},
+    {"nodebased": ["p1_x", "p1_y"], "nuke": ["p1"], "kind": "components", "reason": "point stored as scalar coordinates"},
+    {"nodebased": ["color0_red", "color0_green", "color0_blue", "color0_alpha"], "nuke": ["color0"], "kind": "components", "reason": "colour stored as scalar components"}
    ],
    "skip_default": ["translate"]
   },

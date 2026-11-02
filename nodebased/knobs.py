@@ -781,13 +781,21 @@ KNOB_LAYOUT = {
         KnobGroup("xy", ("p0_x", "p0_y"), label="P0"), KnobGroup("xy", ("p1_x", "p1_y"), label="P1"),
         KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Colour 0"),
         KnobGroup("color", ("color1_red", "color1_green", "color1_blue", "color1_alpha"), label="Colour 1"),
+        KnobGroup("enum", ("ramp_type",), label="Type"),
+        KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
+                  help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Radial": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("xy", ("box_x", "box_y"), label="Area"),
         KnobGroup("xy", ("box_width", "box_height"), label="Area size"),
         KnobGroup("float_slider", ("softness",), soft_range=(0, 1)),
+        KnobGroup("bool", ("plinear",), label="Perceptually linear"),
         KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"),
+        KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"),
+        KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
+                  help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Rectangle": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -795,6 +803,8 @@ KNOB_LAYOUT = {
         KnobGroup("xy", ("box_width", "box_height"), label="Area size"),
         KnobGroup("float_slider", ("softness",), soft_range=(0, 1)),
         KnobGroup("color", ("red", "green", "blue", "alpha")), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"),
+        KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
+                  help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Noise": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -803,7 +813,8 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("octaves",)), KnobGroup("float_slider", ("lacunarity",), soft_range=(1, 4)),
         KnobGroup("float_slider", ("gain",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
-        KnobGroup("int", ("seed",)), KnobGroup("enum", ("type",)), KnobGroup("bool", ("nyquist",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"), KnobGroup("xy", ("rotate_x", "rotate_y"), label="Rotate"), KnobGroup("float", ("scaling",), label="Scale"), KnobGroup("float", ("skew",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("float", ("xrotate",)), KnobGroup("float", ("yrotate",)), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("int", ("seed",)), KnobGroup("enum", ("type",)), KnobGroup("bool", ("nyquist",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"), KnobGroup("xy", ("rotate_x", "rotate_y"), label="Rotate"), KnobGroup("float", ("scaling",), label="Scale"), KnobGroup("float", ("skew",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("float", ("xrotate",)), KnobGroup("float", ("yrotate",)), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"), KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
+                  help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Text": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("multiline", ("message",)), KnobGroup("string", ("font",)),
@@ -1165,6 +1176,10 @@ KNOB_LAYOUT = {
         KnobGroup("xy", ("grid_offset_x", "grid_offset_y"), label="Offset"),
         KnobGroup("float", ("line_width",)),
         KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"),
+        KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"),
+        KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
+                  help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "NoOp": _groups(KnobGroup("multiline", ("note",))),
     "Profile": _groups(
@@ -1892,6 +1907,8 @@ def _range_row(first, second, label):
     return KnobGroup("xy", (first, second), label=label, captions=("min", "max"))
 
 
+_DRAW_HEAD = ("output", "premult", "cliptype", "replace", "invert", "opacity", "maskChannelInput", "inject", "invert_mask")
+_AREA_ROW = KnobGroup("xy", ("box_x", "box_y", "box_width", "box_height"), label="Area (x, y, w, h)", captions=("x", "y", "w", "h"))
 NUKE_LAYOUT = {
     "Grade": ("channels", "blackpoint", "whitepoint", "black", "white", "multiply", "offset", "gamma", "reverse", "black_clamp", "white_clamp"),
     "ColorCorrect": ("channels",
@@ -1928,6 +1945,10 @@ NUKE_LAYOUT = {
     "ChannelMerge": ("a_channel", "channel_operation", "b_channel", "out_channel"),
     "Shuffle": ("fromInput1", "layer", "fromInput2", "in2", "red_from", "green_from", "blue_from", "alpha_from", "out2",
                 "red_from2", "green_from2", "blue_from2", "alpha_from2"),
+    # The Draw nodes (lane 9 step C): the Draw chrome first, the mask strip after it, then the node's own knobs and the Color tab, as the guide's tables.
+    "Rectangle": (*_DRAW_HEAD, _AREA_ROW, "softness", "ramp", "red", "p1_x", "color0_red", "p0_x"),
+    "Radial": (*_DRAW_HEAD, _AREA_ROW, "softness", "plinear", "ramp", "red", "p1_x", "color0_red", "p0_x"),
+    "Ramp": (*_DRAW_HEAD, "p0_x", "p1_x", "ramp_type", "color1_red"),
 }
 # The mask strip in Nuke's wording (docs/parity/nuke_nodes.json: mask, inject, invert, fringe, (un)premult by, invert). Nuke has no
 # heading above it, so none is drawn.
@@ -1942,6 +1963,9 @@ NUKE_LABELS = {
     "PLogLin": {"log_direction": "Operation", "linear_reference": "Linear reference value", "log_reference": "Log reference value", "negative_gamma": "Negative gamma",
                 "density_per_code_value": "Density per code value"},
     "ChannelMerge": {"a_channel": "A channel", "b_channel": "B channel", "out_channel": "Output", "channel_operation": "Operation"},
+    "Rectangle": {"premult": "Premult", "p0_x": "Point 0 xy", "p1_x": "Point 1 xy"},
+    "Radial": {"premult": "Premult", "p0_x": "Point 0 xy", "p1_x": "Point 1 xy"},
+    "Ramp": {"premult": "Premult", "p0_x": "Point 0 xy", "p1_x": "Point 1 xy", "color1_red": "Color", "color0_red": "Color 0"},
 }
 
 

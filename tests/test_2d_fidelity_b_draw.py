@@ -93,13 +93,13 @@ class OptionTests(unittest.TestCase):
                 np.testing.assert_allclose(shape_of(kind, opacity=0.4), shape_of(kind) * 0.4, atol=1e-6)
 
     def test_invert_flips_the_coverage_and_keeps_the_colour(self):
-        rectangle = shape_of("Rectangle")
-        inverted = shape_of("Rectangle", invert=1)
+        rectangle = shape_of("Rectangle", legacy_draw_axes=1)             # the older reading inverts the finished alpha
+        inverted = shape_of("Rectangle", invert=1, legacy_draw_axes=1)
         np.testing.assert_allclose(inverted[..., 3], 1.0 - rectangle[..., 3], atol=1e-6)
         colour = np.array([0.8, 0.4, 0.2], np.float32)
         np.testing.assert_allclose(inverted[..., :3], colour * inverted[..., 3:4], atol=1e-6)
-        radial = shape_of("Radial")
-        np.testing.assert_allclose(shape_of("Radial", invert=1)[..., 3], 1.0 - radial[..., 3], atol=1e-6)
+        radial = shape_of("Radial", legacy_draw_axes=1)
+        np.testing.assert_allclose(shape_of("Radial", invert=1, legacy_draw_axes=1)[..., 3], 1.0 - radial[..., 3], atol=1e-6)
 
     def test_premult_multiplies_the_colour_by_the_chosen_channel(self):
         base = shape_of("Rectangle")

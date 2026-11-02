@@ -281,6 +281,8 @@ def upgrade_nodes(nodes):
         added.update(step_l9a_params(node.get("type")))
         from . import transformbehaviour
         added.update(transformbehaviour.upgrade_params(node.get("type")))      # the Transform group (lane 9 step B)
+        from . import drawbehaviour
+        added.update(drawbehaviour.upgrade_params(node.get("type")))           # the Draw group (lane 9 step C)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)
@@ -822,11 +824,13 @@ def shape_fallback_color(p):
 def shape_chrome(kind, p, shape):
     """Invert, premult-by and opacity applied to a freshly drawn premultiplied RGBA shape. Called by
     Evaluator._draw_shape, the one function both the evaluator and the tile path draw through."""
+    from . import drawbehaviour
     cfg = draw_config(kind, p)
-    if cfg is None or not (cfg.invert or cfg.premult != "none" or cfg.opacity != 1.0):
+    invert = bool(cfg is not None and cfg.invert) and not drawbehaviour.inverts_coverage(kind, p)      # the kernel inverted the coverage itself
+    if cfg is None or not (invert or cfg.premult != "none" or cfg.opacity != 1.0):
         return shape
     out = shape.astype(np.float32)
-    if cfg.invert:
+    if invert:
         alpha = out[..., 3:4]
         fallback = shape_fallback_color(p)
         straight = np.where(alpha > 1e-9, out[..., :3] / np.where(alpha > 1e-9, alpha, 1.0), fallback[:3])

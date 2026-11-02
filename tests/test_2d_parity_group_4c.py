@@ -165,7 +165,7 @@ class FormatRegistryTests(unittest.TestCase):
 class GridTests(unittest.TestCase):
     def grid(self, **params):
         g = Graph()
-        base = dict(width=32, height=20, spacing_x=8.0, spacing_y=5.0, line_width=1.0,
+        base = dict(width=32, height=20, spacing_x=8.0, spacing_y=5.0, line_width=1.0, legacy_draw_axes=1,
                     red=1.0, green=0.5, blue=0.25, alpha=1.0)
         base.update(params)
         g.add("node", "Grid", base)

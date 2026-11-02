@@ -94,7 +94,7 @@ class CurveToolTests(unittest.TestCase):
 
     def test_max_luma_pixel_and_auto_crop(self):
         g = TimeGraph()
-        g.add("bar", "Rectangle", dict(width=N, height=N, box_x=3.0, box_y=5.0, box_width=6.0, box_height=4.0,
+        g.add("bar", "Rectangle", dict(width=N, height=N, legacy_draw_axes=1, box_x=3.0, box_y=5.0, box_width=6.0, box_height=4.0,
                                        red=1.0, green=1.0, blue=1.0, alpha=1.0))
         g.add("ct", "CurveTool", dict(frame_start=1, frame_end=1, curve_type="Auto Crop"), image="bar")
         self.go(g)
@@ -315,7 +315,7 @@ class DropShadowTests(unittest.TestCase):
 
     def graph(self, operation="over", **params):
         g = Graph()
-        g.add("src", "Rectangle", dict(width=N, height=N, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
+        g.add("src", "Rectangle", dict(width=N, height=N, legacy_draw_axes=1, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
                                        red=1.0, green=0.0, blue=0.0, alpha=1.0))
         constant(g, "bg", (0.5, 0.5, 0.5, 1.0))
         g.add("sh", "DropShadow", {**dict(angle=0.0, distance=4.0, shadow_size=0.0, opacity=1.0, operation=operation), **params},
