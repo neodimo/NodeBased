@@ -1,3 +1,11 @@
+## 2026-11-02 - lane 9 (2D behaviour), step C of 3: the draw nodes, Defocus and EdgeExtend
+
+- **What was done (evidence):** ten nodes read against the Nuke 17.0 pages and their kernels; three commits (Rectangle, Radial, Ramp; Noise, Grid, Grain, Dither; Defocus, ZDefocus, EdgeExtend).
+  `tools/nuke_fidelity_cases_filter.py` gains the draw and defocus cases; `tests/test_2d_behaviour_draw.py`: the cases, every paired knob, tab order, tiles, older documents bit for bit. Targeted gate green.
+- **Defocus:** aspect ratio now widens the disc without changing its height (the older node narrowed the height); new `scale` (splits into width and height). **ZDefocus:** new `zdefocus_math`
+  (direct, depth, far = 0 and negatives), `size`; direct blur is depth x size clamped to maximum. **EdgeExtend:** new `source_premultiplied`, `premultiply`, `erode`. Older nodes keep their pixels (`legacy_defocus`, `legacy_zdefocus`, `legacy_edge_extend`, set on load; no schema bump).
+- **Overall fidelity** 87.4 -> 87.6 over this commit (previous formula 92.0). **Not done:** Defocus quality and method; ZDefocus blur curve, layers, filter shapes (the page gives no formula); EdgeExtend matte choices, detail amount, edge mask, and the Channels row still trails its main tab.
+
 ## 2026-11-02 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step B of 3: Transform, Reformat, CornerPin and Crop compute what Nuke computes (integrator tick)
 
 - **What was done:** `main` `f8775c44` -> `81851da6` plus this docs commit. Evidence and per-lane commit
