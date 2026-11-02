@@ -63,9 +63,14 @@ class CurveNodeTests(unittest.TestCase):
     def test_color_lookup_range_changes_curve_domain_without_breaking_tiles(self):
         p = SPECS["ColorLookup"]["params"].copy()
         p.update(curve_master=encode(((0, 0), (1, 0.5))), range=2.0)
+        # Nuke's Range only sets how far the lookup table reaches: .8 maps through the curve to .4 whatever Range holds.
         d = self.make_graph("ColorLookup", p)
         whole = Evaluator().evaluate(dict(d.document, view="fx"))
-        # .8 is evaluated at .4 when range is two, therefore maps to .2.
+        self.assertAlmostEqual(float(whole[0, 0, 0]), .4, places=6)
+        # An older document (older_range_scaling) keeps the old domain scaling: .8 is evaluated at .4 when range is two, so maps to .2.
+        p["older_range_scaling"] = 1
+        d = self.make_graph("ColorLookup", p)
+        whole = Evaluator().evaluate(dict(d.document, view="fx"))
         self.assertAlmostEqual(float(whole[0, 0, 0]), .2, places=6)
         tile = TileExecutor(tile_edge=5)
         region = tile.canvas_region(d.document, "fx", 1, 1)
