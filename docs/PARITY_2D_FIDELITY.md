@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 91.1 / 100** (167 nodes scored, rank-weighted; 93.4 counting only the nodes NodeBased has).
+**Overall fidelity: 91.2 / 100** (167 nodes scored, rank-weighted; 93.5 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -31,7 +31,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Draw | 83.1 | 62.3 | 17 |
 | Time | 96.1 | 78.2 | 13 |
 | Channel | 98.4 | 97.2 | 5 |
-| Color | 93.8 | 77.2 | 34 |
+| Color | 94.4 | 80.7 | 34 |
 | Filter | 90.2 | 71.6 | 32 |
 | Keyer | 87.3 | 64.6 | 11 |
 | Merge | 99.4 | 98.7 | 12 |
@@ -39,7 +39,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 99.4 | 98.9 | 5 |
 | Other | 80.3 | 43.0 | 12 |
 
-Behaviour checked: 26 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.
+Behaviour checked: 30 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.
 
 ## Per node
 
@@ -121,11 +121,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | Gamma | `Gamma` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | unmeasured |
 | 8 | Clamp | `Clamp` | supported | 99.4 | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | unmeasured |
 | 9 | HueCorrect | `HueCorrect` | supported | 80.0 | 50 (1/2) | 100 | 100 | 100 | 100 (15/15) | unmeasured |
-| 10 | ColorLookup | `ColorLookup` | supported | 100.0 | 100 (8/8) | 100 | 100 | 100 | - | no fixture |
+| 10 | ColorLookup | `ColorLookup` | supported | 90.0 | 75 (6/8) | 100 | 100 | 100 | 100 (7/7) | unmeasured |
 | 11 | Exposure | `Exposure` | supported | 93.6 | 86 (6/7) | 93 | 100 | 100 | 100 (2/2) | unmeasured |
 | 12 | HSVTool | `HSVTool` | partial | 80.8 | 59 (14/25) | 100 | 100 | - | 100 (11/11) | unmeasured |
 | 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | unmeasured |
-| 14 | Colorspace | `Colorspace` | supported | 82.2 | 67 (6/9) | 100 | 100 | 100 | - | no fixture |
+| 14 | Colorspace | `Colorspace` | supported | 83.6 | 78 (7/9) | 100 | 100 | 100 | 70 (14/20) | unmeasured |
 | 14 | OCIOColorspace | `OCIOColorspace` | supported | 61.9 | 29 (2/11) | 100 | 100 | 100 | - | no fixture |
 | 14 | OCIODisplay | `OCIODisplay` | supported | 37.6 | 23 (3/17) | 33 | 100 | - | - | no fixture |
 | 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 88.1 | 80 (3/4) | 91 | 100 | 100 | - | no fixture |
@@ -135,14 +135,14 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 15 | PLogLin | `PLogLin` | supported | 96.7 | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | unmeasured |
 | 16 | ColorTransfer | - | supported | 0.0 | 0 (0/1) | - | 0 | - | - | no fixture |
 | 16 | MatchGrade | `MatchGrade` | supported | 26.0 | 8 (3/33) | - | 100 | - | - | no fixture |
-| 17 | Expression | `Expression` | supported | 60.0 | 25 (4/16) | 100 | 100 | 100 | - | no fixture |
-| 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
+| 17 | Expression | `Expression` | supported | 100.0 | 100 (16/16) | 100 | 100 | 100 | 100 (15/15) | unmeasured |
+| 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | unmeasured |
 | 19 | Posterize | `Posterize` | supported | 98.5 | 100 (1/1) | 89 | 100 | 100 | - | unmeasured |
 | 19 | SoftClip | `SoftClip` | supported | 100.0 | 100 (3/3) | 100 | 100 | - | 100 (5/5) | unmeasured |
 | 19 | Toe | `Toe` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | unmeasured |
-| 20 | HistEQ | `HistEQ` | supported | 76.9 | 100 (1/1) | - | 100 | 0 | - | no fixture |
+| 20 | HistEQ | `HistEQ` | supported | 80.0 | 100 (1/1) | 100 | 100 | 0 | - | unmeasured |
 | 20 | Histogram | `Histogram` | supported | 65.1 | 67 (2/3) | 100 | 100 | 14 | - | no fixture |
-| 20 | MinColor | `MinColor` | supported | 15.4 | 0 (0/4) | - | 100 | 0 | - | no fixture |
+| 20 | MinColor | `MinColor` | supported | 100.0 | 100 (4/4) | 100 | 100 | 100 | - | unmeasured |
 | 20 | Sampler | `Sampler` | supported | 30.8 | 25 (1/4) | - | 100 | 0 | - | no fixture |
 | 21 | GenerateLUT | `GenerateLUT` | supported | 28.8 | 18 (1/9) | 0 | 100 | - | - | no fixture |
 | 21 | Vectorfield | `Vectorfield` | supported | 42.3 | 38 (4/10) | 0 | 100 | - | - | no fixture |
@@ -460,6 +460,70 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `ploglin_custom_reference` | convention | pass | within tolerance | - |
 | `ploglin_negative_gamma_and_density` | convention | pass | within tolerance | - |
 | `ploglin_custom_to_log` | convention | pass | within tolerance | - |
+| `colorspace_srgb_to_linear` | convention | pass | within tolerance | - |
+| `colorspace_linear_to_srgb` | convention | pass | within tolerance | - |
+| `colorspace_gamma22` | convention | pass | within tolerance | - |
+| `colorspace_gamma24_out` | convention | pass | within tolerance | - |
+| `colorspace_srgb_to_gamma22` | convention | pass | within tolerance | - |
+| `colorspace_primaries_709_to_2020` | convention | pass | within tolerance | - |
+| `colorspace_primaries_2020_to_709` | convention | pass | within tolerance | - |
+| `colorspace_primaries_709_to_p3d65` | convention | pass | within tolerance | - |
+| `colorspace_primaries_with_curves` | convention | pass | within tolerance | - |
+| `colorspace_illuminant_keeps_xyz` | guide | pass | within tolerance | - |
+| `colorspace_illuminant_keeps_xyz_dci` | guide | pass | within tolerance | - |
+| `colorspace_bradford_adapts` | convention | pass | within tolerance | - |
+| `colorspace_bradford_equal_illuminants` | guide | pass | within tolerance | - |
+| `colorspace_does_not_divide_by_alpha` | guide | pass | within tolerance | - |
+| `colorspace_hsv` | guide | inexpressible | - | - |
+| `colorspace_ycbcr` | guide | inexpressible | - | - |
+| `colorspace_cie` | guide | inexpressible | - | - |
+| `colorspace_cineon` | guide | inexpressible | - | - |
+| `colorspace_rec709_curve` | guide | inexpressible | - | - |
+| `colorspace_other_illuminants` | guide | inexpressible | - | - |
+| `colorlookup_default_is_identity` | guide | pass | within tolerance | - |
+| `colorlookup_red_curve` | guide | pass | within tolerance | - |
+| `colorlookup_green_blue_curves` | guide | pass | within tolerance | - |
+| `colorlookup_alpha_curve` | guide | pass | within tolerance | - |
+| `colorlookup_master_curve` | guide | pass | within tolerance | - |
+| `colorlookup_range_does_not_scale_the_axis` | guide | pass | within tolerance | - |
+| `colorlookup_without_precomputed_table` | guide | pass | within tolerance | - |
+| `colorlookup_outside_the_curve` | guide | not scored: the page does not say whether a curve holds its end values or continues its slope past the keys (NodeBased extends the end segments linearly) | - | - |
+| `colorlookup_smooth_keys` | guide | not scored: the page names the curve editor but not the spline Nuke fits through keys added there (smooth is its default); the cases above use linear segments, whose shape is the same in any editor, and NodeBased's smooth and Hermite segments cannot be compared without that spline | - | - |
+| `colorlookup_master_with_channel` | guide | not scored: the page says the master curve represents all channels but not how it combines with a channel's own curve (NodeBased runs the master first, then the channel) | - | - |
+| `colorlookup_precomputed_table_steps` | guide | not scored: the page says a table 'between 0 and the value specified in the range field' is used but not how many entries it holds, so its rounding cannot be reproduced (NodeBased evaluates the curves exactly, as Nuke does with the table off) | - | - |
+| `expression_blank_is_zero` | guide | pass | within tolerance | - |
+| `expression_arithmetic_precedence` | convention | pass | within tolerance | - |
+| `expression_conditional` | convention | pass | within tolerance | - |
+| `expression_equality` | guide | pass | within tolerance | - |
+| `expression_layer_dot_channel` | guide | pass | within tolerance | - |
+| `expression_functions_rounding` | guide | pass | within tolerance | - |
+| `expression_functions_clamp_min_max_lerp` | guide | pass | within tolerance | - |
+| `expression_functions_power` | guide | pass | within tolerance | - |
+| `expression_functions_trig` | guide | pass | within tolerance | - |
+| `expression_functions_step` | guide | pass | within tolerance | - |
+| `expression_functions_rint` | guide | pass | within tolerance | - |
+| `expression_temp_variables` | guide | pass | within tolerance | - |
+| `expression_channel_row` | guide | pass | within tolerance | - |
+| `expression_channel_set_rgb` | guide | pass | within tolerance | - |
+| `expression_32_bit_float` | guide | pass | within tolerance | - |
+| `expression_pixel_coordinates` | guide | not scored: the page says x and y are the pixel coordinate but not whether a pixel's x is its left edge or its centre (a half pixel in), nor which row counts as zero (Nuke counts up from the bottom row; NodeBased's new node counts up from the bottom and uses pixel centres, its older node counted down from the top) | - | - |
+| `expression_centred_coordinates` | guide | not scored: the page defines cx and cy by their geometry (0,0 at the centre, -1 and 1 at the left and right edges, 1,1 on the diagonal of the right edge) but, as with x and y, not whether the value belongs to a pixel's centre or its edge, so the half-pixel shift in every value is left unchecked | - | - |
+| `expression_noise_functions` | guide | not scored: the page describes Perlin noise and pseudo-random values only in words; Nuke's own table and seed are not published, so no value can be reproduced (NodeBased refuses these) | - | - |
+| `expression_colour_conversion_functions` | guide | not scored: the page words 'color component' as a value the function takes and returns without saying whether that is 0 to 1 or 0 to 255 (to_byte returns an 8-bit value, from_byte's text repeats from_sRGB's), so the scale cannot be pinned down (NodeBased refuses these) | - | - |
+| `expression_atan2_and_mantissa` | guide | not scored: the page names atan2's arguments (x, y) but not which one is the numerator, and gives mantissa and exponent as the frexp pair without saying whether logb matches it or the C logb | - | - |
+| `expression_knob_references` | guide | not scored: the page says any control on any node can be named in an expression; NodeBased's Expression node has no node-knob references (its parameter expressions are a separate system) | - | - |
+| `expression_percent_operator` | guide | not scored: the page lists no operators; NodeBased reads % as C's fmod, which the table's fmod describes | - | - |
+| `crosstalk_default_is_identity` | convention | pass | within tolerance | - |
+| `crosstalk_bleed_red_into_green` | guide | pass | within tolerance | - |
+| `crosstalk_nine_lines_make_a_matrix` | guide | pass | within tolerance | - |
+| `crosstalk_sum_of_three_lookups` | guide | pass | within tolerance | - |
+| `crosstalk_remove_a_channel_from_itself` | guide | pass | within tolerance | - |
+| `crosstalk_outside_zero_to_one` | guide | not scored: the page does not say how a crossover curve continues past its end keys (NodeBased extends the end segments linearly), so the HDR and negative values are left out | - | - |
+| `crosstalk_smooth_curves` | guide | not scored: the page does not name the spline the curve editor fits through added keys, so only linear segments, whose shape is the same in any editor, are compared | - | - |
+| `crosstalk_alpha` | guide | not scored: the page says the output colour channels are sums of lookups and says nothing about alpha (NodeBased leaves it alone) | - | - |
+| `histeq_flat_histogram` | guide | not scored: the page states the aim, a flat histogram, and no algorithm: not which channels are equalised together (each on its own or the luminance), the range the histogram covers (the data's minimum to maximum, or 0 to 1, and what happens to values outside it), nor where inside a bin a value lands, so no pixel can be written down (tests/test_2d_behaviour_color_b.py checks the property instead: the output's histogram is flatter and the order of the values is kept) | - | - |
+| `histeq_histogram_entries` | guide | not scored: the page names the knob and nothing else about it: how many entries are better than few, and how Nuke maps values into the entries, is not published | - | - |
+| `mincolor_adds_the_delta` | guide | not scored: the delta that is added is calculated by the Find Pixel Delta button over a range of frames, not by rendering: the node adds the stored delta (tests/test_2d_behaviour_color_b.py runs the button's calculation and the addition against this statement) | - | - |
 | `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
 | `blur_box_1` | convention | pass | within tolerance | - |
 | `blur_box_2` | convention | pass | within tolerance | - |
