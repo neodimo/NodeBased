@@ -16,6 +16,7 @@
     "Blur": {"size": "wh"},
     "Sharpen": {"size": "wh"},
     "Soften": {"size": "wh"},
+    "Noise": {"size": "wh"},
     "Glow": {"size": "wh"},
     "Erode (filter)": {"size": "wh"},
     "Transform": {"scale": "wh"},

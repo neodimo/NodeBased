@@ -84,6 +84,7 @@ SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: spli
     # Nuke's AColor knobs on the colour nodes (docs/PARITY_2D.md). A kernel reads one through split_values, and each is laid out
     # as a KnobGroup("split", ...) in nodebased/knobs.py; tests/test_split_knobs.py checks the two lists agree.
     "AdjustBBox": {"numpixels": "wh"},      # Nuke's Add Pixels splits into a width and a height
+    "Noise": {"size": "wh"},                # Nuke's x/ysize: "low y values relative to x produces horizontal noise"
     "Transform": {"scale": "wh"},           # Nuke's scale: "one or two values"; the older scale mode and scale X, Y stay for older documents
     "Reformat": {"scale": "wh"},            # Nuke's scale: "To scale each direction separately ... click the 2 button"
     "Grade": {name: "rgba" for name in ("blackpoint", "whitepoint", "black", "white", "multiply", "offset", "gamma")},
@@ -426,7 +427,7 @@ SPECS = {
     # Dither (step 5a): quantises to `bits` per channel with position-hashed triangular noise of
     # +/- `dither_amount` least-significant bits; `seed` picks the noise pattern.
     "Dither": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"bits": 8, "dither_amount": 1.0, "seed": 0, "channels": "rgb", "mix": 1.0}},
+               "params": {"bits": 8, "dither_amount": 1.0, "seed": 1, "channels": "rgb", "mix": 1.0, **_drawbehaviour.new_params("Dither")}},
     # Grain (step 5b): synthetic film grain. Nuke's per-channel `size` and `intensity` knobs are
     # red_size/red_intensity etc. (Nuke's red_m is called red_intensity here); `seed` plus the
     # frame picks the pattern, so grain moves every frame and seed = -frame freezes it, as in Nuke.
@@ -434,7 +435,7 @@ SPECS = {
     "Grain": {"inputs": ["image"], "optional_inputs": ["mask"],
               "params": {"seed": 134, "red_size": 3.3, "green_size": 2.9, "blue_size": 2.5,
                          "red_intensity": 0.05, "green_intensity": 0.05, "blue_intensity": 0.05,
-                         "luminance_weighted": 0, "black": 0.0, "mix": 1.0}},
+                         "luminance_weighted": 0, "black": 0.0, "mix": 1.0, **_drawbehaviour.new_params("Grain")}},
     # Optical effects (step V3). Coordinates are canvas pixels; stochastic effects hash absolute
     # pixel coordinates and frame so evaluator and tile renders are reproducible.
     "Flare": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"position_x": 480.0, "position_y": 270.0, "tracker_id": "", "track_index": -1, "brightness": 1.0, "streaks": 6, "length": 180.0, "rotation": 0.0, "ghosts": 5, "spread": 0.65, "size": 18.0, "red": 0.7, "green": 0.85, "blue": 1.0, "chromatic_shift": 2.0, "mix": 1.0}},
@@ -662,7 +663,7 @@ SPECS = {
     # every other node's because LIMITS is keyed globally by parameter name.
     "Grid": {"inputs": [], "optional_inputs": ["image", "mask"],
              "params": {"width": 960, "height": 540,
-                       "spacing_x": 64.0, "spacing_y": 64.0, "number_x": 0, "number_y": 0,
+                       "spacing_x": 64.0, "spacing_y": 64.0, "number_x": 10, "number_y": 10,
                        "grid_offset_x": 0.0, "grid_offset_y": 0.0, "line_width": 1.0,
                        "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "mix": 1.0, **_drawbehaviour.new_params("Grid")}},
     # NoOp: Nuke's passthrough that, unlike Dot (a wire reroute with no properties), is a real node
@@ -716,8 +717,8 @@ SPECS = {
     # the same seed to be identical and two different seeds to differ, which a z_slice-only
     # generator cannot promise without moving the slice.
     "Noise": {"inputs": [], "optional_inputs": ["image", "mask"],
-              "params": {"width": 960, "height": 540, "size": 64.0, "z_slice": 0.0, "octaves": 4,
-                        "lacunarity": 2.0, "gain": 0.5, "gamma": 1.0, "seed": 0, "type": "fBm", "nyquist": 1, "translate_x": 0.0, "translate_y": 0.0, "rotate_x": 0.0, "rotate_y": 0.0, "scaling": 1.0, "skew": 0.0, "center_x": 480.0, "center_y": 270.0, "xrotate": 0.0, "yrotate": 0.0, "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0, "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0, "mix": 1.0, **_drawbehaviour.new_params("Noise")}},
+              "params": {"width": 960, "height": 540, "size": 350.0, "z_slice": 0.0, "octaves": 10,
+                        "lacunarity": 2.0, "gain": 0.5, "gamma": 0.5, "seed": 0, "type": "fBm", "nyquist": 1, "translate_x": 0.0, "translate_y": 0.0, "rotate_x": 0.0, "rotate_y": 0.0, "scaling": 1.0, "skew": 0.0, "center_x": 480.0, "center_y": 270.0, "xrotate": 30.0, "yrotate": 30.0, "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0, "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0, "mix": 1.0, **_drawbehaviour.new_params("Noise")}},
     # Text renders through Qt's own text rasteriser offscreen (QPainter/QFont on a QImage), so it
     # needs no new dependency. "font" is a family name looked up through Qt's font database, not a
     # file path: whether a given family actually renders depends on what is installed on the
@@ -1649,7 +1650,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
-          "bits": (1, 16), "dither_amount": (0.0, 4.0),
+          "bits": (0, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
           "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "track_index": (-1, 199), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "irregularity": (0.0, 1.0), "minimum": (0.0, 1.0), "apply_through_alpha": (0, 1), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0), "rows": (2, 15), "columns": (2, 15),
           "threshold": (0.0, 1.0), "enabled": (0, 1), "create_matte": (0, 1), "matt_limit": (-10000.0, 10000.0), "gradient_extrapolate": (0, 1),
@@ -1700,7 +1701,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "grid_offset_x": (-16384.0, 16384.0), "grid_offset_y": (-16384.0, 16384.0), "line_width": (0.0, 4096.0),
           # Shared fraction-of-the-box-radius softness for both Radial and Rectangle.
           "softness": (0.0, 1.0),
-          "z_slice": (-100000.0, 100000.0), "octaves": (1, 8), "lacunarity": (0.01, 8.0),
+          "z_slice": (-100000.0, 100000.0), "octaves": (1, 32), "lacunarity": (0.01, 8.0),
           "seed": (0, 2147483647), "font_size": (1.0, 2000.0),
           "fps": (0.01, 1000.0), "drop_frame": (0, 1), "margin": (0.0, 8192.0), "bar": (0, 1), "bar_opacity": (0.0, 1.0),
           # Keyer's four-point range ramp (group c3): unbounded like Clamp's minimum/maximum,

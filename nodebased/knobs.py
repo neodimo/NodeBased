@@ -372,9 +372,11 @@ KNOB_LAYOUT = {
         *[KnobGroup("float", (f"{band}_{name}",), label=f"{band.title()} {name}") for band in ("shadows", "midtones", "highlights") for name in ("gamma", "gain", "offset")],
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Dither": _groups(
-        KnobGroup("int", ("bits",), label="Bits"),
-        KnobGroup("float_slider", ("dither_amount",), label="Amount", soft_range=(0, 2)),
-        KnobGroup("int", ("seed",), label="Seed"),
+        KnobGroup("int", ("bits",), label="Round to bits", help="0 leaves the dithered values as they are; 1 to 16 rounds them to that many bits."),
+        KnobGroup("float_slider", ("dither_amount",), label="Amount", soft_range=(0, 1)),
+        KnobGroup("bool", ("monodither",)), KnobGroup("int", ("seed",), label="Seed"), KnobGroup("bool", ("static_seed",)),
+        KnobGroup("bool", ("legacy_dither",), label="Legacy dither",
+                  help="Round to the number of bits after adding triangular noise of up to a bit, as graphs saved before Dither followed Nuke do."),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Grain": _groups(
         KnobGroup("int", ("seed",), label="Seed"),
@@ -384,8 +386,15 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("red_intensity",), label="Intensity red", soft_range=(0, 1)),
         KnobGroup("float_slider", ("green_intensity",), label="Intensity green", soft_range=(0, 1)),
         KnobGroup("float_slider", ("blue_intensity",), label="Intensity blue", soft_range=(0, 1)),
-        KnobGroup("bool", ("luminance_weighted",), label="Luminance weighted"),
+        KnobGroup("float_slider", ("red_i",), label="Irregularity red", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("green_i",), label="Irregularity green", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("blue_i",), label="Irregularity blue", soft_range=(0, 1)),
+        KnobGroup("bool", ("luminance_weighted",), label="Luminance weighted (older grain)"),
         KnobGroup("float_slider", ("black",), label="Black", soft_range=(0, 1)),
+        KnobGroup("color", ("minimum_red", "minimum_green", "minimum_blue"), label="Minimum rgb"),
+        KnobGroup("bool", ("maskgrain",), label="Apply only through alpha"), KnobGroup("bool", ("invert_mask",), label="Invert alpha"),
+        KnobGroup("bool", ("legacy_grain",), label="Legacy grain",
+                  help="Weigh the grain by brightness only when Luminance weighted is on, and scale the intensities as graphs saved before Grain followed Nuke do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Flare": _groups(KnobGroup("xy", ("position_x", "position_y"), label="Position"), KnobGroup("string", ("tracker_id",), label="Tracker link"), KnobGroup("int", ("track_index",), label="Track index"), KnobGroup("float_slider", ("brightness",), soft_range=(0, 4)), KnobGroup("int", ("streaks",)), KnobGroup("float_slider", ("length",), soft_range=(0, 1000)), KnobGroup("float", ("rotation",)), KnobGroup("int", ("ghosts",)), KnobGroup("float", ("spread",)), KnobGroup("float_slider", ("size",), soft_range=(0, 200)), KnobGroup("color", ("red", "green", "blue")), KnobGroup("float", ("chromatic_shift",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Glint": _groups(KnobGroup("float", ("tolerance",)), KnobGroup("int", ("rays",)), KnobGroup("float", ("length",)), KnobGroup("float", ("rotation",)), KnobGroup("float", ("falloff",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
@@ -808,12 +817,12 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Noise": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
-        KnobGroup("float_slider", ("size",), soft_range=(2, 512)),
+        KnobGroup("split", ("size",), label="X/ysize", soft_range=(2, 512), channels="wh"),
         KnobGroup("float_slider", ("z_slice",), soft_range=(-10, 10)),
         KnobGroup("int", ("octaves",)), KnobGroup("float_slider", ("lacunarity",), soft_range=(1, 4)),
         KnobGroup("float_slider", ("gain",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
-        KnobGroup("int", ("seed",)), KnobGroup("enum", ("type",)), KnobGroup("bool", ("nyquist",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"), KnobGroup("xy", ("rotate_x", "rotate_y"), label="Rotate"), KnobGroup("float", ("scaling",), label="Scale"), KnobGroup("float", ("skew",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("float", ("xrotate",)), KnobGroup("float", ("yrotate",)), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"), KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
+        KnobGroup("int", ("seed",)), KnobGroup("enum", ("type",)), KnobGroup("bool", ("nyquist",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"), KnobGroup("xy", ("rotate_x", "rotate_y"), label="Rotate"), KnobGroup("float", ("scaling",), label="Scale"), KnobGroup("float", ("skew",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("float", ("xrotate",)), KnobGroup("float", ("yrotate",)), KnobGroup("color", ("red", "green", "blue", "alpha")), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"), KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
                   help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Text": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -1172,7 +1181,7 @@ KNOB_LAYOUT = {
     "Grid": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("xy", ("spacing_x", "spacing_y"), label="Spacing"),
-        KnobGroup("int", ("number_x",), label="Lines in X"), KnobGroup("int", ("number_y",), label="Lines in Y"),
+        KnobGroup("xy", ("number_x", "number_y"), label="Number"),
         KnobGroup("xy", ("grid_offset_x", "grid_offset_y"), label="Offset"),
         KnobGroup("float", ("line_width",)),
         KnobGroup("color", ("red", "green", "blue", "alpha")),
@@ -1945,10 +1954,19 @@ NUKE_LAYOUT = {
     "ChannelMerge": ("a_channel", "channel_operation", "b_channel", "out_channel"),
     "Shuffle": ("fromInput1", "layer", "fromInput2", "in2", "red_from", "green_from", "blue_from", "alpha_from", "out2",
                 "red_from2", "green_from2", "blue_from2", "alpha_from2"),
-    # The Draw nodes (lane 9 step C): the Draw chrome first, the mask strip after it, then the node's own knobs and the Color tab, as the guide's tables.
+}
+# The same, for the nodes lane 9 lays out (the Draw nodes, step C): the Draw chrome first, the mask strip after it, then the node's own knobs
+# and the Color tab, as the guide's tables have them. Kept apart from NUKE_LAYOUT, which tests/test_split_knobs.py pins to lane 2's nodes.
+NUKE_LAYOUT_LANE9 = {
     "Rectangle": (*_DRAW_HEAD, _AREA_ROW, "softness", "ramp", "red", "p1_x", "color0_red", "p0_x"),
     "Radial": (*_DRAW_HEAD, _AREA_ROW, "softness", "plinear", "ramp", "red", "p1_x", "color0_red", "p0_x"),
     "Ramp": (*_DRAW_HEAD, "p0_x", "p1_x", "ramp_type", "color1_red"),
+    "Noise": (*_DRAW_HEAD, "type", "size", "z_slice", "octaves", "nyquist", "lacunarity", "gain", "gamma", "translate_x", "rotate_x", "scaling", "skew",
+              "center_x", "xrotate", "yrotate", "ramp", "red", "p1_x", "color0_red", "p0_x"),
+    "Grid": (*_DRAW_HEAD, "number_x", "line_width", "grid_offset_x", "ramp", "red", "p1_x", "color0_red", "p0_x"),
+    "Dither": ("channels", "dither_amount", "monodither", "seed", "static_seed"),
+    "Grain": ("seed", "red_size", "green_size", "blue_size", "red_i", "green_i", "blue_i", "red_intensity", "green_intensity", "blue_intensity", "black",
+              "minimum_red", "maskgrain", "invert_mask"),
 }
 # The mask strip in Nuke's wording (docs/parity/nuke_nodes.json: mask, inject, invert, fringe, (un)premult by, invert). Nuke has no
 # heading above it, so none is drawn.
@@ -1966,11 +1984,14 @@ NUKE_LABELS = {
     "Rectangle": {"premult": "Premult", "p0_x": "Point 0 xy", "p1_x": "Point 1 xy"},
     "Radial": {"premult": "Premult", "p0_x": "Point 0 xy", "p1_x": "Point 1 xy"},
     "Ramp": {"premult": "Premult", "p0_x": "Point 0 xy", "p1_x": "Point 1 xy", "color1_red": "Color", "color0_red": "Color 0"},
+    "Noise": {"premult": "Premult", "z_slice": "Z", "nyquist": "Clip at Nyquist limit", "translate_x": "Translate xy", "center_x": "Center xy"},
+    "Grid": {"premult": "Premult", "line_width": "Size", "grid_offset_x": "Translate", "p0_x": "Point 0", "p1_x": "Point 1"},
+    "Grain": {"invert_mask": "Invert alpha", "minimum_red": "Minimum rgb"},
 }
 
 
 def _nuke_layouts():
-    for kind, wanted in NUKE_LAYOUT.items():
+    for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9}.items():
         groups = [group for group in KNOB_LAYOUT[kind] if group.kind != "legacy"]
         legacy = [group for group in KNOB_LAYOUT[kind] if group.kind == "legacy"]
         by_first = {group.params[0]: group for group in groups}
@@ -1990,7 +2011,7 @@ def _nuke_layouts():
         mix = [group for group in rest if group.params == ("mix",)]
         own = [group for group in rest if group not in strip and group not in mix]
         ordered = [*order, *own, *strip, *mix]
-        labels = {**NUKE_LABELS.get(kind, {}), **{name: _STRIP_LABELS[name] for name in _MASK_STRIP if name in by_first}}
+        labels = {**{name: _STRIP_LABELS[name] for name in _MASK_STRIP if name in by_first}, **NUKE_LABELS.get(kind, {})}
         sections = NUKE_SECTIONS.get(kind, {})
         final = []
         for group in ordered:

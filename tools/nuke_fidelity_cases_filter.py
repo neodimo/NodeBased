@@ -928,3 +928,94 @@ def _draw_cases(Case, out):
              "convention", f"Ramp {kind}: the curve between the points",
              unscored="the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) "
                       "but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear")
+    _noise_grid_cases(Case, out, case)
+
+
+def _noise_grid_cases(Case, out, case):
+    """Noise and Grid. The Noise page names the Perlin noise function and the combination of octaves but not the function's values,
+    so its pixels are not scored (the properties the page states are tested in tests/test_2d_behaviour_draw.py)."""
+    page = DRAW_GUIDE + "noise.html"
+    noise_reason = ("the page says the node is 'based on the Perlin noise function' and how octaves, lacunarity, gain and gamma combine it, but not "
+                    "the function's values (its gradient table and permutation are Foundry's), so the pixels cannot be written down; "
+                    "tests/test_2d_behaviour_draw.py checks what the page states: gain 0 leaves one octave, gamma is the output power, translate, "
+                    "rotate and scale move the pattern as the transform tab says, the x and y sizes stretch it, zoffset moves through it smoothly "
+                    "and the same settings give the same pixels")
+
+    def noise_case(id, nuke_knobs, params, statement):
+        case(id, "Noise", "Noise", nuke_knobs, "Noise", params, lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)),
+             "convention", statement, unscored=noise_reason)
+    noise_case("noise_fbm_values", (("type", "fBm"),), {"type": "fBm", "size": 6.0, "octaves": 3},
+               f"Noise fBm: 'runs noise() octave times at different scales to get random numbers between -1 and +1 and adds them up' ({page})")
+    noise_case("noise_turbulence_values", (("type", "turbulence"),), {"type": "turbulence", "size": 6.0, "octaves": 3},
+               "Noise turbulence: 'similar to fBm except it uses the absolute value of the noise function so the values it sums up are all between 0 and 1'")
+
+    page = DRAW_GUIDE + "grid.html"
+    grid = {"number_x": 4, "number_y": 3, "line_width": 1.0, "grid_offset_x": 0.0, "grid_offset_y": 0.0, "red": 1.0, "green": 0.5, "blue": 0.25, "alpha": 1.0}
+
+    def square_centres(fx):
+        like = fx["A"].astype(np.float64)
+        xs, ys = _nuke_xy(like)
+        return like, ((xs % 4 == 2) & (ys % 4 == 2))
+    out.append(Case(id="grid_number_makes_squares_with_empty_middles", nuke="Grid", nuke_class="Grid", nuke_knobs=(("number", "4 3"), ("size", 1.0)),
+                    nuke_inputs=("A",), nb_kind="Grid", nb_params={"width": 16, "height": 12, **grid}, nb_inputs=("A",),
+                    expected=lambda fx: (square_centres(fx)[0], np.broadcast_to(square_centres(fx)[1][..., None], fx["A"].shape).copy()),
+                    source="guide", statement=f"Grid: number 'sets the number of grid squares on the x and y axes' ({page}): on a 16 x 12 frame a number of 4 across and 3 up "
+                    "makes squares four pixels across with lines one pixel thick, so the middle of each square (compared there only) is the input untouched"))
+    out.append(Case(id="grid_line_positions", nuke="Grid", nuke_class="Grid", nuke_knobs=(("number", "4 3"), ("size", 1.0)), nuke_inputs=("A",),
+                    nb_kind="Grid", nb_params={"width": 16, "height": 12, **grid}, nb_inputs=("A",),
+                    expected=lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), source="convention",
+                    statement="Grid: where the lines of a grid with a given number, size and translate fall",
+                    unscored="the page gives the number of squares, the line thickness in pixels and a translate but not where in a square a line of a given "
+                             "thickness sits (starting at the grid position, centred on it or ending at it) or what the last line does at the frame's edge; "
+                             "tests/test_2d_behaviour_draw.py checks the spacing (the frame divided by the number), the thickness, that translate moves "
+                             "the whole grid and that lines are drawn in the colour and the ramp"))
+    _grain_dither_cases(Case, out, case)
+
+
+def _grain_dither_cases(Case, out, case):
+    """Grain and Dither. Both add noise whose values the pages do not publish; what they do state is scored where it fixes pixels."""
+    page = DRAW_GUIDE + "grain.html"
+    quiet = {"red_intensity": 0.0, "green_intensity": 0.0, "blue_intensity": 0.0}
+    noisy = {"minimum_red": -1000.0, "minimum_green": -1000.0, "minimum_blue": -1000.0}
+
+    def minimum_ref(fx):
+        src = fx["A"].astype(np.float64)
+        ref = src.copy()
+        ref[..., :3] = np.maximum(src[..., :3], np.array([0.1, 0.2, 0.3]))
+        return ref, np.ones(src.shape, bool)
+    case("grain_minimum_rgb_is_the_floor", "Grain", "Grain", (("red_m", 0.0), ("green_m", 0.0), ("blue_m", 0.0), ("minimum", "0.1 0.2 0.3")), "Grain",
+         {**quiet, "minimum_red": 0.1, "minimum_green": 0.2, "minimum_blue": 0.3}, minimum_ref, "convention",
+         f"Grain: minimum rgb is 'the minimum output rgb values; if the calculation results in pixel values lower than these, these values are used instead' "
+         f"({page}); with every intensity at 0 the calculation adds no grain, so the output is the input raised to the minimum")
+
+    def through_alpha(invert):
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            alpha = src[..., 3]
+            kept = (alpha == 1.0) if invert else (alpha == 0.0)
+            return src, np.broadcast_to(kept[..., None], src.shape).copy()
+        return expected
+    case("grain_apply_only_through_alpha_leaves_empty_alpha_alone", "Grain", "Grain", (("maskgrain", True),), "Grain",
+         {**noisy, "maskgrain": 1}, through_alpha(False), "guide",
+         "Grain: 'apply only through alpha': 'the effect is limited to the non-black areas of the image's alpha channel', so where alpha is 0 the "
+         "picture is unchanged (compared there only)")
+    case("grain_invert_alpha_leaves_full_alpha_alone", "Grain", "Grain", (("maskgrain", True), ("invert_mask", True)), "Grain",
+         {**noisy, "maskgrain": 1, "invert_mask": 1}, through_alpha(True), "guide",
+         "Grain: 'invert alpha' 'inverts the use of the alpha channel, so that ... the effect is limited to the non-white areas of the alpha', so "
+         "where alpha is 1 the picture is unchanged (compared there only)")
+    case("grain_pattern", "Grain", "Grain", (("seed", 134),), "Grain", {**noisy}, lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)),
+         "convention", "Grain: the grain pattern for a given size, irregularity and intensity",
+         unscored="the page describes the controls in words (size shrinks or enlarges, irregularity is 'the random quality', intensity is the contrast of "
+                  "the effect against the image) and gives no grain function or amplitude; tests/test_2d_behaviour_draw.py checks what follows from the "
+                  "words: zero intensity adds nothing, the grain is zero-mean, a larger size gives a coarser grain, the pattern changes with the frame "
+                  "and holds when the seed is minus the frame, black sets the grain at black, and each channel is controlled by its own knobs")
+
+    page = DRAW_GUIDE + "dither.html"
+    case("dither_amount_zero_adds_nothing", "Dither", "Dither", (("amount", 0.0),), "Dither", {"dither_amount": 0.0, "bits": 0, "channels": "rgba"},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "guide",
+         f"Dither: amount 'up to 0.5 of this amount is added or subtracted from each pixel' ({page}), so an amount of 0 changes nothing")
+    case("dither_pattern", "Dither", "Dither", (("amount", 0.1), ("seed", 1)), "Dither", {"dither_amount": 0.1, "bits": 0, "channels": "rgba"},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "convention", "Dither: the noise added to each pixel",
+         unscored="the page says the noise is random, up to 0.5 of the amount either way, and gives neither the generator nor its distribution; "
+                  "tests/test_2d_behaviour_draw.py checks the bound, that the mean is the input's, that monodither gives every channel the same "
+                  "offset, and that the seed, the frame and static seed change the pattern as the page says")

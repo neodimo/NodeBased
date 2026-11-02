@@ -15,6 +15,7 @@ KINDS = ("Grain", "Posterize", "SoftClip", "HSVTool", "AddMix", "Blend", "CopyRe
 
 def grain_params(**over):
     p = dict(SPECS["Grain"]["params"])
+    p.update(legacy_grain=1, red_intensity=0.05, green_intensity=0.05, blue_intensity=0.05)       # these tests pin the older grain (lane 9 step C)
     p.update(over)
     return p
 

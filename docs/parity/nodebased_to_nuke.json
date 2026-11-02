@@ -612,7 +612,8 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"}
+    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"}
    ]
   },
   "RotoPaint": {
@@ -771,16 +772,24 @@
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
-    {"nodebased": ["red_intensity"], "nuke": ["red_i"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'red', scripting name `red_i`"},
-    {"nodebased": ["green_intensity"], "nuke": ["green_i"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'green', scripting name `green_i`"},
-    {"nodebased": ["blue_intensity"], "nuke": ["blue_i"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'blue', scripting name `blue_i`"},
+    {"nodebased": ["red_intensity"], "nuke": ["red_m"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'red' under Intensity, scripting name `red_m`"},
+    {"nodebased": ["green_intensity"], "nuke": ["green_m"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'green' under Intensity, scripting name `green_m`"},
+    {"nodebased": ["blue_intensity"], "nuke": ["blue_m"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'blue' under Intensity, scripting name `blue_m`"},
     {"nodebased": ["seed"], "nuke": ["seed"], "kind": "same"},
     {"nodebased": ["red_size"], "nuke": ["red_size"], "kind": "same"},
     {"nodebased": ["green_size"], "nuke": ["green_size"], "kind": "same"},
     {"nodebased": ["blue_size"], "nuke": ["blue_size"], "kind": "same"},
     {"nodebased": ["black"], "nuke": ["black"], "kind": "same"},
     {"nodebased": ["luminance_weighted"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["red_i"], "nuke": ["red_i"], "kind": "same"},
+    {"nodebased": ["green_i"], "nuke": ["green_i"], "kind": "same"},
+    {"nodebased": ["blue_i"], "nuke": ["blue_i"], "kind": "same"},
+    {"nodebased": ["minimum_red", "minimum_green", "minimum_blue"], "nuke": ["minimum"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one rgb knob"},
+    {"nodebased": ["maskgrain"], "nuke": ["maskgrain"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["legacy_grain"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Grain followed Nuke keep the intensities, the brightness weighting and the unmasked grain they had; lane 9 step C"},
+    {"nodebased": [], "nuke": ["presets"], "kind": "unsupported", "reason": "the guide names six film stocks but not the size, irregularity and intensity values each sets, so choosing one has nothing to set"}
    ]
   },
   "ScannedGrain": {
@@ -879,7 +888,10 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["monodither"], "nuke": ["monodither"], "kind": "same"},
+    {"nodebased": ["static_seed"], "nuke": ["static_seed"], "kind": "same"},
+    {"nodebased": ["legacy_dither"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Dither followed Nuke keep rounding to bits after triangular noise of up to a bit; lane 9 step C"}
    ]
   },
   "Grid": {

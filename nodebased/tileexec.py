@@ -1477,7 +1477,7 @@ class TileExecutor:
                 # Noise is hashed from the absolute pixel position, so hand the kernel where this
                 # array sits on the canvas (Dither's halo is zero: the artifact IS the region).
                 filtered = imaging.Evaluator._dither(image, params,
-                                                     origin=(image_artifact.region.x, image_artifact.region.y))
+                                                     origin=(image_artifact.region.x, image_artifact.region.y), frame=frame)
             elif kind == "Grain":
                 # Same absolute-position noise as Dither; the frame is folded into the seed.
                 filtered = imaging.Evaluator._grain(image, params,

@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 87.2 / 100** (167 nodes scored, rank-weighted; 89.4 counting only the nodes NodeBased has).
+**Overall fidelity: 87.4 / 100** (167 nodes scored, rank-weighted; 89.6 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.8 (94.1 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.9 (94.3 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -33,7 +33,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
 | Image | 80.9 | 84.7 | 85.9 | 6 |
-| Draw | 75.1 | 60.1 | 84.7 | 17 |
+| Draw | 77.2 | 65.4 | 86.5 | 17 |
 | Time | 96.1 | 78.9 | 96.1 | 13 |
 | Channel | 88.9 | 92.2 | 98.9 | 5 |
 | Color | 93.8 | 77.9 | 94.4 | 34 |
@@ -44,9 +44,9 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 48 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 30 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 51 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 28 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 270 of the 342 paired knobs probed change the output pixels; 72 change nothing on the fixture (listed per node below). Splits: 7 of the 13 nodes with split knobs in the table split all of them.
+Knobs that act: 277 of the 349 paired knobs probed change the output pixels; 72 change nothing on the fixture (listed per node below). Splits: 8 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -73,18 +73,18 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 5 | Radial | `Radial` | supported | 98.7 | 98.8 | 100 (14/14) | - | 88 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
-| 6 | Noise | `Noise` | supported | 92.2 | 95.7 | 98 (25/26) | - | 78 | 100 | 100 | - | 75 | - | no fixture |
+| 6 | Noise | `Noise` | supported | 99.6 | 99.5 | 100 (26/26) | - | 96 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 7 | RotoPaint | `RotoPaint` | supported | 66.8 | 91.3 | 84 (73/88) | - | 100 | 100 | 100 | 0 unchecked | 83 | - | no fixture |
 | 8 | LightWrap | `LightWrap` | supported | 66.1 | 98.6 | 100 (27/27) | 41 (8/27) | 89 | 100 | 100 | 0 unchecked | 89 | - | no fixture |
-| 9 | Grain | `Grain` | supported | 53.0 | 51.7 | 56 (8/14) | 89 (7/8) | 62 | 100 | 0 | 0 unchecked | 100 | - | no fixture |
+| 9 | Grain | `Grain` | supported | 96.7 | 95.0 | 88 (13/14) | 100 (13/13) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 15.4 | 20.0 | 0 (0/1) | - | - | 100 | - | 0 unchecked | - | - | no fixture |
 | 10 | DustBust | - | supported | 0.0 | 0.0 | 0 (0/5) | - | - | 0 | - | - | - | - | no fixture |
 | 10 | MarkerRemoval | - | supported | 0.0 | 0.0 | 0 (0/5) | - | - | 0 | - | - | - | - | no fixture |
 | 11 | Flare | `Flare` | supported | 35.4 | 27.1 | 7 (3/50) | 75 (2/3) | 33 | 100 | - | 0 unchecked | 67 | - | no fixture |
 | 11 | Glint | `Glint` | supported | 45.6 | 38.4 | 31 (4/13) | 100 (4/4) | 40 | 100 | 17 | 0 unchecked | 75 | - | no fixture |
 | 11 | Sparkles | `Sparkles` | supported | 40.6 | 22.6 | 9 (2/32) | 100 (2/2) | 0 | 100 | - | 0 unchecked | 100 | - | no fixture |
-| 12 | Dither | `Dither` | supported | 62.6 | 69.3 | 50 (2/4) | 100 (2/2) | 70 | 100 | 100 | 0 unchecked | 100 | - | no fixture |
-| 13 | Grid | `Grid` | supported | 92.1 | 98.3 | 100 (14/14) | - | 88 | 100 | 100 | - | 57 | - | no fixture |
+| 12 | Dither | `Dither` | supported | 94.9 | 99.2 | 100 (4/4) | 75 (3/4) | 92 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 
 ### Time
 
@@ -741,6 +741,16 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `ramp_smooth0_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
 | `ramp_smooth1_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
 | `ramp_plinear_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
+| `noise_fbm_values` | convention | not scored: the page says the node is 'based on the Perlin noise function' and how octaves, lacunarity, gain and gamma combine it, but not the function's values (its gradient table and permutation are Foundry's), so the pixels cannot be written down; tests/test_2d_behaviour_draw.py checks what the page states: gain 0 leaves one octave, gamma is the output power, translate, rotate and scale move the pattern as the transform tab says, the x and y sizes stretch it, zoffset moves through it smoothly and the same settings give the same pixels | - | - |
+| `noise_turbulence_values` | convention | not scored: the page says the node is 'based on the Perlin noise function' and how octaves, lacunarity, gain and gamma combine it, but not the function's values (its gradient table and permutation are Foundry's), so the pixels cannot be written down; tests/test_2d_behaviour_draw.py checks what the page states: gain 0 leaves one octave, gamma is the output power, translate, rotate and scale move the pattern as the transform tab says, the x and y sizes stretch it, zoffset moves through it smoothly and the same settings give the same pixels | - | - |
+| `grid_number_makes_squares_with_empty_middles` | guide | pass | within tolerance | - |
+| `grid_line_positions` | convention | not scored: the page gives the number of squares, the line thickness in pixels and a translate but not where in a square a line of a given thickness sits (starting at the grid position, centred on it or ending at it) or what the last line does at the frame's edge; tests/test_2d_behaviour_draw.py checks the spacing (the frame divided by the number), the thickness, that translate moves the whole grid and that lines are drawn in the colour and the ramp | - | - |
+| `grain_minimum_rgb_is_the_floor` | convention | pass | within tolerance | - |
+| `grain_apply_only_through_alpha_leaves_empty_alpha_alone` | guide | pass | within tolerance | - |
+| `grain_invert_alpha_leaves_full_alpha_alone` | guide | pass | within tolerance | - |
+| `grain_pattern` | convention | not scored: the page describes the controls in words (size shrinks or enlarges, irregularity is 'the random quality', intensity is the contrast of the effect against the image) and gives no grain function or amplitude; tests/test_2d_behaviour_draw.py checks what follows from the words: zero intensity adds nothing, the grain is zero-mean, a larger size gives a coarser grain, the pattern changes with the frame and holds when the seed is minus the frame, black sets the grain at black, and each channel is controlled by its own knobs | - | - |
+| `dither_amount_zero_adds_nothing` | guide | pass | within tolerance | - |
+| `dither_pattern` | convention | not scored: the page says the noise is random, up to 0.5 of the amount either way, and gives neither the generator nor its distribution; tests/test_2d_behaviour_draw.py checks the bound, that the mean is the input's, that monodither gives every channel the same offset, and that the seed, the frame and static seed change the pattern as the page says | - | - |
 
 ## Requirements of 2026-11-02, per node
 
@@ -749,8 +759,8 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 Each paired knob below was moved off its default to every value its `LIMITS` and `CHOICES` allow the probe to try, alone and with each other paired knob moved first, and NodeBased's output did not change on the fixture. Either the knob is not implemented, or it acts only in a state the probe does not reach (two other knobs moved together, a payload the default node does not hold). Implement it, or unpair it in `docs/parity/nodebased_to_nuke.json` with a reason.
 
 - LightWrap (`LightWrap`): `disableluma`, `enableglow`, `saturation`, `LumaTolerance`, `white`, `gray`, `contrast`, `gamma`, `gain`, `offset`, `shadows_gamma`, `shadows_gain`, `shadows_offset`, `midtones_gamma`, `midtones_gain`, `midtones_offset`, `highlights_gamma`, `highlights_gain`, `highlights_offset`
-- Grain (`Grain`): `black`
 - Flare (`Flare`): `chroma_shift`
+- Dither (`Dither`): `static_seed`
 - Shuffle (`Shuffle`): `fromInput1`, `fromInput2`, `out2`
 - ColorLookup (`ColorLookup`): `source`, `target`
 - HSVTool (`HSVTool`): `srccolor`, `dstcolor`, `huerolloffrange`, `satrolloffrange`, `brtrolloffrange`
@@ -785,12 +795,10 @@ Labels below are NodeBased's, then the guide's.
 - CurveTool (`CurveTool`): 8 of 11 paired knobs in Nuke's order
 - Roto (`Roto`): 8 of 13 paired knobs in Nuke's order
 - Text (`Text`): 27 of 40 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
-- Noise (`Noise`): 16 of 25 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"; `zoffset` reads "Z Slice", Nuke "z"
 - RotoPaint (`RotoPaint`): 8 of 12 paired knobs in Nuke's order
 - LightWrap (`LightWrap`): 21 of 27 paired knobs in Nuke's order
 - Flare (`Flare`): 2 of 3 paired knobs in Nuke's order
 - Glint (`Glint`): 3 of 4 paired knobs in Nuke's order; `repeat` reads "Rays", Nuke "no. of rays"
-- Grid (`Grid`): 6 of 14 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"; `size` reads "Line Width", Nuke "size"
 - AppendClip (`AppendClip`): 3 of 5 paired knobs in Nuke's order
 - TimeBlur (`TimeBlur`): 3 of 4 paired knobs in Nuke's order
 - TimeEcho (`TimeEcho`): 1 of 2 paired knobs in Nuke's order; `mode` reads "Method", Nuke "TimeEcho Method"; `framesbehind` reads "Frames", Nuke "Frames to look at"
@@ -844,6 +852,7 @@ Labels below are NodeBased's, then the guide's.
 
 Nuke's knob class for each knob: AColor_Knob (one slider that splits into r g b a) and WH_Knob (one slider that splits into w h), as Nuke writes them in .nk scripts (for example `multiply {1 1 1 1}`, `size {4 4}`) and as the Nuke Python API names them (nuke.AColor_Knob, nuke.WH_Knob). The Reference Guide's tables do not state knob classes, so this table is not read from the guide. Curated, not exhaustive. Only knobs whose class is long-established are listed; a node that is not here has no splits component and is not penalised. To be confirmed against a Nuke install (scripts from tools/make_nuke_reference_pack.py can print each node's knob classes).
 
+- Noise (`Noise`): `size` (wh). all split.
 - Grade (`Grade`): `blackpoint` (rgba), `whitepoint` (rgba), `black` (rgba), `white` (rgba), `multiply` (rgba), `add` (rgba), `gamma` (rgba). all split.
 - ColorCorrect (`ColorCorrect`): `saturation` (rgba), `contrast` (rgba), `gamma` (rgba), `gain` (rgba), `offset` (rgba), `shadows.saturation` (rgba), `shadows.contrast` (rgba), `shadows.gamma` (rgba), `shadows.gain` (rgba), `shadows.offset` (rgba), `midtones.saturation` (rgba), `midtones.contrast` (rgba), `midtones.gamma` (rgba), `midtones.gain` (rgba), `midtones.offset` (rgba), `highlights.saturation` (rgba), `highlights.contrast` (rgba), `highlights.gamma` (rgba), `highlights.gain` (rgba), `highlights.offset` (rgba). all split.
 - Multiply (`Multiply`): `value` (rgba). all split.

@@ -5367,7 +5367,7 @@ class Evaluator:
         if kind == "EdgeExtend":
             return Evaluator._edge_extend(source.fit(out), p)
         if kind == "Dither":
-            return Evaluator._dither(source.fit(out), p, origin=(out.x, out.y))
+            return Evaluator._dither(source.fit(out), p, origin=(out.x, out.y), frame=frame)
         if kind == "Grain":
             return Evaluator._grain(source.fit(out), p, origin=(out.x, out.y), frame=frame)
         if kind == "Posterize":
@@ -5652,8 +5652,10 @@ class Evaluator:
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("EdgeBlur", "EdgeExtend", "Dither"):
-            filtered = getattr(Evaluator, {"EdgeBlur": "_edge_blur", "EdgeExtend": "_edge_extend",
-                                           "Dither": "_dither"}[kind])(inputs[0], p)
+            if kind == "Dither":
+                filtered = Evaluator._dither(inputs[0], p, frame=frame)
+            else:
+                filtered = getattr(Evaluator, {"EdgeBlur": "_edge_blur", "EdgeExtend": "_edge_extend"}[kind])(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("Grain", "Posterize", "SoftClip", "HSVTool", "Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain"):
@@ -7365,7 +7367,9 @@ class Evaluator:
         return np.concatenate([rgb, fg[..., 3:4]], axis=2).astype(np.float32)
 
     @staticmethod
-    def _dither(image, p, origin=(0, 0)):
+    def _dither(image, p, origin=(0, 0), frame=None):
+        if not _draw.dither_is_legacy(p):
+            return _draw.dither(image, p, Evaluator._CHANNEL_SETS[p.get("channels", "rgb")], origin, frame)
         # Quantises to `bits` per channel with triangular (TPDF) noise of +/- `dither_amount`
         # least-significant bits added first, so a smooth gradient reduces to fine grain whose
         # average is the original value instead of contour bands. The noise is a hash of the
@@ -7397,6 +7401,8 @@ class Evaluator:
 
     @staticmethod
     def _grain(image, p, origin=(0, 0), frame=None):
+        if not _draw.grain_is_legacy(p):
+            return _draw.grain(image, p, origin, frame, Evaluator._value_noise)
         # Synthetic grain: zero-mean lattice noise added per channel, so the mean of a flat area
         # is preserved. Each channel has its own size (the lattice spacing in pixels; 1 or less is
         # one independent value per pixel) and intensity (the amplitude of unit-variance noise at
@@ -8362,6 +8368,17 @@ class Evaluator:
 
     @staticmethod
     def _noise_shape(p, x0, y0, w, h):
+        if not _draw.is_legacy(p):
+            # Nuke's Noise: the noise is the shape's coverage, coloured by `color` and the ramp, drawn over the input like the other Draw nodes.
+            coverage = _draw.cover(p, _draw.noise_field(p, x0, y0, w, h))
+            ramp = str(p.get("ramp", "none"))
+            high = (p.get("red", 1.0), p.get("green", 1.0), p.get("blue", 1.0), p.get("alpha", 1.0))
+            if ramp != "none":
+                straight = _draw.ramp_colour(p, x0, y0, w, h, ramp, high)
+            else:
+                straight = np.broadcast_to(np.asarray(high, np.float64), (h, w, 4))
+            alpha = coverage * straight[..., 3]
+            return np.concatenate([straight[..., :3] * alpha[..., None], alpha[..., None]], axis=-1).astype(np.float32)
         xs = np.arange(x0, x0 + w, dtype=np.float64)
         ys = np.arange(y0, y0 + h, dtype=np.float64)
         xx, yy = np.meshgrid(xs, ys)
