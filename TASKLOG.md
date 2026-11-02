@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step B of 3: Transform, Reformat, CornerPin and Crop compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `f8775c44` -> `81851da6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `81851da6`: Ran 8150 tests in 575.565 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02 - lane 9 (2D behaviour), step B of 3: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox, BlackOutside
 
 - **What was done (evidence):** read the Nuke 17.0 pages and the kernels on both paths; `tools/nuke_fidelity_cases_filter.py` gains 61 cases (49 pass, 0 fail,

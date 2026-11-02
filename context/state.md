@@ -1,5 +1,24 @@
 ## 2026-11-02 - Lane 9 (2D behaviour), step B of 3: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox, BlackOutside
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:45 PM on 2026-11-02 PDT)
+
+`main` moved `f8775c44` -> `81851da6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `81851da6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-1326.log`, started 1:26 PM): **Ran 8150 tests in 575.565 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step B of 3: Transform, Reformat, CornerPin and Crop compute what Nuke computes.** Commits:
+  - `80ef11a2` Lane 9 step B: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox and BlackOutside compute what Nuke computes (squashed from 9697ee31, 1ba9ccab, 9f7cc809, the main merge 2a994582 and d4210829; the same tree as d4210829, one commit on main so the stack applies)
+  Diff: 33 files changed, 2387 insertions(+), 302 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-behaviour`, merged with main at `59b98b2a`. Nine nodes compute what Nuke computes, shown by 61 cases and `tests/test_2d_behaviour_transform.py`; each changed
 reading sits behind a `legacy_*` flag an older saved node is given on load (`nodebased/transformbehaviour.py`, no schema bump). The viewer Transform handle, the tracker's Transform export and
 the 2D device path follow the new directions and edges. Not verified: any real Nuke render; the 2D device tests pass on the RTX 3080 Ti, the AMD integrated adapter and llvmpipe.
