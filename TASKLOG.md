@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step A of 3: Blur, the erodes and the convolution filters compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `51ffc5d1` -> `0f99ba86` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `0f99ba86`: Ran 7912 tests in 578.790 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-01 - lane 9 (2D behaviour), step A of 3: Blur, Erode, ErodeFilter, Median, Sharpen, Soften, Glow, Convolve, Matrix, Laplacian, EdgeDetect, Emboss
 
 - **What was done (evidence):** read the Nuke 17.0 pages of all twelve nodes and NodeBased's kernels on the evaluator and tile path; wrote

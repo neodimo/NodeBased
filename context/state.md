@@ -1,5 +1,27 @@
 ## 2026-11-01 - Lane 9 (2D behaviour), step A of 3: the Filter nodes Blur to Emboss compute what the guide states
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:55 AM on 2026-11-02 PDT)
+
+`main` moved `51ffc5d1` -> `0f99ba86` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `0f99ba86` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-0145.log`, started 1:45 AM): **Ran 7912 tests in 578.790 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step A of 3: Blur, the erodes and the convolution filters compute what Nuke computes.** Commits:
+  - `b4263ea4` docs: rebuild the 2D fidelity report on main after the rebase
+  - `cb87f5e8` chrome: Convolve's filter channel is a channel picker, so the cache test edits it to a real channel
+  - `c562a1b9` notes: lane 9 step A TASKLOG and state
+  - `762952d7` filters: Blur through Emboss compute what the guide states, with behaviour cases and legacy flags
+  Diff: 21 files changed, 1698 insertions(+), 88 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-behaviour`. Behaviour cases in `tools/nuke_fidelity_cases_filter.py` (hooked into `tools/nuke_fidelity_cases.py`), kernel fixes in
 `nodebased/filterbehaviour.py` with the legacy flags `legacy_erode_sign`, `legacy_median_radius`, `legacy_matrix_unclipped`, `legacy_laplacian` and
 `legacy_convolve`, given to older documents by `ops2d_chrome.step_l9a_params` (no schema bump: SCHEMA_VERSION stays 28). New knobs: `laplacian_size`,
