@@ -1846,7 +1846,8 @@ def _canvas_size_for_chain(document, target, frame, tier):
             # already match it (M0), never the other way around.
             params = tiers.scale_params(node["type"], node["params"], tier)
             return int(params["width"]), int(params["height"])
-        if node["type"] == "Reformat" and node["params"]["reformat_type"] != "scale":
+        if (node["type"] == "Reformat" and node["params"]["reformat_type"] != "scale"
+                and not (node["params"]["reformat_type"] == "to_box" and not node["params"].get("box_fixed", 1))):
             # "to_format"/"to_box" state the format directly in width/height (post proxy-tier
             # scaling, since both are in tiers.PIXEL_UNIT_PARAMS["Reformat"]); "scale" derives its
             # size from the upstream canvas instead, which this walk does not resolve -- Reformat

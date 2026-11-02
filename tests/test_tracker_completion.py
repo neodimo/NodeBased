@@ -173,7 +173,7 @@ class TrackerUiAcceptanceTests(unittest.TestCase):
         self.assertAlmostEqual(curves[pin_id]["to1_x"]["keys"][1]["value"], 13.0)
         self.assertAlmostEqual(curves[transform_id]["translate_x"]["keys"][1]["value"], 3.0)
         self.window.command({"op": "create", "id": "expected", "type": "Transform",
-                             "params": {"translate_x": 3.0, "translate_y": 2.0}})
+                             "params": {"translate_x": 3.0, "translate_y": -2.0}})   # the tracker moves down by 2; a new Transform counts y upwards
         self.window.command({"op": "connect", "id": "expected", "input": "image", "source": "plate"})
         evaluator = Evaluator()
         pin_image = evaluator.evaluate_raster(self.window.dispatcher.document, target=pin_id, frame=2)

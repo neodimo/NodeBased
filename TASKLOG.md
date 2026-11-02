@@ -1,3 +1,16 @@
+## 2026-11-02 - lane 9 (2D behaviour), step B of 3: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox, BlackOutside
+
+- **What was done (evidence):** read the Nuke 17.0 pages and the kernels on both paths; `tools/nuke_fidelity_cases_filter.py` gains 61 cases (49 pass, 0 fail,
+  12 not scored with a reason); `tests/test_2d_behaviour_transform.py` (105 tests): the cases, every paired knob, tab order, tiles, older documents bit for bit.
+  Older tests that pinned the old readings now set the `legacy_*` flags (group 2c5, 3b, lut/tile d3, phase A, tracker, handle UI, gpu2d). Targeted gate green.
+- **Nodes with behaviour checked:** nine of nine (before: 0 scored on Transform, Reformat, Crop, Mirror, Tile, AdjustBBox; Position, CornerPin, BlackOutside had none).
+  Overall fidelity 85.0 -> 87.0 (previous formula 91.3 -> 91.6).
+- **Kernels changed (flags in `nodebased/transformbehaviour.py`, set on older saved nodes, no schema bump):** Transform axes, edges (black outside / clamp), shutter window; Reformat layout, box shape,
+  clamp and black outside; CornerPin edges and shutter; Mirror window; Position direction and fill; AdjustBBox fill; Tile filter. New: Tile's filter, Transform and Reformat split scale.
+- **GPU:** the 2D device path pins the older edge readings, runs Nuke's black outside off on the device, and sends clamp and a split scale to the CPU (tests/test_gpu2d.py OK on the RTX 3080 Ti, the AMD integrated adapter and llvmpipe).
+- **Knobs unpaired:** Transform scale_x, scale_y, scale_mode (older per-axis scale); Reformat pixel_aspect (changes no pixels).
+- **Not done / Needs Gonzo:** CornerPin direction enum vs Nuke's invert checkbox; Crop intersect default; Notch filter;.
+
 ## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step C of 3: the keyers and the channel nodes compute what Nuke computes (integrator tick)
 
 - **What was done:** `main` `b6a8835d` -> `59b98b2a` plus this docs commit. Evidence and per-lane commit

@@ -89,7 +89,7 @@ class LutTileD3Tests(unittest.TestCase):
 
     def test_tile_2x2_checker_and_bypass(self):
         self.add("src", "Checker", {"width": 4, "height": 4, "size": 2})
-        self.add("tile", "Tile", {"rows": 2, "columns": 2}, {"image": "src"})
+        self.add("tile", "Tile", {"rows": 2, "columns": 2, "filter": "bilinear"}, {"image": "src"})
         got = Evaluator().evaluate_raster(self.d.document, "tile").pixels
         checker = Evaluator().evaluate_raster(self.d.document, "src").pixels
         small = np.ones((2, 2, 4), np.float32)
@@ -106,7 +106,7 @@ class LutTileD3Tests(unittest.TestCase):
         source[..., 0] = np.arange(16, dtype=np.float32).reshape(4, 4)
         source[..., 3] = 1
         self.add("src", "Constant", {"width": 4, "height": 4, "alpha": 1})
-        self.add("tile", "Tile", {"rows": 2, "columns": 2, "mirror_x": 1, "mirror_y": 1}, {"image": "src"})
+        self.add("tile", "Tile", {"rows": 2, "columns": 2, "mirror_x": 1, "mirror_y": 1, "filter": "bilinear"}, {"image": "src"})
         evaluator = Evaluator()
         evaluator._lut_roots = {"src": Raster.of(source)}
         got = evaluator.evaluate_raster(self.d.document, "tile").pixels[..., 0]

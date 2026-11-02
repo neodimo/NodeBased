@@ -33,6 +33,10 @@ def params(kind, **over):
     p = dict(SPECS[kind]["params"])
     if kind == "Blur":
         p.update(blurknobs.OLD["Blur"])         # the device has the box blur; a new Blur is gaussian and stays on the CPU (below)
+    if kind == "Transform":
+        # The device's clamp and black outside are the older readings (clamp the sample position, paint the outside opaque black);
+        # Nuke's reading is tested below (`test_transform_nuke_edges_*`).
+        p["legacy_transform_edges"], p["black_outside"] = 1, 0
     p.update(over)
     return p
 
@@ -173,7 +177,7 @@ class MappingTests(unittest.TestCase):
         src = Region(0, 0, 40, 30)
         grown = Region(-3, -3, 46, 36)
         whole = gpu2d.map_transform(params("Transform", translate_x=4.0, translate_y=-2.0), src, grown)
-        self.assertEqual((whole.mode, whole.shift), ("copy", (4, -2)))
+        self.assertEqual((whole.mode, whole.shift), ("copy", (4, 2)))   # positive translate y moves the picture up the screen
         identity = gpu2d.map_transform(params("Transform"), src, src)
         self.assertEqual((identity.mode, identity.shift), ("copy", (0, 0)))
         fractional = gpu2d.map_transform(params("Transform", translate_x=1.5), src, grown)
@@ -688,7 +692,7 @@ class KernelTests(DeviceTestCase):
             "nonuniform scale, rotate, pivot": dict(rotate=-31.0, scale_mode="xy", scale_x=1.4, scale_y=0.7, center_x=5.0, center_y=-3.0),
             "scale up about a pivot": dict(scale=2.3, center_x=10.0, center_y=4.0),
             "scale down": dict(scale=0.37),
-            "skew": dict(skew_x=0.3, skew_y=0.1, translate_x=1.5),
+            "skew": dict(skew_x=0.3, skew_y=0.13, translate_x=1.5),   # no sample lands on a nearest-filter tie, where float rounding decides
             "invert": dict(invert=1, rotate=12.0, translate_x=2.2),
             "clamp": dict(clamp=1, rotate=15.0, translate_x=1.3),
             "black outside": dict(black_outside=1, rotate=9.0, translate_x=1.3),
@@ -715,6 +719,19 @@ class KernelTests(DeviceTestCase):
                      dict(translate_x=0.5, translate_y=-7.13, clamp=1), dict(scale=1.9, rotate=-17.0, translate_x=12.4, center_x=2.3)):
             with self.subTest(over=over):
                 self.assert_matches("Transform", params("Transform", filter="cubic", **over), [src], str(over))
+
+    def test_transform_nuke_edges_on_the_device_and_value_clamp_on_the_cpu(self):
+        """Nuke's reading (legacy_transform_edges 0): black outside on is plain zero fill, off carries the outermost pixels outwards
+        (the device's edge extension); the value clamp is not on the device, so it is a CPU boundary."""
+        src = self.data.image(41, 29, x=-7, y=5, spike=6.0)
+        for filt in ("nearest", "bilinear", "cubic"):
+            for over in (dict(black_outside=1), dict(black_outside=0), dict(black_outside=0, rotate=15.0, translate_x=1.3),
+                         dict(black_outside=1, rotate=-9.0, translate_x=0.4, translate_y=-3.7), dict(black_outside=0, translate_x=2.5)):
+                with self.subTest(filter=filt, over=over):
+                    p = params("Transform", filter=filt, legacy_transform_edges=0, **over)
+                    self.assert_matches("Transform", p, [src], f"{filt} {over}")
+        with self.assertRaises(gpu2d.Unsupported):
+            self.backend.stage("Transform", params("Transform", legacy_transform_edges=0, clamp=1, rotate=15.0), [src])
 
     def test_transform_motion_blur_is_a_cpu_boundary(self):
         with self.assertRaises(gpu2d.Unsupported):

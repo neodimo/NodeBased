@@ -30,11 +30,14 @@ from . import sourcepool
 from . import tiers
 from . import timeknobs
 from . import tracker
+from . import transformbehaviour as _transformbehaviour
 from .raster import Raster, as_array, scale_window
 from .tiers import Region
 
 
 from .cancellation import Cancelled
+
+_TRANSFORM_KERNELS = _transformbehaviour.KERNELS
 
 
 def _whitewater_cache_state(value):
@@ -2734,7 +2737,11 @@ class Evaluator:
                     count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
                     offset = params["shutter_offset"]
-                    if offset == "start":
+                    if kind in ("Transform", "CornerPin"):
+                        # The guide's shutter (nodebased/transformbehaviour.py); a node saved before it keeps the older window.
+                        low, high = _transformbehaviour.shutter_window(
+                            frame, shutter, offset, params.get("custom_offset", 0.0), _transformbehaviour.is_legacy(kind, params, "legacy_shutter_window"))
+                    elif offset == "start":
                         low, high = frame - shutter, frame
                     elif offset == "end":
                         low, high = frame, frame + shutter
@@ -3653,15 +3660,20 @@ class Evaluator:
                 y0, y1 = row * height // rows, (row + 1) * height // rows
                 for column in range(columns):
                     x0, x1 = column * width // columns, (column + 1) * width // columns
-                    # Bilinear resize at pixel centres (no new image dependency).
+                    # Each tile is the picture resized to the tile's size at pixel centres, with the node's filter (bilinear is what a
+                    # Tile saved before the knob always used).
                     sx = np.clip((np.arange(x1-x0, dtype=np.float32) + .5) * width / (x1-x0) - .5, 0, width-1)
                     sy = np.clip((np.arange(y1-y0, dtype=np.float32) + .5) * height / (y1-y0) - .5, 0, height-1)
-                    xlo, ylo = np.floor(sx).astype(int), np.floor(sy).astype(int)
-                    xhi, yhi = np.minimum(xlo+1, width-1), np.minimum(ylo+1, height-1)
-                    fx, fy = (sx-xlo)[None, :, None], (sy-ylo)[:, None, None]
-                    top = pixels[ylo[:, None], xlo[None, :]] * (1-fx) + pixels[ylo[:, None], xhi[None, :]] * fx
-                    bottom = pixels[yhi[:, None], xlo[None, :]] * (1-fx) + pixels[yhi[:, None], xhi[None, :]] * fx
-                    tile = top * (1-fy) + bottom * fy
+                    if p.get("filter", "bilinear") != "bilinear":
+                        grid_x, grid_y = np.meshgrid(sx, sy)
+                        tile = Evaluator._resample(pixels, grid_x, grid_y, p["filter"], clamp=True).astype(pixels.dtype)
+                    else:
+                        xlo, ylo = np.floor(sx).astype(int), np.floor(sy).astype(int)
+                        xhi, yhi = np.minimum(xlo+1, width-1), np.minimum(ylo+1, height-1)
+                        fx, fy = (sx-xlo)[None, :, None], (sy-ylo)[:, None, None]
+                        top = pixels[ylo[:, None], xlo[None, :]] * (1-fx) + pixels[ylo[:, None], xhi[None, :]] * fx
+                        bottom = pixels[yhi[:, None], xlo[None, :]] * (1-fx) + pixels[yhi[:, None], xhi[None, :]] * fx
+                        tile = top * (1-fy) + bottom * fy
                     if p["mirror_x"] and column % 2:
                         tile = tile[:, ::-1]
                     if p["mirror_y"] and row % 2:
@@ -3925,11 +3937,16 @@ class Evaluator:
                     "no silent resampling is performed")
             reformat_type = p["reformat_type"]
             if reformat_type == "scale":
-                factor = float(p["scale"])
-                target_w = max(1, int(round(source.display.width * factor)))
-                target_h = max(1, int(round(source.display.height * factor)))
+                from .core import is_split, split_values
+                factor_w, factor_h = split_values(p, "scale", 2) if is_split(p, "scale") else (float(p["scale"]),) * 2
+                target_w = max(1, int(round(source.display.width * float(factor_w))))
+                target_h = max(1, int(round(source.display.height * float(factor_h))))
             else:
                 target_w, target_h = int(p["width"]), int(p["height"])
+                if reformat_type == "to_box" and not int(p.get("box_fixed", 1)):
+                    # Force this shape off: the box in one direction, the source's proportion in the other (the guide).
+                    target_w, target_h = _transformbehaviour.reformat_box_shape(
+                        source.display.width, source.display.height, target_w, target_h, p["resize_type"], bool(p["turn"]))
             target_display = Region(0, 0, target_w, target_h)
             own_box = target_display
             if p["preserve_bbox"]:
@@ -5013,21 +5030,65 @@ class Evaluator:
           outside are dropped); pixels that stay are byte-identical and stay where they were.
           `clip_to_format` then intersects the result with the display window.
         """
+        from .core import is_split, split_values
         box = source.data
         if kind == "Position":
-            box = Region(box.x + int(p["translate_x"]), box.y + int(p["translate_y"]), box.width, box.height)
-            return Raster(source.pixels, box, source.display)
+            dx, dy = int(p["translate_x"]), int(p["translate_y"])
+            if _transformbehaviour.is_legacy("Position", p, "legacy_position"):
+                box = Region(box.x + dx, box.y + dy, box.width, box.height)
+                return Raster(source.pixels, box, source.display)
+            # Nuke: positive Y moves the picture up (fewer rows); the area between the original and the moved picture is filled by
+            # repeating the moved picture's edge pixels, so the window is the union of the two.
+            moved = Region(box.x + dx, box.y - dy, box.width, box.height)
+            if box.is_empty:
+                return Raster(source.pixels, moved, source.display)
+            out = box.union(moved)
+            return Raster(Evaluator._carry_edges(source.pixels, moved, out), out, source.display)
         if box.is_empty:
             return source
         if kind == "BlackOutside":
             grown = box.expand(1, 1)
         else:
-            grown = box.expand(int(p["numpixels"]), int(p["numpixels"]))
+            if is_split(p, "numpixels"):
+                across, down = (int(round(float(v))) for v in split_values(p, "numpixels", 2))
+            else:
+                across = down = int(p["numpixels"])
+            grown = box.expand(across, down)
             if grown.is_empty:
                 grown = Region(box.x, box.y, 0, 0)
             if p.get("clip_to_format", 0):
                 grown = grown.intersect(source.display)
+            if not _transformbehaviour.is_legacy("AdjustBBox", p, "legacy_adjustbbox") and not grown.is_empty:
+                # The area a growing box adds repeats the outermost pixels (what BlackOutside then blacks out).
+                return Raster(Evaluator._carry_edges(source.pixels, box, grown), grown, source.display)
         return Raster(source.fit(grown), grown, source.display)
+
+    @staticmethod
+    def _carry_edges(pixels, box, out):
+        """`pixels` (covering `box`) over the rectangle `out`: the picture where it lies, its outermost pixels everywhere else."""
+        ys = np.clip(np.arange(out.y, out.bottom), box.y, box.bottom - 1) - box.y
+        xs = np.clip(np.arange(out.x, out.right), box.x, box.right - 1) - box.x
+        return np.ascontiguousarray(pixels[np.ix_(ys, xs)])
+
+    @staticmethod
+    def _mirror_window(box, display, p):
+        """Mirror about the centre of the format: where the data window lands once flipped, the way the pixels are."""
+        x, y = box.x, box.y
+        if p.get("flip_x", 0):
+            x = display.x + display.right - box.right
+        if p.get("flip_y", 0):
+            y = display.y + display.bottom - box.bottom
+        return Region(x, y, box.width, box.height)
+
+    @staticmethod
+    def _edge_window(kind, p, box, source):
+        """Transform and CornerPin with black outside off: the outermost pixels are carried outwards over the whole format (the guide),
+        so the window reaches the format's rectangle as well as the moved picture. An older node (and Tracker, Stabilize) keeps the
+        moved picture's own window."""
+        if (kind in ("Transform", "CornerPin") and not int(p.get("black_outside", 1))
+                and not _transformbehaviour.is_legacy(kind, p, "legacy_transform_edges")):
+            return box.union(source.display) if not box.is_empty else box
+        return box
 
     @staticmethod
     def _filter_window(kind, p, source):
@@ -5039,10 +5100,12 @@ class Evaluator:
             # Nuke's `intersect`: on, the output box is the crop box cut to the incoming box; off, it is the crop
             # box itself and can reach outside the incoming one.
             return source.data.intersect(box) if p.get("intersect", 1) else box
+        if kind == "Mirror" and not _transformbehaviour.is_legacy("Mirror", p, "legacy_mirror_window"):
+            return Evaluator._mirror_window(source.data, source.display, p)
         if kind in ("Transform", "Tracker", "Stabilize"):
-            return Evaluator._transformed_window(source.data, p)
+            return Evaluator._edge_window(kind, p, Evaluator._transformed_window(source.data, p), source)
         if kind == "CornerPin":
-            return Evaluator._cornerpin_window(source.data, p)
+            return Evaluator._edge_window(kind, p, Evaluator._cornerpin_window(source.data, p), source)
         if kind in ("Blur", "Sharpen", "Soften", "Glow", "Laplacian") and not p.get("crop", 1):
             # "Crop to format" off: the window grows by the filter's reach, the new edge being transparent black.
             from . import blurknobs
@@ -5070,7 +5133,7 @@ class Evaluator:
         # Reconstruction reach of the filter, in destination pixels. Rounding outward and adding
         # the support keeps every pixel the resampler can actually write inside the window; a
         # window one pixel short would clip a rotated edge and look like a rendering bug.
-        support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(p.get("filter", "nearest"), 2)
+        support = _transformbehaviour.support(p.get("filter", "nearest"))
         reach = float(np.linalg.norm(matrix[:2, :2], ord=2))
         margin = int(math.ceil(support * max(1.0, reach)))
         left, top = math.floor(min(xs)) - margin, math.floor(min(ys)) - margin
@@ -5080,19 +5143,22 @@ class Evaluator:
     @staticmethod
     def _transform_forward_matrix(p):
         """Nuke-style 2D affine matrix shared by pixel sampling and data-window bounds."""
-        angle = math.radians(float(p.get("rotate", 0.0)))
+        rotate, kx, ky, ty = _transformbehaviour.screen_matrix_terms(p)
+        angle = math.radians(rotate)
         c, s = math.cos(angle), math.sin(angle)
-        sx = float(p.get("scale_x", p.get("scale", 1.0)))
-        sy = float(p.get("scale_y", p.get("scale", 1.0)))
-        if p.get("scale_mode", "uniform") != "xy":
-            sx = sy = float(p.get("scale", 1.0))
-        kx, ky = float(p.get("skew_x", 0.0)), float(p.get("skew_y", 0.0))
+        if isinstance(p.get("scale"), (list, tuple)):       # the split form of scale: width and height factors
+            sx, sy = (float(v) for v in p["scale"])
+        else:
+            sx = float(p.get("scale_x", p.get("scale", 1.0)))
+            sy = float(p.get("scale_y", p.get("scale", 1.0)))
+            if p.get("scale_mode", "uniform") != "xy":
+                sx = sy = float(p.get("scale", 1.0))
         skew_x = np.array([[1.0, kx], [0.0, 1.0]])
         skew_y = np.array([[1.0, 0.0], [ky, 1.0]])
         skew = skew_y @ skew_x if p.get("skew_order", "XY") == "XY" else skew_x @ skew_y
         linear = np.array([[c, -s], [s, c]]) @ skew @ np.diag([sx, sy])
         cx, cy = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
-        tx, ty = float(p.get("translate_x", 0.0)), float(p.get("translate_y", 0.0))
+        tx = float(p.get("translate_x", 0.0))
         forward = np.eye(3)
         forward[:2, :2] = linear
         forward[:2, 2] = [cx + tx, cy + ty] - linear @ np.array([cx, cy])
@@ -5316,7 +5382,16 @@ class Evaluator:
                          center_y=float(p.get("center_y", 0.0)) - out.y)
             return Evaluator._dirblur(source.fit(out), local)
         if kind == "Mirror":
-            return Evaluator._mirror(source.fit(out), p)
+            if _transformbehaviour.is_legacy("Mirror", p, "legacy_mirror_window"):
+                return Evaluator._mirror(source.fit(out), p)
+            flipped = Evaluator._mirror(source.fit(source.data), p)
+            home = Evaluator._mirror_window(source.data, source.display, p)
+            pixels = np.zeros((out.height, out.width, flipped.shape[2]), np.float32)
+            shown = out.intersect(home)
+            if not shown.is_empty:
+                pixels[shown.y - out.y:shown.bottom - out.y, shown.x - out.x:shown.right - out.x] = \
+                    flipped[shown.y - home.y:shown.bottom - home.y, shown.x - home.x:shown.right - home.x]
+            return pixels
         raise ValueError(f"No windowed filter for {kind}")
 
     @staticmethod
@@ -8783,7 +8858,7 @@ class Evaluator:
         return frame
 
     @staticmethod
-    def _reformat_place(target_w, target_h, src_w, src_h, resize_type, center, turn):
+    def _reformat_place(target_w, target_h, src_w, src_h, resize_type, center, turn, nuke_layout=False):
         """Scale and offset placing a `src_w`x`src_h` source into a `target_w`x`target_h` format,
         before flip/flop/turn are applied. Shared by `_reformat` (the kernel) and
         `_reformat_transformed_window` (the preserve-bounding-box case) so the two formulas
@@ -8814,7 +8889,9 @@ class Evaluator:
             offset_x = (tw - src_w * scale_x) / 2.0
             offset_y = (th - src_h * scale_y) / 2.0
         else:
-            offset_x = offset_y = 0.0
+            # Nuke: with center off the lower left corners line up (rows run downwards here, so the lower edge is the last row).
+            offset_x = 0.0
+            offset_y = (th - src_h * scale_y) if nuke_layout else 0.0
         return scale_x, scale_y, offset_x, offset_y, tw, th
 
     @staticmethod
@@ -8825,19 +8902,23 @@ class Evaluator:
             return box
         resize_type, center = p["resize_type"], p["center"]
         flip, flop, turn = p["flip"], p["flop"], p["turn"]
+        nuke_layout = not _transformbehaviour.is_legacy("Reformat", p, "legacy_reformat_layout")
         scale_x, scale_y, offset_x, offset_y, _tw, _th = Evaluator._reformat_place(
-            target_w, target_h, src_display_w, src_display_h, resize_type, center, turn)
+            target_w, target_h, src_display_w, src_display_h, resize_type, center, turn, nuke_layout)
         xs, ys = [], []
         for bx, by in ((box.x, box.y), (box.right, box.y), (box.x, box.bottom), (box.right, box.bottom)):
             px, py = bx * scale_x + offset_x, by * scale_y + offset_y
-            fx, fy = (py, px) if turn else (px, py)
+            if turn:
+                fx, fy = (py, _tw - px) if nuke_layout else (py, px)
+            else:
+                fx, fy = px, py
             if flop:
                 fx = target_w - fx
             if flip:
                 fy = target_h - fy
             xs.append(fx)
             ys.append(fy)
-        support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(p.get("filter", "nearest"), 2)
+        support = _transformbehaviour.support(p.get("filter", "nearest"))
         left, top = math.floor(min(xs)) - support, math.floor(min(ys)) - support
         right, bottom = math.ceil(max(xs)) + support, math.ceil(max(ys)) + support
         return Region(int(left), int(top), int(right - left), int(bottom - top))
@@ -8856,20 +8937,30 @@ class Evaluator:
             dst_box = Region(0, 0, target_w, target_h)
         resize_type, center = p["resize_type"], p["center"]
         flip, flop, turn = p["flip"], p["flop"], p["turn"]
+        nuke_layout = not _transformbehaviour.is_legacy("Reformat", p, "legacy_reformat_layout")
         scale_x, scale_y, offset_x, offset_y, _tw, _th = Evaluator._reformat_place(
-            target_w, target_h, src_display_w, src_display_h, resize_type, center, turn)
+            target_w, target_h, src_display_w, src_display_h, resize_type, center, turn, nuke_layout)
         gx, gy = np.meshgrid(np.arange(dst_box.width, dtype=np.float32) + dst_box.x + 0.5,
                              np.arange(dst_box.height, dtype=np.float32) + dst_box.y + 0.5)
         # Undo flip/flop/turn, in reverse of the order `_reformat_transformed_window` applies them,
         # then undo the placement scale/offset to land on a source sample coordinate.
         y_a = (target_h - gy) if flip else gy
         x_b = (target_w - gx) if flop else gx
-        px, py = (y_a, x_b) if turn else (x_b, y_a)
+        if turn:
+            px, py = (_tw - y_a, x_b) if nuke_layout else (y_a, x_b)
+        else:
+            px, py = x_b, y_a
         sx = (px - offset_x) / scale_x if scale_x else px
         sy = (py - offset_y) / scale_y if scale_y else py
         sx_frac = sx - 0.5 - src_box.x
         sy_frac = sy - 0.5 - src_box.y
-        return Evaluator._resample(src, sx_frac, sy_frac, p["filter"]).astype(np.float32)
+        # Nuke's black outside off carries the picture's outermost pixels over the area it does not cover; clamp keeps the filtered
+        # result inside the range of the input. A node without the knobs (TVIScale, an older document) is black outside, unclamped.
+        result = Evaluator._resample(src, sx_frac, sy_frac, p["filter"],
+                                     clamp=not int(p.get("black_outside", 1))).astype(np.float32)
+        if int(p.get("clamp", 0)):
+            result = _transformbehaviour.value_clamp(result, src)
+        return result
 
     @staticmethod
     def _cornerpin(src, p, src_box=None, dst_box=None):
@@ -8918,13 +9009,17 @@ class Evaluator:
         # Identity shortcut: every supported filter samples the original pixel centers exactly
         # when the geometry is unchanged, so avoid building a resampling grid for default nodes.
         extras = params or {}
+        # Nuke's black outside and clamp (nodebased/transformbehaviour.py): black outside off carries the outermost pixels outwards, and
+        # clamp limits the result to the range of the input. A node without `legacy_transform_edges` reads them the older way.
+        nuke_edges = int(extras.get("legacy_transform_edges", 1)) == 0
+        edge_knobs = (("skew_x", 0.0), ("skew_y", 0.0), ("invert", 0)) if nuke_edges else \
+            (("skew_x", 0.0), ("skew_y", 0.0), ("invert", 0), ("clamp", 0), ("black_outside", 0))
         if (translate_x == 0 and translate_y == 0 and (rotate % 360.0) == 0
                 and scale == 1 and center_x == 0 and center_y == 0
-                and not any(extras.get(name, default) != default for name, default in
-                            (("skew_x", 0.0), ("skew_y", 0.0), ("invert", 0),
-                             ("clamp", 0), ("black_outside", 0)))
+                and not any(extras.get(name, default) != default for name, default in edge_knobs)
                 and extras.get("scale_mode", "uniform") == "uniform"
-                and filter in ("nearest", "bilinear", "cubic") and dst_box == src_box):
+                and (filter in ("nearest", "bilinear", "cubic") or filter in _TRANSFORM_KERNELS or filter == "impulse")
+                and dst_box == src_box):
             return src
         p = dict(params or {}, translate_x=translate_x, translate_y=translate_y,
                  rotate=rotate, scale=scale, center_x=center_x, center_y=center_y)
@@ -8932,15 +9027,16 @@ class Evaluator:
             rotate % 360.0 == 0 and scale == 1.0
             and p.get("scale_mode", "uniform") == "uniform"
             and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0
-            and not p.get("invert", 0) and not p.get("clamp", 0)
-            and not p.get("black_outside", 0)
+            and not p.get("invert", 0)
+            and ((p.get("black_outside", 1) and not p.get("legacy_transform_edges", 1)) if nuke_edges
+                 else (not p.get("clamp", 0) and not p.get("black_outside", 0)))
             and float(translate_x).is_integer() and float(translate_y).is_integer()
         )
         if integer_translation:
             # Integer pixel offsets land exactly on source pixel centres for every filter.
             # Copy the overlapping window directly and leave the uncovered area transparent.
             offset_x = dst_box.x - src_box.x - int(translate_x)
-            offset_y = dst_box.y - src_box.y - int(translate_y)
+            offset_y = dst_box.y - src_box.y - int(_transformbehaviour.screen_matrix_terms(p)[3])
             result = np.zeros((dst_box.height, dst_box.width, 4), dtype=np.float32)
             dx0, dy0 = max(0, -offset_x), max(0, -offset_y)
             sx0, sy0 = max(0, offset_x), max(0, offset_y)
@@ -8955,12 +9051,16 @@ class Evaluator:
                            and p.get("scale_mode", "uniform") == "uniform"
                            and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0
                            and not p.get("invert", 0))
+        # The outside of the picture: carry the edge pixels outwards (what the older clamp did) or, in Nuke's reading, when black outside is off.
+        edge_pixels = (not p.get("black_outside", 1)) if nuke_edges else bool(p.get("clamp", 0))
         if separable_cubic:
             x = np.arange(dst_box.width, dtype=np.float32) + dst_box.x + 0.5
             y = np.arange(dst_box.height, dtype=np.float32) + dst_box.y + 0.5
             sx = x + np.float32(inverse[0, 2]) - 0.5 - src_box.x
             sy = y + np.float32(inverse[1, 2]) - 0.5 - src_box.y
-            result = Evaluator._resample_cubic_separable(src, sx, sy, clamp=bool(p.get("clamp", 0)))
+            result = Evaluator._resample_cubic_separable(src, sx, sy, clamp=edge_pixels)
+            if nuke_edges:
+                return _transformbehaviour.value_clamp(result, src) if p.get("clamp", 0) else result.astype(np.float32, copy=False)
             if p.get("black_outside", 0):
                 outside_x = (sx < -0.5) | (sx > src.shape[1] - 0.5)
                 outside_y = (sy < -0.5) | (sy > src.shape[0] - 0.5)
@@ -8981,6 +9081,9 @@ class Evaluator:
         # Translation-only cubic transforms have separable sample coordinates. Reuse four
         # horizontal and four vertical taps instead of constructing sixteen full-frame gathers.
         # Keep the general path for rotations, scale, skew and perspective-like transforms.
+        if nuke_edges:
+            result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=edge_pixels).astype(np.float32)
+            return _transformbehaviour.value_clamp(result, src) if clamp else result
         result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=clamp).astype(np.float32)
         if p.get("black_outside", 0):
             outside = ((sx_frac < -0.5) | (sx_frac > src.shape[1] - 0.5) |
@@ -9101,7 +9204,10 @@ class Evaluator:
         if clamp:
             sx_frac = np.clip(sx_frac, 0.0, max(0.0, w - 1.0))
             sy_frac = np.clip(sy_frac, 0.0, max(0.0, h - 1.0))
-        if filter == "nearest":
+        if filter in _TRANSFORM_KERNELS:
+            # The guide's other filters (nodebased/transformbehaviour.py); `clamp` here carries the outermost pixels outwards.
+            return _transformbehaviour.resample(src, sx_frac, sy_frac, filter, edge=clamp)
+        if filter in ("nearest", "impulse"):
             xi = np.floor(sx_frac + 0.5).astype(np.int32)
             yi = np.floor(sy_frac + 0.5).astype(np.int32)
             valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)

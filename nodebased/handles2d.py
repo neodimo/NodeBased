@@ -3,6 +3,22 @@
 import math
 
 
+def axes_flipped(params):
+    """Whether the Transform node counts its vertical axis upwards, as Nuke does (a missing flag is an older node)."""
+    return not int(params.get("legacy_transform_axes", 1))
+
+
+def flip_axes(values, flipped):
+    """The handle geometry below draws the picture on screen: y down and a positive rotate clockwise. A node that follows Nuke
+    stores translate Y and rotate with the opposite sign; this flips those two (it is its own inverse). Other keys pass through."""
+    out = dict(values)
+    if flipped:
+        for name in ("translate_y", "rotate"):
+            if name in out:
+                out[name] = -out[name]
+    return out
+
+
 def forward_point(x, y, translate_x, translate_y, rotate, scale, center_x, center_y):
     """Map a data-space point through the Transform node's forward affine map."""
     theta = math.radians(rotate)

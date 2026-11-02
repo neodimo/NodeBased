@@ -2483,8 +2483,8 @@ class Viewer(PanZoomView):
         key = graph.selected_id()
         document = self.window.dispatcher.document
         node = document["nodes"].get(key) if key else None
-        if node is None or node["type"] != "Transform":
-            return None
+        if node is None or node["type"] != "Transform" or isinstance(node["params"].get("scale"), (list, tuple)):
+            return None      # a split scale has no single handle
         view_key = document.get("view")
         if view_key is None:
             return None
@@ -2704,18 +2704,23 @@ class Viewer(PanZoomView):
         origin_y = rect.top() if rect is not None else 0.0
         return scene_pos.x() - origin_x, scene_pos.y() - origin_y
 
-    def _transform_values(self, drag=None):
-        """Return committed or live values for the selected Transform overlay."""
+    def _transform_values(self, drag=None, screen=False):
+        """Return committed or live values for the selected Transform overlay: in the node's own convention, or with `screen` in
+        the handles' (y down, positive rotate clockwise; they differ when the node counts y upwards like Nuke)."""
         if drag is None:
             drag = self.transform_drag
         context = self._transform_context()
         if context is None:
             return None
         _, node = context
-        values = dict(node["params"])
+        flipped = handles2d.axes_flipped(node["params"])
+        values = handles2d.flip_axes(node["params"], flipped)
         if drag is None:
-            return values
-        original = drag["original"]
+            return values if screen else handles2d.flip_axes(values, flipped)
+        values = self._transform_drag_values(values, handles2d.flip_axes(drag["original"], flipped), drag)
+        return values if screen else handles2d.flip_axes(values, flipped)
+
+    def _transform_drag_values(self, values, original, drag):
         start = self._transform_data_point(drag["start"])
         current = self._transform_data_point(drag["scene"])
         if drag["kind"] == "translate":
@@ -4376,7 +4381,7 @@ class Viewer(PanZoomView):
         transform_context = self._transform_context()
         if transform_context is not None:
             _, node = transform_context
-            values = self._transform_values()
+            values = self._transform_values(screen=True)
             if values is not None:
                 w, h = self.format_rect.width(), self.format_rect.height()
                 corners = handles2d.box_corners(w, h, values["translate_x"], values["translate_y"],
@@ -4701,7 +4706,7 @@ class Viewer(PanZoomView):
             context = self._transform_context()
             if context is not None:
                 key, node = context
-                p = node["params"]
+                p = handles2d.flip_axes(node["params"], handles2d.axes_flipped(node["params"]))   # the handles draw y down
                 w, h = self.format_rect.width(), self.format_rect.height()
                 corners = handles2d.box_corners(w, h, p["translate_x"], p["translate_y"], p["rotate"],
                                                 p["scale"], p["center_x"], p["center_y"])
@@ -4728,7 +4733,7 @@ class Viewer(PanZoomView):
                                "rotate": ("rotate",), "scale": ("scale",)}[kind]
                     self.transform_drag = {"kind": kind, "key": key, "start": scene_pos, "scene": scene_pos,
                                            "moved": False, "pivot": pivot,
-                                           "original": {param: p[param] for param in touched}}
+                                           "original": {param: node["params"][param] for param in touched}}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     return True
         if button == Qt.MouseButton.LeftButton:
@@ -14796,8 +14801,11 @@ class Window(QMainWindow):
         ident = uuid.uuid4().hex[:12]
         params = {name: SPECS["Transform"]["params"][name] for name in
                   ("translate_x", "translate_y", "rotate", "scale", "center_x", "center_y", "filter", "mix")}
+        # The tracker solves with y down and a positive rotate clockwise; a new Transform counts y upwards and turns counter-clockwise
+        # (like Nuke), so those two curves change sign to give the same picture.
+        sign = {"translate_y": -1.0, "rotate": -1.0}
         curves = {field: {"interpolation": "linear", "keys": [
-                    {"frame": frame, "value": float(solved[field])}
+                    {"frame": frame, "value": sign.get(field, 1.0) * float(solved[field])}
                     for frame, solved in samples]}
                   for field in tracker_model.SOLVED_FIELDS}
         for field, curve in curves.items():

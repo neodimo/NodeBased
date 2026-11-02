@@ -376,6 +376,11 @@ def _crop_rule(params, region, arity):
     return [region.intersect(rect)] + [region] * (arity - 1)
 
 
+# Pixels each way a resampling filter reaches (mirrors transformbehaviour.SUPPORT; this module carries no NumPy).
+_FILTER_SUPPORT = {"nearest": 1, "impulse": 1, "bilinear": 1, "cubic": 2, "keys": 2, "simon": 2, "rifman": 2, "mitchell": 2,
+                   "parzen": 2, "lanczos4": 2, "lanczos6": 3, "sinc4": 2}
+
+
 def _transform_rule(params, region, arity):
     """Inverse-map the output rectangle's corners and take the bounding box.
 
@@ -388,7 +393,8 @@ def _transform_rule(params, region, arity):
         return [region] + [region] * (arity - 1)
     theta = math.radians(float(params.get("rotate", 0.0)))
     cos_t, sin_t = math.cos(theta), math.sin(theta)
-    scale = float(params.get("scale", 1.0))
+    scale = params.get("scale", 1.0)
+    scale = float(min(abs(float(v)) for v in scale)) if isinstance(scale, (list, tuple)) else float(scale)   # split: the smaller factor reaches furthest
     inv_scale = 1.0 / scale if scale != 0 else 1.0
     cx, cy = float(params.get("center_x", 0.0)), float(params.get("center_y", 0.0))
     tx, ty = float(params.get("translate_x", 0.0)), float(params.get("translate_y", 0.0))
@@ -402,7 +408,7 @@ def _transform_rule(params, region, arity):
 
     # Filter support in source pixels. Nearest samples one pixel; bilinear reaches its two
     # neighbours; the cubic kernel reaches two on each side.
-    support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(params.get("filter", "nearest"), 2)
+    support = _FILTER_SUPPORT.get(params.get("filter", "nearest"), 2)
     left, top = math.floor(min(xs)) - support, math.floor(min(ys)) - support
     right, bottom = math.ceil(max(xs)) + support, math.ceil(max(ys)) + support
     image = Region(int(left), int(top), int(right - left), int(bottom - top))
@@ -458,7 +464,7 @@ def _cornerpin_rule(params, region, arity):
         denom = denom if abs(denom) > 1e-9 else 1e-9
         xs.append((inverse[0][0] * gx + inverse[0][1] * gy + inverse[0][2]) / denom)
         ys.append((inverse[1][0] * gx + inverse[1][1] * gy + inverse[1][2]) / denom)
-    support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(params.get("filter", "nearest"), 2)
+    support = _FILTER_SUPPORT.get(params.get("filter", "nearest"), 2)
     left, top = math.floor(min(xs)) - support, math.floor(min(ys)) - support
     right, bottom = math.ceil(max(xs)) + support, math.ceil(max(ys)) + support
     image = Region(int(left), int(top), int(right - left), int(bottom - top))

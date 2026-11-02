@@ -158,12 +158,18 @@ def _shufflecopy_out2(raster):
     return {"out2": layer.pixels} if layer is not None else {}
 
 
+from nodebased import transformbehaviour as _transformbehaviour
+OLDER_TRANSFORM = {**_transformbehaviour.LEGACY["Transform"], **_transformbehaviour.UPGRADE_EXTRA["Transform"]}
+OLDER_REFORMAT = {**_transformbehaviour.LEGACY["Reformat"], **_transformbehaviour.UPGRADE_EXTRA["Reformat"]}
+
+
 def _transform(filter_name):
     def build(tmpdir):
         g = Graph()
         _checker(g, "plate", size=4)
         g.add("node", "Transform",
-              dict(translate_x=2.0, translate_y=-1.0, rotate=12.0, scale=1.15, filter=filter_name),
+              dict(translate_x=2.0, translate_y=-1.0, rotate=12.0, scale=1.15, filter=filter_name,
+                   **OLDER_TRANSFORM),       # the references were drawn with the older directions and edges
               image="plate")
         return g.doc, "node"
     return build
@@ -183,7 +189,7 @@ def _reformat(width, height):
         g = Graph()
         _checker(g, "plate", size=4)
         g.add("node", "Reformat",
-              dict(reformat_type="to_box", width=width, height=height, resize_type="fit"),
+              dict(reformat_type="to_box", width=width, height=height, resize_type="fit", filter="bilinear", **OLDER_REFORMAT),
               image="plate")
         return g.doc, "node"
     return build

@@ -3010,9 +3010,9 @@
     {"nodebased": ["skew_x"], "nuke": ["skewX"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `skewX`"},
     {"nodebased": ["skew_y"], "nuke": ["skewY"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `skewY`"},
     {"nodebased": ["invert"], "nuke": ["invert_matrix"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `invert_matrix`"},
-    {"nodebased": ["scale_x"], "nuke": ["scale"], "kind": "renamed", "reason": "NodeBased's per-axis scale; Nuke's scale takes one or two values"},
-    {"nodebased": ["scale_y"], "nuke": ["scale"], "kind": "renamed", "reason": "NodeBased's per-axis scale; Nuke's scale takes one or two values"},
-    {"nodebased": ["scale_mode"], "nuke": ["scale"], "kind": "renamed", "reason": "NodeBased's uniform/per-axis switch; Nuke's scale takes one or two values"},
+    {"nodebased": ["scale_x"], "kind": "extra", "reason": "NodeBased-only: the older per-axis scale, kept so older documents load (Nuke's scale takes both values through its split button, which `scale` now has)"},
+    {"nodebased": ["scale_y"], "kind": "extra", "reason": "NodeBased-only: the older per-axis scale, kept so older documents load (Nuke's scale takes both values through its split button, which `scale` now has)"},
+    {"nodebased": ["scale_mode"], "kind": "extra", "reason": "NodeBased-only: the older per-axis scale, kept so older documents load (Nuke's scale takes both values through its split button, which `scale` now has)"},
     {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
     {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
     {"nodebased": ["rotate"], "nuke": ["rotate"], "kind": "same"},
@@ -3024,7 +3024,10 @@
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
     {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["legacy_transform_edges"], "kind": "extra", "reason": "NodeBased-only: graphs saved before black outside and clamp followed the guide keep the older reading (black outside painted the outside opaque black, clamp extended the edge); lane 9 step B"},
+    {"nodebased": ["legacy_shutter_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the shutter followed the guide keep start and end the other way round; lane 9 step B"},
+    {"nodebased": ["legacy_transform_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the directions followed Nuke keep a positive translate Y moving the picture down and a positive rotate turning it clockwise; lane 9 step B"}
    ],
    "skip_default": ["translate", "center"]
   },
@@ -3139,7 +3142,7 @@
    "knobs": [
     {"nodebased": ["width", "height"], "nuke": ["box_width", "box_height"], "kind": "components", "reason": "to-box size"},
     {"nodebased": ["reformat_type"], "nuke": ["type"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'type', scripting name `type`"},
-    {"nodebased": ["pixel_aspect"], "nuke": ["box_pixel_aspect"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `box_pixel_aspect`"},
+    {"nodebased": ["pixel_aspect"], "kind": "extra", "reason": "NodeBased-only: NodeBased works in square pixels, so the value is carried with the format and changes no pixels (unpaired in lane 9 step B because a paired knob has to act)"},
     {"nodebased": ["resize_type"], "nuke": ["resize"], "kind": "renamed", "reason": "resize type"},
     {"nodebased": ["preserve_bbox"], "nuke": ["pbb"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'preserve bounding box', scripting name `pbb`"},
     {"nodebased": ["format"], "nuke": ["format"], "kind": "same"},
@@ -3149,7 +3152,11 @@
     {"nodebased": ["flop"], "nuke": ["flop"], "kind": "same"},
     {"nodebased": ["turn"], "nuke": ["turn"], "kind": "same"},
     {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["box_fixed"], "nuke": ["box_fixed"], "kind": "same"},
+    {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"},
+    {"nodebased": ["black_outside"], "nuke": ["black_outside"], "kind": "same"},
+    {"nodebased": ["legacy_reformat_layout"], "kind": "extra", "reason": "NodeBased-only: graphs saved before center off lined up the lower left corners and turn rotated counter-clockwise keep the older layout (top left corners lined up, turn as a transpose); lane 9 step B"}
    ],
    "skip_default": ["box_width", "box_height"]
   },
@@ -3185,7 +3192,9 @@
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: how many sub-frames the shutter blur averages (Nuke's motionblur knob is that count itself)"},
     {"nodebased": [], "nuke": ["copy_from_to"], "kind": "panel", "reason": "the Copy 'from' button of the CornerPin panel (window.cornerpin_button, nodebased/cornerpinknobs.py): the From points into the To points"},
     {"nodebased": [], "nuke": ["set_to_input"], "kind": "panel", "reason": "the Set to input button of the CornerPin panel: the From points on the corners of the input's format"},
-    {"nodebased": [], "nuke": ["copy_from_to#2"], "kind": "panel", "reason": "the Copy 'to' button of the CornerPin panel: the To points into the From points"}
+    {"nodebased": [], "nuke": ["copy_from_to#2"], "kind": "panel", "reason": "the Copy 'to' button of the CornerPin panel: the To points into the From points"},
+    {"nodebased": ["legacy_shutter_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the shutter followed the guide keep start and end the other way round; lane 9 step B"},
+    {"nodebased": ["legacy_transform_edges"], "kind": "extra", "reason": "NodeBased-only: graphs saved before black outside off filled the whole format keep the moved picture's own window; lane 9 step B"}
    ],
    "skip_default": ["to1", "to2", "to3", "to4", "from1", "from2", "from3", "from4"],
    "value_map": {"invert": {"forward": false, "inverse": true}}
@@ -3199,7 +3208,8 @@
    "knobs": [
     {"nodebased": ["flip_x"], "nuke": ["Horizontal"], "kind": "renamed", "reason": "mirror left to right"},
     {"nodebased": ["flip_y"], "nuke": ["Vertical"], "kind": "renamed", "reason": "mirror top to bottom"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["legacy_mirror_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Mirror flipped about the centre of the format keep the older flip inside the picture's own window; lane 9 step B"}
    ]
   },
   "Stabilize": {
@@ -3228,7 +3238,8 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
    "knobs": [
-    {"nodebased": ["translate_x", "translate_y"], "nuke": ["translate"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"}
+    {"nodebased": ["translate_x", "translate_y"], "nuke": ["translate"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["legacy_position"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Position followed the guide keep a positive Y moving the picture down and no fill between the original and the moved picture; lane 9 step B"}
    ]
   },
   "AdjustBBox": {
@@ -3238,7 +3249,8 @@
    ],
    "knobs": [
     {"nodebased": ["numpixels"], "nuke": ["numpixels"], "kind": "same"},
-    {"nodebased": ["clip_to_format"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["clip_to_format"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["legacy_adjustbbox"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the area a growing box adds repeated the outermost pixels keep it empty; lane 9 step B"}
    ]
   },
   "BlackOutside": {
@@ -3330,7 +3342,8 @@
     {"nodebased": ["mirror_y"], "nuke": ["mirrorRows"], "kind": "renamed", "reason": "mirror alternate rows"},
     {"nodebased": ["rows"], "nuke": ["rows"], "kind": "same"},
     {"nodebased": ["columns"], "nuke": ["columns"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"}
    ]
   },
   "VectorCornerPin": {

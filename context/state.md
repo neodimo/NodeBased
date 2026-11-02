@@ -1,3 +1,9 @@
+## 2026-11-02 - Lane 9 (2D behaviour), step B of 3: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox, BlackOutside
+
+Branch `openclaw/nb-2d-behaviour`, merged with main at `59b98b2a`. Nine nodes compute what Nuke computes, shown by 61 cases and `tests/test_2d_behaviour_transform.py`; each changed
+reading sits behind a `legacy_*` flag an older saved node is given on load (`nodebased/transformbehaviour.py`, no schema bump). The viewer Transform handle, the tracker's Transform export and
+the 2D device path follow the new directions and edges. Not verified: any real Nuke render; the 2D device tests pass on the RTX 3080 Ti, the AMD integrated adapter and llvmpipe.
+
 ## 2026-11-02 - Lane 2 (2D behaviour), step C of 3: the keyers and channel nodes compute what Nuke computes
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:05 AM on 2026-11-02 PDT)

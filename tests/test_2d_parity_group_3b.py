@@ -349,7 +349,7 @@ class WindowNodeTests(unittest.TestCase):
         g.add("dotplate", "Rectangle", dict(width=48, height=32, box_x=10, box_y=10, box_width=1, box_height=1,
                                             softness=0.0, alpha=1.0))
         base = raster_of(g.doc, "dotplate")
-        g.add("node", "Position", dict(translate_x=3, translate_y=-2), image="dotplate")
+        g.add("node", "Position", dict(translate_x=3, translate_y=-2, legacy_position=1), image="dotplate")
         moved = raster_of(g.doc, "node")
         self.assertEqual((moved.data.x, moved.data.y), (base.data.x + 3, base.data.y - 2))
         self.assertEqual((moved.data.width, moved.data.height), (base.data.width, base.data.height))
@@ -366,7 +366,7 @@ class WindowNodeTests(unittest.TestCase):
     def test_position_pixel_at_ten_ten_lands_at_thirteen_eight(self):
         g = Graph()
         self._plate(g)
-        g.add("node", "Position", dict(translate_x=3, translate_y=-2), image="plate")
+        g.add("node", "Position", dict(translate_x=3, translate_y=-2, legacy_position=1), image="plate")
         src, out = evaluator_pixels(g.doc, "plate"), evaluator_pixels(g.doc, "node")
         np.testing.assert_array_equal(out[8, 13], src[10, 10])
         np.testing.assert_array_equal(out[8:, 13:][:20, :30], src[10:, 10:][:20, :30])
@@ -374,9 +374,9 @@ class WindowNodeTests(unittest.TestCase):
     def test_position_zero_is_identity_and_reveals_no_new_pixels_outside_the_frame(self):
         g = Graph()
         self._plate(g)
-        g.add("node", "Position", image="plate")
+        g.add("node", "Position", dict(legacy_position=1), image="plate")
         np.testing.assert_array_equal(evaluator_pixels(g.doc, "node"), evaluator_pixels(g.doc, "plate"))
-        g.add("far", "Position", dict(translate_x=1000), image="plate")
+        g.add("far", "Position", dict(translate_x=1000, legacy_position=1), image="plate")
         np.testing.assert_array_equal(evaluator_pixels(g.doc, "far"), np.zeros((32, 48, 4), np.float32))
 
     def test_position_only_accepts_integers(self):
@@ -412,7 +412,7 @@ class WindowNodeTests(unittest.TestCase):
     def test_adjust_bbox_grows_by_the_amount_and_leaves_pixels_alone(self):
         g = Graph()
         self._plate(g)
-        g.add("node", "AdjustBBox", dict(numpixels=5), image="plate")
+        g.add("node", "AdjustBBox", dict(numpixels=5, legacy_adjustbbox=1), image="plate")
         before, after = raster_of(g.doc, "plate"), raster_of(g.doc, "node")
         self.assertEqual((after.data.x, after.data.y, after.data.width, after.data.height),
                          (-5, -5, before.data.width + 10, before.data.height + 10))
@@ -483,7 +483,7 @@ class WindowNodeTests(unittest.TestCase):
         for kind in ("Position", "BlackOutside", "AdjustBBox"):
             self.assertIn(kind, SPECS)
         self.assertIn("numpixels", LIMITS)
-        self.assertEqual(SPECS["Position"]["params"], {"translate_x": 0, "translate_y": 0})
+        self.assertEqual(SPECS["Position"]["params"], {"translate_x": 0, "translate_y": 0, "legacy_position": 0})   # a new node reads Nuke's way
 
 
 if __name__ == "__main__":

@@ -38,6 +38,9 @@ NOT_PIXEL = {
     "Sharpen": {"crop": "crop to format acts on the bounding box only"},
     "Soften": {"crop": "crop to format acts on the bounding box only"},
     "Glow": {"crop": "crop to format acts on the bounding box only"},
+    "Transform": {"skew_order": "orders the two skews, so it acts only when skew X and skew Y are both set; the probe moves one at a time (tests/test_2d_behaviour_transform.py)"},
+    "Crop": {"reformat": "makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)",
+             "crop": "black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)"},
 }
 # Nuke nodes whose knobs only act on data the fixture does not hold, so the probe is skipped for the whole node.
 NOT_PROBED = {
@@ -195,12 +198,14 @@ def _norm_label(text):
 
 
 def _longest_increasing(seq):
+    """Length of the longest run that never goes back. Knobs that share a row (Reformat's box width and height are one w, h pair)
+    sit at the same position, and sharing a row is in order."""
     tails = []
     for x in seq:
         lo, hi = 0, len(tails)
         while lo < hi:
             mid = (lo + hi) // 2
-            if tails[mid] < x:
+            if tails[mid] <= x:
                 lo = mid + 1
             else:
                 hi = mid

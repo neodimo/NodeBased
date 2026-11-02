@@ -288,7 +288,8 @@ def planar_corner(window):
 
 
 def transform_geometry(window):
-    p = window.dispatcher.document["nodes"]["x"]["params"]
+    raw = window.dispatcher.document["nodes"]["x"]["params"]
+    p = handles2d.flip_axes(raw, handles2d.axes_flipped(raw))      # the handles draw y down; a new node counts y upwards
     corners = handles2d.box_corners(WIDTH, HEIGHT, p["translate_x"], p["translate_y"], p["rotate"],
                                     p["scale"], p["center_x"], p["center_y"])
     pivot = handles2d.pivot_point(p["translate_x"], p["translate_y"], p["center_x"], p["center_y"])

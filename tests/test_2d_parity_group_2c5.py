@@ -69,7 +69,7 @@ class ReformatWorkedExampleTests(unittest.TestCase):
         g = Graph()
         g.add("plate", "Checker", dict(width=960, height=540, size=64))
         g.add("node", "Reformat", dict(format="Custom", width=1200, height=800,
-                                       resize_type="none", center=0), image="plate")
+                                       resize_type="none", center=0, legacy_reformat_layout=1), image="plate")   # the older layout: top left corners line up
         out = evaluator_pixels(g.doc, "node")
         plate = evaluator_pixels(g.doc, "plate")
         self.assertEqual(out.shape[:2], (800, 1200))

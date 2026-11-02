@@ -235,6 +235,7 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(detail["layout_labels"], (2, 3))           # "gamma" reads as the scripting name; Grade's "Lift" reads as neither
         self.assertAlmostEqual(frac, 0.5 * 2 / 3 + 0.5 * 2 / 3)
         self.assertEqual(req._longest_increasing([3, 1, 2, 5, 4]), 3)
+        self.assertEqual(req._longest_increasing([1, 2, 2, 3]), 4)      # two knobs on one row are in order
 
     def test_splits_count_splittable_params_and_half_for_per_channel_params(self):
         import nuke_fidelity_requirements as req

@@ -279,6 +279,8 @@ def upgrade_nodes(nodes):
         from . import behaviour2d
         added.update(behaviour2d.upgrade_params(node.get("type")))      # Nuke's behaviour for the colour nodes (lane 2, November 2026)
         added.update(step_l9a_params(node.get("type")))
+        from . import transformbehaviour
+        added.update(transformbehaviour.upgrade_params(node.get("type")))      # the Transform group (lane 9 step B)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

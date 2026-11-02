@@ -3,6 +3,7 @@
 Numerical coverage for every new op/filter, including HDR (>1) and negative values,
 and the v0.3.0 -> v3 document upgrade path.
 """
+from nodebased import transformbehaviour as _transformbehaviour
 import copy
 import unittest
 import numpy as np
@@ -438,7 +439,7 @@ class DocumentUpgradeTests(unittest.TestCase):
             {"op": "create", "id": "shifted", "type": "Constant", "name": "Plate",
              "params": {"width": 4, "height": 4, "red": 0.8, "green": 0.6, "blue": 0.4, "alpha": 1.0}},
             {"op": "create", "id": "xform", "type": "Transform",
-             "params": {"translate_x": 1.0, "translate_y": -1.0}},
+             "params": {"translate_x": 1.0, "translate_y": -1.0, **_transformbehaviour.LEGACY["Transform"], "black_outside": 0}},   # an older node
             {"op": "connect", "id": "xform", "input": "image", "source": "shifted"},
             {"op": "create", "id": "shifted_view", "type": "Viewer"},
             {"op": "connect", "id": "shifted_view", "input": "image", "source": "xform"},
@@ -477,9 +478,10 @@ class SpecAndChoicesTests(unittest.TestCase):
                          {"translate_x", "translate_y", "rotate", "scale", "scale_mode",
                           "scale_x", "scale_y", "skew_x", "skew_y", "skew_order", "invert",
                           "clamp", "black_outside", "motionblur", "shutter", "shutter_offset",
-                          "custom_offset", "samples", "center_x", "center_y", "filter", "mix"})
+                          "custom_offset", "samples", "center_x", "center_y", "filter", "mix",
+                          "legacy_transform_edges", "legacy_shutter_window", "legacy_transform_axes"})
         self.assertEqual(params["filter"], "cubic")
-        self.assertEqual(set(CHOICES["filter"]), {"nearest", "bilinear", "cubic"})
+        self.assertTrue({"nearest", "bilinear", "cubic"} <= set(CHOICES["filter"]))   # and the guide's other filters (tests/test_2d_behaviour_transform.py)
         for name in ("translate_x", "translate_y", "rotate", "scale", "scale_x", "scale_y",
                      "skew_x", "skew_y", "shutter", "custom_offset", "samples", "center_x",
                      "center_y", "mix", "invert", "clamp", "black_outside", "motionblur"):

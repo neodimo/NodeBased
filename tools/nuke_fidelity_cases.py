@@ -352,7 +352,12 @@ for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter"):
 
 
 def run_nodebased(case, fx=None):
-    """Run a case on NodeBased's evaluator kernel; returns the output array, or None when NodeBased cannot express the case."""
+    """Run a case on NodeBased's evaluator kernel; returns the output array, or None when NodeBased cannot express the case.
+
+    A node that works on the data window (Reformat, Position, Tile, AdjustBBox...) has no whole-array kernel: it is run through the
+    windowed one, on a picture whose data window is its display window, or, with `_data_window` (x, y, w, h) in the case's params, on a
+    picture that covers only that part of the format. `_windowed` in the params asks for the windowed kernel of a node that has both.
+    The array returned is what the viewer shows of the result: the format's rectangle, zero where the data window does not reach."""
     if case.nb_params is None:
         return None
     from nodebased import core
@@ -361,7 +366,36 @@ def run_nodebased(case, fx=None):
     spec = core.SPECS[case.nb_kind]
     slots = [fx[name] for name in case.nb_inputs]
     slots += [None] * (len(spec["inputs"]) + len(spec.get("optional_inputs", [])) - len(slots))
-    return np.asarray(Evaluator._kernel(case.nb_kind, dict(spec["params"], **case.nb_params), slots), dtype=np.float64)
+    knobs = dict(case.nb_params)
+    windowed = knobs.pop("_windowed", False)
+    data_window = knobs.pop("_data_window", None)
+    params = dict(spec["params"], **knobs)
+    if not windowed and data_window is None:
+        try:
+            return np.asarray(Evaluator._kernel(case.nb_kind, params, slots), dtype=np.float64)
+        except ValueError as exc:
+            if not str(exc).startswith("No kernel for"):
+                raise
+    from nodebased.raster import Raster
+    from nodebased.tiers import Region
+    rasters = []
+    for slot in slots:
+        if slot is None:
+            continue
+        slot = np.asarray(slot, np.float32)
+        if data_window is None:
+            rasters.append(Raster.of(slot))
+        else:
+            x, y, w, h = data_window
+            rasters.append(Raster(np.ascontiguousarray(slot[y:y + h, x:x + w]), Region(x, y, w, h), Region(0, 0, slot.shape[1], slot.shape[0])))
+    made = Evaluator._windowed_kernel(case.nb_kind, params, rasters)
+    display, data = made.display, made.data
+    canvas = np.zeros((display.height, display.width, made.pixels.shape[2]), np.float64)
+    shown = display.intersect(data)
+    if not shown.is_empty:
+        canvas[shown.y - display.y:shown.bottom - display.y, shown.x - display.x:shown.right - display.x] = \
+            made.pixels[shown.y - data.y:shown.bottom - data.y, shown.x - data.x:shown.right - data.x]
+    return canvas
 
 
 def cases_for(nuke_key):

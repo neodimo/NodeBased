@@ -270,7 +270,7 @@ def _check_chrome(kind, p, images):
         raise Unsupported(f"{kind} uses the shared channel and mask strip")
 
 
-_FILTERS = {"nearest": 0, "bilinear": 1, "cubic": 2}
+_FILTERS = {"nearest": 0, "impulse": 0, "bilinear": 1, "cubic": 2}
 
 
 def _split(values):
@@ -334,20 +334,29 @@ def map_transform(p, src: Region, dst: Region):
         raise Unsupported(f"Transform filter {filt!r}")
     translate_x, translate_y = p["translate_x"], p["translate_y"]
     rotate, scale = p["rotate"], p["scale"]
+    if isinstance(scale, (list, tuple)):
+        raise Unsupported("Transform split scale")
     center_x, center_y = p["center_x"], p["center_y"]
     mix = float(p.get("mix", 1.0))
     clamp, black = bool(p.get("clamp", 0)), bool(p.get("black_outside", 0))
+    if int(p.get("legacy_transform_edges", 1)) == 0:
+        # Nuke's reading (nodebased/transformbehaviour.py): black outside off carries the edge pixels outwards (what the device calls
+        # clamp), on is plain zero fill; the value clamp is not on the device.
+        if clamp:
+            raise Unsupported("Transform clamp")
+        clamp, black = not black, False
     uniform = p.get("scale_mode", "uniform") == "uniform"
     plain = (uniform and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0 and not p.get("invert", 0))
     # Identity: the CPU returns the source itself (only when the output window is the source's).
     if (translate_x == 0 and translate_y == 0 and (rotate % 360.0) == 0 and scale == 1
             and center_x == 0 and center_y == 0 and plain and not clamp and not black and dst == src):
         return TransformPlan("copy", (0, 0), _FILTERS[filt], mix=mix)
-    if (rotate % 360.0 == 0 and scale == 1.0 and plain and not clamp and not black
-            and float(translate_x).is_integer() and float(translate_y).is_integer()):
-        return TransformPlan("copy", (int(translate_x), int(translate_y)), _FILTERS[filt], mix=mix)
     merged = dict(p, translate_x=translate_x, translate_y=translate_y, rotate=rotate, scale=scale,
                   center_x=center_x, center_y=center_y)
+    if (rotate % 360.0 == 0 and scale == 1.0 and plain and not clamp and not black
+            and float(translate_x).is_integer() and float(translate_y).is_integer()):
+        from . import transformbehaviour
+        return TransformPlan("copy", (int(translate_x), int(transformbehaviour.screen_matrix_terms(merged)[3])), _FILTERS[filt], mix=mix)
     inverse = np.linalg.inv(Evaluator._transform_forward_matrix(merged))
     separable_cubic = filt == "cubic" and rotate % 360.0 == 0 and scale == 1.0 and plain
     w, h = dst.width, dst.height

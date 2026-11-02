@@ -83,6 +83,9 @@ SPLIT_CHANNELS = {"rgba": ("r", "g", "b", "a"), "wh": ("w", "h")}
 SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: split set}
     # Nuke's AColor knobs on the colour nodes (docs/PARITY_2D.md). A kernel reads one through split_values, and each is laid out
     # as a KnobGroup("split", ...) in nodebased/knobs.py; tests/test_split_knobs.py checks the two lists agree.
+    "AdjustBBox": {"numpixels": "wh"},      # Nuke's Add Pixels splits into a width and a height
+    "Transform": {"scale": "wh"},           # Nuke's scale: "one or two values"; the older scale mode and scale X, Y stay for older documents
+    "Reformat": {"scale": "wh"},            # Nuke's scale: "To scale each direction separately ... click the 2 button"
     "Grade": {name: "rgba" for name in ("blackpoint", "whitepoint", "black", "white", "multiply", "offset", "gamma")},
     "ColorCorrect": {f"{prefix}{name}": "rgba" for prefix in ("", "shadows_", "midtones_", "highlights_")
                      for name in ("saturation", "contrast", "gamma", "gain", "offset")},
@@ -210,6 +213,7 @@ from . import textknobs as _textknobs
 from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import filterbehaviour as _filterbehaviour
+from . import transformbehaviour as _transformbehaviour
 from . import timeknobs as _timeknobs
 from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
@@ -349,7 +353,7 @@ SPECS = {
     "OCIOLookTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0}},
     "OCIOLogConvert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"ocio_log_operation": "log to lin", "channels": "rgb", "config": "", "mix": 1.0}},
     "Colorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"primaries_in": "Rec.709", "primaries_out": "Rec.709", "transfer_in": "Linear", "transfer_out": "Linear", "whitepoint_in": "D65", "whitepoint_out": "D65", "mix": 1.0, **_behaviour2d.new_params("Colorspace")}},
-    "Tile": {"inputs": ["image"], "params": {"rows": 2, "columns": 2, "mirror_x": 0, "mirror_y": 0, "mix": 1.0}},
+    "Tile": {"inputs": ["image"], "params": {"rows": 1, "columns": 1, "mirror_x": 0, "mirror_y": 0, "filter": "cubic", "mix": 1.0}},
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0, **_behaviour2d.new_params("HistEQ")}},
     "MinColor": {"inputs": ["image"], "params": {"channels": "rgb", "modify": "all", "target": 0.095, "adjdir": "Up", "pixeldelta": 0.0, "frame_start": 1, "frame_end": 100, "mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
@@ -481,24 +485,24 @@ SPECS = {
     "CopyBBox": {"inputs": ["A", "B"], "params": {}},
     # Position: Nuke's integer-pixel move, `translate` as two ints. Pixels and data window move
     # together, nothing is resampled.
-    "Position": {"inputs": ["image"], "params": {"translate_x": 0, "translate_y": 0}},
+    "Position": {"inputs": ["image"], "params": {"translate_x": 0, "translate_y": 0, **_transformbehaviour.new_params("Position")}},
     # BlackOutside: black outside the data window, and the data window grows one pixel on each side
     # so a later filter has a black border to read instead of smearing the edge pixel.
     "BlackOutside": {"inputs": ["image"], "params": {}},
     # AdjustBBox: grow (or, negative, shrink) the data window by `numpixels` on every side without
     # moving pixels; `clip_to_format` then keeps it inside the display window.
-    "AdjustBBox": {"inputs": ["image"], "params": {"numpixels": 0, "clip_to_format": 0}},
+    "AdjustBBox": {"inputs": ["image"], "params": {"numpixels": 25, "clip_to_format": 0, **_transformbehaviour.new_params("AdjustBBox")}},
     "Mirror": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0}},
+               "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0, **_transformbehaviour.new_params("Mirror")}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                                                  "scale": 1.0, "scale_mode": "uniform", "scale_x": 1.0, "scale_y": 1.0,
                                                  "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "invert": 0,
-                                                 "clamp": 0, "black_outside": 0, "motionblur": 0, "shutter": 1.0,
-                                                 "shutter_offset": "centred", "custom_offset": 0.0,
+                                                 "clamp": 0, "black_outside": 1, "motionblur": 0, "shutter": 0.5,
+                                                 "shutter_offset": "start", "custom_offset": 0.0,
                                                  "samples": 4, "center_x": 0.0, "center_y": 0.0,
-                                                 "filter": "cubic", "mix": 1.0}},
+                                                 "filter": "cubic", "mix": 1.0, **_transformbehaviour.new_params("Transform")}},
     # Crop's Nuke knobs (fidelity step C): crop_softness (the guide's `softness`; pixels, and apart from the 0..1 `softness` of the
-    # shapes), reformat, intersect (on here, which is what Crop always did; Nuke's default is off) and crop ("black outside").
+    # shapes), reformat, intersect (on here, which is what Crop always did; Nuke's default is off. Lane 9 step B left the default alone: three step C tests pin it) and crop ("black outside").
     "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0,
                                                                           "crop_softness": 0.0, "reformat": 0, "intersect": 1, "crop": 1}},
     # Reformat is the lane's step 2c5 "real format model" (docs/PARITY_2D.md): unlike Transform/
@@ -518,7 +522,7 @@ SPECS = {
                  "params": {"reformat_type": "to_format", "format": "HD_1080",
                            "width": 1920, "height": 1080, "pixel_aspect": 1.0, "scale": 1.0,
                            "resize_type": "fit", "center": 1, "flip": 0, "flop": 0, "turn": 0,
-                           "filter": "bilinear", "preserve_bbox": 0, "mix": 1.0}},
+                           "filter": "cubic", "preserve_bbox": 0, "mix": 1.0, **_transformbehaviour.new_params("Reformat")}},
     # CornerPin2D: a projective (four-point) warp. Unlike Reformat it does not change the format --
     # like Transform/Tracker it only moves the data window, sharing their `_filter_window`/
     # `_filtered_pixels` dispatch and region-rule shape (`tiers._cornerpin_rule`). Default from/to
@@ -532,7 +536,7 @@ SPECS = {
                             "to1_x": 0.0, "to1_y": 0.0, "to2_x": 960.0, "to2_y": 0.0,
                             "to3_x": 0.0, "to3_y": 540.0, "to4_x": 960.0, "to4_y": 540.0,
                             "direction": "forward", "filter": "cubic", "mix": 1.0,
-                            **_cornerpinknobs.new_params("CornerPin")}},
+                            **_cornerpinknobs.new_params("CornerPin"), **_transformbehaviour.new_params("CornerPin")}},
     # Undistort / Redistort (Rendering 13 step L1): Nuke's LensDistortion round trip. The optional camera input
     # supplies the lens; unwired, `lens_preset` picks a named lens ("custom" reads the node's own knobs).
     # Undistort grows the data window to hold the straightened plate; Redistort returns to the format.
@@ -1639,7 +1643,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "filter_size": (-500.0, 500.0), "threshold": (0.0, 100.0),
-          "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1),
+          "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
@@ -2013,7 +2017,7 @@ MERGE_OPERATIONS = ("over", "under", "plus", "minus", "multiply", "screen", "max
                     "average", "from", "hypot", "matte", "disjoint-over", "conjoint-over", "copy",
                     "exclusion", "geometric", "overlay", "hard-light", "soft-light", "color-dodge",
                     "color-burn")
-TRANSFORM_FILTERS = ("nearest", "bilinear", "cubic")
+TRANSFORM_FILTERS = _transformbehaviour.CHOICES
 TRACKER_MODES = _trackerknobs.MODES
 # Write destinations. Deliberately the formats the writers can actually write (media.py for EXR, imaging.py for PNG,
 # writeformats.py for TIFF, JPEG and DPX); a format list longer than the writers is a promise the render button cannot keep.

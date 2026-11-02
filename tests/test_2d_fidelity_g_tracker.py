@@ -305,12 +305,15 @@ def at_frame(g, frame, target="node"):
     return Evaluator().evaluate_raster(dict(g.doc, view=target), target=target, frame=frame)
 
 
+from nodebased import transformbehaviour as _transformbehaviour
+OLDER_TRANSFORM = {**_transformbehaviour.LEGACY["Transform"], "black_outside": 0}   # the Tracker's own matrix keeps the older directions and edges
+
 SLIDING = [track("a", {1: (20.0, 20.0), 3: (28.0, 24.0)})]
 
 
 class PixelTests(unittest.TestCase):
     def transform_reference(self, g, frame, **params):
-        g.add("ref", "Transform", {"filter": "nearest", **params}, image="plate")
+        g.add("ref", "Transform", {**OLDER_TRANSFORM, "filter": "nearest", **params}, image="plate")   # Tracker shares the older matrix
         return at_frame(g, frame, "ref")
 
     def test_match_move_equals_the_transform_it_solves(self):
@@ -337,7 +340,7 @@ class PixelTests(unittest.TestCase):
 
     def test_skew_comes_from_the_transform_tab(self):
         g = build(SLIDING, mode="none", skew_x=0.3, filter="bilinear")
-        g.add("ref", "Transform", dict(skew_x=0.3, filter="bilinear"), image="plate")
+        g.add("ref", "Transform", dict(OLDER_TRANSFORM, skew_x=0.3, filter="bilinear"), image="plate")
         np.testing.assert_allclose(at_frame(g, 1).pixels, at_frame(g, 1, "ref").pixels, atol=1e-6)
 
     def test_clamp_and_black_outside_reach_the_resampler(self):

@@ -81,7 +81,7 @@ class TransformHandleTests(unittest.TestCase):
         drop, press = viewer.mapToScene(target), viewer.mapToScene(start)
         p = self.window.dispatcher.document["nodes"]["t"]["params"]
         self.assertAlmostEqual(p["translate_x"], before[0] + drop.x() - press.x(), delta=.01)
-        self.assertAlmostEqual(p["translate_y"], before[1] + drop.y() - press.y(), delta=.01)
+        self.assertAlmostEqual(p["translate_y"], before[1] - (drop.y() - press.y()), delta=.01)   # a new node counts y upwards, like Nuke
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
         self.window.command({"op": "undo"})
         p = self.window.dispatcher.document["nodes"]["t"]["params"]
@@ -116,7 +116,7 @@ class TransformHandleTests(unittest.TestCase):
         self.drag(start, target)
         expected = handles2d.rotate_from_drag(0, pvt, viewer._transform_data_point(viewer.mapToScene(start)),
                                               viewer._transform_data_point(viewer.mapToScene(target)))
-        self.assertAlmostEqual(self.window.dispatcher.document["nodes"]["t"]["params"]["rotate"], expected, delta=.1)
+        self.assertAlmostEqual(self.window.dispatcher.document["nodes"]["t"]["params"]["rotate"], -expected, delta=.1)   # a new node turns counter-clockwise for a positive rotate
 
     def test_ctrl_drag_pivot_preserves_image(self):
         generation = self.window.frame_generation

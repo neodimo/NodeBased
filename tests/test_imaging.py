@@ -76,10 +76,12 @@ class ImageTests(unittest.TestCase):
 
     def test_transform_skew_and_invert_use_the_expected_affine_matrices(self):
         from nodebased.core import SPECS
-        skew = Evaluator._transform_forward_matrix({**SPECS['Transform']['params'], 'skew_x': 0.5})
+        # The older axes (y down); a new Transform counts y upwards and turns the skew with it (tests/test_2d_behaviour_transform.py).
+        from nodebased.transformbehaviour import LEGACY
+        base = {**SPECS['Transform']['params'], **LEGACY['Transform']}
+        skew = Evaluator._transform_forward_matrix({**base, 'skew_x': 0.5})
         np.testing.assert_allclose(skew, [[1, 0.5, 0], [0, 1, 0], [0, 0, 1]])
-        inverse = Evaluator._transform_forward_matrix(
-            {**SPECS['Transform']['params'], 'skew_x': 0.5, 'invert': 1})
+        inverse = Evaluator._transform_forward_matrix({**base, 'skew_x': 0.5, 'invert': 1})
         np.testing.assert_allclose(inverse, [[1, -0.5, 0], [0, 1, 0], [0, 0, 1]], atol=1e-12)
 
     def test_transform_clamp_and_black_outside_are_distinct(self):
@@ -103,7 +105,7 @@ class ImageTests(unittest.TestCase):
         dispatcher.execute({'op': 'create', 'id': 'tiny', 'type': 'Constant', 'pos': [0, 0],
                             'params': {'width': 2, 'height': 2, 'red': 1, 'alpha': 1}})
         dispatcher.execute({'op': 'create', 'id': 'edge', 'type': 'Transform', 'pos': [0, 0],
-                            'params': {'translate_x': 1, 'filter': 'nearest', 'clamp': 1}})
+                            'params': {'translate_x': 1, 'filter': 'nearest', 'clamp': 1, 'black_outside': 0, 'legacy_transform_edges': 1}})   # the older edge readings
         dispatcher.execute({'op': 'connect', 'id': 'edge', 'input': 'image', 'source': 'tiny'})
         executor = TileExecutor()
         result = executor.compose(dispatcher.document, 'edge')
