@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from nuke_fidelity_cases import Case, _all_valid
 
 REC709 = (0.2125, 0.7154, 0.0721)
 CCIR601 = (0.299, 0.587, 0.114)
@@ -566,5 +565,9 @@ def _posterize_cases():
 
 
 def cases():
+    # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
+    # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
+    global Case, _all_valid
+    from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
             + _posterize_cases())
