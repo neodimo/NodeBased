@@ -816,7 +816,7 @@ SPECS = {
                        "copy_alpha": "none", "mix": 1.0, **_smallnodes.new_params("Copy")}},
     "ChannelMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                      "params": {"a_channel": "A.a", "b_channel": "B.a", "out_channel": "A",
-                               "operation": "over", "mix": 1.0}},
+                               "operation": "over", "mix": 1.0, **_behaviour2d.new_params("ChannelMerge")}},
     # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes. Keyer keys a chosen
     # per-pixel quantity through a four-point range ramp (0 below range_a, ramping up to 1 between
     # range_a and range_b, 1 through range_c, ramping down to 0 between range_c and range_d, 0

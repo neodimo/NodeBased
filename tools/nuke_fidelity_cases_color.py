@@ -1334,6 +1334,156 @@ def _ibk_cases():
     return out
 
 
+# -------------------------------------------------------------------------------------------- Copy, ChannelMerge and Shuffle (step C)
+_COPY_GUIDE = ("Copy (Nuke 17.0 Reference Guide): 'Replaces channels in the B input with channels from the A input'; the mask: 'the A input is used where the mask is white, the B input "
+               "where the mask is black, and a blend between the inputs where the mask is gray'; mix: 'you can use this node as a dissolve'")
+_NUKE_CHANNEL = {"r": "rgba.red", "g": "rgba.green", "b": "rgba.blue", "a": "rgba.alpha"}
+
+
+def _copy_expected(routes, channels="", mix=1.0, use_mask=False):
+    def expected(fx):
+        a, b = fx["A"].astype(np.float64), fx["B"].astype(np.float64)
+        copied = b.copy()
+        for out_index, source in routes.items():
+            copied[..., out_index] = a[..., "rgba".index(source)]
+        for letter in channels:
+            copied[..., "rgba".index(letter)] = a[..., "rgba".index(letter)]
+        gate = mix
+        if use_mask:
+            matte = fx["mask"][..., 3:4].astype(np.float64)
+            gate = mix * matte
+        ref = b + (copied - b) * gate
+        return ref, _all_valid(ref)
+    return expected
+
+
+def _copy_case(case_id, routes, statement, channels="", mix=1.0, use_mask=False, source="guide", layer_copy=None):
+    names = {0: "copy_red", 1: "copy_green", 2: "copy_blue", 3: "copy_alpha"}
+    nb = {names[i]: f"A.{letter}" for i, letter in routes.items()}
+    nuke = tuple(item for n, (i, letter) in enumerate(routes.items()) for item in ((f"from{n}", _NUKE_CHANNEL[letter]), (f"to{n}", _NUKE_CHANNEL["rgba"[i]])))
+    if channels:
+        nb["channels"] = layer_copy
+        nuke += (("channels", layer_copy),)
+    if mix != 1.0:
+        nb["mix"] = mix
+        nuke += (("mix", mix),)
+    if use_mask:
+        nuke += (("maskChannelInput", "mask.a"),)
+    inputs = ("A", "B", "mask") if use_mask else ("A", "B")
+    return Case(case_id, "Copy", "Copy", nuke, ("B", "A", "mask") if use_mask else ("B", "A"), "Copy", nb, inputs,
+                _copy_expected(routes, channels, mix, use_mask), source, f"{statement} ({_COPY_GUIDE})")
+
+
+def _copy_cases():
+    out = []
+    out.append(_copy_case("copy_red_from_a_alpha", {0: "a"}, "the red channel of B is replaced by the alpha channel of A and nothing else changes"))
+    out.append(_copy_case("copy_alpha_from_a_red", {3: "r"}, "B's alpha is replaced by A's red"))
+    out.append(_copy_case("copy_four_channels", {0: "g", 1: "b", 2: "r", 3: "a"}, "up to four channel pairs copy at once: red from A's green, green from A's blue, blue from A's red, alpha from A's alpha"))
+    out.append(_copy_case("copy_layer_copy_rgb", {}, "Layer copy with rgb copies A's red, green and blue over B's and leaves B's alpha", channels="rgb", layer_copy="rgb"))
+    out.append(_copy_case("copy_layer_copy_alpha", {}, "Layer copy with alpha copies A's alpha over B's", channels="a", layer_copy="alpha"))
+    out.append(_copy_case("copy_mix_dissolves", {0: "g", 3: "a"}, "mix dissolves from B (0) to the copy (1)", mix=0.4))
+    out.append(_copy_case("copy_mask", {0: "g", 2: "a"}, "with a mask the copy shows where the mask is white, B where it is black and a blend between", use_mask=True))
+    out.append(_copy_case("copy_mask_and_mix", {0: "a", 1: "a", 2: "a"}, "the mask and the mix multiply: a quarter of the way to the copy through a mask that is half white", use_mask=True, mix=0.5))
+    for case_id, what, reason in (
+            ("copy_bounding_box", "Set BBox to (union, B side, A side)", "the cases run on the 16 x 12 fixture, where both pictures have the same box"),
+            ("copy_metadata_and_range", "metadata from and range from", "they pick which input's metadata and frame range pass down the tree, which no pixel shows"),
+            ("copy_unpremult_by", "(un)premult by", "the page says the image is divided by the channel before the copy and multiplied after; tests/test_2d_behaviour_keyer.py checks the identity it implies on pictures where that channel is 1")):
+        out.append(_unscored_case(case_id, "Copy", "Copy", f"Copy: {what} ({_COPY_GUIDE})", reason))
+    return out
+
+
+_CM_GUIDE = ("ChannelMerge (Nuke 17.0 Reference Guide): 'Sets how the pixel values from input A are calculated with the pixel values from input B to create the new pixel values': "
+             "absminus abs(A-B), b if not a A?A:B, divide A/B (0 if A<0 and B<0), from B-A, max, min, minus A-B, multiply AB (A if A<0 and B<0), plus A+B, union A+B-AB, xor A+B-2AB")
+_CM_REFERENCE = {
+    "absminus": lambda a, b: np.abs(a - b), "b if not a": lambda a, b: np.where(a != 0, a, b), "from": lambda a, b: b - a, "max": np.maximum, "min": np.minimum,
+    "minus": lambda a, b: a - b, "plus": lambda a, b: a + b, "union": lambda a, b: a + b - a * b, "xor": lambda a, b: a + b - 2 * a * b,
+    "multiply": lambda a, b: np.where((a < 0) & (b < 0), a, a * b), "divide": lambda a, b: np.where((a < 0) & (b < 0), 0.0, a / np.where(b != 0, b, 1.0)),
+}
+
+
+def _cm_expected(op, a_channel, b_channel, out_channel):
+    def expected(fx):
+        a, b = fx["A"].astype(np.float64), fx["B"].astype(np.float64)
+        av, bv = a[..., "rgba".index(a_channel)], b[..., "rgba".index(b_channel)]
+        with np.errstate(all="ignore"):
+            merged = _CM_REFERENCE[op](av, bv)
+        ref = b.copy()
+        ref[..., "rgba".index(out_channel)] = merged
+        valid = np.zeros(ref.shape, bool)
+        valid[..., "rgba".index(out_channel)] = np.isfinite(merged)
+        if op == "divide":
+            valid[..., "rgba".index(out_channel)] &= bv != 0                        # the page does not say what A / 0 is
+        return ref, valid
+    return expected
+
+
+def _cm_case(op, a_channel="r", b_channel="r", out_channel="r", statement=None, source="guide", case_id=None):
+    nb = {"channel_operation": op, "a_channel": f"A.{a_channel}", "b_channel": f"B.{b_channel}", "out_channel": out_channel.upper()}
+    nuke = (("A", _NUKE_CHANNEL[a_channel]), ("operation", op), ("B", _NUKE_CHANNEL[b_channel]), ("output", _NUKE_CHANNEL[out_channel]))
+    return Case(case_id or f"channelmerge_{op.replace(' ', '_')}", "ChannelMerge", "ChannelMerge", nuke, ("B", "A"), "ChannelMerge", nb, ("A", "B"),
+                _cm_expected(op, a_channel, b_channel, out_channel), source, f"ChannelMerge {op}: {statement or 'the formula the guide states'} ({_CM_GUIDE})")
+
+
+def _channel_merge_cases():
+    out = []
+    for op in ("absminus", "b if not a", "from", "max", "min", "minus", "plus", "union", "xor"):
+        out.append(_cm_case(op))
+    out.append(_cm_case("multiply", statement="AB, and A where A and B are both negative"))
+    out.append(_cm_case("divide", statement="A / B, and 0 where A and B are both negative (compared where B is not 0)"))
+    out.append(_cm_case("plus", "g", "b", "a", statement="the A channel is A's green, the B channel B's blue and the result goes to the alpha", case_id="channelmerge_other_channels_selected"))
+    out.append(Case("channelmerge_other_channels_are_b", "ChannelMerge", "ChannelMerge", (("A", "rgba.red"), ("operation", "plus"), ("B", "rgba.green"), ("output", "rgba.blue")), ("B", "A"),
+                    "ChannelMerge", {"channel_operation": "plus", "a_channel": "A.r", "b_channel": "B.g", "out_channel": "B"}, ("A", "B"),
+                    lambda fx: (lambda b, a: (np.concatenate([b[..., :2], b[..., 1:2] + a[..., 0:1], b[..., 3:4]], axis=-1), np.ones(b.shape, bool)))(
+                        fx["B"].astype(np.float64), fx["A"].astype(np.float64)),
+                    "convention", "the channels other than the output stay B's (the page names only the output channel; Merge's output behaves so)"))
+    for op, what in (("in", "Ab"), ("out", "A(1-b)"), ("stencil", "B(1-a)")):
+        out.append(_unscored_case(f"channelmerge_{op}", "ChannelMerge", "ChannelMerge", f"ChannelMerge {op}: {what} ({_CM_GUIDE})",
+                                  "the page writes a lower-case a or b, which in Merge are the alphas of A and B; ChannelMerge's A and B are one channel each with no alpha of their own, and the page does not "
+                                  "say whether the lower-case letter then means the channel's own value or the alpha of its input (NodeBased reads the channel's own value)"))
+    return out
+
+
+_SH_GUIDE = ("Shuffle (Nuke 17.0 Reference Guide): 'rearrange up to 8 channels from a single image (B input). For example, you can use it to swap rgba.red for rgba.green, and vice versa', "
+             "'rearrange channels between two separate nodes (A and B input)', 'replace a channel with black [...] or with white'")
+_SH_NO_SCRIPT = " The routing matrix has no text form in the guide, so the reference pack's script leaves Shuffle at its defaults for this case; compare it with Nuke by hand."
+
+
+def _shuffle_expected(routes):
+    def expected(fx):
+        first, second = fx["A"].astype(np.float64), fx["B"].astype(np.float64)
+        ref = np.zeros_like(first)
+        for index, route in enumerate(routes):
+            if route in "01":
+                ref[..., index] = float(route)
+            elif route.endswith("2"):
+                ref[..., index] = second[..., "RGBA".index(route[0])]
+            else:
+                ref[..., index] = first[..., "RGBA".index(route)]
+        return ref, _all_valid(ref)
+    return expected
+
+
+def _shuffle_case(case_id, routes, statement, two=False):
+    nb = dict(zip(("red_from", "green_from", "blue_from", "alpha_from"), routes))
+    if two:
+        nb["in2"] = "rgba"
+    return Case(case_id, "Shuffle", "Shuffle", (), ("A", "B") if two else ("A",), "Shuffle", nb, ("A", "B") if two else ("A",), _shuffle_expected(routes), "guide", f"{statement} ({_SH_GUIDE}).{_SH_NO_SCRIPT}")
+
+
+def _shuffle_cases():
+    out = []
+    out.append(_shuffle_case("shuffle_default_passes_through", ("R", "G", "B", "A"), "the default routing sends every channel to itself"))
+    out.append(_shuffle_case("shuffle_swap_red_and_green", ("G", "R", "B", "A"), "red and green swap and blue and alpha stay"))
+    out.append(_shuffle_case("shuffle_rotate_channels", ("B", "A", "R", "G"), "any channel can go to any output: a four-way rotation"))
+    out.append(_shuffle_case("shuffle_alpha_to_every_channel", ("A", "A", "A", "1"), "one channel can feed several outputs, and white makes the alpha solid"))
+    out.append(_shuffle_case("shuffle_black_and_white", ("0", "1", "0", "1"), "a channel replaced with black is 0 and one replaced with white is 1"))
+    out.append(_shuffle_case("shuffle_from_the_second_input", ("R2", "G", "B2", "A2"), "channels route in from the second input as well: red and blue from it, green from the first, alpha from it", two=True))
+    out.append(_shuffle_case("shuffle_mix_of_both_and_constants", ("A2", "R", "0", "B2"), "routes from the two inputs and a constant in one matrix", two=True))
+    out.append(_unscored_case("shuffle_second_output_layer", "Shuffle", "Shuffle", f"Shuffle: the second output layer ({_SH_GUIDE})",
+                              "the second layer is a named layer and the 16 x 12 fixture holds only rgba (tests/test_2d_behaviour_keyer.py checks the layer and its routing)"))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
@@ -1341,4 +1491,5 @@ def cases():
     from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
             + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
-            + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases())
+            + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases()
+            + _copy_cases() + _channel_merge_cases() + _shuffle_cases())

@@ -714,7 +714,10 @@ LAYOUTS = {
         'Copy Red', 'Copy Green', 'Copy Blue', 'Copy Alpha', 'Layer copy', 'Metadata from', 'Range from', 'Mask', 'Inject',
         'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
-    'ChannelMerge': ['A channel', 'Operation', 'B channel', 'Output', 'Mask', 'Inject', 'Invert', 'Fringe', 'Mix'],
+    'ChannelMerge': [
+        'A channel', 'Operation', 'B channel', 'Output', 'Older operations', 'Older operation', 'Mask', 'Inject', 'Invert', 'Fringe',
+        'Mix'
+    ],
     'Shuffle': [
         'Input 1', 'Layer 1', 'Input 2', 'Layer 2', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',
         'Red from (second)', 'Green from (second)', 'Blue from (second)', 'Alpha from (second)'

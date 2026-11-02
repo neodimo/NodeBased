@@ -7968,13 +7968,50 @@ class Evaluator:
         return write_matte(b, alpha, channel)
 
     @staticmethod
+    def _channel_merge_guide(op, a, b):
+        """The fourteen operations the Reference Guide lists for ChannelMerge, on one channel of A and one of B. Where the page writes a lower-case
+        `a` or `b` (in, out, stencil) the channel's own value stands in for the alpha, as the node always read them. Division by zero gives 0."""
+        if op == "absminus":
+            return np.abs(a - b)
+        if op == "b if not a":
+            return np.where(a != 0, a, b)
+        if op == "divide":
+            safe = np.where(b != 0, b, np.float32(1.0))
+            return np.where((a < 0) & (b < 0), np.float32(0.0), np.where(b != 0, a / safe, np.float32(0.0))).astype(np.float32)
+        if op == "from":
+            return b - a
+        if op == "in":
+            return a * b
+        if op == "max":
+            return np.maximum(a, b)
+        if op == "min":
+            return np.minimum(a, b)
+        if op == "minus":
+            return a - b
+        if op == "multiply":
+            return np.where((a < 0) & (b < 0), a, a * b).astype(np.float32)
+        if op == "out":
+            return a * (1 - b)
+        if op == "plus":
+            return a + b
+        if op == "stencil":
+            return b * (1 - a)
+        if op == "union":
+            return a + b - a * b
+        if op == "xor":
+            return a + b - 2 * a * b
+        raise ValueError(f"Unknown ChannelMerge operation: {op}")
+
+    @staticmethod
     def _channel_merge(a, b, p):
         index = {"r": 0, "g": 1, "b": 2, "a": 3}
         a_idx = index[p.get("a_channel", "A.a").split(".")[1]]
         b_idx = index[p.get("b_channel", "B.a").split(".")[1]]
         out_idx = {"R": 0, "G": 1, "B": 2, "A": 3}[p.get("out_channel", "A")]
-        combined = Evaluator._channel_merge_op(p.get("operation", "over"),
-                                               a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1])
+        if p.get("older_channel_operations", 0):
+            combined = Evaluator._channel_merge_op(p.get("operation", "over"), a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1])
+        else:
+            combined = Evaluator._channel_merge_guide(p.get("channel_operation", "union"), a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1])
         out = b.copy()
         out[..., out_idx:out_idx + 1] = combined
         return out

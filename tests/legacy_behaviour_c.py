@@ -25,3 +25,15 @@ class Legacy:
         if "output_enabled" in p or "output_channel" in p:
             return _keyerknobs.hue_output(image, alpha, p)
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _channel_merge(a, b, p):
+        index = {"r": 0, "g": 1, "b": 2, "a": 3}
+        a_idx = index[p.get("a_channel", "A.a").split(".")[1]]
+        b_idx = index[p.get("b_channel", "B.a").split(".")[1]]
+        out_idx = {"R": 0, "G": 1, "B": 2, "A": 3}[p.get("out_channel", "A")]
+        combined = Evaluator._channel_merge_op(p.get("operation", "over"),
+                                               a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1])
+        out = b.copy()
+        out[..., out_idx:out_idx + 1] = combined
+        return out

@@ -942,7 +942,10 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ChannelMerge": _groups(
         KnobGroup("enum", ("a_channel",)), KnobGroup("enum", ("b_channel",)),
-        KnobGroup("enum", ("operation",)), KnobGroup("enum", ("out_channel",)),
+        KnobGroup("enum", ("channel_operation",)), KnobGroup("enum", ("out_channel",)),
+        KnobGroup("bool", ("older_channel_operations",), label="Older operations",
+                  help="Use the Older operation below, one of NodeBased's Merge operations with the formulas the node had before it followed the guide's list. Set on graphs saved before."),
+        KnobGroup("enum", ("operation",), label="Older operation"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Keyer": _groups(
         KnobGroup("enum", ("key_input",), label="Input"),
@@ -1882,7 +1885,7 @@ NUKE_LAYOUT = {
     "IBKColor": ("screen_type", "fill_size", "darks", "lights", "screen_erode", "patch_black"),
     "IBKGizmo": ("screen_type", "red_weight", "blue_green_weight", "luminance_match", "luminance_level", "screen_subtraction", "use_bg_luminance"),
     "Copy": ("copy_red", "copy_green", "copy_blue", "copy_alpha", "channels", "metainput", "rangeinput"),
-    "ChannelMerge": ("a_channel", "operation", "b_channel", "out_channel"),
+    "ChannelMerge": ("a_channel", "channel_operation", "b_channel", "out_channel"),
     "Shuffle": ("fromInput1", "layer", "fromInput2", "in2", "red_from", "green_from", "blue_from", "alpha_from", "out2",
                 "red_from2", "green_from2", "blue_from2", "alpha_from2"),
 }
@@ -1898,7 +1901,7 @@ NUKE_LABELS = {
     "Log2Lin": {"log_direction": "Operation", "ignore_black": "Ignore"},
     "PLogLin": {"log_direction": "Operation", "linear_reference": "Linear reference value", "log_reference": "Log reference value", "negative_gamma": "Negative gamma",
                 "density_per_code_value": "Density per code value"},
-    "ChannelMerge": {"a_channel": "A channel", "b_channel": "B channel", "out_channel": "Output"},
+    "ChannelMerge": {"a_channel": "A channel", "b_channel": "B channel", "out_channel": "Output", "channel_operation": "Operation"},
 }
 
 

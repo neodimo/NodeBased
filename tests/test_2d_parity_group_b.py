@@ -150,7 +150,7 @@ class KernelPixelTests(unittest.TestCase):
         b = np.array([[[0.0, 0.4, 0.0, 0.5]]], dtype=np.float32)
         out = Evaluator._kernel(
             "ChannelMerge", {"a_channel": "A.r", "b_channel": "B.g", "out_channel": "A",
-                            "operation": "plus", "mix": 1.0}, [a, b])
+                            "older_channel_operations": 1, "operation": "plus", "mix": 1.0}, [a, b])
         self.assertAlmostEqual(float(out[0, 0, 3]), 0.7, places=6)
         # Untouched channels stay B's own.
         np.testing.assert_allclose(out[0, 0, :3], b[0, 0, :3])
@@ -160,7 +160,7 @@ class KernelPixelTests(unittest.TestCase):
         b = np.array([[[0.0, 0.4, 0.0, 1.0]]], dtype=np.float32)
         out = Evaluator._kernel(
             "ChannelMerge", {"a_channel": "A.r", "b_channel": "B.g", "out_channel": "R",
-                            "operation": "multiply", "mix": 1.0}, [a, b])
+                            "older_channel_operations": 1, "operation": "multiply", "mix": 1.0}, [a, b])
         self.assertAlmostEqual(float(out[0, 0, 0]), 0.2, places=6)
 
 
@@ -203,7 +203,7 @@ class MaskMixTests(unittest.TestCase):
         params = {"Dissolve": {"which": 0.5, "mix": 0.0}, "Keymix": {"mix": 0.0},
                  "Copy": {"copy_red": "A.r", "mix": 0.0},
                  "ChannelMerge": {"a_channel": "A.r", "b_channel": "B.g", "out_channel": "R",
-                                  "operation": "plus", "mix": 0.0}}
+                                  "older_channel_operations": 1, "operation": "plus", "mix": 0.0}}
         for kind in GROUP_B_MERGE:
             with self.subTest(kind=kind):
                 g = Graph()
@@ -244,7 +244,7 @@ class TilePathParityTests(unittest.TestCase):
             "Keymix": dict(invert_mask=0, mix=1.0),
             "Copy": dict(copy_red="A.r", copy_green="none", copy_blue="A.b", copy_alpha="A.a", mix=1.0),
             "ChannelMerge": dict(a_channel="A.r", b_channel="B.g", out_channel="B",
-                                 operation="screen", mix=1.0),
+                                 older_channel_operations=1, operation="screen", mix=1.0),
         }
         for kind, params in cases.items():
             with self.subTest(kind=kind):

@@ -29,6 +29,9 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
                                       the value an older document holds rather than a switch).
     HueKeyer      older_hue_window    1: the matte is a hue window (Hue center, Hue width, Hue softness, a saturation range) and not the amount and
                                       saturation threshold curves over hue that Nuke's HueKeyer holds in its `lut` knob. Set on graphs saved before.
+    ChannelMerge  older_channel_operations
+                                      1: the operation is the older `operation` choice (NodeBased's Merge vocabulary, over by default, with the formulas it had), not
+                                      the fourteen operations the guide lists for ChannelMerge (`channel_operation`, union by default). Set on graphs saved before.
     Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
                                       (value - black) / (white - black) with gamma as the exponent.
     PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
@@ -55,6 +58,7 @@ NEW = {
     "Expression": {"older_expression_syntax": 0},
     "HistEQ": {"histeqbins": 4096},
     "HueKeyer": {"older_hue_window": 0, "curve_amount": FLAT_ZERO, "curve_sat_thrsh": FLAT_ZERO},
+    "ChannelMerge": {"channel_operation": "union", "older_channel_operations": 0},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -69,9 +73,12 @@ OLD = {
     "Expression": {"older_expression_syntax": 1},
     "HistEQ": {"histeqbins": 256},
     "HueKeyer": {"older_hue_window": 1, "curve_amount": FLAT_ZERO, "curve_sat_thrsh": FLAT_ZERO},
+    "ChannelMerge": {"channel_operation": "union", "older_channel_operations": 1},
 }
-LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1)}
-CHOICES = {"luminance_math": list(SATURATION_MATH)}
+LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_channel_operations": (0, 1)}
+# The operations the Reference Guide lists for ChannelMerge, in its order (the guide's names; "b if not a" is its `A?A:B`).
+CHANNEL_MERGE_OPERATIONS = ("absminus", "b if not a", "divide", "from", "in", "max", "min", "minus", "multiply", "out", "plus", "stencil", "union", "xor")
+CHOICES = {"luminance_math": list(SATURATION_MATH), "channel_operation": list(CHANNEL_MERGE_OPERATIONS)}
 
 
 def new_params(kind):

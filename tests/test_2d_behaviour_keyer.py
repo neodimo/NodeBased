@@ -84,7 +84,7 @@ class CaseTests(unittest.TestCase):
     def test_every_scored_case_compares_pixels_the_node_changes(self):
         """A case whose valid mask is empty, or whose reference equals its input everywhere, would pass whatever the kernel does."""
         fx = fidelity.make_fixtures()
-        identity_by_design = {"keyer_output_none"}
+        identity_by_design = {"keyer_output_none", "shuffle_default_passes_through"}
         for case in fidelity.CASES:
             if case.nuke not in self.NODE_KEYS or case.unscored or case.inexpressible:
                 continue
@@ -681,6 +681,282 @@ class IBKGizmoTilesTests(unittest.TestCase):
                 for edge in (7, 16, 32):
                     with self.subTest(params=params, masked=masked, edge=edge):
                         np.testing.assert_allclose(tiled(g.doc, edge), full, atol=1e-5)
+
+
+# ================================================================================================================ two-input plates
+def two_plate_graph(kind, params, masked=False, second="A", first="B"):
+    """Two plates (a rectangle over a ramp, and a ramp) wired to a node's two image inputs (and a radial mask), in the tile tests' 61 x 47 frame."""
+    from tests.test_2d_parity_group_3b import Graph
+    g = Graph()
+    g.add("plate_a", "Rectangle", dict(width=61, height=47, box_x=6, box_y=5, box_width=44, box_height=33, red=0.9, green=0.5, blue=0.2, alpha=0.8, softness=0.5))
+    g.add("plate_b", "Ramp", dict(width=61, height=47, color0_red=0.1, color1_red=0.8, color0_green=0.6, color1_green=0.2, color0_alpha=0.9, color1_alpha=0.4))
+    g.add("matte", "Radial", dict(width=61, height=47, box_x=4, box_y=4, box_width=50, box_height=38, softness=0.8))
+    inputs = {second: "plate_a", first: "plate_b"}
+    if masked:
+        inputs["mask"] = "matte"
+    g.add("node", kind, params, **inputs)
+    return g
+
+
+def two_plate_tiles(kind, params_list, test, **slots):
+    from tests.test_2d_behaviour_color_a import tiled
+    for params in params_list:
+        for masked in (False, True):
+            g = two_plate_graph(kind, params, masked, **slots)
+            full = evaluator_pixels(g.doc, "node")
+            for edge in (7, 16, 32):
+                with test.subTest(kind=kind, params=params, masked=masked, edge=edge):
+                    np.testing.assert_allclose(tiled(g.doc, edge), full, atol=1e-5)
+
+
+# ================================================================================================================ Copy
+_COPY_BASE = {"copy_red": "A.r", "copy_alpha": "A.a"}
+_COPY_CHANGES = {
+    "from0": {"copy_red": "A.b"}, "to0": {"copy_red": "none"}, "from1": {"copy_green": "A.r"}, "to1": {"copy_green": "A.g"},
+    "from2": {"copy_blue": "A.g"}, "to2": {"copy_blue": "A.b"}, "from3": {"copy_alpha": "A.r"}, "to3": {"copy_alpha": "none"},
+    "channels": {"channels": "rgb"}, "maskChannelInput": CHROME["maskChannelInput"], "invert_mask": CHROME["invert_mask"], "inject": {"inject": 1},
+    "fringe": CHROME["fringe"], "unpremult": CHROME["unpremult"], "invert_unpremult": ({"unpremult": "rgba.alpha"}, {"invert_unpremult": 1}), "mix": CHROME["mix"],
+    "metainput": None, "rangeinput": None,
+}
+
+
+class TwoInputKnobsActTests(KnobsActTests):
+    """The same check with two different pictures on the A and B inputs (the shared helper feeds both the same one)."""
+
+    def _differs(self, kind, nuke_knob):
+        change = self.CHANGES[kind][nuke_knob]
+        base_updates, change = change if isinstance(change, tuple) else ({}, change)
+        base = dict(self.BASES[kind], **base_updates)
+        second = fixture_image(5)
+        a = render(kind, dict(base), source=fixture_image(3), mask=matte(), second=second)
+        b = render(kind, dict(base, **change), source=fixture_image(3), mask=matte(), second=second)
+        if "inject" in change:
+            self.assertIn("mask", b.layers or {}, f"{kind}.{nuke_knob}: inject wrote no mask layer")
+            return
+        self.assertFalse(np.array_equal(a.pixels, b.pixels), f"{kind}: changing {nuke_knob} left the pixels alone")
+
+
+class CopyKnobsActTests(TwoInputKnobsActTests):
+    BASES = {"Copy": _COPY_BASE}
+    CHANGES = {"Copy": _COPY_CHANGES}
+
+    def _differs(self, kind, nuke_knob):
+        if nuke_knob == "metainput":          # metadata and the frame range travel with the picture and show in no pixel: tests/test_2d_fidelity_d_small.py runs both
+            from nodebased.imaging import _inherited_metadata
+            from nodebased.raster import Raster
+            a, b = Raster.of(fixture_image(), None), Raster.of(fixture_image(), None)
+            a.meta, b.meta = {"who": "a"}, {"who": "b"}
+            self.assertNotEqual(_inherited_metadata("Copy", [a, b], {"metainput": "A"}), _inherited_metadata("Copy", [a, b], {"metainput": "B"}))
+            return
+        if nuke_knob == "rangeinput":
+            from tests.test_2d_fidelity_d_small import CopyTests
+            self.assertTrue(hasattr(CopyTests, "test_rangeinput_picks_whose_frame_range_goes_on"))
+            return
+        super()._differs(kind, nuke_knob)
+
+    def test_every_paired_knob_acts(self):
+        self._check_kind("Copy")
+
+
+class CopyBehaviourTests(unittest.TestCase):
+    def copy(self, params, mask=None):
+        a, b = fixture_image(3), fixture_image(5)
+        return Evaluator._windowed_kernel("Copy", dict(SPECS["Copy"]["params"], **params), [__import__("nodebased.raster", fromlist=["Raster"]).Raster.of(a),
+                                                                                            __import__("nodebased.raster", fromlist=["Raster"]).Raster.of(b)]
+                                          + ([__import__("nodebased.raster", fromlist=["Raster"]).Raster.of(mask)] if mask is not None else [])).pixels, a, b
+
+    def test_a_copied_channel_replaces_the_one_in_b_and_nothing_else_changes(self):
+        out, a, b = self.copy({"copy_green": "A.a"})
+        np.testing.assert_array_equal(out[..., 1], a[..., 3])
+        for channel in (0, 2, 3):
+            np.testing.assert_array_equal(out[..., channel], b[..., channel])
+
+    def test_a_default_copy_changes_nothing(self):
+        out, _, b = self.copy({})
+        np.testing.assert_array_equal(out, b)
+
+    def test_the_mask_picks_a_where_white_and_b_where_black(self):
+        mask = np.zeros((H, W, 4), np.float32)
+        mask[:, : W // 2, 3] = 1.0
+        out, a, b = self.copy({"copy_red": "A.r", "copy_blue": "A.b"}, mask)
+        np.testing.assert_array_equal(out[:, : W // 2, 0], a[:, : W // 2, 0])
+        np.testing.assert_array_equal(out[:, W // 2:, 0], b[:, W // 2:, 0])
+        out, a, b = self.copy({"copy_red": "A.r", "invert_mask": 1}, mask)
+        np.testing.assert_array_equal(out[:, : W // 2, 0], b[:, : W // 2, 0])
+        np.testing.assert_array_equal(out[:, W // 2:, 0], a[:, W // 2:, 0])
+
+    def test_layer_copy_all_takes_every_channel_of_a(self):
+        out, a, _ = self.copy({"channels": "all"})
+        np.testing.assert_array_equal(out, a)
+
+    def test_unpremult_by_the_alpha_divides_before_the_copy_and_multiplies_after(self):
+        """The page: it 'simulates doing the copy before the premultiplication was done': a copy of A's red into B's red, with B premultiplied by its alpha, gives A's red times B's alpha."""
+        out, a, b = self.copy({"copy_red": "A.r", "unpremult": "rgba.alpha"})
+        np.testing.assert_allclose(out[..., 0], a[..., 0] * b[..., 3], rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(out[..., 1:3], b[..., 1:3], rtol=1e-5, atol=1e-6)
+
+
+class CopyTilesTests(unittest.TestCase):
+    def test_tiles_equal_the_whole_frame(self):
+        two_plate_tiles("Copy", [dict(_COPY_BASE), {"copy_green": "A.b", "mix": 0.5}, {"channels": "alpha", "unpremult": "rgba.alpha"}], self)
+
+
+# ================================================================================================================ ChannelMerge
+OLD_KNOBS["ChannelMerge"] = ("channel_operation", "older_channel_operations")
+_CM_BASE = {"channel_operation": "plus", "a_channel": "A.r", "b_channel": "B.g", "out_channel": "R"}
+_CM_CHANGES = {
+    "A": {"a_channel": "A.b"}, "B": {"b_channel": "B.r"}, "output": {"out_channel": "G"}, "operation": {"channel_operation": "minus"},
+    "mix": CHROME["mix"], "maskChannelInput": CHROME["maskChannelInput"], "invert_mask": CHROME["invert_mask"], "inject": {"inject": 1}, "fringe": CHROME["fringe"],
+}
+
+
+class ChannelMergeKnobsActTests(TwoInputKnobsActTests):
+    BASES = {"ChannelMerge": _CM_BASE}
+    CHANGES = {"ChannelMerge": _CM_CHANGES}
+
+    def test_every_paired_knob_acts(self):
+        self._check_kind("ChannelMerge")
+
+
+class ChannelMergeBehaviourTests(unittest.TestCase):
+    def merge(self, a, b, **p):
+        return kernel("ChannelMerge", dict({"a_channel": "A.r", "b_channel": "B.r", "out_channel": "R"}, **p),
+                      np.array([[[a, 0, 0, 1]]], np.float32), np.array([[[b, 0.3, 0.4, 0.5]]], np.float32))[0, 0]
+
+    def test_the_default_is_union_and_the_older_default_over_is_kept_behind_the_switch(self):
+        self.assertEqual((SPECS["ChannelMerge"]["params"]["channel_operation"], SPECS["ChannelMerge"]["params"]["older_channel_operations"]), ("union", 0))
+        self.assertEqual(self.merge(0.5, 0.25)[0], 0.5 + 0.25 - 0.5 * 0.25)
+        self.assertEqual(self.merge(0.5, 0.25, older_channel_operations=1, operation="over")[0], 0.5 + 0.25 * 0.5)
+
+    def test_negative_pairs_are_stopped_from_turning_positive(self):
+        self.assertEqual(self.merge(-0.5, -0.25, channel_operation="multiply")[0], -0.5)           # A where both are negative
+        self.assertAlmostEqual(float(self.merge(-0.5, 0.25, channel_operation="multiply")[0]), -0.125)
+        self.assertEqual(self.merge(-0.5, -0.25, channel_operation="divide")[0], 0.0)              # 0 where both are negative
+        self.assertAlmostEqual(float(self.merge(0.5, 0.25, channel_operation="divide")[0]), 2.0)
+
+    def test_every_operation_of_the_guide_is_there_and_nothing_else(self):
+        from nodebased.core import CHOICES
+        self.assertEqual(CHOICES["channel_operation"], ["absminus", "b if not a", "divide", "from", "in", "max", "min", "minus", "multiply", "out", "plus", "stencil", "union", "xor"])
+        for op in CHOICES["channel_operation"]:
+            with self.subTest(op=op):
+                self.assertTrue(np.all(np.isfinite(self.merge(0.5, 0.25, channel_operation=op))))
+
+    def test_the_other_channels_stay_bs_and_the_result_goes_where_output_says(self):
+        out = self.merge(0.5, 0.25, channel_operation="plus", out_channel="B")
+        np.testing.assert_allclose(out, [0.25, 0.3, 0.75, 0.5], atol=1e-6)
+
+    def test_b_if_not_a_takes_a_wherever_a_exists(self):
+        a = np.array([[[0.0, 0, 0, 1], [0.7, 0, 0, 1]]], np.float32)
+        b = np.array([[[0.2, 0, 0, 1], [0.2, 0, 0, 1]]], np.float32)
+        out = kernel("ChannelMerge", {"a_channel": "A.r", "b_channel": "B.r", "out_channel": "R", "channel_operation": "b if not a"}, a, b)
+        np.testing.assert_allclose(out[0, :, 0], [0.2, 0.7])
+
+
+class ChannelMergeTilesTests(unittest.TestCase):
+    def test_tiles_equal_the_whole_frame(self):
+        two_plate_tiles("ChannelMerge", [dict(_CM_BASE), {"channel_operation": "multiply", "a_channel": "A.g", "b_channel": "B.b", "out_channel": "G", "mix": 0.6},
+                                         {"older_channel_operations": 1, "operation": "hypot", "out_channel": "A"}], self)
+
+
+class ChannelMergeOlderDocumentTests(unittest.TestCase):
+    def test_an_older_document_keeps_its_pixels(self):
+        for params in ({"operation": "screen", "a_channel": "A.r", "b_channel": "B.g", "out_channel": "B"},
+                       {"operation": "over", "mix": 0.6}, {"operation": "hypot", "a_channel": "A.b", "b_channel": "B.b", "out_channel": "R", "mix": 0.7}):
+            with self.subTest(params=params):
+                g = two_plate_graph("ChannelMerge", params, masked=True)
+                for name in OLD_KNOBS["ChannelMerge"]:
+                    g.doc["nodes"]["node"]["params"].pop(name, None)
+                doc = upgrade_document(g.doc)
+                self.assertEqual(doc["nodes"]["node"]["params"]["older_channel_operations"], 1)
+                a, b, gate = evaluator_pixels(doc, "plate_a"), evaluator_pixels(doc, "plate_b"), evaluator_pixels(doc, "matte")
+                full = dict(SPECS["ChannelMerge"]["params"], **doc["nodes"]["node"]["params"])
+                np.testing.assert_array_equal(evaluator_pixels(doc, "node"), Evaluator._apply_mask_mix(b, Legacy._channel_merge(a, b, full), mask=gate, mix=full.get("mix", 1.0)))
+
+
+# ================================================================================================================ Shuffle
+_SH_CHANGES = {
+    "out1": {"red_from": "G", "green_from": "R", "blue_from": "1", "alpha_from": "0"},
+    "in1": "layer", "fromInput1": {"fromInput1": "A"},
+    "in2": {"in2": "rgba", "red_from": "R2"}, "fromInput2": ({"in2": "rgba", "red_from": "R2"}, {"fromInput2": "B"}),
+    "out2": "layer2",
+}
+
+
+class ShuffleKnobsActTests(unittest.TestCase):
+    def shuffle(self, params, layers=None):
+        g = two_plate_graph("Shuffle", params, second="A", first="image")
+        return evaluator_pixels(g.doc, "node"), g
+
+    def test_every_paired_knob_acts(self):
+        base, _ = self.shuffle({})
+        for nuke, params in KnobsActTests.paired("Shuffle"):
+            with self.subTest(knob=nuke):
+                self.assertIn(nuke, _SH_CHANGES, f"Shuffle: the paired knob {nuke} has no acting check")
+                change = _SH_CHANGES[nuke]
+                if change == "layer":                                   # the layer the first slot reads: a named layer of the input
+                    self.assertTrue(self._named_layer_is_read())
+                    continue
+                if change == "layer2":                                  # the second output layer: it appears, routed by its own four choices
+                    self.assertTrue(self._second_output_layer())
+                    continue
+                base_updates, change = change if isinstance(change, tuple) else ({}, change)
+                before, _ = self.shuffle(base_updates)
+                after, _ = self.shuffle(dict(base_updates, **change))
+                self.assertFalse(np.array_equal(before, after), f"Shuffle: changing {nuke} left the pixels alone")
+        self.assertFalse(np.array_equal(base, self.shuffle({"red_from": "G"})[0]))
+
+    def _named_layer_is_read(self):
+        from nodebased.raster import Raster
+        main, extra = fixture_image(3), fixture_image(5)
+        source = Raster(main, layers={"extra": Raster.of(extra)})
+        out = Evaluator._windowed_kernel("Shuffle", dict(SPECS["Shuffle"]["params"], layer="extra"), [source, None]).pixels
+        np.testing.assert_array_equal(out, extra)
+        return True
+
+    def _second_output_layer(self):
+        _, g = self.shuffle({"out2": "extra", "red_from2": "A", "green_from2": "A", "blue_from2": "0", "alpha_from2": "1"})
+        from tests.test_2d_parity_group_3b import evaluator_raster
+        raster = evaluator_raster(g.doc, "node")
+        layer = raster.layers["extra"].pixels
+        main = raster.pixels
+        np.testing.assert_array_equal(layer[..., 0], main[..., 3])
+        np.testing.assert_array_equal(layer[..., 1], main[..., 3])
+        np.testing.assert_array_equal(layer[..., 2], 0.0)
+        np.testing.assert_array_equal(layer[..., 3], 1.0)
+        return True
+
+
+class ShuffleBehaviourTests(unittest.TestCase):
+    def test_every_output_takes_the_channel_it_is_routed_from(self):
+        src = fixture_image(3)
+        out = kernel("Shuffle", {"red_from": "A", "green_from": "R", "blue_from": "1", "alpha_from": "0"}, src)
+        np.testing.assert_array_equal(out[..., 0], src[..., 3])
+        np.testing.assert_array_equal(out[..., 1], src[..., 0])
+        np.testing.assert_array_equal(out[..., 2], 1.0)
+        np.testing.assert_array_equal(out[..., 3], 0.0)
+
+    def test_two_channels_swap(self):
+        src = fixture_image(3)
+        out = kernel("Shuffle", {"red_from": "G", "green_from": "R"}, src)
+        np.testing.assert_array_equal(out[..., :2], src[..., 1::-1])
+        np.testing.assert_array_equal(out[..., 2:], src[..., 2:])
+
+    def test_a_route_from_the_second_slot_needs_the_second_input(self):
+        with self.assertRaises(ValueError):
+            kernel("Shuffle", {"red_from": "R2"}, fixture_image(3))
+        a, b = fixture_image(3), fixture_image(5)
+        np.testing.assert_array_equal(kernel("Shuffle", {"red_from": "B2", "alpha_from": "A2"}, a, b)[..., [0, 3]], b[..., [2, 3]])
+
+
+class ShuffleTilesTests(unittest.TestCase):
+    def test_tiles_equal_the_whole_frame(self):
+        from tests.test_2d_behaviour_color_a import tiled
+        for params in ({"red_from": "G", "green_from": "R"}, {"red_from": "R2", "alpha_from": "1", "in2": "rgba"}, {"fromInput1": "A", "blue_from": "A"}):
+            g = two_plate_graph("Shuffle", params, second="A", first="image")
+            full = evaluator_pixels(g.doc, "node")
+            for edge in (7, 16, 32):
+                with self.subTest(params=params, edge=edge):
+                    np.testing.assert_allclose(tiled(g.doc, edge), full, atol=1e-5)
 
 
 if __name__ == "__main__":

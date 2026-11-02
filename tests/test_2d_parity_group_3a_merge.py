@@ -113,11 +113,11 @@ class NewMergeOperationTests(unittest.TestCase):
         a = np.array([[[0.5, 0.0, 0.0, 1.0]]], np.float32)
         b = np.array([[[0.25, 0.0, 0.0, 1.0]]], np.float32)
         for op in NEW_OPS:
-            out = Evaluator._kernel("ChannelMerge", {"operation": op, "a_channel": "A.r",
+            out = Evaluator._kernel("ChannelMerge", {"older_channel_operations": 1, "operation": op, "a_channel": "A.r",
                                                      "b_channel": "B.r", "out_channel": "R",
                                                      "mix": 1.0}, [a, b])
             self.assertTrue(np.isfinite(out).all(), op)
-        one = Evaluator._kernel("ChannelMerge", {"operation": "exclusion", "a_channel": "A.r",
+        one = Evaluator._kernel("ChannelMerge", {"older_channel_operations": 1, "operation": "exclusion", "a_channel": "A.r",
                                                  "b_channel": "B.r", "out_channel": "R",
                                                  "mix": 1.0}, [a, b])
         self.assertAlmostEqual(float(one[0, 0, 0]), 0.5 + 0.25 - 2 * 0.5 * 0.25, places=6)
