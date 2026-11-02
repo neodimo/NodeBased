@@ -145,7 +145,8 @@ PREMULT_BY_CHOICES = ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "rgba
 MERGE_CHANNEL_CHOICES = ["rgba", "rgb", "alpha", "none", "red", "green", "blue"]
 OUTPUT_CHOICES = ["rgba", "rgb", "alpha", "red", "green", "blue", "none"]
 MERGE_OPEN_CHOICES = ("Achannels", "Bchannels", "merge_output", "also_merge")
-OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult", "width_channel", "blur_channel"})
+OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult", "width_channel", "blur_channel",
+                                "filter_channel"})
 
 _COMPONENT = {"R": 0, "X": 0, "U": 0, "G": 1, "Y": 1, "V": 1, "B": 2, "Z": 2, "A": 3, "W": 3}
 _RGBA_WORDS = {"red": 0, "r": 0, "green": 1, "g": 1, "blue": 2, "b": 2, "alpha": 3, "a": 3}
@@ -190,6 +191,7 @@ def suggestions(name):
     return {"channels": CHANNEL_CHOICES, "maskChannelInput": MASK_CHANNEL_CHOICES, "unpremult": UNPREMULT_CHOICES,
             "output": OUTPUT_CHOICES, "premult": UNPREMULT_CHOICES, "premult_by": PREMULT_BY_CHOICES,
             "width_channel": MASK_CHANNEL_CHOICES, "blur_channel": MASK_CHANNEL_CHOICES,
+            "filter_channel": PREMULT_BY_CHOICES,          # Convolve: the filter always needs a channel, so no "none"
             "Achannels": MERGE_CHANNEL_CHOICES, "Bchannels": MERGE_CHANNEL_CHOICES, "merge_output": MERGE_CHANNEL_CHOICES,
             "also_merge": ["none", "all"]}[name]
 
