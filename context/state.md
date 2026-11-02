@@ -1,3 +1,12 @@
+## 2026-11-01, 2D behaviour step A of 3 (Lane 2): the colour grading nodes compute what Nuke computes
+
+Branch `openclaw/nb-2d-parity`. Seven nodes, 75 cases in `tools/nuke_fidelity_cases_color.py` (66 pass, 9 not scored with reasons), fixture `C` added to
+`tools/nuke_fidelity_cases.py`. The cases ran against the kernels and exposed six that disagreed; each is fixed on the evaluator and the tile path, with a knob
+that keeps an older document's pixels (`nodebased/behaviour2d.py`, applied by `ops2d_chrome.upgrade_nodes`, no schema bump): ColorCorrect `divide_by_alpha`
+(also the GPU island's WGSL, checked on three adapters), Saturation `luminance_math`, HueCorrect `older_curve_maths`, HSVTool `adjust_by_scaling`, SoftClip
+`older_grey`; Toe's lift defaults to 0 for new nodes. Targeted tests (561) pass. Tests: `tests/test_2d_behaviour_color_a.py`; older kernels frozen in
+`tests/legacy_behaviour_a.py`. Overall fidelity 90.851 -> 90.930; nodes with behaviour checked 12 -> 18. Details and what is left: the TASKLOG note of the same date.
+
 ## 2026-10-31, 12:45 PM PDT — Lane 6 smoke up-res, finish 1: factor 4 rendered (default stays off)
 
 ## Continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) (10:20 AM on 2026-11-01 PDT)
