@@ -336,7 +336,10 @@ SPECS = {
     "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_curve_{out}_{src}": '{"interpolation":"linear","points":[[0,0],[0.5,0.5],[1,1]]}' if out == src else '{"interpolation":"linear","points":[[0,0],[1,0]]}' for out in "rgb" for src in "rgb"}, "xt_fringe": 0, "xt_unpremult": "none", "mix": 1.0}},
     "ShuffleCopy": {"inputs": ["in1", "in2"], "params": {**{f"out{out}_{channel}": f"in{1 if out == 1 else 2}.{channel}" for out in (1, 2) for channel in "rgba"}, "layer1": "", "layer2": ""}},
     "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.0, "mix": 1.0}},
-    "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {"expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0}},
+    "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {
+        **{f"temp_{part}{slot}": "" for slot in range(4) for part in ("name", "expr")},
+        "expr_channels_r": "red", "expr_channels_g": "green", "expr_channels_b": "blue", "expr_channels_a": "alpha",
+        "expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0, **_behaviour2d.new_params("Expression")}},
     # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
     "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0}},
     "GenerateLUT": {"inputs": ["source"], "params": {"lut_path": "", "lut_size": 33, "colorspace_in": "ACEScg", "colorspace_out": "ACEScg"}},
@@ -348,8 +351,8 @@ SPECS = {
     "Colorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"primaries_in": "Rec.709", "primaries_out": "Rec.709", "transfer_in": "Linear", "transfer_out": "Linear", "whitepoint_in": "D65", "whitepoint_out": "D65", "mix": 1.0, **_behaviour2d.new_params("Colorspace")}},
     "Tile": {"inputs": ["image"], "params": {"rows": 2, "columns": 2, "mirror_x": 0, "mirror_y": 0, "mix": 1.0}},
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
-    "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0}},
-    "MinColor": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
+    "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0, **_behaviour2d.new_params("HistEQ")}},
+    "MinColor": {"inputs": ["image"], "params": {"channels": "rgb", "modify": "all", "target": 0.095, "adjdir": "Up", "pixeldelta": 0.0, "frame_start": 1, "frame_end": 100, "mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
     "Sampler": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0, "sample_r": 0.0, "sample_g": 0.0, "sample_b": 0.0, "sample_a": 0.0}},
     # reference is optional so a baked (match_analyzed=1) node keeps working once Analyze has
     # measured and written grade_gain_*/grade_offset_*, exactly as Nuke's baked-knob workflow does.
@@ -1617,7 +1620,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "srccolor_r": (0.0, 1.0), "srccolor_g": (0.0, 1.0), "srccolor_b": (0.0, 1.0),
           "dstcolor_r": (0.0, 1.0), "dstcolor_g": (0.0, 1.0), "dstcolor_b": (0.0, 1.0),
           **{f"xt_{o}_{c}_{i}": (-100.0, 100.0) for o in "rgb" for c in "rgb" for i in range(3)},
-          "xt_fringe": (0, 1), "fringe": (0, 1), "inject": (0, 1), "ignore_black": (0, 1),
+          "xt_fringe": (0, 1), "fringe": (0, 1), "inject": (0, 1), "ignore_black": (0, 1), "pixeldelta": (-1000000.0, 1000000.0),
           "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "smoothness": (0.0, 100.0), "falloff": (0, 1000000),
           "near": (-1000000, 1000000), "far": (-1000000, 1000000),
           "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
@@ -2019,7 +2022,7 @@ EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
-CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion", "patch"], "mincolor_mode": ["minimum", "maximum"],
+CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion", "patch"], "mincolor_mode": ["minimum", "maximum"],
            "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
            "mask_channel": ["alpha", "red", "green", "blue", "luminance"],
            "autocrop_mode": ["alpha", "color"],

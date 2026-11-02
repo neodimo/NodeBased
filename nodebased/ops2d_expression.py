@@ -49,6 +49,14 @@ def _eval(n, env, depth=0):
     raise ExpressionError(f"Unsupported expression construct: {type(n).__name__}")
 
 def evaluate_channels(image, second, params, frame, origin=(0, 0), canvas_size=None):
+    """Nuke's Expression (nodebased/nukeexpr.py), or with `older_expression_syntax` the earlier Python-syntax reading kept for documents saved before."""
+    if not params.get("older_expression_syntax", 0):
+        from . import nukeexpr
+        return nukeexpr.evaluate_rows(image, second, params, frame, origin, canvas_size)
+    return evaluate_channels_older(image, second, params, frame, origin, canvas_size)
+
+
+def evaluate_channels_older(image, second, params, frame, origin=(0, 0), canvas_size=None):
     h, w = image.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     env = {c: image[..., i] for i, c in enumerate("rgba")}

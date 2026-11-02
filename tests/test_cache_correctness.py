@@ -117,6 +117,11 @@ VALUE_OVERRIDES = {
     ("Expression", "expr_g"): "g*0.5",
     ("Expression", "expr_b"): "b*0.5",
     ("Expression", "expr_a"): "a*0.5",
+    ("MinColor", "channels"): "red",              # 2D behaviour lane 2 step B: the searched and modified channels are rgba words
+    ("MinColor", "modify"): "rgb",
+    **{("Expression", f"expr_channels_{c}"): "rgb" for c in "rgba"},       # 2D behaviour lane 2 step B: a row's channels are rgba words
+    **{("Expression", f"temp_name{slot}"): f"tmp{slot}" for slot in range(4)},
+    **{("Expression", f"temp_expr{slot}"): "0.5" for slot in range(4)},
     ("Shuffle", "in2"): "rgba",
     ("TimeClip", "frame_expr"): "frame + 1",      # fidelity step D: Nuke's frame knob, a formula in `frame`
     ("Text", "index"): "Bold",                    # fidelity step F: a font style that changes the glyphs

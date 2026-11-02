@@ -59,3 +59,51 @@ class Legacy:
             values = colorcurves.evaluate_array(master, result[..., index] / domain)
             result[..., index] = colorcurves.evaluate_array(colorcurves.decode(p[f"curve_{name}"]), values)
         return result
+
+    @staticmethod
+    def _expression(image, p, second=None, frame=1):
+        """ops2d_expression.evaluate_channels as it was (Python syntax, integer pixel indices from the top row)."""
+        import ast
+        from nodebased.expressions import CONSTANTS, MAX_EXPRESSION_LENGTH, ExpressionError
+        from nodebased.ops2d_expression import VARS, VFUN, _eval
+        h, w = image.shape[:2]
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        env = {c: image[..., i] for i, c in enumerate("rgba")}
+        env.update({f"second_{c}": (second[..., i] if second is not None else np.zeros((h, w), np.float32)) for i, c in enumerate("rgba")})
+        env.update({f"{c}2": env[f"second_{c}"] for c in "rgba"})
+        env.update(x=xx, y=yy, width=w, height=h, frame=float(frame or 0))
+        out = image.copy()
+        for i, c in enumerate("rgba"):
+            text = str(p[f"expr_{c}"])
+            tree = ast.parse(text, mode="eval")
+            value = np.asarray(_eval(tree.body, env), dtype=np.float32)
+            if value.ndim == 0:
+                value = np.full((h, w), value, np.float32)
+            if value.shape != (h, w) or not np.all(np.isfinite(value)):
+                raise ExpressionError(f"{c}: expression produced invalid pixels")
+            out[..., i] = value
+        return out
+
+    @staticmethod
+    def _hist_eq(image, p):
+        out = image.copy()
+        if p.get("hist_eq_mode", "luminance") == "luminance":
+            luma = np.sum(image[..., :3] * np.array([0.2126, 0.7152, 0.0722], np.float32), axis=-1)
+            lo, hi = float(np.min(luma)), float(np.max(luma))
+            if hi > lo:
+                hist, edges = np.histogram(luma, bins=256, range=(lo, hi))
+                cdf = np.cumsum(hist, dtype=np.float64)
+                cdf = (cdf - cdf[0]) / max(float(cdf[-1] - cdf[0]), 1.0)
+                mapped = np.interp(luma, edges[:-1], cdf).astype(np.float32)
+                scale = np.divide(mapped, luma, out=np.ones_like(luma), where=np.abs(luma) > 1e-8)
+                out[..., :3] *= scale[..., None]
+        else:
+            for c in range(3):
+                values = image[..., c]
+                lo, hi = float(np.min(values)), float(np.max(values))
+                if hi > lo:
+                    hist, edges = np.histogram(values, bins=256, range=(lo, hi))
+                    cdf = np.cumsum(hist, dtype=np.float64)
+                    cdf = (cdf - cdf[0]) / max(float(cdf[-1] - cdf[0]), 1.0)
+                    out[..., c] = np.interp(values, edges[:-1], cdf)
+        return out

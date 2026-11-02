@@ -4210,7 +4210,10 @@ class Evaluator:
             return Raster(pixels, out, display)
         # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
-        if kind in ("MinColor", "Sampler", "CurveTool"):
+        if kind == "MinColor":
+            from . import mincolorknobs
+            return source.with_pixels(mincolorknobs.add_delta(source.pixels, p))      # the stored delta (Find Pixel Delta) is added; the analysis results are knobs
+        if kind in ("Sampler", "CurveTool"):
             return source
         if kind == "Write" and p.get("reading") and str(p.get("path", "") or "").strip():
             # Read file: the Write shows the file it wrote (nodebased/writenode.py `read_back`) in place of its input.
@@ -8345,12 +8348,14 @@ class Evaluator:
 
     @staticmethod
     def _hist_eq(image, p):
+        """Histogram equalisation over `histeqbins` entries (Nuke's Histogram Entries, 4096; a graph saved before holds 256)."""
         out = image.copy()
+        bins = max(2, int(p.get("histeqbins", 4096)))
         if p.get("hist_eq_mode", "luminance") == "luminance":
             luma = np.sum(image[..., :3] * np.array([0.2126, 0.7152, 0.0722], np.float32), axis=-1)
             lo, hi = float(np.min(luma)), float(np.max(luma))
             if hi > lo:
-                hist, edges = np.histogram(luma, bins=256, range=(lo, hi))
+                hist, edges = np.histogram(luma, bins=bins, range=(lo, hi))
                 cdf = np.cumsum(hist, dtype=np.float64)
                 cdf = (cdf - cdf[0]) / max(float(cdf[-1] - cdf[0]), 1.0)
                 mapped = np.interp(luma, edges[:-1], cdf).astype(np.float32)
@@ -8361,7 +8366,7 @@ class Evaluator:
                 values = image[..., c]
                 lo, hi = float(np.min(values)), float(np.max(values))
                 if hi > lo:
-                    hist, edges = np.histogram(values, bins=256, range=(lo, hi))
+                    hist, edges = np.histogram(values, bins=bins, range=(lo, hi))
                     cdf = np.cumsum(hist, dtype=np.float64)
                     cdf = (cdf - cdf[0]) / max(float(cdf[-1] - cdf[0]), 1.0)
                     out[..., c] = np.interp(values, edges[:-1], cdf)

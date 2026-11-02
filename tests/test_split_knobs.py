@@ -688,8 +688,10 @@ LAYOUTS = {
         'Inject', 'Invert', 'Fringe', 'Fringe', 'Unpremult by', '(Un)premult by', 'Invert', 'Mix'
     ],
     'Expression': [
-        'R expression', 'G expression', 'B expression', 'A expression', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by',
-        'Invert', 'Mix'
+        'Variable 1 name', 'Variable 1 expression', 'Variable 2 name', 'Variable 2 expression', 'Variable 3 name',
+        'Variable 3 expression', 'Variable 4 name', 'Variable 4 expression', 'R channels', 'R expression', 'G channels',
+        'G expression', 'B channels', 'B expression', 'A channels', 'A expression', 'Older expression syntax', 'Mask', 'Inject',
+        'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'Range', 'Mix'],
     'HueKeyer': [
@@ -717,8 +719,8 @@ LAYOUTS = {
         'Input 1', 'Layer 1', 'Input 2', 'Layer 2', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',
         'Red from (second)', 'Green from (second)', 'Blue from (second)', 'Alpha from (second)'
     ],
-    'HistEQ': ['Equalise', 'Mix'],
-    'MinColor': ['Frame start', 'Frame end', 'Find', 'Box origin', 'Box size', 'Result R', 'Result G', 'Result B', 'Result A'],
+    'HistEQ': ['Histogram entries', 'Equalise', 'Mix'],
+    'MinColor': ['Channels', 'Modify', 'Target', 'Direction', 'Delta', 'Frame start', 'Frame end', 'Find', 'Box origin', 'Box size', 'Result R', 'Result G', 'Result B', 'Result A'],
     'ScreenKeyer': [
         'Screen colour', 'Screen gain', 'Screen balance', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Alpha bias colour',
         'Despill bias colour', 'Clip black', 'Clip white', 'Clip rollback', 'Screen shrink/grow', 'Screen softness',

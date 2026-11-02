@@ -1729,9 +1729,21 @@
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["temp_name0"], "nuke": ["temp_name0"], "kind": "same"},
+    {"nodebased": ["temp_expr0"], "nuke": ["temp_expr0"], "kind": "same"},
+    {"nodebased": ["temp_name1"], "nuke": ["temp_name1"], "kind": "same"},
+    {"nodebased": ["temp_expr1"], "nuke": ["temp_expr1"], "kind": "same"},
+    {"nodebased": ["temp_name2"], "nuke": ["temp_name2"], "kind": "same"},
+    {"nodebased": ["temp_expr2"], "nuke": ["temp_expr2"], "kind": "same"},
+    {"nodebased": ["temp_name3"], "nuke": ["temp_name3"], "kind": "same"},
+    {"nodebased": ["temp_expr3"], "nuke": ["temp_expr3"], "kind": "same"},
+    {"nodebased": ["expr_channels_r"], "nuke": ["channel0"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'channels', scripting name `channel0`"},
     {"nodebased": ["expr_r"], "nuke": ["expr0"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr0`"},
+    {"nodebased": ["expr_channels_g"], "nuke": ["channel1"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'channels', scripting name `channel1`"},
     {"nodebased": ["expr_g"], "nuke": ["expr1"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr1`"},
+    {"nodebased": ["expr_channels_b"], "nuke": ["channel2"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'channels', scripting name `channel2`"},
     {"nodebased": ["expr_b"], "nuke": ["expr2"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr2`"},
+    {"nodebased": ["expr_channels_a"], "nuke": ["channel3"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'channels', scripting name `channel3`"},
     {"nodebased": ["expr_a"], "nuke": ["expr3"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '=', scripting name `expr3`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
@@ -1739,7 +1751,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["older_expression_syntax"], "kind": "extra", "reason": "NodeBased-only: the older Python-syntax expression reading (integer pixel indices from the top row, blank is an error); a new node reads Nuke's C-like syntax, and a graph saved before keeps this on"}
    ]
   },
   "CrossTalk": {
@@ -1820,7 +1833,8 @@
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
-    {"nodebased": ["hist_eq_mode"], "nuke": ["histeqbins"], "kind": "renamed", "reason": "no counterpart: NodeBased selects the equalised quantity, Nuke the bin count"},
+    {"nodebased": ["histeqbins"], "nuke": ["histeqbins"], "kind": "same"},
+    {"nodebased": ["hist_eq_mode"], "kind": "extra", "reason": "NodeBased-only: Nuke's HistEQ has one behaviour that the guide does not describe (whether it equalises each channel or the luminance); NodeBased offers both"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
   },
@@ -1843,6 +1857,11 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["modify"], "nuke": ["modify"], "kind": "same"},
+    {"nodebased": ["target"], "nuke": ["target"], "kind": "same"},
+    {"nodebased": ["adjdir"], "nuke": ["adjdir"], "kind": "same"},
+    {"nodebased": ["pixeldelta"], "nuke": ["pixeldelta"], "kind": "same"},
     {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mincolor_mode"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},

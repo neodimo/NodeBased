@@ -12840,6 +12840,7 @@ class Window(QMainWindow):
                 form.addRow(readout)
 
                 def run_analysis(k=key, label=readout):
+                    from . import mincolorknobs
                     selected = self.graph_nodes()[k]
                     inputs = selected["inputs"]
                     if not inputs.get("image"):
@@ -12869,17 +12870,24 @@ class Window(QMainWindow):
                                 label.setText("Frame end must be at or after frame start."); return
                             changes = []
                             last_rgba = None
+                            minima = []
                             for sample_frame in range(start, end + 1):
                                 resolved = analysisregion.region_params_at_frame(doc, k, sample_frame)
                                 raster = self.evaluator.evaluate_raster(doc, target=inputs["image"], frame=sample_frame)
-                                rgba = analysisregion.min_color_result(raster.pixels, (raster.data.x, raster.data.y),
-                                    (resolved["box_x"], resolved["box_y"], resolved["box_width"], resolved["box_height"]), resolved["mincolor_mode"])
+                                box = (resolved["box_x"], resolved["box_y"], resolved["box_width"], resolved["box_height"])
+                                rgba = analysisregion.min_color_result(raster.pixels, (raster.data.x, raster.data.y), box, resolved["mincolor_mode"])
                                 if rgba is None:
                                     label.setText(f"The selected box contains no pixels at frame {sample_frame}."); return
                                 last_rgba = rgba
+                                minima.append(mincolorknobs.search_minimum(raster.pixels, (raster.data.x, raster.data.y), box, selected["params"].get("channels", "rgb")))
                                 changes.extend({"op": "set_key", "id": k, "param": f"mincolor_{c}", "frame": sample_frame, "value": float(v), "interpolation": "linear"}
                                                for c, v in zip("rgba", rgba))
-                            label.setText(f"Result RGBA · " + " / ".join(f"{v:.5f}" for v in last_rgba) + f" · frames {start}–{end}")
+                            # Nuke's Find Pixel Delta: the target minus the darkest searched value over the frame range, remembered in `pixeldelta`.
+                            delta = mincolorknobs.find_pixel_delta(minima, selected["params"].get("target", 0.095))
+                            if delta is not None:
+                                changes.append({"op": "set", "id": k, "param": "pixeldelta", "value": delta})
+                            label.setText(f"Result RGBA · " + " / ".join(f"{v:.5f}" for v in last_rgba) + f" · frames {start}–{end}"
+                                          + ("" if delta is None else f" · delta {delta:.5f}"))
                             self.command({"op": "batch", "commands": changes})
                         elif selected["type"] == "Sampler":
                             start, end = int(selected["params"]["frame_start"]), int(selected["params"]["frame_end"])

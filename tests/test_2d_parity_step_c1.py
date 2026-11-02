@@ -68,8 +68,9 @@ class ColorC1Tests(unittest.TestCase):
                                       Evaluator().evaluate(dict(d.document, view="src")))
 
     def test_expression_channels_coordinates_error_and_performance(self):
+        # The older reading (integer pixel indices, Python syntax): a new node reads Nuke's, tested in test_2d_behaviour_color_b.
         _, doc = self.source_graph("Expression", {"expr_r": "r*2", "expr_g": "x/width",
-            "expr_b": "b", "expr_a": "a", "mix": 1})
+            "expr_b": "b", "expr_a": "a", "mix": 1, "older_expression_syntax": 1})
         out = Evaluator().evaluate(doc)
         self.assertAlmostEqual(float(out[0, 0, 0]), .8, places=6)
         self.assertAlmostEqual(float(out[0, 8, 1]), .5, places=6)

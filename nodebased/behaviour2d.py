@@ -20,6 +20,13 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
                                       off by default, which keeps the XYZ values equal and lets the RGB values change.
     ColorLookup   older_range_scaling 1: `range` scales the curves' input axis (values are divided by it first). Nuke's range only sets how far
                                       its precomputed table reaches, which changes how fast the lookup runs and not what it maps.
+    Expression    older_expression_syntax
+                                      1: the expressions are Python syntax (`a if c else b`, `and`, `**`), x and y are integer pixel
+                                      indices counted from the top row, a blank expression is an error and a result that is not finite is
+                                      refused. Nuke's are C-like (`c ? a : b`, `&&`), y counts up from the bottom, x and y are pixel centres
+                                      (a half pixel in), a blank expression is zero and the arithmetic is plain 32-bit float.
+    HistEQ        histeqbins          256: the histogram held 256 entries. Nuke's Histogram Entries default is 4096 (a real knob, so it is
+                                      the value an older document holds rather than a switch).
     Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
                                       (value - black) / (white - black) with gamma as the exponent.
     PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
@@ -41,6 +48,8 @@ NEW = {
     "PLogLin": {"older_log_maths": 0},
     "Colorspace": {"divide_by_alpha": 0, "bradford_matrix": 0},
     "ColorLookup": {"older_range_scaling": 0},
+    "Expression": {"older_expression_syntax": 0},
+    "HistEQ": {"histeqbins": 4096},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -52,8 +61,10 @@ OLD = {
     "PLogLin": {"older_log_maths": 1},
     "Colorspace": {"divide_by_alpha": 1, "bradford_matrix": 1},
     "ColorLookup": {"older_range_scaling": 1},
+    "Expression": {"older_expression_syntax": 1},
+    "HistEQ": {"histeqbins": 256},
 }
-LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1)}
+LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536)}
 CHOICES = {"luminance_math": list(SATURATION_MATH)}
 
 

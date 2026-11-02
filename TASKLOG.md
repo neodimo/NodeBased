@@ -1,3 +1,11 @@
+## 2026-11-02, 2D behaviour step B of 3 (Lane 2, Claude Sonnet 5.5), finished by Gonzo: CrossTalk, Expression, HistEQ, MinColor
+
+- **What happened:** the step B worker committed Log2Lin/PLogLin, Colorspace and ColorLookup, then crashed at 1:34 AM (its CLI output passed the 8 MiB limit) with CrossTalk, Expression, HistEQ and MinColor written but uncommitted. Its own targeted runs of those modules were green (`run/tests-L2b-ex4.log`, `tests-L2b-mc4.log`); it had just started a full run.
+- **What Gonzo did:** read the uncommitted work against the brief (all eight nodes have cases in `tools/nuke_fidelity_cases_color.py`), ran the targeted set (behaviour A and B, cache correctness, fidelity audit and `--check`, knowledge, split knobs, the parity modules naming these kinds, knobs, expressions, tiers, chrome: 395 tests). One failure: MinColor's channels knob was labelled `Search`, which breaks step S's rule that a node whose Nuke table opens with channels shows `Channels` first; relabelled (help text keeps the meaning).
+- **New here:** `nodebased/nukeexpr.py` (Nuke's C-like expression language, parsed to a tree and evaluated in numpy, never as Python source), `nodebased/mincolorknobs.py` (MinColor adds its stored delta). Older documents keep their pixels through `older_expression_syntax` and HistEQ's 256 entries (`nodebased/behaviour2d.py`).
+- **Not verified by the worker's own report:** the worker never wrote its report, so what it left out of these four nodes is unstated beyond the cases marked not scored. The full suite runs at the next tick.
+- **Next owner:** Gonzo; step C of 3 (the Channel nodes).
+
 ## 2026-11-02 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step A of 3: Blur, the erodes and the convolution filters compute what Nuke computes (integrator tick)
 
 - **What was done:** `main` `51ffc5d1` -> `0f99ba86` plus this docs commit. Evidence and per-lane commit

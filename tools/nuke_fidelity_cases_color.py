@@ -903,10 +903,210 @@ def _color_lookup_cases():
     return out
 
 
+
+# ----------------------------------------------------------------------------------------------------------- Expression (step B)
+_EXPR_GUIDE = "Expression (Nuke 17.0 Reference Guide)"
+_F32 = np.float32
+
+
+def _expr_case(case_id, rows, reference, statement, source="guide", channels=None, temps=None):
+    """`rows`: {"r": expression, ...} for the rows the case sets (a row not named keeps the identity `r`, `g`, `b`, `a`); `reference(fx)` returns the
+    expected (h, w, 4) float64 array. Non-finite reference values are left out of the comparison."""
+    params = {f"expr_{c}": rows.get(c, c) for c in "rgba"}
+    knobs = [(f"expr{i}", rows.get(c, c)) for i, c in enumerate("rgba")]
+    for letter, text in (channels or {}).items():
+        params[f"expr_channels_{letter}"] = text
+        knobs.append((f"channel{'rgba'.index(letter)}", text))
+    for slot, (name, expr) in enumerate(temps or ()):
+        params[f"temp_name{slot}"], params[f"temp_expr{slot}"] = name, expr
+        knobs += [(f"temp_name{slot}", name), (f"temp_expr{slot}", expr)]
+
+    def expected(fx):
+        ref = np.asarray(reference(fx), np.float64)
+        return ref, np.isfinite(ref)
+    note = f"{statement} ({_EXPR_GUIDE})" if source == "guide" else f"{statement} ({_EXPR_GUIDE} says 'C-like syntax expressions'; the operators themselves are C's)"
+    return Case(case_id, "Expression", "Expression", tuple(knobs), ("A",), "Expression", params, ("A",), expected, source, note)
+
+
+def _channels_of(fx):
+    a = fx["A"].astype(np.float64)
+    return a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+
+
+def _stack(r, g, b, a):
+    return np.stack([np.broadcast_to(c, r.shape) for c in (r, g, b, a)], axis=-1)
+
+
+def _expression_cases():
+    out = []
+    out.append(_expr_case("expression_blank_is_zero", {"r": "", "b": ""}, lambda fx: _stack(0.0 * _channels_of(fx)[0], _channels_of(fx)[1], 0.0 * _channels_of(fx)[2], _channels_of(fx)[3]),
+                          "a blank expression is the same as zero: the red and blue rows are empty, so those channels become 0 and green and alpha pass through"))
+    out.append(_expr_case("expression_arithmetic_precedence", {"r": "r + g * b", "g": "(r + g) * b", "b": "-r - g / 2 + b"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (r + g * b, (r + g) * b, -r - g / 2 + b, a))(*_channels_of(fx))),
+                          "C-like syntax: * and / bind tighter than + and -, parentheses group, a leading minus negates", source="convention"))
+    out.append(_expr_case("expression_conditional", {"r": "r > 0.5 ? r : 0", "g": "r > 0.2 && g < 1 ? 1 : 0.5", "b": "r < 0 || b >= 4 ? -1 : !a"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (np.where(r > 0.5, r, 0.0), np.where((r > 0.2) & (g < 1), 1.0, 0.5),
+                                                                   np.where((r < 0) | (b >= 4), -1.0, (a == 0) * 1.0), a))(*_channels_of(fx))),
+                          "C-like syntax: c ? a : b, the comparisons, && and || and !, which give 1 for true and 0 for false", source="convention"))
+    out.append(_expr_case("expression_equality", {"r": "r == 0.5", "g": "g != 0.5", "b": "true() + false() + b == 1"},
+                          lambda fx: _stack(*(lambda r, g, b, a: ((r == 0.5) * 1.0, (g != 0.5) * 1.0, (1.0 + 0.0 + b == 1) * 1.0, a))(*_channels_of(fx))),
+                          "== and != compare, true() always returns 1 and false() always returns 0 (the function table)"))
+    out.append(_expr_case("expression_layer_dot_channel", {"r": "rgba.green", "g": "rgba.blue", "b": "rgba.red"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (g, b, r, a))(*_channels_of(fx))),
+                          "'use r, g, b, and a to reference the red, green, blue, and alpha channels in the rgba layer': layer.channel names the same channels"))
+    out.append(_expr_case("expression_functions_rounding", {"r": "floor(r) + ceil(g)", "g": "int(r) - trunc(b)", "b": "abs(r) + fabs(g) + clamp(b, -0.25, 0.75)"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (np.floor(r) + np.ceil(g), np.trunc(r) - np.trunc(b), np.abs(r) + np.abs(g) + np.clip(b, -0.25, 0.75), a))(*_channels_of(fx))),
+                          "floor, ceil, int and trunc (toward zero), abs and fabs, and clamp(x, min, max)"))
+    out.append(_expr_case("expression_functions_clamp_min_max_lerp", {"r": "clamp(r)", "g": "max(r, g, b)", "b": "min(r, g, b, 0.3) + lerp(r, g, 0.25)"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (np.clip(r, 0.0, 1.0), np.maximum(np.maximum(r, g), b), np.minimum(np.minimum(np.minimum(r, g), b), 0.3) + (r + (g - r) * 0.25), a))(*_channels_of(fx))),
+                          "clamp(x) limits to 0..1, min and max take any number of values, lerp(a, b, x) is a at 0 and b at 1"))
+    out.append(_expr_case("expression_functions_power", {"r": "pow(abs(r), 2.2) + pow2(g)", "g": "sqrt(abs(b)) + exp(r) - log10(abs(b) + 1)", "b": "log(abs(g) + 1) + hypot(r, g)"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (np.abs(r) ** 2.2 + g * g, np.sqrt(np.abs(b)) + np.exp(r) - np.log10(np.abs(b) + 1), np.log(np.abs(g) + 1) + np.hypot(r, g), a))(*_channels_of(fx))),
+                          "pow, pow2, sqrt, exp, log, log10 and hypot"))
+    out.append(_expr_case("expression_functions_trig", {"r": "sin(r) + cos(g)", "g": "tan(b / 10) + tanh(r)", "b": "degrees(r) - radians(g)"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (np.sin(r) + np.cos(g), np.tan(b / 10) + np.tanh(r), np.degrees(r) - np.radians(g), a))(*_channels_of(fx))),
+                          "sin, cos, tan and tanh (radians), degrees and radians"))
+    out.append(_expr_case("expression_functions_step", {"r": "smoothstep(0.2, 0.8, r)", "g": "step(0.5, g)", "b": "fmod(b, 0.7)"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (np.where(r < 0.2, 0.0, np.where(r >= 0.8, 1.0, (lambda t: t * t * (3 - 2 * t))((r - 0.2) / 0.6))),
+                                                                   np.where(g < 0.5, 0.0, 1.0), np.fmod(b, 0.7), a))(*_channels_of(fx))),
+                          "smoothstep(a, b, x) is 0 below a, 1 from b and a smooth cubic between, step(a, x) is 0 below a and 1 otherwise, fmod(x, y) is the remainder rounded toward zero"))
+    out.append(_expr_case("expression_functions_rint", {"r": "rint(r * 3 + 0.1)"}, lambda fx: _stack(np.rint(_channels_of(fx)[0] * 3 + 0.1), *_channels_of(fx)[1:]),
+                          "rint(x) rounds to the nearest integer (compared away from the exact halves, where the page does not say which way they go)"))
+    out.append(_expr_case("expression_temp_variables", {"r": "lum", "g": "lum", "b": "lum * k"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (lambda lum: (lum, lum, lum * 2.0, a))(0.2125 * r + 0.7154 * g + 0.0721 * b))(*_channels_of(fx))),
+                          "a temporary variable stands for a long expression in the '=' fields: lum is the Rec 709 grey and k is 2",
+                          temps=(("lum", "0.2125 * r + 0.7154 * g + 0.0721 * b"), ("k", "2"))))
+    out.append(_expr_case("expression_channel_row", {"r": "a", "g": "g", "b": "b", "a": "a"},
+                          lambda fx: _stack(_channels_of(fx)[3], _channels_of(fx)[1], _channels_of(fx)[2], _channels_of(fx)[3]),
+                          "the 'channels' of a row pick where its expression is written: the first row sends alpha to red and the later rows write green, blue and alpha as they are",
+                          channels={"r": "red"}))
+    out.append(_expr_case("expression_channel_set_rgb", {"r": "r * 0.5 + 0.25", "g": "g", "b": "b"},
+                          lambda fx: _stack(*(lambda r, g, b, a: (r * 0.5 + 0.25, g, b, a))(*_channels_of(fx))),
+                          "a row whose channels are 'rgb' writes its expression to red, green and blue; the later rows that name their own channel then overwrite green and blue with "
+                          "themselves, so only red changes",
+                          channels={"r": "rgb"}))
+    out.append(_expr_case("expression_32_bit_float", {"r": "(r + 100000000) - 100000000"},
+                          lambda fx: _stack(((_channels_of(fx)[0].astype(_F32) + _F32(1e8)) - _F32(1e8)).astype(np.float64), *_channels_of(fx)[1:]),
+                          "'All math is done with 32-bit floating point numbers': adding and removing 1e8 leaves multiples of 8, the float32 step at that size"))
+    unscored = (
+        ("expression_pixel_coordinates", "x and y",
+         "the page says x and y are the pixel coordinate but not whether a pixel's x is its left edge or its centre (a half pixel in), nor which row counts as zero "
+         "(Nuke counts up from the bottom row; NodeBased's new node counts up from the bottom and uses pixel centres, its older node counted down from the top)"),
+        ("expression_centred_coordinates", "cx and cy",
+         "the page defines cx and cy by their geometry (0,0 at the centre, -1 and 1 at the left and right edges, 1,1 on the diagonal of the right edge) but, as with x and y, "
+         "not whether the value belongs to a pixel's centre or its edge, so the half-pixel shift in every value is left unchecked"),
+        ("expression_noise_functions", "random, noise, fBm and turbulence",
+         "the page describes Perlin noise and pseudo-random values only in words; Nuke's own table and seed are not published, so no value can be reproduced (NodeBased refuses these)"),
+        ("expression_colour_conversion_functions", "from_sRGB, to_sRGB, from_rec709, to_rec709, from_byte and to_byte",
+         "the page words 'color component' as a value the function takes and returns without saying whether that is 0 to 1 or 0 to 255 (to_byte returns an 8-bit value, "
+         "from_byte's text repeats from_sRGB's), so the scale cannot be pinned down (NodeBased refuses these)"),
+        ("expression_atan2_and_mantissa", "atan2, exponent, logb and mantissa",
+         "the page names atan2's arguments (x, y) but not which one is the numerator, and gives mantissa and exponent as the frexp pair without saying whether logb "
+         "matches it or the C logb"),
+        ("expression_knob_references", "references to other nodes' knobs (Blur1.size, Blur1.size(t))",
+         "the page says any control on any node can be named in an expression; NodeBased's Expression node has no node-knob references (its parameter expressions are a separate system)"),
+        ("expression_percent_operator", "the % operator",
+         "the page lists no operators; NodeBased reads % as C's fmod, which the table's fmod describes"),
+    )
+    for case_id, what, reason in unscored:
+        out.append(Case(case_id, "Expression", "Expression", (), ("A",), "Expression", None, ("A",),
+                        lambda fx: (fx["A"].astype(np.float64), np.zeros(fx["A"].shape, bool)), "guide", f"{_EXPR_GUIDE}: {what}", unscored=reason))
+    return out
+
+
+
+# ------------------------------------------------------------------------------------------------------------ CrossTalk (step B)
+_XT_GUIDE = ("Crosstalk (Nuke 17.0 Reference Guide): 'Each output color channel is the sum of three lookup tables, each indexed by one of the input color channels. "
+             "The horizontal axis represents the channel's original, or input, values, and the vertical axis represents the channel's new, or output values'")
+_XT_NO_SCRIPT = (" The guide gives no text form for the crossover curves, so the reference pack's script leaves them at their defaults for this case; "
+                 "compare it with Nuke by hand.")
+_XT_IDENTITY = {(o, s): ((0.0, 0.0), (1.0, 1.0)) if o == s else ((0.0, 0.0), (1.0, 0.0)) for o in "rgb" for s in "rgb"}
+
+
+def crosstalk_reference(rgb, curves):
+    out = np.zeros_like(rgb, dtype=np.float64)
+    for oi, o in enumerate("rgb"):
+        for si, s in enumerate("rgb"):
+            out[..., oi] += np.interp(rgb[..., si], *zip(*curves[(o, s)]))
+    return out
+
+
+def _xt_case(case_id, changed, statement, source="guide"):
+    curves = {**_XT_IDENTITY, **changed}
+    params = {f"xt_curve_{o}_{s}": _cl_curve_json(pts) for (o, s), pts in curves.items()}
+
+    def expected(fx):
+        src = fx["C"].astype(np.float64)
+        ref = src.copy()
+        ref[..., :3] = crosstalk_reference(src[..., :3], curves)
+        valid = np.ones(src.shape, bool)
+        valid[..., 3] = False                       # the page says nothing about alpha
+        return ref, valid
+    note = f"{statement} ({_XT_GUIDE}){_XT_NO_SCRIPT}"
+    return Case(case_id, "CrossTalk", "CrossTalk", (), ("C",), "CrossTalk", params, ("C",), expected, source, note)
+
+
+def _crosstalk_cases():
+    out = []
+    out.append(_xt_case("crosstalk_default_is_identity", {}, "the default curves pass each channel straight through (red from red, green from green, blue from blue) and add nothing "
+                        "from the others", source="convention"))
+    out.append(_xt_case("crosstalk_bleed_red_into_green", {("g", "r"): ((0.0, 0.0), (1.0, 0.3))},
+                        "the R->G curve adds a share of the red value to green: here green + 0.3 * red"))
+    matrix = {("r", "r"): 0.9, ("r", "g"): 0.1, ("r", "b"): 0.0, ("g", "r"): 0.05, ("g", "g"): 0.8, ("g", "b"): 0.15, ("b", "r"): 0.0, ("b", "g"): 0.2, ("b", "b"): 0.7}
+    out.append(_xt_case("crosstalk_nine_lines_make_a_matrix", {key: ((0.0, 0.0), (1.0, slope)) for key, slope in matrix.items()},
+                        "nine straight curves are a 3 x 3 matrix on the colour: each output channel is the sum of the three input channels scaled by that row's slopes"))
+    bent = {("r", "r"): ((0.0, 0.0), (0.5, 0.4), (1.0, 1.0)), ("r", "g"): ((0.0, 0.0), (0.5, 0.2), (1.0, 0.1)), ("r", "b"): ((0.0, 0.1), (1.0, 0.0)),
+            ("g", "r"): ((0.0, 0.0), (0.3, 0.1), (1.0, 0.5)), ("g", "g"): ((0.0, 0.0), (0.7, 0.9), (1.0, 1.0)), ("g", "b"): ((0.0, 0.0), (1.0, 0.0)),
+            ("b", "r"): ((0.0, 0.2), (0.6, 0.0), (1.0, 0.3)), ("b", "g"): ((0.0, 0.0), (1.0, 0.25)), ("b", "b"): ((0.0, 0.0), (0.4, 0.5), (1.0, 0.8))}
+    out.append(_xt_case("crosstalk_sum_of_three_lookups", bent,
+                        "every output channel is the sum of three lookups, each through its own bent curve (linear segments between the keys)"))
+    out.append(_xt_case("crosstalk_remove_a_channel_from_itself", {("r", "r"): ((0.0, 0.0), (1.0, 0.0)), ("r", "g"): ((0.0, 0.0), (1.0, 1.0))},
+                        "with the red curve flat at zero and R<-G passing green through, the red channel becomes the green one"))
+    for case_id, what, reason in (
+            ("crosstalk_outside_zero_to_one", "values below 0 and above 1",
+             "the page does not say how a crossover curve continues past its end keys (NodeBased extends the end segments linearly), so the HDR and negative values are left out"),
+            ("crosstalk_smooth_curves", "smooth curves between keys",
+             "the page does not name the spline the curve editor fits through added keys, so only linear segments, whose shape is the same in any editor, are compared"),
+            ("crosstalk_alpha", "alpha",
+             "the page says the output colour channels are sums of lookups and says nothing about alpha (NodeBased leaves it alone)")):
+        out.append(Case(case_id, "CrossTalk", "CrossTalk", (), ("C",), "CrossTalk", None, ("C",),
+                        lambda fx: (fx["C"].astype(np.float64), np.zeros(fx["C"].shape, bool)), "guide", f"CrossTalk: {what}", unscored=reason))
+    return out
+
+
+
+# ------------------------------------------------------------------------------------ HistEQ and MinColor (step B), described only in words
+def _unscored_case(case_id, nuke, nb_kind, statement, reason, fixture="A"):
+    return Case(case_id, nuke, nuke, (), (fixture,), nb_kind, None, (fixture,), lambda fx: (fx[fixture].astype(np.float64), np.zeros(fx[fixture].shape, bool)),
+                "guide", statement, unscored=reason)
+
+
+def _histeq_cases():
+    guide = "HistEQ (Nuke 17.0 Reference Guide): 'Alters the histogram of the input image to be flat. This process is called histogram equalization.'"
+    return [
+        _unscored_case("histeq_flat_histogram", "HistEQ", "HistEQ", guide,
+                       "the page states the aim, a flat histogram, and no algorithm: not which channels are equalised together (each on its own or the luminance), the range the "
+                       "histogram covers (the data's minimum to maximum, or 0 to 1, and what happens to values outside it), nor where inside a bin a value lands, so no pixel can "
+                       "be written down (tests/test_2d_behaviour_color_b.py checks the property instead: the output's histogram is flatter and the order of the values is kept)"),
+        _unscored_case("histeq_histogram_entries", "HistEQ", "HistEQ", "HistEQ: 'Histogram Entries' (default 4096) adjusts the number of entries in the histogram",
+                       "the page names the knob and nothing else about it: how many entries are better than few, and how Nuke maps values into the entries, is not published"),
+    ]
+
+
+def _mincolor_cases():
+    guide = ("MinColor (Nuke 17.0 Reference Guide): 'Calculates the difference between the darkest value in the input image and the target value, and then adds the result to "
+             "the image. This sets the darkest pixel to the target value.'")
+    return [
+        _unscored_case("mincolor_adds_the_delta", "MinColor", "MinColor", guide,
+                       "the delta that is added is calculated by the Find Pixel Delta button over a range of frames, not by rendering: the node adds the stored delta "
+                       "(tests/test_2d_behaviour_color_b.py runs the button's calculation and the addition against this statement)"),
+    ]
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
     global Case, _all_valid
     from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
-            + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases())
+            + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases())
