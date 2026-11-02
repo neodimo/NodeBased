@@ -1,3 +1,29 @@
+## 2026-11-01 - lane 9 (2D behaviour), step A of 3: Blur, Erode, ErodeFilter, Median, Sharpen, Soften, Glow, Convolve, Matrix, Laplacian, EdgeDetect, Emboss
+
+- **What was done (evidence):** read the Nuke 17.0 pages of all twelve nodes and NodeBased's kernels on the evaluator and tile path; wrote
+  `tools/nuke_fidelity_cases_filter.py` (34 cases: 20 pass, 14 not scored with a stated reason, 0 fail) and `tests/test_2d_behaviour_filter_a.py`
+  (cases, every paired main-tab knob, tiles of 7, 16 and 32 with and without a mask, old documents bit for bit). Targeted gate (the module, the audit,
+  knowledge, tiles, bypass, knobs, tiers, core, panel and label tests, and every module that names these kinds): 590 tests OK.
+- **Nodes with behaviour checked:** scored cases on 6 of 12 (before: 0) (Blur, Erode (fast), Median, Glow, Matrix, Laplacian); the other six (Erode (filter),
+  Sharpen, Soften, Convolve, EdgeDetect, Emboss) have only `not scored` cases because the guide states no formula, with their stated facts tested in the
+  module. Overall fidelity 90.9 -> 91.0.
+- **Kernels changed (each behind a `legacy_*` flag, `nodebased/filterbehaviour.py`; an older document is given the flag on load by `ops2d_chrome.upgrade_nodes`, no schema bump):**
+  Erode (fast): positive size grew dark pixels, the guide says it grows light ones (default size 1 -> 0). Erode (filter): negative size did nothing, the guide
+  says it grows the light areas. Median: size was a radius, the guide's size 3 is the 3 x 3 area (default 1 -> 3). Matrix: results were not clipped, the guide says
+  0 to 1. Laplacian: a fixed 3 x 3 cross, original minus blur, no knobs; now the blur at `laplacian_size` (filter, quality, crop) minus the original. Convolve:
+  read the top-left corner of the red channel at `kernel_size`; now the filter channel (alpha), `normalize`, `use_input_channels`, `filter_bounds`, centred on the
+  filter's box at any size (FFT above 15 x 15), and a new Convolve is a whole-frame job (no tile path). EdgeDetect: gains `edge_blur_size`, `edge_erode_size`,
+  `edge_blur_quality` (default 0, so old documents are unchanged).
+- **Knobs unpaired:** none. Paired and now acting: Convolve 4, Laplacian 4, EdgeDetect 3.
+- **Not scored (guide silent):** Gaussian sigma for a size, triangle and quadratic weights, the quality down-scale method, Sharpen/Soften's scale of amount and
+  the minimum/maximum role, Glow's response curve, EdgeDetect operator scales and the missing `simple` detector, Emboss's formula and its `optype`, edge handling
+  at the picture's border, Matrix weight orientation.
+- **Open risk:** the Matrix clip and the Erode (fast) sign follow the guide's text; a real Nuke render could contradict either. Needs Gonzo: a Nuke reference
+  pack render settles both, and the Sharpen, Soften, Emboss and EdgeDetect scales.
+- **Not done:** steps B and C of the lane (Transform and Draw groups); default values that differ from Nuke's (Blur size 8 against 0, Sharpen amount 0.5 against 1,
+  Soften size 4 against 1, Glow size 8 against 15) stay, so existing scripts and tests that rely on them keep working.
+- **Next owner:** Gonzo for step B. Branch `openclaw/nb-2d-behaviour`.
+
 ## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of 3: the log, colourspace and lookup nodes compute what Nuke computes (integrator tick)
 
 - **What was done:** `main` `aabf15e3` -> `e7b07b5a` plus this docs commit. Evidence and per-lane commit

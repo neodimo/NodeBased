@@ -1,3 +1,11 @@
+## 2026-11-01 - Lane 9 (2D behaviour), step A of 3: the Filter nodes Blur to Emboss compute what the guide states
+
+Branch `openclaw/nb-2d-behaviour`. Behaviour cases in `tools/nuke_fidelity_cases_filter.py` (hooked into `tools/nuke_fidelity_cases.py`), kernel fixes in
+`nodebased/filterbehaviour.py` with the legacy flags `legacy_erode_sign`, `legacy_median_radius`, `legacy_matrix_unclipped`, `legacy_laplacian` and
+`legacy_convolve`, given to older documents by `ops2d_chrome.step_l9a_params` (no schema bump: SCHEMA_VERSION stays 28). New knobs: `laplacian_size`,
+`edge_blur_size`, `edge_erode_size`, `edge_blur_quality`, `filter_channel`, `use_input_channels`, `filter_bounds`, `normalize` on Convolve. A new Convolve needs the
+whole frame (`ops2d_chrome.needs_full_frame`). Cases 34: 20 pass, 14 not scored, 0 fail. Overall fidelity 90.9 -> 91.0. Targeted gate: 590 tests OK.
+
 ## 2026-11-02, 2D behaviour step S (Lane 2): per-channel knobs and Nuke's layout
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:25 AM on 2026-11-02 PDT)
