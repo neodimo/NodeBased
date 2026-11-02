@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 82.1 / 100** (167 nodes scored, rank-weighted; 84.1 counting only the nodes NodeBased has).
+**Overall fidelity: 85.0 / 100** (167 nodes scored, rank-weighted; 87.1 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.2 (93.5 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.3 (93.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -35,18 +35,18 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Image | 80.9 | 84.7 | 85.9 | 6 |
 | Draw | 72.8 | 58.1 | 83.1 | 17 |
 | Time | 96.1 | 78.7 | 96.1 | 13 |
-| Channel | 72.6 | 78.2 | 98.4 | 5 |
+| Channel | 88.6 | 91.8 | 98.9 | 5 |
 | Color | 93.8 | 77.9 | 94.4 | 34 |
 | Filter | 81.4 | 68.2 | 90.2 | 32 |
-| Keyer | 65.7 | 51.7 | 87.3 | 11 |
+| Keyer | 86.5 | 65.5 | 88.3 | 11 |
 | Merge | 88.8 | 81.7 | 99.4 | 12 |
 | Transform | 70.7 | 66.8 | 88.1 | 20 |
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 30 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 43 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 36 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 33 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 271 of the 346 paired knobs probed change the output pixels; 75 change nothing on the fixture (listed per node below). Splits: 5 of the 13 nodes with split knobs in the table split all of them.
+Knobs that act: 270 of the 345 paired knobs probed change the output pixels; 75 change nothing on the fixture (listed per node below). Splits: 5 of the 13 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -109,10 +109,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Shuffle | `Shuffle` | supported | 60.3 | 100.0 | 100 (6/6) | 17 (1/4) | 100 | 100 | - | 0 unchecked | 100 | - | no fixture |
+| 1 | Shuffle | `Shuffle` | supported | 84.1 | 100.0 | 100 (6/6) | 17 (1/4) | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 2 | ShuffleCopy | `ShuffleCopy` | supported | 85.0 | 100.0 | 100 (4/4) | - | - | 100 | - | - | 25 | - | no fixture |
-| 3 | Copy | `Copy` | supported | 75.6 | 97.8 | 100 (10/10) | 100 (8/8) | 100 | 100 | 89 | 0 unchecked | 80 | - | no fixture |
-| 4 | ChannelMerge | `ChannelMerge` | supported | 72.9 | 90.7 | 100 (4/4) | 100 (4/4) | 56 | 100 | 83 | 0 unchecked | 100 | - | no fixture |
+| 3 | Copy | `Copy` | supported | 97.3 | 98.3 | 100 (10/10) | 100 (8/8) | 100 | 100 | 89 | 100 (8/8) | 80 | - | unmeasured |
+| 4 | ChannelMerge | `ChannelMerge` | supported | 95.7 | 94.2 | 100 (4/4) | 100 (4/4) | 67 | 100 | 83 | 100 (13/13) | 100 | - | unmeasured |
 | 5 | Remove | `Remove` | supported | 97.1 | 97.3 | 100 (4/4) | - | 80 | 100 | 100 | - | 100 | - | no fixture |
 
 ### Color
@@ -195,15 +195,15 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Keyer | `Keyer` | supported | 70.4 | 96.3 | 100 (10/10) | 100 (9/9) | 78 | 100 | - | 0 unchecked | 61 | - | no fixture |
-| 2 | ChromaKeyer | `ChromaKeyer` | supported | 72.1 | 97.8 | 100 (16/16) | 85 (13/16) | 87 | 100 | - | 0 unchecked | 100 | - | no fixture |
-| 3 | Difference | `Difference` | supported | 76.2 | 100.0 | 100 (4/4) | 100 (4/4) | 100 | 100 | - | 0 unchecked | 100 | - | no fixture |
-| 4 | HueKeyer | `HueKeyer` | supported | 76.1 | 96.7 | 100 (4/4) | 100 (4/4) | 75 | 100 | 100 | 0 unchecked | 100 | - | no fixture |
-| 5 | Keylight | `ScreenKeyer` | partial | 70.9 | 98.0 | 98 (34/35) | 81 (27/34) | 97 | 100 | - | 0 unchecked | 91 | - | no fixture |
+| 1 | Keyer | `Keyer` | supported | 94.2 | 97.4 | 100 (10/10) | 100 (9/9) | 78 | 100 | - | 100 (11/11) | 61 | - | unmeasured |
+| 2 | ChromaKeyer | `ChromaKeyer` | supported | 95.4 | 98.9 | 100 (16/16) | 85 (13/16) | 93 | 100 | - | - | 100 | - | unmeasured |
+| 3 | Difference | `Difference` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (4/4) | 100 | 100 | - | 100 (2/2) | 100 | - | unmeasured |
+| 4 | HueKeyer | `HueKeyer` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
+| 5 | Keylight | `ScreenKeyer` | partial | 93.0 | 98.0 | 98 (34/35) | 81 (27/34) | 97 | 100 | - | - | 91 | - | unmeasured |
 | 6 | Primatte | - | missing | 0.0 | 0.0 | 0 (0/26) | - | - | 0 | 0 | - | - | - | no fixture |
 | 6 | Ultimatte | - | missing | 0.0 | 0.0 | 0 (0/60) | - | - | 0 | - | - | - | - | no fixture |
-| 7 | IBKColor | `IBKColor` | supported | 57.9 | 79.2 | 100 (6/6) | 67 (4/6) | 25 | 50 | - | 0 unchecked | 100 | - | no fixture |
-| 7 | IBKGizmo | `IBKGizmo` | supported | 54.8 | 59.7 | 47 (7/15) | 86 (6/7) | 71 | 100 | - | 0 unchecked | 93 | - | no fixture |
+| 7 | IBKColor | `IBKColor` | supported | 76.0 | 79.2 | 100 (6/6) | 67 (4/6) | 25 | 50 | - | - | 100 | - | unmeasured |
+| 7 | IBKGizmo | `IBKGizmo` | supported | 72.0 | 59.7 | 47 (7/15) | 86 (6/7) | 71 | 100 | - | - | 93 | - | unmeasured |
 | 8 | Cryptomatte | `Cryptomatte` | partial | 43.8 | 40.0 | 25 (1/4) | - | - | 100 | - | - | - | - | no fixture |
 | 8 | Encryptomatte | `Encryptomatte` | partial | 46.4 | 42.9 | 29 (1/4) | - | - | 100 | - | - | - | - | no fixture |
 
@@ -290,36 +290,36 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | Shuffle (Channel #1) | `Shuffle` | 39.68 | 60.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `fromInput1`, `fromInput2`, `out2` |
-| 2 | Roto (Draw #1) | `Roto` | 39.13 | 60.9 | 27 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (8 of 13 in order) |
-| 3 | Transform (Transform #1) | `Transform` | 30.25 | 69.7 | behaviour unchecked (no pixel case); knobs that change no pixels: `skew_order`; knob order differs from Nuke's (13 of 15 in order); not splittable like Nuke: `scale` |
-| 4 | Keyer (Keyer #1) | `Keyer` | 29.63 | 70.4 | behaviour unchecked (no pixel case); knob order differs from Nuke's (6 of 9 in order); 4 labels differ from Nuke's |
-| 5 | Read (Image #1) | `Read` | 18.26 | 81.7 | knob order differs from Nuke's (20 of 27 in order); 3 labels differ from Nuke's |
-| 6 | Crop (Transform #2) | `Crop` | 17.86 | 64.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `reformat`, `crop` |
-| 7 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 8 | Write (Image #2) | `Write` | 16.54 | 66.9 | 29 secondary knobs missing; knob order differs from Nuke's (19 of 26 in order); 3 labels differ from Nuke's |
-| 9 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 13.97 | 72.1 | behaviour unchecked (no pixel case); knobs that change no pixels: `_replaceAlphaDiff`, `_replaceColor`, `_replaceAmount` |
-| 10 | Tracker (Transform #3) | `Tracker` | 12.96 | 61.1 | 13 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (24 of 35 in order) |
-| 11 | Blur (Filter #1) | `Blur` | 9.80 | 90.2 | 1 label differs from Nuke's; not splittable like Nuke: `size` |
-| 12 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 13 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 14 | Sharpen (Filter #2) | `Sharpen` | 8.15 | 83.7 | knobs that change no pixels: `quailty`; knob order differs from Nuke's (5 of 7 in order); not splittable like Nuke: `size` |
-| 15 | Copy (Channel #3) | `Copy` | 8.15 | 75.6 | node chrome missing: bbox handling; behaviour unchecked (no pixel case); knob order differs from Nuke's (6 of 10 in order) |
-| 16 | Difference (Keyer #3) | `Difference` | 7.94 | 76.2 | behaviour unchecked (no pixel case) |
-| 17 | ShuffleCopy (Channel #2) | `ShuffleCopy` | 7.50 | 85.0 | knob order differs from Nuke's (2 of 4 in order); 2 labels differ from Nuke's |
-| 18 | Constant (Image #4) | `Constant` | 7.14 | 71.4 | behaviour unchecked (no pixel case); knob order differs from Nuke's (3 of 4 in order) |
-| 19 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 20 | ChannelMerge (Channel #4) | `ChannelMerge` | 6.76 | 72.9 | node chrome missing: bbox handling; behaviour unchecked (no pixel case) |
-| 21 | Switch (Merge #4) | `Switch` | 6.58 | 73.7 | behaviour unchecked (no pixel case) |
-| 22 | Root (Other #11) | `time and settings` | 6.36 | 30.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
-| 23 | HueKeyer (Keyer #4) | `HueKeyer` | 5.98 | 76.1 | behaviour unchecked (no pixel case) |
-| 24 | Keylight (Keyer #5) | `ScreenKeyer` | 5.83 | 70.9 | 1 secondary knob missing: `about`; behaviour unchecked (no pixel case); knobs that change no pixels: `despillBias`, `insideReplaceMethod`, `insideReplaceColour`, `SourceXMethod`, `SourceYMethod`, `insideComponent` and 1 more; knob order differs from Nuke's (28 of 34 in order) |
-| 25 | Merge (Merge #1) | `Merge` | 5.80 | 94.2 | knobs that change no pixels: `screen_alpha` |
-| 26 | Reformat (Transform #5) | `Reformat` | 5.35 | 73.2 | primary knobs missing: `box_fixed`, `clamp`, `black_outside`; knob order differs from Nuke's (12 of 13 in order); not splittable like Nuke: `scale` |
-| 27 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 28 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 29 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 30 | DropShadow (Filter #7) | `DropShadow` | 4.78 | 66.5 | behaviour unchecked (no pixel case); knobs that change no pixels: `operation`; knob order differs from Nuke's (5 of 9 in order); 2 labels differ from Nuke's |
+| 1 | Roto (Draw #1) | `Roto` | 39.13 | 60.9 | 27 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (8 of 13 in order) |
+| 2 | Transform (Transform #1) | `Transform` | 30.25 | 69.7 | behaviour unchecked (no pixel case); knobs that change no pixels: `skew_order`; knob order differs from Nuke's (13 of 15 in order); not splittable like Nuke: `scale` |
+| 3 | Read (Image #1) | `Read` | 18.26 | 81.7 | knob order differs from Nuke's (20 of 27 in order); 3 labels differ from Nuke's |
+| 4 | Crop (Transform #2) | `Crop` | 17.86 | 64.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `reformat`, `crop` |
+| 5 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 6 | Write (Image #2) | `Write` | 16.54 | 66.9 | 29 secondary knobs missing; knob order differs from Nuke's (19 of 26 in order); 3 labels differ from Nuke's |
+| 7 | Shuffle (Channel #1) | `Shuffle` | 15.87 | 84.1 | knobs that change no pixels: `fromInput1`, `fromInput2`, `out2` |
+| 8 | Tracker (Transform #3) | `Tracker` | 12.96 | 61.1 | 13 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (24 of 35 in order) |
+| 9 | Blur (Filter #1) | `Blur` | 9.80 | 90.2 | 1 label differs from Nuke's; not splittable like Nuke: `size` |
+| 10 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 11 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 12 | Sharpen (Filter #2) | `Sharpen` | 8.15 | 83.7 | knobs that change no pixels: `quailty`; knob order differs from Nuke's (5 of 7 in order); not splittable like Nuke: `size` |
+| 13 | ShuffleCopy (Channel #2) | `ShuffleCopy` | 7.50 | 85.0 | knob order differs from Nuke's (2 of 4 in order); 2 labels differ from Nuke's |
+| 14 | Constant (Image #4) | `Constant` | 7.14 | 71.4 | behaviour unchecked (no pixel case); knob order differs from Nuke's (3 of 4 in order) |
+| 15 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 16 | Switch (Merge #4) | `Switch` | 6.58 | 73.7 | behaviour unchecked (no pixel case) |
+| 17 | Root (Other #11) | `time and settings` | 6.36 | 30.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
+| 18 | Keyer (Keyer #1) | `Keyer` | 5.82 | 94.2 | knob order differs from Nuke's (6 of 9 in order); 4 labels differ from Nuke's |
+| 19 | Merge (Merge #1) | `Merge` | 5.80 | 94.2 | knobs that change no pixels: `screen_alpha` |
+| 20 | Reformat (Transform #5) | `Reformat` | 5.35 | 73.2 | primary knobs missing: `box_fixed`, `clamp`, `black_outside`; knob order differs from Nuke's (12 of 13 in order); not splittable like Nuke: `scale` |
+| 21 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 22 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 23 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 24 | DropShadow (Filter #7) | `DropShadow` | 4.78 | 66.5 | behaviour unchecked (no pixel case); knobs that change no pixels: `operation`; knob order differs from Nuke's (5 of 9 in order); 2 labels differ from Nuke's |
+| 25 | Dissolve (Merge #5) | `Dissolve` | 4.76 | 76.2 | behaviour unchecked (no pixel case) |
+| 26 | RotoPaint (Draw #7) | `RotoPaint` | 4.75 | 66.8 | 15 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (8 of 12 in order) |
+| 27 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.70 | 15.4 | primary knobs missing: `fullGrain`; behaviour unchecked (no pixel case) |
+| 28 | DirBlur (Filter #9) | `DirBlur` | 4.41 | 60.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `holdout`, `BlurCenter`, `UseTarget`, `Samples`, `PixelAspect`, `Quality` and 1 more; knob order differs from Nuke's (9 of 12 in order); 3 labels differ from Nuke's |
+| 29 | LightWrap (Draw #8) | `LightWrap` | 4.24 | 66.1 | behaviour unchecked (no pixel case); knobs that change no pixels: `disableluma`, `enableglow`, `saturation`, `LumaTolerance`, `white`, `gray` and 13 more; knob order differs from Nuke's (21 of 27 in order) |
+| 30 | Mirror (Transform #7) | `Mirror` | 4.08 | 71.4 | behaviour unchecked (no pixel case); 2 labels differ from Nuke's |
 
 ## Formula cases
 
@@ -531,6 +531,94 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `histeq_flat_histogram` | guide | not scored: the page states the aim, a flat histogram, and no algorithm: not which channels are equalised together (each on its own or the luminance), the range the histogram covers (the data's minimum to maximum, or 0 to 1, and what happens to values outside it), nor where inside a bin a value lands, so no pixel can be written down (tests/test_2d_behaviour_color_b.py checks the property instead: the output's histogram is flatter and the order of the values is kept) | - | - |
 | `histeq_histogram_entries` | guide | not scored: the page names the knob and nothing else about it: how many entries are better than few, and how Nuke maps values into the entries, is not published | - | - |
 | `mincolor_adds_the_delta` | guide | not scored: the delta that is added is calculated by the Find Pixel Delta button over a range of frames, not by rendering: the node adds the stored delta (tests/test_2d_behaviour_color_b.py runs the button's calculation and the addition against this statement) | - | - |
+| `keyer_red_trapezoid` | convention | pass | within tolerance | - |
+| `keyer_green_trapezoid` | convention | pass | within tolerance | - |
+| `keyer_blue_trapezoid` | convention | pass | within tolerance | - |
+| `keyer_max_trapezoid` | convention | pass | within tolerance | - |
+| `keyer_min_trapezoid` | convention | pass | within tolerance | - |
+| `keyer_triangle_range` | convention | pass | within tolerance | - |
+| `keyer_hdr_range` | convention | pass | within tolerance | - |
+| `keyer_alpha_input` | convention | pass | within tolerance | - |
+| `keyer_invert` | convention | pass | within tolerance | - |
+| `keyer_output_channel` | convention | pass | within tolerance | - |
+| `keyer_output_none` | convention | pass | within tolerance | - |
+| `keyer_luminance_operation` | guide | not scored: the page says the key is on 'luminance' and shows the graph running 0 to 1, but not the weights of the red, green and blue; Foundry's Rec 709 form (0.2125 / 0.7154 / 0.0721) and the exact Rec 709 form (0.2126 / 0.7152 / 0.0722) differ by up to 3e-4 of the value and the page names neither | - | - |
+| `keyer_saturation_operation` | guide | not scored: the page names 'saturation' as a keyed property and gives no formula: HSV saturation (max - min) / max, HSL saturation and (max - min) all fit the words | - | - |
+| `keyer_redscreen_operation` | guide | not scored: the page names no formula for the screen operations: 'red minus the larger of green and blue', 'red minus their mean' and 'red minus green' are all in use | - | - |
+| `keyer_greenscreen_operation` | guide | not scored: same as redscreen: no formula for the green screen difference | - | - |
+| `keyer_bluescreen_operation` | guide | not scored: same as redscreen: no formula for the blue screen difference | - | - |
+| `keyer_combine` | guide | not scored: the page gives no formula for intersect and union: the smaller and the larger of the two mattes, their product and A + B - AB all read as 'intersect' and 'union' (tests/test_2d_behaviour_keyer.py checks that NodeBased's choice is the smaller and the larger) | - | - |
+| `huekeyer_default_keys_nothing` | guide | pass | within tolerance | - |
+| `huekeyer_amount_green_to_black` | guide | pass | within tolerance | - |
+| `huekeyer_amount_curve_shape` | guide | pass | within tolerance | - |
+| `huekeyer_invert_off_is_the_amount` | guide | pass | within tolerance | - |
+| `huekeyer_output_channel` | convention | pass | within tolerance | - |
+| `huekeyer_sat_thrsh` | guide | not scored: the page does not say how a pixel below the threshold is rejected (a hard cut, or a fade in over some range), nor whether saturation is the HSV or the HSL one (they differ widely for bright colours); tests/test_2d_behaviour_keyer.py checks that a higher threshold removes the keying from the lower-saturation hues | - | - |
+| `huekeyer_curve_smoothing` | guide | not scored: the page does not name the spline the curve editor fits through added points, so only the straight segments, whose shape is the same in any editor, are compared | - | - |
+| `huekeyer_channels` | guide | not scored: the page does not say what hue a pixel has when a channel is left out (as 0, or hue from the remaining two); NodeBased's channels knob limits the channels the node may write, like every node with a channels knob | - | - |
+| `difference_identical_inputs` | guide | pass | within tolerance | - |
+| `difference_offset_subtracts` | guide | pass | within tolerance | - |
+| `difference_metric` | guide | not scored: the page does not say how the three colour channels become one matte value: the largest channel difference, their sum, their mean, the luminance of the difference and the length of the difference vector are all in use | - | - |
+| `difference_gain` | guide | not scored: the sentence says what a white pixel becomes and not how the other values scale, nor whether the gain is applied before or after the offset is subtracted | - | - |
+| `difference_clamp` | guide | not scored: the page does not say whether the matte is clamped to 0 to 1, so the values below 0 (after the offset) and above 1 are left alone | - | - |
+| `difference_output_colour` | guide | not scored: the page says the node 'produces the difference as a matte' and not what the colour channels hold | - | - |
+| `chromakeyer_screen_colour` | guide | not scored: the page says a pixel of the screen colour becomes transparent and gives no distance measure for the pixels near it: how far a colour is from the screen colour, and how that distance becomes an alpha, is not published (tests/test_2d_behaviour_keyer.py checks that the screen colour itself is transparent and a neutral grey stays opaque) | - | - |
+| `chromakeyer_screen_gain` | guide | not scored: the page states the direction and no formula for the gain (tests/test_2d_behaviour_keyer.py checks that a higher gain never makes the matte more opaque) | - | - |
+| `chromakeyer_screen_balance` | guide | not scored: the page gives the three values to try and no formula for what a balance weighs against what | - | - |
+| `chromakeyer_chroma_gain` | guide | not scored: the page states the effect and no formula (tests/test_2d_behaviour_keyer.py checks that a higher chroma gain never makes the matte more transparent) | - | - |
+| `chromakeyer_white_black_point` | guide | not scored: both sentences are relative to the matte before the points, which the page does not give a formula for, so no independent matte can be written down (tests/test_2d_behaviour_keyer.py checks them against the node's own matte before the points) | - | - |
+| `chromakeyer_alpha_bias` | guide | not scored: the page describes the use and gives no formula for how a picked colour moves the matte | - | - |
+| `chromakeyer_despill` | guide | not scored: the page gives no formula for the despill: which channel is limited, and to what mix of the others | - | - |
+| `chromakeyer_replace_modes` | guide | not scored: the page words the four modes ('a corresponding amount of the replace color added for any increase in alpha', 'reintroduced/removed if the alpha is changed') without the amount's formula, and the matte they act on is itself not published (tests/test_2d_fidelity_h_keyers.py and tests/test_2d_behaviour_keyer.py check the stated relations) | - | - |
+| `chromakeyer_premultiply` | guide | not scored: the colour that is multiplied is the despilled colour and its matte is not published, so the output colour cannot be written down independently (tests/test_2d_behaviour_keyer.py checks that the colour equals the unpremultiplied colour times the alpha) | - | - |
+| `chromakeyer_inside_mask` | guide | not scored: the page says the results add up and does not say how (a sum, a union or a maximum) or how the sum is kept within 1 | - | - |
+| `keylight_screen_colour_gain_balance` | guide | not scored: Keylight is a third-party plug-in; the Reference Guide lists its knobs and the introduction says only that the screen colour is picked with the eyedropper and 'many options you can adjust'. Its screen matte formula is not published, so no pixel can be written down | - | - |
+| `keylight_clip_black_white` | guide | not scored: both sentences are relative to the screen matte, which has no published formula (tests/test_2d_behaviour_keyer.py checks them against the node's own screen matte) | - | - |
+| `keylight_despill_bias` | guide | not scored: no formula is published for either bias | - | - |
+| `keylight_replace_methods` | guide | not scored: the methods are named and not defined by any page of the guide | - | - |
+| `ibkcolor_screen_type` | guide | not scored: neither page defines 'not green' (a ratio of the channels, a difference, a threshold) or what replaces it, so the processed screen cannot be written down (tests/test_2d_behaviour_keyer.py checks that a green screen plate keeps its green and that a foreground inside it is filled from the screen around it) | - | - |
+| `ibkcolor_size` | guide | not scored: the page states the direction and the filter (a Gaussian) without its width in pixels for a given size | - | - |
+| `ibkcolor_darks_lights_patch_black` | guide | not scored: the tutorial names what each control cures and gives no formula for any of them, nor the erode | - | - |
+| `ibkgizmo_screen_type_difference` | guide | not scored: the matte formula is not published: the pages say 'essentially a difference matte' without the weights of red, blue and green in it. NodeBased has green and blue and no pick or C-red | - | - |
+| `ibkgizmo_red_blue_green_weights` | guide | not scored: no page of the guide or the tutorial defines the weights beyond their names | - | - |
+| `ibkgizmo_luminance_match_level` | guide | not scored: no page of the guide or the tutorial describes any of the four knobs | - | - |
+| `ibkgizmo_screen_subtraction_despill` | guide | not scored: no page of the guide or the tutorial describes this knob | - | - |
+| `ibkgizmo_unimplemented_knobs` | guide | not scored: eight of the gizmo's fifteen knobs (color, screen range, enable for the luminance level, autolevels, yellow, cyan, magenta, use bkg chroma) have no NodeBased param, and no page says what they do; they stay unpaired until the gizmo's own definition can be read | - | - |
+| `copy_red_from_a_alpha` | guide | pass | within tolerance | - |
+| `copy_alpha_from_a_red` | guide | pass | within tolerance | - |
+| `copy_four_channels` | guide | pass | within tolerance | - |
+| `copy_layer_copy_rgb` | guide | pass | within tolerance | - |
+| `copy_layer_copy_alpha` | guide | pass | within tolerance | - |
+| `copy_mix_dissolves` | guide | pass | within tolerance | - |
+| `copy_mask` | guide | pass | within tolerance | - |
+| `copy_mask_and_mix` | guide | pass | within tolerance | - |
+| `copy_bounding_box` | guide | not scored: the cases run on the 16 x 12 fixture, where both pictures have the same box | - | - |
+| `copy_metadata_and_range` | guide | not scored: they pick which input's metadata and frame range pass down the tree, which no pixel shows | - | - |
+| `copy_unpremult_by` | guide | not scored: the page says the image is divided by the channel before the copy and multiplied after; tests/test_2d_behaviour_keyer.py checks the identity it implies on pictures where that channel is 1 | - | - |
+| `channelmerge_absminus` | guide | pass | within tolerance | - |
+| `channelmerge_b_if_not_a` | guide | pass | within tolerance | - |
+| `channelmerge_from` | guide | pass | within tolerance | - |
+| `channelmerge_max` | guide | pass | within tolerance | - |
+| `channelmerge_min` | guide | pass | within tolerance | - |
+| `channelmerge_minus` | guide | pass | within tolerance | - |
+| `channelmerge_plus` | guide | pass | within tolerance | - |
+| `channelmerge_union` | guide | pass | within tolerance | - |
+| `channelmerge_xor` | guide | pass | within tolerance | - |
+| `channelmerge_multiply` | guide | pass | within tolerance | - |
+| `channelmerge_divide` | guide | pass | within tolerance | - |
+| `channelmerge_other_channels_selected` | guide | pass | within tolerance | - |
+| `channelmerge_other_channels_are_b` | convention | pass | within tolerance | - |
+| `channelmerge_in` | guide | not scored: the page writes a lower-case a or b, which in Merge are the alphas of A and B; ChannelMerge's A and B are one channel each with no alpha of their own, and the page does not say whether the lower-case letter then means the channel's own value or the alpha of its input (NodeBased reads the channel's own value) | - | - |
+| `channelmerge_out` | guide | not scored: the page writes a lower-case a or b, which in Merge are the alphas of A and B; ChannelMerge's A and B are one channel each with no alpha of their own, and the page does not say whether the lower-case letter then means the channel's own value or the alpha of its input (NodeBased reads the channel's own value) | - | - |
+| `channelmerge_stencil` | guide | not scored: the page writes a lower-case a or b, which in Merge are the alphas of A and B; ChannelMerge's A and B are one channel each with no alpha of their own, and the page does not say whether the lower-case letter then means the channel's own value or the alpha of its input (NodeBased reads the channel's own value) | - | - |
+| `shuffle_default_passes_through` | guide | pass | within tolerance | - |
+| `shuffle_swap_red_and_green` | guide | pass | within tolerance | - |
+| `shuffle_rotate_channels` | guide | pass | within tolerance | - |
+| `shuffle_alpha_to_every_channel` | guide | pass | within tolerance | - |
+| `shuffle_black_and_white` | guide | pass | within tolerance | - |
+| `shuffle_from_the_second_input` | guide | pass | within tolerance | - |
+| `shuffle_mix_of_both_and_constants` | guide | pass | within tolerance | - |
+| `shuffle_second_output_layer` | guide | not scored: the second layer is a named layer and the 16 x 12 fixture holds only rgba (tests/test_2d_behaviour_keyer.py checks the layer and its routing) | - | - |
 | `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
 | `blur_box_1` | convention | pass | within tolerance | - |
 | `blur_box_2` | convention | pass | within tolerance | - |
