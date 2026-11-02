@@ -280,7 +280,7 @@ SPECS = {
                  "params": {"exposure_mode": "stops", "blackpoint": 0.0, "gang": 1, "red": 0.0,
                             "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0}},
     "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {**{f"curve_{name}": ('{"interpolation":"linear","points":[[0,0],[360,0]]}' if name.endswith("_sup") else '{"interpolation":"linear","points":[[0,1],[360,1]]}') for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix": 1.0}},
+                   "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,1],[360,1]]}' for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix": 1.0, **_behaviour2d.new_params("HueCorrect")}},
     "ColorLookup": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "use_precomputed": 1, "range": 1.0, "source": 0.0, "target": 0.0, "mix": 1.0}},
     # ColorMatrix (step 4a): a 3x3 RGB matrix as nine knobs, matrix_RC = row R, column C, so
@@ -292,7 +292,7 @@ SPECS = {
     "PLogLin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"linear_reference": 0.18, "log_reference": 445.0, "density_per_code_value": 0.002, "negative_gamma": 1.0, "mix": 1.0}},
     "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_curve_{out}_{src}": '{"interpolation":"linear","points":[[0,0],[0.5,0.5],[1,1]]}' if out == src else '{"interpolation":"linear","points":[[0,0],[1,0]]}' for out in "rgb" for src in "rgb"}, "xt_fringe": 0, "xt_unpremult": "none", "mix": 1.0}},
     "ShuffleCopy": {"inputs": ["in1", "in2"], "params": {**{f"out{out}_{channel}": f"in{1 if out == 1 else 2}.{channel}" for out in (1, 2) for channel in "rgba"}, "layer1": "", "layer2": ""}},
-    "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.05, "mix": 1.0}},
+    "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.0, "mix": 1.0}},
     "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {"expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0}},
     # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
     "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0}},
@@ -397,7 +397,7 @@ SPECS = {
                   "params": {"colors": 16, "channels": "rgb", "mix": 1.0}},
     # SoftClip (step 5b): Nuke's four `conversion` modes with softclip_min / softclip_max.
     "SoftClip": {"inputs": ["image"], "optional_inputs": ["mask"],
-                 "params": {"conversion": "none", "softclip_min": 0.8, "softclip_max": 1.0, "mix": 1.0}},
+                 "params": {"conversion": "none", "softclip_min": 0.8, "softclip_max": 1.0, "mix": 1.0, **_behaviour2d.new_params("SoftClip")}},
     # HSVTool (step 5b): hue rotation, saturation and brightness adjustment limited to a hue,
     # saturation and brightness range each with a rolloff. Nuke's `huesrcs` pair is
     # hue_range_min/max, `satsrcs` is saturation_range_*, `brtsrcs` is brightness_range_*; Nuke's
@@ -410,7 +410,7 @@ SPECS = {
                            "brightness_range_min": 0.0, "brightness_range_max": 1.0, "brightness_rolloff": 0.0,
                            "brt_adjust": 0.0, "set_brightness": 0, "output_alpha": "preserve",
                            "color_replace": 0, "srccolor_r": 0.0, "srccolor_g": 0.0, "srccolor_b": 0.0,
-                           "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0}},
+                           "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0, **_behaviour2d.new_params("HSVTool")}},
     # AddMix (step 5b): A is premultiplied, then merged `over` B (MERGE_LIKE_KINDS: bypass passes B).
     "AddMix": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                "params": {"mix": 1.0, **_addmixknobs.new_params("AddMix")}},

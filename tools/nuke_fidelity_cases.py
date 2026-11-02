@@ -40,6 +40,31 @@ def _fixtures_ab():
     return a, b
 
 
+_HUES = 32                                                                  # C: hue steps of 11.25 degrees from 3
+_SATURATIONS = (0.12, 0.27, 0.42, 0.58, 0.73, 0.88, 0.99)
+_VALUES = (0.22, 0.37, 0.52, 0.67, 0.82, 0.97)
+
+
+def _fixture_colours():
+    """C: colour inside 0..1 spread over hue, saturation and value, for the nodes that read HSV (A holds only three in-range colours).
+
+    Pixel (y, x) takes hue 3 + 11.25 * ((5x + 7y) mod 32) degrees, a saturation and a value from the lists above (stepped by different
+    combinations of x and y so every combination turns up), and the alpha cycle of A."""
+    c = np.zeros((H, W, 4), np.float32)
+    for y in range(H):
+        for x in range(W):
+            hue = 3.0 + 360.0 / _HUES * ((5 * x + 7 * y) % _HUES)
+            sat = _SATURATIONS[(3 * x + 5 * y) % len(_SATURATIONS)]
+            val = _VALUES[(2 * x + 3 * y + x * y) % len(_VALUES)]
+            sector = hue / 60.0
+            i, f = int(sector) % 6, sector - int(sector)
+            p, q, t = val * (1 - sat), val * (1 - sat * f), val * (1 - sat * (1 - f))
+            table = ((val, q, p, p, t, val), (t, val, val, q, p, p), (p, p, t, val, val, q))
+            c[y, x, :3] = [table[0][i], table[1][i], table[2][i]]
+            c[y, x, 3] = _ALPHA[(y * W + x) % len(_ALPHA)]
+    return c
+
+
 def make_fixtures():
     a, b = _fixtures_ab()
     mask = np.zeros((H, W, 4), np.float32)
@@ -48,7 +73,7 @@ def make_fixtures():
             i = y * W + x
             for c in range(4):
                 mask[y, x, c] = _MASK[(i // (c + 1) + c) % len(_MASK)]
-    return {"A": a, "B": b, "mask": mask}
+    return {"A": a, "B": b, "mask": mask, "C": _fixture_colours()}
 
 
 # ---------------------------------------------------------------------------------------------------- Merge formulas

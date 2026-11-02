@@ -83,7 +83,7 @@ class HueCorrectTests(unittest.TestCase):
 
     def test_red_band_saturation_zero_desaturates_red_and_leaves_green(self):
         red = hue_correct(px(1.0, 0.0, 0.0, 1.0), sat_red=0.0)
-        luma = 0.2126
+        luma = 0.2125          # Nuke's Rec 709 grey (the older curve maths used 0.2126)
         np.testing.assert_allclose(red[0, 0, :3], [luma] * 3, atol=1e-6)
         green = px(0.0, 1.0, 0.0, 1.0)
         np.testing.assert_allclose(hue_correct(green, sat_red=0.0), green, atol=1e-6)
@@ -95,10 +95,15 @@ class HueCorrectTests(unittest.TestCase):
                 out = hue_correct(pixel, **{f"lum_{band}": 0.5})
                 np.testing.assert_allclose(out[0, 0, :3], pixel[0, 0, :3] * 0.5, atol=1e-6)
 
-    def test_luminance_leaves_neutrals_alone(self):
+    def test_luminance_leaves_neutrals_alone_in_the_older_curve_maths(self):
         grey = px(0.4, 0.4, 0.4, 1.0)
         params = {f"lum_{b}": 3.0 for b in BANDS}
-        np.testing.assert_allclose(hue_correct(grey, **params), grey, atol=1e-7)
+        np.testing.assert_allclose(hue_correct(grey, older_curve_maths=1, **params), grey, atol=1e-7)
+
+    def test_luminance_is_a_plain_gain_like_nukes(self):
+        grey = px(0.4, 0.4, 0.4, 1.0)
+        params = {f"lum_{b}": 3.0 for b in BANDS}
+        np.testing.assert_allclose(hue_correct(grey, **params), px(1.2, 1.2, 1.2, 1.0), atol=1e-6)
 
     def test_interpolation_is_continuous_across_band_edges(self):
         # Saturation multiplier sweeps 0 (red) .. 1 elsewhere; walk the hue through the red anchor
@@ -110,7 +115,7 @@ class HueCorrectTests(unittest.TestCase):
         self.assertLess(float(steps), 0.03)
         # ... and the anchor itself is reached: the pure-red pixel is fully desaturated.
         idx = int(np.argmin(np.abs(hues - 0.0)))
-        np.testing.assert_allclose(out[0, idx, :3], [0.2126] * 3, atol=1e-6)
+        np.testing.assert_allclose(out[0, idx, :3], [0.2125] * 3, atol=1e-6)
 
     def test_interpolation_midpoint_is_halfway(self):
         # Hue 30 sits midway between red and yellow: smoothstep(0.5) = 0.5.

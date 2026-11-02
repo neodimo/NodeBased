@@ -26,13 +26,16 @@ class CurveNodeTests(unittest.TestCase):
         np.testing.assert_array_equal(Evaluator._hue_correct(image, p), image)
         p["curve_sat"] = encode(((0, 1), (60, 1), (120, 0), (180, 1), (240, 1), (300, 1), (360, 1)))
         out = Evaluator._hue_correct(image, p)
-        np.testing.assert_allclose(out[0, 1, :3], [.7152, .7152, .7152], atol=1e-6)
+        np.testing.assert_allclose(out[0, 1, :3], [.7154, .7154, .7154], atol=1e-6)      # Nuke's Rec 709 grey
         np.testing.assert_array_equal(out[0, 0], image[0, 0])
         np.testing.assert_array_equal(out[0, 2], image[0, 2])
 
     def test_v12_hue_anchors_upgrade_to_equivalent_curve(self):
         image = np.random.default_rng(7).random((11, 17, 4), dtype=np.float32)
         legacy = SPECS["HueCorrect"]["params"].copy()
+        legacy["older_curve_maths"] = 1          # a v12 document is an older document: it keeps the curve maths it was saved with,
+        for name in ("r_sup", "g_sup", "b_sup"):  # in which a suppression of 0 does nothing (the migration fills those curves with 0)
+            legacy[f"curve_{name}"] = encode(((0, 0), (360, 0)))
         legacy.update({f"sat_{band}": (i + 1) / 6 for i, band in enumerate(("red", "yellow", "green", "cyan", "blue", "magenta"))})
         legacy.update({f"lum_{band}": 1.3 - i / 10 for i, band in enumerate(("red", "yellow", "green", "cyan", "blue", "magenta"))})
         expected = Evaluator._hue_correct(image, legacy)

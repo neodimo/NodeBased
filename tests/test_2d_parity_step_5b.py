@@ -127,7 +127,7 @@ class SoftClipTests(unittest.TestCase):
     def test_preserve_hue_and_brightness_desaturates_at_constant_luma(self):
         image = np.array([[[3.0, 0.2, 0.1, 1.0], [0.5, 0.25, 0.1, 1.0]]], np.float32)
         out = kernel("SoftClip", image, conversion="preserve hue and brightness", softclip_max=1.0)
-        luma = lambda px: 0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]
+        luma = lambda px: 0.2125 * px[0] + 0.7154 * px[1] + 0.0721 * px[2]          # Nuke's Rec 709 grey
         self.assertAlmostEqual(float(out[0, 0, :3].max()), 1.0, places=5)
         self.assertAlmostEqual(float(luma(out[0, 0])), float(luma(image[0, 0])), places=5)
         np.testing.assert_array_equal(out[0, 1], image[0, 1])
@@ -163,11 +163,14 @@ class HSVToolTests(unittest.TestCase):
 
     def test_saturation_and_brightness_adjust_scale_or_force(self):
         image = self._pixels((0.8, 0.4, 0.4), (2.0, 1.0, 1.0))
-        half = kernel("HSVTool", image, sat_adjust=-0.5)
+        # The older scaling (`adjust_by_scaling`); tests/test_2d_behaviour_color_a.py has the additive adjustment a new node uses.
+        half = kernel("HSVTool", image, sat_adjust=-0.5, adjust_by_scaling=1)
         np.testing.assert_allclose(half[0, 0, :3], (0.8, 0.6, 0.6), atol=1e-6)         # S 0.5 -> 0.25, V kept
+        added = kernel("HSVTool", image, sat_adjust=-0.25)
+        np.testing.assert_allclose(added[0, 0, :3], (0.8, 0.6, 0.6), atol=1e-6)        # S 0.5 - 0.25 = 0.25, V kept
         forced = kernel("HSVTool", image, sat_adjust=0.0, set_saturation=1)
         np.testing.assert_allclose(forced[0, :, :3], [(0.8, 0.8, 0.8), (2.0, 2.0, 2.0)], atol=1e-6)
-        bright = kernel("HSVTool", image, brt_adjust=1.0, brightness_range_max=1000.0)
+        bright = kernel("HSVTool", image, brt_adjust=1.0, brightness_range_max=1000.0, adjust_by_scaling=1)
         np.testing.assert_allclose(bright[0, 0, :3], (1.6, 0.8, 0.8), atol=1e-6)
         np.testing.assert_allclose(bright[0, 1, :3], (4.0, 2.0, 2.0), atol=1e-6)
         setv = kernel("HSVTool", image, brt_adjust=0.25, set_brightness=1, brightness_range_max=1000.0)

@@ -1417,7 +1417,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["older_curve_maths"], "kind": "extra", "reason": "NodeBased-only: the older curve maths (lum scaled by saturation, the older suppression and grey weights); a new node reads every curve as Nuke does, and a graph saved before keeps this on"}
    ],
    "skip_default": ["hue"]
   },
@@ -1495,7 +1496,8 @@
     {"nodebased": ["set_brightness"], "nuke": ["setbrightness"], "kind": "renamed", "reason": "spelling or case variant of Nuke's scripting name `setbrightness`"},
     {"nodebased": ["output_alpha"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `output`"},
     {"nodebased": ["color_replace"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["adjust_by_scaling"], "kind": "extra", "reason": "NodeBased-only: the older saturation and brightness adjustment, which scaled the value by (1 + adjustment); a new node adds the adjustment as Nuke does, and a graph saved before keeps this on"}
    ],
    "skip_default": ["huesrcs", "satsrcs", "brtsrcs", "output"]
   },
@@ -1781,7 +1783,8 @@
     {"nodebased": ["conversion"], "nuke": ["conversion"], "kind": "same"},
     {"nodebased": ["softclip_min"], "nuke": ["softclip_min"], "kind": "same"},
     {"nodebased": ["softclip_max"], "nuke": ["softclip_max"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["older_grey"], "kind": "extra", "reason": "NodeBased-only: the older 0.2126 / 0.7152 / 0.0722 grey that preserve hue and brightness moved the colour toward; a new node uses Nuke's Rec 709 weights 0.2125 / 0.7154 / 0.0721, and a graph saved before keeps this on"}
    ]
   },
   "Toe": {
@@ -1796,7 +1799,7 @@
     {"nodebased": ["toe"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
-    {"nodebased": ["invert_mask"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert"], "kind": "renamed", "reason": "the Toe page's table names the mask invert checkbox `invert` where every other node's page says `invert_mask`; it inverts the use of the mask channel"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},

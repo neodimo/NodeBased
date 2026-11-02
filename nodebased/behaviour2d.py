@@ -13,6 +13,10 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
                                       of the other two (0 = nothing, 1 = fully), and the grey is 0.2126 / 0.7152 / 0.0722.
     HSVTool       adjust_by_scaling   1: saturation and brightness adjustments scale the value by (1 + adjustment). Nuke adds the
                                       adjustment to the value.
+    SoftClip      older_grey          1: "preserve hue and brightness" moves the colour toward the 0.2126 / 0.7152 / 0.0722 grey.
+                                      Nuke's Rec 709 is 0.2125 / 0.7154 / 0.0721.
+
+Toe's default lift changed from 0.05 to Nuke's 0 for new nodes: a node's params are stored whole, so no document changes and no knob is needed.
 """
 from __future__ import annotations
 
@@ -21,12 +25,18 @@ SATURATION_MATH = ("Rec 709", "Ccir 601", "Average", "Maximum", "Rec 709 (old we
 NEW = {
     "ColorCorrect": {"divide_by_alpha": 0},
     "Saturation": {"luminance_math": "Rec 709"},
+    "HueCorrect": {"older_curve_maths": 0},
+    "HSVTool": {"adjust_by_scaling": 0},
+    "SoftClip": {"older_grey": 0},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
     "Saturation": {"luminance_math": "Rec 709 (old weights)"},
+    "HueCorrect": {"older_curve_maths": 1},
+    "HSVTool": {"adjust_by_scaling": 1},
+    "SoftClip": {"older_grey": 1},
 }
-LIMITS = {"divide_by_alpha": (0, 1)}
+LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1)}
 CHOICES = {"luminance_math": list(SATURATION_MATH)}
 
 

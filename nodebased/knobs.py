@@ -350,6 +350,9 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("conversion",)),
         KnobGroup("float_slider", ("softclip_min",), label="Softclip min", soft_range=(0, 1)),
         KnobGroup("float_slider", ("softclip_max",), label="Softclip max", soft_range=(0, 10)),
+        KnobGroup("bool", ("older_grey",), label="Older grey",
+                  help="Preserve hue and brightness moves the colour toward the 0.2126 / 0.7152 / 0.0722 grey NodeBased's SoftClip used before it followed Nuke's "
+                       "Rec 709 weights (0.2125 / 0.7154 / 0.0721). Set on graphs saved before."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "HSVTool": _groups(
         KnobGroup("float_slider", ("hue_range_min",), label="Hue range min", soft_range=(0, 360)),
@@ -370,6 +373,9 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("color_replace",), label="Color replacement"),
         KnobGroup("color", ("srccolor_r", "srccolor_g", "srccolor_b"), label="Source color"),
         KnobGroup("color", ("dstcolor_r", "dstcolor_g", "dstcolor_b"), label="Destination color"),
+        KnobGroup("bool", ("adjust_by_scaling",), label="Adjust by scaling",
+                  help="Scale the saturation and the brightness by (1 + adjustment) as NodeBased's HSVTool did before it followed Nuke. Off adds the adjustment, "
+                       "so -1 desaturates or blackens completely and 1 saturates or whitens. Set on graphs saved before."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "AddMix": _groups(
         KnobGroup("string", ("Achannels",), label="A channels"), KnobGroup("string", ("Bchannels",), label="B channels"),
@@ -410,6 +416,10 @@ KNOB_LAYOUT = {
         *[KnobGroup("curve", (f"curve_{name}",), label=name.replace("_", " ").title()) for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")],
         KnobGroup("float_slider", ("sat_thrsh",), label="Saturation threshold", soft_range=(0, 1)),
         KnobGroup("float_slider", ("hue_shift",), label="Hue shift", soft_range=(-180, 180)),
+        KnobGroup("bool", ("older_curve_maths",), label="Older curve maths",
+                  help="Read the curves as NodeBased's HueCorrect did before it followed Nuke: lum scaled by the pixel's saturation, a suppression curve of 1 "
+                       "limiting a channel to the largest of the other two (0 did nothing, so the three suppress curves read the other way round) and the "
+                       "0.2126 / 0.7152 / 0.0722 grey. Set on graphs saved before."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ColorLookup": _groups(KnobGroup("bool", ("use_precomputed",), label="Use precomputed table"), KnobGroup("float", ("range",)),
         *[KnobGroup("curve", (f"curve_{name}",), label=name.title()) for name in ("master", "red", "green", "blue", "alpha")],

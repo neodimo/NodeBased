@@ -128,18 +128,21 @@ class HueCorrectOutputTests(unittest.TestCase):
         p = SPECS["HueCorrect"]["params"].copy()
         p["curve_sat"] = encode(((0, .5), (360, .5)))
         out = Evaluator._hue_correct(image, p)
-        weights = np.array([.2126, .7152, .0722], np.float32)
+        weights = np.array([.2125, .7154, .0721], np.float32)          # Nuke's Rec 709 grey
         np.testing.assert_allclose(out[..., :3] @ weights, image[..., :3] @ weights, atol=1e-5)
         spread = lambda a: a[..., :3].max(-1) - a[..., :3].min(-1)
         np.testing.assert_allclose(spread(out), spread(image) * .5, atol=1e-5)
 
     def test_the_suppress_curves_are_separate_from_the_channel_response(self):
+        # The older curve maths: a suppression of 1 limits a channel to the larger of the other two, 0 does nothing.
         image = np.array([[[.8, .4, .3, 1], [.2, .6, .1, 1]]], np.float32)
         p = SPECS["HueCorrect"]["params"].copy()
         p["curve_red"] = encode(((0, .5), (360, .5)))
         response = Evaluator._hue_correct(image, p)
         np.testing.assert_allclose(response[0, 0, :3], [.4, .4, .3], atol=1e-6)
         p = SPECS["HueCorrect"]["params"].copy()
+        p["older_curve_maths"] = 1
+        p["curve_g_sup"] = p["curve_b_sup"] = encode(((0, 0), (360, 0)))          # the older node's default: no suppression
         p["curve_r_sup"] = encode(((0, 1), (360, 1)))
         out = Evaluator._hue_correct(image, p)
         # Full suppression limits red to the larger of green and blue; a pixel whose red is
@@ -148,6 +151,18 @@ class HueCorrectOutputTests(unittest.TestCase):
         np.testing.assert_array_equal(out[0, 1], image[0, 1])
         p["curve_r_sup"] = encode(((0, .5), (360, .5)))
         np.testing.assert_allclose(Evaluator._hue_correct(image, p)[0, 0, 0], .6, atol=1e-6)
+
+    def test_the_suppress_curves_pull_a_channel_toward_the_smaller_of_the_other_two(self):
+        # Nuke's measured form: c = min(others) + sup * (c - min(others)) where c is above the smaller of the other two; 1 changes nothing.
+        image = np.array([[[.8, .4, .3, 1], [.2, .6, .1, 1]]], np.float32)
+        p = SPECS["HueCorrect"]["params"].copy()
+        np.testing.assert_array_equal(Evaluator._hue_correct(image, p), image)
+        p["curve_r_sup"] = encode(((0, 0), (360, 0)))
+        out = Evaluator._hue_correct(image, p)
+        np.testing.assert_allclose(out[0, 0], [.3, .4, .3, 1], atol=1e-6)
+        np.testing.assert_allclose(out[0, 1], [.1, .6, .1, 1], atol=1e-6)
+        p["curve_r_sup"] = encode(((0, .5), (360, .5)))
+        np.testing.assert_allclose(Evaluator._hue_correct(image, p)[0, 0, 0], .55, atol=1e-6)
 
     def test_every_output_curve_matches_the_tile_path(self):
         d = Dispatcher()

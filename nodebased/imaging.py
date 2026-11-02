@@ -6836,7 +6836,13 @@ class Evaluator:
 
     @staticmethod
     def _hue_correct(image, p):
+        # Nuke's HueCorrect, each curve read at the pixel's own hue: sat lerps toward the Rec 709 grey (0.2125 / 0.7154 / 0.0721) as the Saturation
+        # node does, lum is a plain gain on all three channels, red / green / blue the gain of one channel, and a suppression curve pulls a channel
+        # that exceeds the smaller of the other two back toward it, c = lowest + sup * (c - lowest) (0 removes the excess, 1 changes nothing).
+        # `older_curve_maths` is what the node did before (nodebased/behaviour2d.py): lum scaled by the pixel's saturation, a suppression curve
+        # of 1 limited a channel to the largest of the other two with 0 doing nothing, and the grey was 0.2126 / 0.7152 / 0.0722.
         from . import colorcurves
+        older = bool(p.get("older_curve_maths", 0))
         rgb = image[..., :3]
         hue, sat = Evaluator._rgb_to_hue_sat(rgb)
         hue = hue[..., 0].astype(np.float64) % 360.0
@@ -6863,18 +6869,30 @@ class Evaluator:
                 return np.full(hue.shape, default, np.float32)
             return colorcurves.evaluate_array(colorcurves.decode(raw), hue)
         s_mult, l_mult = sample("sat"), sample("lum")
-        luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+        if older:
+            luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+        else:
+            luma = 0.2125 * rgb[..., 0:1] + 0.7154 * rgb[..., 1:2] + 0.0721 * rgb[..., 2:3]
         out = rgb + (s_mult[..., None] - 1.0) * (rgb - luma) * sat_weight[..., None]
-        out = out * (1.0 + (l_mult[..., None] - 1.0) * np.clip(sat[..., None], 0.0, 1.0) * sat_weight[..., None])
+        if older:
+            out = out * (1.0 + (l_mult[..., None] - 1.0) * np.clip(sat[..., None], 0.0, 1.0) * sat_weight[..., None])
+        else:
+            out = out * (1.0 + (l_mult[..., None] - 1.0) * sat_weight[..., None])
         for channel, name in enumerate(("red", "green", "blue")):
             out[..., channel] *= 1.0 + (sample(name) - 1.0) * sat_weight
-        # Suppression is despill-style limiting, a separate output from the channel response above:
-        # a channel is pulled toward the larger of the other two by the curve's value, so 1 limits
-        # it to them and a channel already below them is left alone.
         pre = out.copy()
-        for channel, name in enumerate("rgb"):
-            others = np.maximum(pre[..., (channel + 1) % 3], pre[..., (channel + 2) % 3])
-            out[..., channel] -= sample(name + "_sup", 0.0) * np.maximum(pre[..., channel] - others, 0.0) * sat_weight
+        if older:
+            # Suppression is despill-style limiting, a separate output from the channel response above:
+            # a channel is pulled toward the larger of the other two by the curve's value, so 1 limits
+            # it to them and a channel already below them is left alone.
+            for channel, name in enumerate("rgb"):
+                others = np.maximum(pre[..., (channel + 1) % 3], pre[..., (channel + 2) % 3])
+                out[..., channel] -= sample(name + "_sup", 0.0) * np.maximum(pre[..., channel] - others, 0.0) * sat_weight
+        else:
+            for channel, name in enumerate("rgb"):
+                lowest = np.minimum(pre[..., (channel + 1) % 3], pre[..., (channel + 2) % 3])
+                keep = 1.0 - (1.0 - sample(name + "_sup", 1.0)) * sat_weight
+                out[..., channel] = np.where(pre[..., channel] > lowest, lowest + keep * (pre[..., channel] - lowest), pre[..., channel])
         shift = float(p.get("hue_shift", 0.0))
         if shift % 360.0 != 0.0:
             a = math.radians(shift); c, s = math.cos(a), math.sin(a); k = 1.0 / math.sqrt(3.0)
@@ -7587,7 +7605,10 @@ class Evaluator:
             if mode == "preserve hue and saturation":
                 out_rgb = np.where(over, rgb * (hi / np.where(over, peak, 1.0)), rgb)
             else:
-                luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+                if p.get("older_grey", 0):
+                    luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+                else:
+                    luma = 0.2125 * rgb[..., 0:1] + 0.7154 * rgb[..., 1:2] + 0.0721 * rgb[..., 2:3]
                 gap = np.where(peak > luma, peak - luma, 1.0)
                 keep = np.clip((hi - luma) / gap, 0.0, 1.0)
                 out_rgb = np.where(over, luma + (rgb - luma) * keep, rgb)
@@ -7640,9 +7661,10 @@ class Evaluator:
         # HSVTool: RGB -> (hue in degrees, saturation, value), an adjustment weighted by how far
         # inside the hue, saturation and brightness ranges the pixel sits (product of the three
         # weights, each with its own linear rolloff), then back to RGB. Hue rotates by
-        # hue_rotation degrees. Saturation and brightness scale by (1 + adjust), or, with the
-        # matching "force" toggle, move to the adjust value itself (the definition of Nuke's
-        # `saturation`/`brightness` adjustments is inferred, see docs/PARITY_2D.md). Alpha is
+        # hue_rotation degrees. Saturation and brightness have the adjustment added, or, with the
+        # matching "force" toggle, move to the adjust value itself (Foundry's "Correcting HSV" page gives the
+        # ends: -1 desaturates or blackens completely, 1 saturates or whitens; `adjust_by_scaling` keeps the older
+        # (1 + adjust) scaling for graphs saved before). Alpha is
         # untouched unless output_alpha is on, when it becomes the combined range weight.
         # `color_replace` (Nuke's Color Replacement, `srccolor`/`dstcolor`) derives the rotation
         # and forced saturation/brightness from the two picked colours instead of the literal
@@ -7688,8 +7710,13 @@ class Evaluator:
         brt_effect = brt_weight if independent_masks else weight
         weight = weight * mask_alpha(hm) * mask_alpha(sm) * mask_alpha(bm)
         new_hue = (hue + rotation * hue_effect) % 360.0
-        sat_target = sat_adjust if set_saturation else sat * (1.0 + sat_adjust)
-        val_target = brt_adjust if set_brightness else val * (1.0 + brt_adjust)
+        if p.get("adjust_by_scaling", 0):
+            # The older adjustment (nodebased/behaviour2d.py) scaled the value; Nuke adds the adjustment (-1 reaches gray or black, 1 saturated or white).
+            sat_target = sat_adjust if set_saturation else sat * (1.0 + sat_adjust)
+            val_target = brt_adjust if set_brightness else val * (1.0 + brt_adjust)
+        else:
+            sat_target = sat_adjust if set_saturation else sat + sat_adjust
+            val_target = brt_adjust if set_brightness else val + brt_adjust
         new_sat = np.clip(sat + (sat_target - sat) * sat_effect, 0.0, 1.0)
         new_val = np.maximum(val + (val_target - val) * brt_effect, 0.0)
         out_rgb = np.stack([new_val - new_val * new_sat * np.clip(np.minimum((n + new_hue / 60.0) % 6.0,
