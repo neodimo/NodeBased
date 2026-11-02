@@ -88,9 +88,15 @@ class ColorCorrectMathTests(unittest.TestCase):
         # luminance 0.2: half shadow by this curve, half midtone (highlight 0)
         np.testing.assert_allclose(out, (0.5 * 0.6 + 0.5 * 0.2,) * 3, rtol=1e-5)
 
-    def test_unpremultiplies_before_correcting(self):
+    def test_corrects_the_stored_colour_like_nuke(self):
+        # Nuke corrects what is stored; its (un)premult by knob does any dividing (2D behaviour lane 2, step A).
         pixel = np.array([[[0.1, 0.1, 0.1, 0.5]]], np.float32)
         out = Evaluator._color_correct(pixel, {"offset": 0.1})
+        np.testing.assert_allclose(out[0, 0], (0.2, 0.2, 0.2, 0.5), rtol=1e-5)
+
+    def test_divide_by_alpha_is_the_older_unpremultiplied_correction(self):
+        pixel = np.array([[[0.1, 0.1, 0.1, 0.5]]], np.float32)
+        out = Evaluator._color_correct(pixel, {"offset": 0.1, "divide_by_alpha": 1})
         np.testing.assert_allclose(out[0, 0], (0.15, 0.15, 0.15, 0.5), rtol=1e-5)
 
 

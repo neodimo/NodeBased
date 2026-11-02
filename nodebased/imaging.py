@@ -6032,9 +6032,22 @@ class Evaluator:
     @staticmethod
     def _saturation(image, p):
         # Unlike Multiply/Add/Gamma, Saturation has no channels knob in Nuke: it is inherently an
-        # RGB-luma operation and always leaves alpha untouched.
+        # RGB-luma operation and always leaves alpha untouched. The grey y every pixel is mixed with comes from
+        # `luminance_math` (Nuke's four choices: Rec 709 0.2125 / 0.7154 / 0.0721, Ccir 601 0.299 / 0.587 / 0.114,
+        # Average, Maximum), and out = y + saturation * (in - y), unclamped. "Rec 709 (old weights)" is the
+        # 0.2126 / 0.7152 / 0.0722 grey the node used before it had the choice (nodebased/behaviour2d.py).
         rgb = image[..., :3]
-        luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+        mode = p.get("luminance_math", "Rec 709")
+        if mode == "Rec 709 (old weights)":
+            luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+        elif mode == "Ccir 601":
+            luma = 0.299 * rgb[..., 0:1] + 0.587 * rgb[..., 1:2] + 0.114 * rgb[..., 2:3]
+        elif mode == "Average":
+            luma = (rgb[..., 0:1] + rgb[..., 1:2] + rgb[..., 2:3]) / 3.0
+        elif mode == "Maximum":
+            luma = np.maximum(np.maximum(rgb[..., 0:1], rgb[..., 1:2]), rgb[..., 2:3])
+        else:
+            luma = 0.2125 * rgb[..., 0:1] + 0.7154 * rgb[..., 1:2] + 0.0721 * rgb[..., 2:3]
         out_rgb = luma + (rgb - luma) * p.get("saturation", 1.0)
         return np.concatenate([out_rgb, image[..., 3:4]], axis=2).astype(np.float32)
 
@@ -8341,7 +8354,7 @@ class Evaluator:
 
     @staticmethod
     def _color_correct(image, p):
-        """Nuke's ColorCorrect, on unpremultiplied colour.
+        """Nuke's ColorCorrect, on the stored colour (`divide_by_alpha` works on unpremultiplied colour, as older documents did).
 
         Weights: the input's Rec.709 luminance (Nuke's 0.2125/0.7154/0.0721) looked up in the shadow
         and highlight curves, held flat past their end points; midtones = 1 - shadows - highlights.
@@ -8360,7 +8373,13 @@ class Evaluator:
             return image
         frame = image
         alpha = frame[..., 3:4]
-        straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
+        # Nuke corrects the stored colour; its (un)premult by knob does any dividing. `divide_by_alpha` is the older behaviour,
+        # which an older document's node keeps (nodebased/behaviour2d.py).
+        divide = bool(q.get("divide_by_alpha", 0))
+        if divide:
+            straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
+        else:
+            straight = frame[..., :3]
 
         def luminance(rgb):
             return 0.2125 * rgb[..., 0:1] + 0.7154 * rgb[..., 1:2] + 0.0721 * rgb[..., 2:3]
@@ -8413,7 +8432,7 @@ class Evaluator:
                 result = corrected      # the weights add up to 1; skip their rounding
                 break
             result += w * corrected
-        return np.concatenate([result * alpha, alpha], axis=2).astype(np.float32)
+        return np.concatenate([result * alpha if divide else result, alpha], axis=2).astype(np.float32)
 
     @staticmethod
     def _log2lin(image, p):

@@ -267,6 +267,8 @@ def upgrade_nodes(nodes):
             precompnode.upgrade_use_output(params)         # an older Precomp that names an output node keeps using it
         added = spec_params(node.get("type"))
         added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type")), **step_g_params(node.get("type")), **step_h_params(node.get("type"))}
+        from . import behaviour2d
+        added.update(behaviour2d.upgrade_params(node.get("type")))      # Nuke's behaviour for the colour nodes (lane 2, November 2026)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

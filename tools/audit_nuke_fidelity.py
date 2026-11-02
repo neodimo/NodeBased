@@ -381,7 +381,7 @@ def build_report(reference_dir=None):
     w("| defaults | 10 | Of the paired knobs whose Nuke default the guide states and whose NodeBased default is comparable, the fraction that agree. |")
     w("| sockets | 10 | The Nuke node's input sockets (mask included, A/B and numbered inputs as listed) that a NodeBased input is paired with. |")
     w("| chrome | 15 | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |")
-    w("| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form where the page names the knobs but states no formula (Grade, Exposure; marked *convention*). Only nodes with such cases have this component. |")
+    w("| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). Only nodes with such cases have this component. |")
     w("| pixels | 30 | Pixel truth against real Nuke renders. **Not measured yet**: it joins the formula once `--reference-dir` has renders; until then it is not in any number here. |")
     w("")
     w("`fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. "
@@ -402,6 +402,11 @@ def build_report(reference_dir=None):
         if g in by_group:
             rw, n, mean = by_group[g]
             w(f"| {g} | {rw:.1f} | {mean:.1f} | {n} |")
+    w("")
+    checked = [u for u in units if u["score"] is not None and "math" in u["components"]]
+    scored_nodes = [u for u in units if u["score"] is not None]
+    w(f"Behaviour checked: {len(checked)} of the {len(scored_nodes)} scored nodes have at least one scored pixel case against what the node computes "
+      "(the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.")
     w("")
     w("## Per node")
     w("")

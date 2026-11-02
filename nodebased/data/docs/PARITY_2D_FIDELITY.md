@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 90.9 / 100** (167 nodes scored, rank-weighted; 93.1 counting only the nodes NodeBased has).
+**Overall fidelity: 90.9 / 100** (167 nodes scored, rank-weighted; 93.2 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -14,7 +14,7 @@ Per node, five components, each a fraction from 0 to 1:
 | defaults | 10 | Of the paired knobs whose Nuke default the guide states and whose NodeBased default is comparable, the fraction that agree. |
 | sockets | 10 | The Nuke node's input sockets (mask included, A/B and numbered inputs as listed) that a NodeBased input is paired with. |
 | chrome | 15 | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |
-| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form where the page names the knobs but states no formula (Grade, Exposure; marked *convention*). Only nodes with such cases have this component. |
+| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). Only nodes with such cases have this component. |
 | pixels | 30 | Pixel truth against real Nuke renders. **Not measured yet**: it joins the formula once `--reference-dir` has renders; until then it is not in any number here. |
 
 `fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. A Nuke node with no NodeBased counterpart scores 0. A node whose guide page lists no inputs or knobs cannot be measured and is left out (listed at the end).
@@ -31,13 +31,15 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Draw | 83.1 | 62.3 | 17 |
 | Time | 96.1 | 78.2 | 13 |
 | Channel | 98.4 | 97.2 | 5 |
-| Color | 92.8 | 75.2 | 34 |
+| Color | 93.0 | 75.2 | 34 |
 | Filter | 89.1 | 67.6 | 32 |
 | Keyer | 87.3 | 64.6 | 11 |
 | Merge | 99.4 | 98.7 | 12 |
 | Transform | 88.1 | 71.2 | 20 |
 | Metadata | 99.4 | 98.9 | 5 |
 | Other | 80.3 | 43.0 | 12 |
+
+Behaviour checked: 14 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.
 
 ## Per node
 
@@ -111,9 +113,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Grade | `Grade` | supported | 100.0 | 100 (10/10) | 100 | 100 | 100 | 100 (6/6) | unmeasured |
-| 2 | ColorCorrect | `ColorCorrect` | supported | 95.4 | 91 (21/23) | 100 | 100 | 100 | - | no fixture |
+| 2 | ColorCorrect | `ColorCorrect` | supported | 96.5 | 91 (21/23) | 100 | 100 | 100 | 100 (20/20) | unmeasured |
 | 3 | Invert | `Invert` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | unmeasured |
-| 4 | Saturation | `Saturation` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
+| 4 | Saturation | `Saturation` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | 100 (13/13) | unmeasured |
 | 5 | Multiply | `Multiply` | supported | 98.8 | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | unmeasured |
 | 6 | Add | `Add` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | unmeasured |
 | 7 | Gamma | `Gamma` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | unmeasured |
@@ -368,6 +370,39 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `grade_reverse` | convention | pass | within tolerance | - |
 | `exposure_stops` | convention | pass | within tolerance | - |
 | `exposure_stops_blackpoint` | convention | pass | within tolerance | - |
+| `cc_master_chain` | convention | pass | within tolerance | - |
+| `cc_gamma_true_power` | convention | pass | within tolerance | - |
+| `cc_saturation_zero` | convention | pass | within tolerance | - |
+| `cc_saturation_two` | convention | pass | within tolerance | - |
+| `cc_master_contrast_pivot` | convention | pass | within tolerance | - |
+| `cc_shadows_contrast_pivot` | convention | pass | within tolerance | - |
+| `cc_midtones_contrast_pivot` | convention | pass | within tolerance | - |
+| `cc_highlights_contrast_pivot` | convention | pass | within tolerance | - |
+| `cc_shadows_offset` | convention | pass | within tolerance | - |
+| `cc_midtones_offset` | convention | pass | within tolerance | - |
+| `cc_highlights_offset` | convention | pass | within tolerance | - |
+| `cc_shadows_saturation_gamma_gain` | convention | pass | within tolerance | - |
+| `cc_midtones_saturation_gamma_gain` | convention | pass | within tolerance | - |
+| `cc_highlights_saturation_gamma_gain` | convention | pass | within tolerance | - |
+| `cc_ranges_sum_to_one` | guide | pass | within tolerance | - |
+| `cc_master_woven_into_ranges` | convention | pass | within tolerance | - |
+| `cc_everything` | convention | pass | within tolerance | - |
+| `cc_stored_colour_not_straight` | guide | pass | within tolerance | - |
+| `cc_mix_half` | guide | pass | within tolerance | - |
+| `cc_mask` | guide | pass | within tolerance | - |
+| `saturation_rec709_zero` | convention | pass | within tolerance | - |
+| `saturation_rec709_half` | convention | pass | within tolerance | - |
+| `saturation_ccir601_zero` | convention | pass | within tolerance | - |
+| `saturation_ccir601_half` | convention | pass | within tolerance | - |
+| `saturation_average_zero` | convention | pass | within tolerance | - |
+| `saturation_average_half` | convention | pass | within tolerance | - |
+| `saturation_maximum_zero` | convention | pass | within tolerance | - |
+| `saturation_maximum_half` | convention | pass | within tolerance | - |
+| `saturation_rec709_boost` | convention | pass | within tolerance | - |
+| `saturation_rec709_negative` | convention | pass | within tolerance | - |
+| `saturation_default_is_identity` | guide | pass | within tolerance | - |
+| `saturation_mix_half` | guide | pass | within tolerance | - |
+| `saturation_mask` | guide | pass | within tolerance | - |
 
 ## What a reader should know about the reference data
 

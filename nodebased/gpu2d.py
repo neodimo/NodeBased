@@ -212,6 +212,7 @@ def map_color_correct(p):
             if master["contrast"] != 1.0: x = (x / .18) ** master["contrast"] * .18
             return x ** (1.0 / gamma) if gamma != 1.0 else x
         cc[38 + 8*k:46 + 8*k] = (saturation, czone, pivot or 0.0, gamma, gain, offset, mask, tone(1.0))
+    cc[63] = 1.0 if q.get("divide_by_alpha", 0) else 0.0         # older documents correct the colour divided by alpha
     return {"identity": identity, "mix": float(q.get("mix", 1.0)), "plan": ColorCorrectPlan(cc)}
 
 
@@ -569,7 +570,8 @@ fn cc_weight(base: u32, lum: f32) -> f32 {
 }
 """ + _MAIN_HEAD + """
     let s = fetch_src(ax, ay); let a = s.w;
-    let straight = select(vec3<f32>(0.0), s.xyz / a, a > 1e-8);
+    let divide = cc[63] != 0.0;
+    let straight = select(s.xyz, select(vec3<f32>(0.0), s.xyz / a, a > 1e-8), divide);
     let lum = dot(straight, vec3<f32>(.2125, .7154, .0721));
     let ws = cc_weight(0u, lum); let wh = cc_weight(18u, lum); let wm = 1.0 - ws - wh;
     var result = vec3<f32>(0.0);
@@ -596,7 +598,7 @@ fn cc_weight(base: u32, lum: f32) -> f32 {
             result = result + w * corrected;
         }
     }
-    out[oi] = gated(s, vec4<f32>(result * a, a), ax, ay);
+    out[oi] = gated(s, vec4<f32>(select(result, result * a, divide), a), ax, ay);
 }
 """
 

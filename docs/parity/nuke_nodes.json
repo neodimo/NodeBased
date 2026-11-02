@@ -1510,6 +1510,7 @@
    "knobs": [
     {"name": "channels", "label": "channels", "tab": "Saturation Tab", "primary": true, "role": "chrome:channels", "counted": true, "type": "channels", "default": "all"},
     {"name": "saturation", "label": "saturation", "tab": "Saturation Tab", "primary": true, "role": "knob", "counted": true, "type": "number", "default": 1},
+     {"name": "luminance_math", "label": "luminance math", "tab": "Saturation Tab", "primary": true, "role": "ui_only", "counted": false, "type": "enum", "default": "Rec709", "reason": "Foundry's SDK Saturation example has this knob (Rec709, Ccir601, Average, Maximum) but the 17.0 page's table omits it; the scripting name is the example's and is not confirmed against a Nuke render"},
     {"name": "N/A", "label": "mask", "tab": "Saturation Tab", "primary": true, "role": "ui_only", "counted": false, "type": "bool", "default": false, "reason": "enable checkbox or label without a scripting name"},
     {"name": "maskChannelInput", "label": "mask", "tab": "Saturation Tab", "primary": true, "role": "chrome:mask_channel", "counted": true, "type": "string", "default": "none"},
     {"name": "inject", "label": "inject", "tab": "Saturation Tab", "primary": true, "role": "chrome:mask_inject", "counted": true, "type": "bool", "default": false},

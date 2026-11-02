@@ -168,6 +168,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
+from . import behaviour2d as _behaviour2d
 from . import rotoknobs as _rotoknobs
 from . import textknobs as _textknobs
 from . import mergeknobs as _mergeknobs
@@ -210,7 +211,7 @@ SPECS = {
            for name, value in (("saturation", 1.0), ("contrast", 1.0), ("gamma", 1.0), ("gain", 1.0), ("offset", 0.0))},
         "shadows_curve": '{"interpolation":"smooth","points":[[0,1],[0.09,0]]}',
         "highlights_curve": '{"interpolation":"smooth","points":[[0.5,0],[1,1]]}',
-        "mix": 1.0}},
+        "mix": 1.0, **_behaviour2d.new_params("ColorCorrect")}},
     # Blur, Sharpen and Soften take Nuke's filter shape, quality limit and "crop to format" (fidelity step E, nodebased/blurknobs.py).
     "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 8.0, "mix": 1.0, **_blurknobs.new_params("Blur")}},
     # Invert/Clamp/Multiply/Add/Gamma/Saturation are Nuke's Color-toolbar nodes that split a
@@ -229,7 +230,7 @@ SPECS = {
     "Multiply": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"multiply": 1.0, "channels": "rgb", "mix": 1.0}},
     "Add": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"offset": 0.0, "channels": "rgb", "mix": 1.0}},
     "Gamma": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"gamma": 1.0, "channels": "rgb", "mix": 1.0}},
-    "Saturation": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"saturation": 1.0, "mix": 1.0}},
+    "Saturation": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"saturation": 1.0, "mix": 1.0, **_behaviour2d.new_params("Saturation")}},
     # Erode/Dilate/Median/Sharpen/Glow/Mirror are the lane's group (c) Filter/Transform nodes.
     # Erode's own "erode_size" and Dilate's "dilate_size" share one box min/max kernel
     # (Evaluator._morph): a positive size erodes (shrinks) and a negative size dilates (grows) on
@@ -2196,7 +2197,7 @@ LIMITS.update({"blur_scale": (0.0, 1000.0), "ignore_top_line": (0, 1), "avg_fram
                "shrink_expand": (-500.0, 500.0), "nonlinear": (0, 1), "effect_only": (0, 1)})
 LIMITS.update({"nyquist": (0, 1), "translate_x": (-1000000.0, 1000000.0), "translate_y": (-1000000.0, 1000000.0), "rotate_x": (-360.0, 360.0), "rotate_y": (-360.0, 360.0), "scaling": (0.000001, 1000000.0), "skew": (-360.0, 360.0), "xrotate": (-360.0, 360.0), "yrotate": (-360.0, 360.0), "p0_x": (-1000000.0, 1000000.0), "p0_y": (-1000000.0, 1000000.0), "p1_x": (-1000000.0, 1000000.0), "p1_y": (-1000000.0, 1000000.0), "color0_red": (-1000000.0, 1000000.0), "color0_green": (-1000000.0, 1000000.0), "color0_blue": (-1000000.0, 1000000.0), "color0_alpha": (-1000000.0, 1000000.0)})
 LIMITS.update({"use_precomputed": (0, 1), "range": (0.000001, 1000000.0), "source": (-1000000.0, 1000000.0), "target": (-1000000.0, 1000000.0),
-               "onlywrap": (0, 1), "disableluma": (0, 1), "enableglow": (0, 1), "saturation": (0.0, 1000000.0), "LumaTolerance": (0.0, 1000000.0),
+               "onlywrap": (0, 1), "disableluma": (0, 1), "enableglow": (0, 1), "saturation": (-1000000.0, 1000000.0), "LumaTolerance": (0.0, 1000000.0),
                "white": (-1000000.0, 1000000.0), "gray": (-1000000.0, 1000000.0), "contrast": (-1000000.0, 1000000.0), "gamma": (0.000001, 1000000.0),
                "gain": (-1000000.0, 1000000.0), "offset": (-1000000.0, 1000000.0), **{f"{band}_{name}": ((0.000001, 1000000.0) if name == "gamma" else (-1000000.0, 1000000.0)) for band in ("shadows", "midtones", "highlights") for name in ("gamma", "gain", "offset")},
                "UseTarget": (0, 1), "Samples": (0, 1000), "PixelAspect": (0.000001, 1000.0), "pixeloffset": (-1000000.0, 1000000.0),
@@ -2215,6 +2216,8 @@ LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000)
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
 # Grade's Nuke knobs (fidelity step E). `black` and `white` are shared names (Log2Lin, Histogram), so Grade's wider ranges are its own.
 LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
+LIMITS.update(_behaviour2d.LIMITS)
+CHOICES.update(_behaviour2d.CHOICES)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
 CHOICES["merge_bbox"] = list(_mergeknobs.BBOX_CHOICES)

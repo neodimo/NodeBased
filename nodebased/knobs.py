@@ -169,6 +169,9 @@ KNOB_LAYOUT = {
                   help="How much of a pixel counts as shadow, by its luminance. Midtones are whatever "
                        "the shadow and highlight curves leave."),
         KnobGroup("curve", ("highlights_curve",), label="Highlights curve", section="Ranges"),
+        KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", section="Ranges",
+                  help="Divide the colour by its alpha before correcting and multiply it back after, as NodeBased's ColorCorrect always did. "
+                       "Off is Nuke's: the stored colour is corrected, and (un)premult by does the dividing when you want it."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Blur": _groups(
         KnobGroup("float_slider", ("radius",), soft_range=(0, 100)),
@@ -200,7 +203,10 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Saturation": _groups(
-        KnobGroup("float_slider", ("saturation",), soft_range=LIMITS["saturation"]),
+        KnobGroup("float_slider", ("saturation",), soft_range=(0, 4)),
+        KnobGroup("enum", ("luminance_math",), label="Luminance math",
+                  help="How the grey each pixel is mixed toward is worked out: Rec 709 or Ccir 601 weights, the average of the three channels, or the largest one. "
+                       "Rec 709 (old weights) is the 0.2126 / 0.7152 / 0.0722 grey an older graph's Saturation always used."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Erode": _groups(
         KnobGroup("float_slider", ("erode_size",), label="Size", soft_range=(-100, 100)),
