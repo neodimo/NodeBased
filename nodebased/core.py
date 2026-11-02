@@ -842,7 +842,7 @@ SPECS = {
                     "params": {"key_red": 0.1, "key_green": 0.8, "key_blue": 0.2,
                               "key_tolerance": 0.35, "key_softness": 0.3, "luma_gain": 0.0,
                               "shadow_level": 0.02, "highlight_level": 1000000.0,
-                              "despill": 1, "despill_bias": 0.5, "premultiply": 0, "invert": 0,
+                              "despill": 1, "despill_bias": 0.5, "premultiply": 1, "invert": 0,
                               "mix": 1.0, **_smallnodes.new_params("ChromaKeyer")}},
     # IBKColor (step K1): builds a clean screen plate from a blue or green screen by repeated
     # edge-aware filling (docs/PARITY_2D.md). `fill_size` is Nuke's `size` (renamed: `size` is a

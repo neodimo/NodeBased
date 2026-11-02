@@ -1229,6 +1229,111 @@ def _hue_keyer_cases():
     return out
 
 
+# ---------------------------------------------------------------------------------------- ChromaKeyer and Difference (step C)
+_CK_GUIDE = "ChromaKeyer (Nuke 17.0 Reference Guide)"
+_DIFF_GUIDE = ("Difference (Nuke 17.0 Reference Guide): 'This node produces the difference between two images as a matte. [...] input B contains the subject with the background, "
+               "and input A contains the background without the subject (a clean plate).' offset: 'Subtract this value from each pixel of the output.'")
+
+
+def _diff_expected(offset):
+    def expected(fx):
+        ref = fx["A"].astype(np.float64).copy()
+        ref[..., 3] = -offset                              # two equal pictures differ by nothing: the matte is 0 less the offset
+        valid = np.zeros(ref.shape, bool)
+        valid[..., 3] = True                               # the guide does not say what colour the node outputs
+        return ref, valid
+    return expected
+
+
+def _difference_cases():
+    out = []
+    out.append(Case("difference_identical_inputs", "Difference", "Difference", (), ("A", "A"), "Difference", {}, ("A", "A"), _diff_expected(0.0), "guide",
+                    f"two identical pictures have no difference: the matte is 0 everywhere ({_DIFF_GUIDE}). Only the alpha is compared: the guide does not say what colour comes out"))
+    out.append(Case("difference_offset_subtracts", "Difference", "Difference", (("offset", -0.3),), ("A", "A"), "Difference", {"offset": -0.3}, ("A", "A"), _diff_expected(-0.3), "guide",
+                    f"offset is subtracted from the output: with nothing to differ, an offset of -0.3 gives a matte of 0.3 ({_DIFF_GUIDE})"))
+    for case_id, what, reason in (
+            ("difference_metric", "the difference between the two images as one matte value",
+             "the page does not say how the three colour channels become one matte value: the largest channel difference, their sum, their mean, the luminance of the difference and "
+             "the length of the difference vector are all in use"),
+            ("difference_gain", "gain: 'Any pixels that are white are set to this color'",
+             "the sentence says what a white pixel becomes and not how the other values scale, nor whether the gain is applied before or after the offset is subtracted"),
+            ("difference_clamp", "the range of the matte", "the page does not say whether the matte is clamped to 0 to 1, so the values below 0 (after the offset) and above 1 are left alone"),
+            ("difference_output_colour", "the colour channels of the output", "the page says the node 'produces the difference as a matte' and not what the colour channels hold")):
+        out.append(_unscored_case(case_id, "Difference", "Difference", f"Difference: {what} ({_DIFF_GUIDE})", reason))
+    return out
+
+
+def _chroma_keyer_cases():
+    out = []
+    for case_id, what, reason in (
+            ("chromakeyer_screen_colour", "screen color: 'Sets the screen color to become transparent, usually blue or green background'",
+             "the page says a pixel of the screen colour becomes transparent and gives no distance measure for the pixels near it: how far a colour is from the screen colour, and how "
+             "that distance becomes an alpha, is not published (tests/test_2d_behaviour_keyer.py checks that the screen colour itself is transparent and a neutral grey stays opaque)"),
+            ("chromakeyer_screen_gain", "screen gain: 'Adjusts how much of the screen color is removed to make the screen matte. Increasing this value keys more'",
+             "the page states the direction and no formula for the gain (tests/test_2d_behaviour_keyer.py checks that a higher gain never makes the matte more opaque)"),
+            ("chromakeyer_screen_balance", "screen balance: 'Sets the balance point for the image to key', suggesting 0.05, 0.5 and 0.95",
+             "the page gives the three values to try and no formula for what a balance weighs against what"),
+            ("chromakeyer_chroma_gain", "chroma gain: 'generates a matte that has less transparent areas in the foreground, but can produce harder edges'",
+             "the page states the effect and no formula (tests/test_2d_behaviour_keyer.py checks that a higher chroma gain never makes the matte more transparent)"),
+            ("chromakeyer_white_black_point", "white point: 'All alpha values above this point are set to 1'; black point: 'All alpha values below this point are set to 0'",
+             "both sentences are relative to the matte before the points, which the page does not give a formula for, so no independent matte can be written down "
+             "(tests/test_2d_behaviour_keyer.py checks them against the node's own matte before the points)"),
+            ("chromakeyer_alpha_bias", "alpha bias: 'Adjusts the alpha bias in case your screen color isn't purely blue or green [...] Pick the color from the part of the foreground that is affected'",
+             "the page describes the use and gives no formula for how a picked colour moves the matte"),
+            ("chromakeyer_despill", "despill bias: 'Adjusts the despill bias to remove any remaining spill'; 'Use custom despill bias' enables it",
+             "the page gives no formula for the despill: which channel is limited, and to what mix of the others"),
+            ("chromakeyer_replace_modes", "replace mode: ignore, edge hard color, edge linear color and edge soft color",
+             "the page words the four modes ('a corresponding amount of the replace color added for any increase in alpha', 'reintroduced/removed if the alpha is changed') without "
+             "the amount's formula, and the matte they act on is itself not published (tests/test_2d_fidelity_h_keyers.py and tests/test_2d_behaviour_keyer.py check the stated relations)"),
+            ("chromakeyer_premultiply", "premultiply: 'premultiply the matte generated by ChromaKeyer with the foreground', enabled by default",
+             "the colour that is multiplied is the despilled colour and its matte is not published, so the output colour cannot be written down independently "
+             "(tests/test_2d_behaviour_keyer.py checks that the colour equals the unpremultiplied colour times the alpha)"),
+            ("chromakeyer_inside_mask", "inside mask: 'set inside mask to source alpha to add up the results of previous ChromaKeyer nodes'",
+             "the page says the results add up and does not say how (a sum, a union or a maximum) or how the sum is kept within 1")):
+        out.append(_unscored_case(case_id, "ChromaKeyer", "ChromaKeyer", f"{_CK_GUIDE}: {what}", reason, fixture="C"))
+    return out
+
+
+def _screen_keyer_cases():
+    out = []
+    guide = "Keylight (Nuke 17.0 Reference Guide and the Keyer introduction page)"
+    for case_id, what, reason in (
+            ("keylight_screen_colour_gain_balance", "screen colour, screen gain and screen balance",
+             "Keylight is a third-party plug-in; the Reference Guide lists its knobs and the introduction says only that the screen colour is picked with the eyedropper and 'many options "
+             "you can adjust'. Its screen matte formula is not published, so no pixel can be written down"),
+            ("keylight_clip_black_white", "clip black and clip white: 'Clip Black looks for any pixel less than the slider and it makes it 100% transparent'; Clip White makes the grey in the white area 'more opaque'",
+             "both sentences are relative to the screen matte, which has no published formula (tests/test_2d_behaviour_keyer.py checks them against the node's own screen matte)"),
+            ("keylight_despill_bias", "despill bias and alpha bias", "no formula is published for either bias"),
+            ("keylight_replace_methods", "screen replace and inside replace (none, source, hard colour, soft colour)", "the methods are named and not defined by any page of the guide")):
+        out.append(_unscored_case(case_id, "Keylight", "ScreenKeyer", f"{guide}: {what}", reason, fixture="C"))
+    return out
+
+
+def _ibk_cases():
+    out = []
+    guide = ("Image-Based Keying (Nuke 17.0 Reference Guide introduction and Foundry's 'Image-Based Keying' tutorial): 'IBKColour [...] generates the processed screen image that "
+             "preserves the color variations in your blue- or greenscreen'; 'essentially a Gaussian-filtered high-contrast key'; IBKGizmo 'smoothing the screen and using the result to "
+             "essentially create a difference matte with the foreground'")
+    for case_id, nuke, kind, what, reason in (
+            ("ibkcolor_screen_type", "IBKColor", "IBKColor", "screen type: 'whatever color is not green it's removing'",
+             "neither page defines 'not green' (a ratio of the channels, a difference, a threshold) or what replaces it, so the processed screen cannot be written down "
+             "(tests/test_2d_behaviour_keyer.py checks that a green screen plate keeps its green and that a foreground inside it is filled from the screen around it)"),
+            ("ibkcolor_size", "IBKColor", "IBKColor", "size: 'the aggressiveness of the removal [...] If I increase that, there is more averaging and fewer and fewer non-green colors'",
+             "the page states the direction and the filter (a Gaussian) without its width in pixels for a given size"),
+            ("ibkcolor_darks_lights_patch_black", "IBKColor", "IBKColor", "darks, lights and patch black: adjust the artifacts that appear 'as light green, dark green, light red, dark red, light blue and dark blue'",
+             "the tutorial names what each control cures and gives no formula for any of them, nor the erode"),
+            ("ibkgizmo_screen_type_difference", "IBKGizmo", "IBKGizmo", "the colour difference matte for the screen types C-blue and C-green (and pick)",
+             "the matte formula is not published: the pages say 'essentially a difference matte' without the weights of red, blue and green in it. NodeBased has green and blue and no pick or C-red"),
+            ("ibkgizmo_red_blue_green_weights", "IBKGizmo", "IBKGizmo", "red weight and blue/green weight", "no page of the guide or the tutorial defines the weights beyond their names"),
+            ("ibkgizmo_luminance_match_level", "IBKGizmo", "IBKGizmo", "luminance match, luminance level, use bkg luminance and use bkg chroma", "no page of the guide or the tutorial describes any of the four knobs"),
+            ("ibkgizmo_screen_subtraction_despill", "IBKGizmo", "IBKGizmo", "screen subtraction (the despill)", "no page of the guide or the tutorial describes this knob"),
+            ("ibkgizmo_unimplemented_knobs", "IBKGizmo", "IBKGizmo", "color, screen range, autolevels, yellow, cyan and magenta",
+             "eight of the gizmo's fifteen knobs (color, screen range, enable for the luminance level, autolevels, yellow, cyan, magenta, use bkg chroma) have no NodeBased param, and no page "
+             "says what they do; they stay unpaired until the gizmo's own definition can be read")):
+        out.append(_unscored_case(case_id, nuke, kind, f"{guide}: {what}", reason, fixture="C"))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
@@ -1236,4 +1341,4 @@ def cases():
     from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
             + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
-            + _keyer_cases() + _hue_keyer_cases())
+            + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases())
