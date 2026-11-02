@@ -1,3 +1,29 @@
+## 2026-11-02, 2D behaviour step C of 3 (Lane 2, Claude Sonnet 5.5): Keyer, HueKeyer, ChromaKeyer, Difference, ScreenKeyer, IBKColor, IBKGizmo, Copy, ChannelMerge, Shuffle
+
+- **What was done (evidence):** read the Nuke 17.0 pages of the ten nodes and the kernels on both paths; `tools/nuke_fidelity_cases_color.py` gains 88 cases
+  (46 pass, 0 fail, 42 not scored with a stated reason: Keyer 11 of 17, HueKeyer 5 of 8, Difference 2 of 6, Copy 8 of 11, ChannelMerge 13 of 16, Shuffle 7 of 8 scored;
+  ChromaKeyer, Keylight, IBKColor and IBKGizmo have only not-scored cases because no page gives a formula). `tests/test_2d_behaviour_keyer.py` (78 tests): the cases,
+  every paired main-tab knob, tiles of 7, 16 and 32 with and without a mask, older documents bit for bit (HueKeyer, ChannelMerge), and the stated words of the
+  unscored nodes as properties of the pixels. Targeted gate (the module, audit, knowledge, tiles, bypass, knobs, tiers, core, split knobs, panel and label tests, and every
+  module that names these kinds): 540 tests OK.
+- **Nodes with behaviour checked:** 6 of 10 (before: 0): Keyer, HueKeyer, Difference, Copy, ChannelMerge, Shuffle. Overall fidelity 91.2 -> 91.3; nodes with behaviour checked 30 -> 36 of 167.
+- **Kernels changed (each behind a switch an older document gets on load by `ops2d_chrome.upgrade_nodes`; no schema bump):** HueKeyer keyed a hue window (centre, width,
+  softness, saturation range); Nuke's keys from two curves over hue (amount, saturation threshold), alpha = 1 - amount while invert (on by default) is on: now the curves,
+  the window behind `older_hue_window`. ChannelMerge used the Merge vocabulary (over by default) and its multiply/divide let two negatives turn positive; now the guide's
+  fourteen operations in `channel_operation` (union by default), the old choice behind `older_channel_operations`. ChromaKeyer's `premultiply` default is on (the page says
+  so; a saved graph keeps its stored value). Keyer, Difference, Copy, Shuffle, ScreenKeyer, IBKColor and IBKGizmo were right where the pages say anything.
+- **Knobs unpaired:** HueKeyer's hue_center, hue_width, hue_softness, sat_min, sat_max (extra, read only with Older hue window); ChannelMerge's old `operation` (extra).
+- **Rule 5:** layouts and splits were built in step S for these nodes (tests/test_split_knobs.py has one order test per node, updated for HueKeyer and ChannelMerge). The Color knobs
+  of these nodes (ChromaKeyer screen colour, alpha bias, despill bias, replace colour; Keylight's; IBKColor darks and lights) are already one param per channel or, for darks and
+  lights, one scalar; no AColor knob remains to split. No step A node was left over.
+- **Not done / open (Needs Gonzo):** IBKGizmo has 7 of 15 knobs: color, screen range, luminance level enable, autolevels, yellow, cyan, magenta, use bkg chroma have no
+  param and no page says what they do; its screen types are green and blue where Nuke has C-blue, C-green and pick. IBKColor's darks/lights are per-channel offset and
+  multiplier colours in Nuke (scripting names off, mult; the tutorial sets darks g to -0.08 and lights g to 0.75), NodeBased clamps the screen channel. ChannelMerge in/out/stencil
+  read the page's lower-case a and b as the channel value (unsettled). HueKeyer's `channels` limits the written channels where Nuke computes the hue from them.
+- **Remaining Color, Keyer and Channel nodes with no behaviour checked:** see the report; ChromaKeyer, Keylight, IBKColor, IBKGizmo (no published formula), plus the nodes of
+  steps A and B that are all not-scored (HistEQ, MinColor) and the Channel/Color nodes outside lane 2's three steps (Remove, ShuffleCopy, ColorMatrix, ColorCorrect siblings).
+- **Next owner:** Gonzo.
+
 ## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of 3: the log, colourspace and lookup nodes compute what Nuke computes (integrator tick)
 
 - **What was done:** `main` `b32de38b` -> `cc2bf235` plus this docs commit. Evidence and per-lane commit

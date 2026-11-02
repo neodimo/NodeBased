@@ -1,3 +1,9 @@
+## 2026-11-02 - Lane 2 (2D behaviour), step C of 3: the keyers and channel nodes compute what Nuke computes
+
+Branch `openclaw/nb-2d-parity`. HueKeyer, ChannelMerge and ChromaKeyer's premultiply default changed behind `older_hue_window`, `older_channel_operations` and the stored
+value (nodebased/behaviour2d.py). Cases: tools/nuke_fidelity_cases_color.py. Tests: tests/test_2d_behaviour_keyer.py. Verified: the cases, every paired knob acts,
+tiles, older documents. Not verified: IBKGizmo's eight missing knobs (no page), IBKColor's darks/lights meaning, any real Nuke render.
+
 ## 2026-11-01 - Lane 9 (2D behaviour), step A of 3: the Filter nodes Blur to Emboss compute what the guide states
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:25 AM on 2026-11-02 PDT)
