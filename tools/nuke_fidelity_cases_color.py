@@ -823,10 +823,90 @@ def _colorspace_cases():
     return out
 
 
+
+# ----------------------------------------------------------------------------------------------------------- ColorLookup (step B)
+_CL_GUIDE = ("ColorLookup (Nuke 17.0 Reference Guide): 'The horizontal axis represents the channel's original, or input, values, and the vertical axis "
+             "represents the channel's new, or output values'")
+_CL_CHANNELS = ("red", "green", "blue", "alpha")
+
+
+def _cl_curve_json(points):
+    return '{"interpolation":"linear","points":' + str([list(map(float, p)) for p in points]).replace(" ", "") + "}"
+
+
+def _cl_nuke_lut(entries):
+    """The `lut` knob text for linear curves through points on the 0..1 axes: master, red, green, blue and alpha, as `{curve L x0 y0 x1 y1 ...}`."""
+    return "{" + " ".join("{" + name + " {curve L " + " ".join(f"x{x:g} {y:g}" for x, y in pts) + "}}" for name, pts in entries.items()) + "}"
+
+
+def color_lookup_reference(rgba, master=None, channels=None):
+    """Each channel runs through the master curve and then its own (linear curves through the given points, held 0..1 by the fixture)."""
+    out = rgba.astype(np.float64).copy()
+    for index, name in enumerate(_CL_CHANNELS):
+        value = out[..., index]
+        if master:
+            value = np.interp(value, *zip(*master))
+        if channels and name in channels:
+            value = np.interp(value, *zip(*channels[name]))
+        out[..., index] = value
+    return out
+
+
+def _cl_case(case_id, curves, statement, source="guide", extra_nb=None, extra_nuke=(), expected_curves=None):
+    """`curves`: {"master" | "red" | ...: points}. `expected_curves` lets a case compare against a different set of curves than it sets (the range cases)."""
+    master = curves.get("master")
+    channels = {k: v for k, v in curves.items() if k != "master"}
+    reference = expected_curves if expected_curves is not None else (master, channels)
+    params = {f"curve_{name}": _cl_curve_json(points) for name, points in curves.items()}
+    params.update(extra_nb or {})
+
+    def expected(fx):
+        src = fx["C"].astype(np.float64)
+        return color_lookup_reference(src, *reference), np.ones(src.shape, bool)
+    knobs = (("lut", _cl_nuke_lut(curves)),) + tuple(extra_nuke) if curves else tuple(extra_nuke)
+    return Case(case_id, "ColorLookup", "ColorLookup", knobs, ("C",), "ColorLookup", params, ("C",), expected, source,
+                f"{statement} ({_CL_GUIDE})" if source == "guide" else statement)
+
+
+def _color_lookup_cases():
+    out = []
+    bend = ((0.0, 0.0), (0.5, 0.8), (1.0, 1.0))
+    out.append(_cl_case("colorlookup_default_is_identity", {}, "the default curves are straight lines from 0 to 1 on every channel, so nothing changes"))
+    out.append(_cl_case("colorlookup_red_curve", {"red": bend}, "the red curve maps the red values (here 0.5 to 0.8) and leaves green, blue and alpha alone"))
+    out.append(_cl_case("colorlookup_green_blue_curves", {"green": ((0.0, 0.1), (1.0, 0.7)), "blue": ((0.0, 0.0), (0.3, 0.6), (1.0, 0.9))},
+                        "the green and blue curves each map their own channel"))
+    out.append(_cl_case("colorlookup_alpha_curve", {"alpha": ((0.0, 0.0), (0.5, 0.2), (1.0, 1.0))},
+                        "the alpha curve maps alpha (the default channels are rgba)"))
+    out.append(_cl_case("colorlookup_master_curve", {"master": ((0.0, 0.0), (0.4, 0.7), (1.0, 0.9))},
+                        "the master curve 'represents all channels': every channel is mapped through it"))
+    out.append(_cl_case("colorlookup_range_does_not_scale_the_axis", {"red": bend, "green": bend},
+                        "range only sets how far the precomputed table reaches ('to increase processing speed'): the curve maps the same values whatever the range",
+                        extra_nb={"use_precomputed": 1, "range": 2.0}, extra_nuke=(("use_precomputed", True), ("range", 2.0))))
+    out.append(_cl_case("colorlookup_without_precomputed_table", {"red": bend, "blue": ((0.0, 0.2), (1.0, 0.6))},
+                        "with use precomputed table off the curve is evaluated directly and maps the same values",
+                        extra_nb={"use_precomputed": 0}, extra_nuke=(("use_precomputed", False),)))
+    unscored = (
+        ("colorlookup_outside_the_curve", "values beyond the first and last key of a curve",
+         "the page does not say whether a curve holds its end values or continues its slope past the keys (NodeBased extends the end segments linearly)"),
+        ("colorlookup_smooth_keys", "interpolation between keys",
+         "the page names the curve editor but not the spline Nuke fits through keys added there (smooth is its default); the cases above use linear segments, whose "
+         "shape is the same in any editor, and NodeBased's smooth and Hermite segments cannot be compared without that spline"),
+        ("colorlookup_master_with_channel", "master and channel curves together",
+         "the page says the master curve represents all channels but not how it combines with a channel's own curve (NodeBased runs the master first, then the channel)"),
+        ("colorlookup_precomputed_table_steps", "the precomputed table's resolution",
+         "the page says a table 'between 0 and the value specified in the range field' is used but not how many entries it holds, so its rounding cannot be reproduced "
+         "(NodeBased evaluates the curves exactly, as Nuke does with the table off)"),
+    )
+    for case_id, what, reason in unscored:
+        out.append(Case(case_id, "ColorLookup", "ColorLookup", (), ("C",), "ColorLookup", None, ("C",),
+                        lambda fx: (fx["C"].astype(np.float64), np.zeros(fx["C"].shape, bool)), "guide", f"ColorLookup: {what}", unscored=reason))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
     global Case, _all_valid
     from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
-            + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases())
+            + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases())

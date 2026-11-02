@@ -1430,8 +1430,8 @@
    ],
    "knobs": [
     {"nodebased": ["curve_master", "curve_red", "curve_green", "curve_blue", "curve_alpha"], "nuke": ["lut"], "kind": "components", "reason": "Nuke keeps the master and channel curves in the one `lut` curve editor knob"},
-    {"nodebased": ["use_precomputed"], "nuke": ["use_precomputed"], "kind": "same"},
-    {"nodebased": ["range"], "nuke": ["range"], "kind": "same"},
+    {"nodebased": ["use_precomputed"], "kind": "extra", "reason": "NodeBased-only: Nuke's table over 0 to range only speeds the lookup up and its size is not published; NodeBased evaluates the curves exactly (what Nuke maps with the table off), so the knob is kept for older documents and changes no pixel"},
+    {"nodebased": ["range"], "kind": "extra", "reason": "NodeBased-only: Nuke's range is the reach of that precomputed table, not an input scale; a graph saved before this note keeps NodeBased's older scaling through older_range_scaling, a new node ignores it"},
     {"nodebased": ["source"], "nuke": ["source"], "kind": "same"},
     {"nodebased": ["target"], "nuke": ["target"], "kind": "same"},
     {"nodebased": ["curve_red", "curve_green", "curve_blue"], "nuke": ["setRGB"], "kind": "components", "reason": "Set RGB rewrites the three RGB curves"},
@@ -1444,7 +1444,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["older_range_scaling"], "kind": "extra", "reason": "NodeBased-only: the older reading of range as a scale of the curves' input axis; a new node follows Nuke, where range only sizes a speed table, and a graph saved before keeps this on"}
    ],
    "skip_default": ["lut"]
   },

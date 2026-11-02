@@ -680,8 +680,8 @@ LAYOUTS = {
         'Bradford matrix', 'Divide by alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'ColorLookup': [
-        'Channels', 'Use precomputed table', 'Range', 'Master', 'Red', 'Green', 'Blue', 'Alpha', 'Source', 'Target', 'Mask',
-        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Channels', 'Use precomputed table', 'Range', 'Master', 'Red', 'Green', 'Blue', 'Alpha', 'Source', 'Target',
+        'Older range scaling', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'CrossTalk': [
         'R from R', 'R from G', 'R from B', 'G from R', 'G from G', 'G from B', 'B from R', 'B from G', 'B from B', 'Mask',

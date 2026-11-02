@@ -6931,9 +6931,9 @@ class Evaluator:
         from . import colorcurves
         result = image.copy()
         master = colorcurves.decode(p["curve_master"])
-        # `range` scales the curve editor's input domain.  A value of two makes the first half
-        # of the curve span the usual 0..1 values; the default preserves the established lookup.
-        domain = max(1e-8, float(p.get("range", 1.0)))
+        # Nuke's `range` and `use precomputed table` only speed the lookup up (a table over 0..range), so the curves map the same values whatever
+        # they hold. `older_range_scaling` is the earlier reading of documents saved before: the input is divided by `range` first.
+        domain = max(1e-8, float(p.get("range", 1.0))) if p.get("older_range_scaling", 0) else 1.0
         for index, name in enumerate(("red", "green", "blue", "alpha")):
             values = colorcurves.evaluate_array(master, result[..., index] / domain)
             result[..., index] = colorcurves.evaluate_array(colorcurves.decode(p[f"curve_{name}"]), values)

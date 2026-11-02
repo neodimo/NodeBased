@@ -17237,14 +17237,10 @@ class Window(QMainWindow):
         self.command({"op": "batch", "commands": cornerpinknobs.button_commands(key, updates)})
 
     def colorlookup_set(self, key, channels):
-        """Set ColorLookup's chosen channel curves through its source/target pair in one undo step."""
-        import json
-        p = self.graph_nodes()[key]["params"]
-        source, target = float(p.get("source", 0.0)), float(p.get("target", 0.0))
-        points = [[0.0, 0.0], [source, target], [1.0, 1.0]]
-        value = json.dumps({"interpolation": "linear", "points": points}, separators=(",", ":"))
-        self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": f"curve_{name}", "value": value}
-                                                    for name in channels]})
+        """Nuke's Set RGB, Set RGBA and Set A: add a point mapping source to target on the chosen channel curves, in one undo step."""
+        from . import colorlookupknobs
+        curves = colorlookupknobs.set_points(self.graph_nodes()[key]["params"], channels)
+        self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": name, "value": value} for name, value in curves.items()]})
 
     def reload_node(self, key):
         """Nuke's reload for Read and Write: count one more reload on the node, which is part of what its result is keyed by."""

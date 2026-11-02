@@ -48,3 +48,14 @@ class Legacy:
         out = src.copy()
         out[..., :3] = converted * alpha
         return out
+
+    @staticmethod
+    def _color_lookup(image, p):
+        from nodebased import colorcurves
+        result = image.copy()
+        master = colorcurves.decode(p["curve_master"])
+        domain = max(1e-8, float(p.get("range", 1.0)))
+        for index, name in enumerate(("red", "green", "blue", "alpha")):
+            values = colorcurves.evaluate_array(master, result[..., index] / domain)
+            result[..., index] = colorcurves.evaluate_array(colorcurves.decode(p[f"curve_{name}"]), values)
+        return result

@@ -18,6 +18,8 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
     Colorspace    divide_by_alpha     1: divide the colour by alpha before converting and multiply it back after; Nuke converts the stored colour.
                   bradford_matrix     1: adapt the colour between two illuminants with the Bradford matrix, as NodeBased always did. Nuke's knob is
                                       off by default, which keeps the XYZ values equal and lets the RGB values change.
+    ColorLookup   older_range_scaling 1: `range` scales the curves' input axis (values are divided by it first). Nuke's range only sets how far
+                                      its precomputed table reaches, which changes how fast the lookup runs and not what it maps.
     Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
                                       (value - black) / (white - black) with gamma as the exponent.
     PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
@@ -38,6 +40,7 @@ NEW = {
     "Log2Lin": {"older_log_maths": 0},
     "PLogLin": {"older_log_maths": 0},
     "Colorspace": {"divide_by_alpha": 0, "bradford_matrix": 0},
+    "ColorLookup": {"older_range_scaling": 0},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -48,8 +51,9 @@ OLD = {
     "Log2Lin": {"older_log_maths": 1},
     "PLogLin": {"older_log_maths": 1},
     "Colorspace": {"divide_by_alpha": 1, "bradford_matrix": 1},
+    "ColorLookup": {"older_range_scaling": 1},
 }
-LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1)}
+LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1)}
 CHOICES = {"luminance_math": list(SATURATION_MATH)}
 
 

@@ -471,9 +471,16 @@ KNOB_LAYOUT = {
                        "limiting a channel to the largest of the other two (0 did nothing, so the three suppress curves read the other way round) and the "
                        "0.2126 / 0.7152 / 0.0722 grey. Set on graphs saved before."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "ColorLookup": _groups(KnobGroup("bool", ("use_precomputed",), label="Use precomputed table"), KnobGroup("float", ("range",)),
+    "ColorLookup": _groups(KnobGroup("bool", ("use_precomputed",), label="Use precomputed table", help="Nuke uses a table of the curves between 0 and Range to speed the lookup up. NodeBased evaluates the curves exactly, so this changes nothing."), KnobGroup("float", ("range",), help="How far Nuke's precomputed table reaches. It changes the speed of the lookup, never the values; NodeBased evaluates the curves exactly."),
         *[KnobGroup("curve", (f"curve_{name}",), label=name.title()) for name in ("master", "red", "green", "blue", "alpha")],
-        KnobGroup("float", ("source",)), KnobGroup("float", ("target",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("split", ("source",), label="Source", soft_range=(0, 1), channels="rgba",
+                  help="The value the Set buttons map from: each button adds a point to the curves that maps this value to the target."),
+        KnobGroup("split", ("target",), label="Target", soft_range=(0, 1), channels="rgba",
+                  help="The value the Set buttons map the source to."),
+        KnobGroup("bool", ("older_range_scaling",), label="Older range scaling",
+                  help="Divide the values by Range before the curves, as NodeBased's ColorLookup did before it followed Nuke, where range only sets the extent of a "
+                       "precomputed table. Set on graphs saved before."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ColorMatrix": _groups(
         KnobGroup("float_slider", ("matrix_00",), label="Matrix 0,0", soft_range=(-2, 2)),
         KnobGroup("float_slider", ("matrix_01",), label="Matrix 0,1", soft_range=(-2, 2)),

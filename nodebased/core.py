@@ -33,7 +33,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
                                        "Grain", "Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain", "Posterize", "SoftClip", "HSVTool", "Blend",
-                                       "Exposure", "HueCorrect", "ColorMatrix",
+                                       "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "RotoPaint",
@@ -87,6 +87,7 @@ SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: spli
     "ColorCorrect": {f"{prefix}{name}": "rgba" for prefix in ("", "shadows_", "midtones_", "highlights_")
                      for name in ("saturation", "contrast", "gamma", "gain", "offset")},
     "Multiply": {"multiply": "rgba"}, "Add": {"offset": "rgba"}, "Gamma": {"gamma": "rgba"},
+    "ColorLookup": {"source": "rgba", "target": "rgba"},
 }
 
 
@@ -324,7 +325,7 @@ SPECS = {
     "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,1],[360,1]]}' for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix": 1.0, **_behaviour2d.new_params("HueCorrect")}},
     "ColorLookup": {"inputs": ["image"], "optional_inputs": ["mask"],
-                    "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "use_precomputed": 1, "range": 1.0, "source": 0.0, "target": 0.0, "mix": 1.0}},
+                    "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "use_precomputed": 1, "range": 1.0, "source": 0.0, "target": 0.0, "mix": 1.0, **_behaviour2d.new_params("ColorLookup")}},
     # ColorMatrix (step 4a): a 3x3 RGB matrix as nine knobs, matrix_RC = row R, column C, so
     # out.r = matrix_00 * r + matrix_01 * g + matrix_02 * b. Defaults to the identity.
     "ColorMatrix": {"inputs": ["image"], "optional_inputs": ["mask"],

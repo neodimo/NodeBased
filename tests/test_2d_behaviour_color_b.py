@@ -58,7 +58,7 @@ class CaseTests(unittest.TestCase):
     def test_every_scored_case_compares_pixels_the_node_changes(self):
         """A case whose valid mask is empty, or whose reference equals its input everywhere, would pass whatever the kernel does."""
         fx = fidelity.make_fixtures()
-        identity_by_design = {"log2lin_alpha_untouched", "colorspace_bradford_equal_illuminants"}
+        identity_by_design = {"log2lin_alpha_untouched", "colorspace_bradford_equal_illuminants", "colorlookup_default_is_identity"}
         for case in fidelity.CASES:
             if case.nuke not in self.NODE_KEYS or case.unscored or case.inexpressible:
                 continue
@@ -288,6 +288,118 @@ class ColorspaceOlderDocumentTests(OlderDocumentTests):
                                    "colorspace_other_illuminants"})
         from nodebased.core import CHOICES
         self.assertEqual(CHOICES["transfer_in"], ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"])
+
+
+# ================================================================================================================ ColorLookup
+OLD_KNOBS["ColorLookup"] = ("older_range_scaling",)
+_CL_CURVE_R = '{"interpolation":"linear","points":[[0,0],[0.5,0.8],[1,1]]}'
+_CL_BASE = {"curve_red": _CL_CURVE_R, "curve_master": '{"interpolation":"linear","points":[[0,0],[0.6,0.5],[1,1]]}'}
+_CL_CHANGES = {
+    "channels": CHROME["channels"], "maskChannelInput": CHROME["maskChannelInput"], "invert_mask": CHROME["invert_mask"],
+    "fringe": CHROME["fringe"], "unpremult": CHROME["unpremult"], "mix": CHROME["mix"], "inject": {"inject": 1},
+    "invert_unpremult": ({"unpremult": "rgba.alpha"}, {"invert_unpremult": 1}),
+    "lut": {"curve_green": '{"interpolation":"linear","points":[[0,0.2],[1,0.6]]}'},
+}
+_CL_SET_KNOBS = {"source": ("red", "green", "blue"), "target": ("red", "green", "blue"), "setRGB": ("red", "green", "blue"),
+                 "setRGBA": ("red", "green", "blue", "alpha"), "setA": ("alpha",)}
+
+
+class ColorLookupKnobsActTests(KnobsActTests):
+    BASES = {"ColorLookup": _CL_BASE}
+    CHANGES = {"ColorLookup": dict(_CL_CHANGES, **{name: None for name in _CL_SET_KNOBS})}
+
+    def _differs(self, kind, nuke_knob):
+        if nuke_knob not in _CL_SET_KNOBS:
+            return super()._differs(kind, nuke_knob)
+        from nodebased import colorlookupknobs
+        base = dict(SPECS["ColorLookup"]["params"], **_CL_BASE, source=0.3, target=0.6)
+        before = run_node("ColorLookup", base).pixels
+        if nuke_knob in ("setRGB", "setRGBA", "setA"):
+            after = run_node("ColorLookup", dict(base, **colorlookupknobs.set_points(base, _CL_SET_KNOBS[nuke_knob]))).pixels
+        else:
+            # source and target act through the buttons: a different pair, pressed, gives different curves
+            changed = dict(base, **{nuke_knob: 0.45 if nuke_knob == "source" else 0.25})
+            first = colorlookupknobs.set_points(base, ("red", "green", "blue"))
+            second = colorlookupknobs.set_points(changed, ("red", "green", "blue"))
+            self.assertNotEqual(first, second, f"ColorLookup: changing {nuke_knob} left the Set RGB curves alone")
+            before = run_node("ColorLookup", dict(base, **first)).pixels
+            after = run_node("ColorLookup", dict(base, **second)).pixels
+        self.assertFalse(np.array_equal(before, after), f"ColorLookup: {nuke_knob} left the pixels alone")
+
+    def test_every_paired_knob_acts(self):
+        self._check_kind("ColorLookup")
+
+    def test_the_speed_knobs_are_not_paired(self):
+        paired = {nuke for nuke, _ in self.paired("ColorLookup")}
+        self.assertNotIn("range", paired)
+        self.assertNotIn("use_precomputed", paired)
+        base = run_node("ColorLookup", _CL_BASE).pixels
+        np.testing.assert_array_equal(run_node("ColorLookup", dict(_CL_BASE, range=3.0)).pixels, base)
+        np.testing.assert_array_equal(run_node("ColorLookup", dict(_CL_BASE, use_precomputed=0)).pixels, base)
+
+
+class ColorLookupTilesTests(TilesMatchTests):
+    TILE_PARAMS = {"ColorLookup": [dict(_CL_BASE), {"curve_blue": '{"interpolation":"smooth","points":[[0,0],[0.4,0.7],[1,1]]}', "range": 2.0},
+                                   {"older_range_scaling": 1, "range": 2.0, "curve_green": _CL_CURVE_R}]}
+
+    def test_tiles_equal_the_whole_frame(self):
+        self._check("ColorLookup")
+
+
+class ColorLookupOlderDocumentTests(OlderDocumentTests):
+    LEGACY = {"ColorLookup": ("_color_lookup", [dict(_CL_BASE), dict(_CL_BASE, range=2.0), dict(_CL_BASE, range=0.5, mix=0.6)])}
+
+    def test_an_older_document_keeps_its_pixels(self):
+        self._check("ColorLookup")
+
+    def test_a_new_node_ignores_range(self):
+        self.assertEqual(SPECS["ColorLookup"]["params"]["older_range_scaling"], 0)
+        src = fixture_image()
+        node = dict(SPECS["ColorLookup"]["params"], curve_red=_CL_CURVE_R)
+        np.testing.assert_array_equal(Evaluator._kernel("ColorLookup", dict(node, range=2.0), [src]), Evaluator._kernel("ColorLookup", node, [src]))
+        self.assertFalse(np.array_equal(Evaluator._kernel("ColorLookup", dict(node, range=2.0, older_range_scaling=1), [src]), Evaluator._kernel("ColorLookup", node, [src])))
+
+
+class ColorLookupSetButtonsTests(unittest.TestCase):
+    """Set RGB, Set RGBA and Set A add a point mapping source to target on the chosen curves, keeping the points they already hold."""
+
+    def test_a_point_is_added_to_each_chosen_curve(self):
+        from nodebased import colorcurves, colorlookupknobs
+        params = dict(SPECS["ColorLookup"]["params"], source=0.25, target=0.5)
+        curves = colorlookupknobs.set_points(params, ("red", "green", "blue"))
+        self.assertEqual(sorted(curves), ["curve_blue", "curve_green", "curve_red"])
+        for text in curves.values():
+            curve = colorcurves.decode(text)
+            self.assertAlmostEqual(float(colorcurves.evaluate(curve, 0.25)), 0.5, places=6)
+            self.assertAlmostEqual(float(colorcurves.evaluate(curve, 0.0)), 0.0, places=6)
+            self.assertAlmostEqual(float(colorcurves.evaluate(curve, 1.0)), 1.0, places=6)
+
+    def test_earlier_points_stay_and_a_key_at_the_source_takes_the_target(self):
+        from nodebased import colorcurves, colorlookupknobs
+        params = dict(SPECS["ColorLookup"]["params"], source=0.25, target=0.5)
+        params.update(colorlookupknobs.set_points(params, ("red",)))
+        params.update(source=0.75, target=0.6)
+        params.update(colorlookupknobs.set_points(params, ("red",)))
+        curve = colorcurves.decode(params["curve_red"])
+        self.assertEqual([round(x, 6) for x, _ in curve["points"]], [0.0, 0.25, 0.75, 1.0])
+        params.update(source=0.25, target=0.4)
+        params.update(colorlookupknobs.set_points(params, ("red",)))
+        self.assertAlmostEqual(float(colorcurves.evaluate(colorcurves.decode(params["curve_red"]), 0.25)), 0.4, places=6)
+
+    def test_set_a_touches_alpha_only_and_a_split_pair_maps_per_channel(self):
+        from nodebased import colorcurves, colorlookupknobs
+        params = dict(SPECS["ColorLookup"]["params"], source=[0.1, 0.2, 0.3, 0.4], target=[0.5, 0.6, 0.7, 0.8])
+        self.assertEqual(sorted(colorlookupknobs.set_points(params, ("alpha",))), ["curve_alpha"])
+        curves = colorlookupknobs.set_points(params, ("red", "green", "blue", "alpha"))
+        for name, source, target in (("red", 0.1, 0.5), ("green", 0.2, 0.6), ("blue", 0.3, 0.7), ("alpha", 0.4, 0.8)):
+            self.assertAlmostEqual(float(colorcurves.evaluate(colorcurves.decode(curves[f"curve_{name}"]), source)), target, places=6)
+
+    def test_a_source_beyond_the_curve_extends_it(self):
+        from nodebased import colorcurves, colorlookupknobs
+        params = dict(SPECS["ColorLookup"]["params"], source=1.5, target=1.2)
+        curve = colorcurves.decode(colorlookupknobs.set_points(params, ("red",))["curve_red"])
+        self.assertEqual([round(x, 6) for x, _ in curve["points"]], [0.0, 1.0, 1.5])
+        self.assertAlmostEqual(float(colorcurves.evaluate(curve, 1.5)), 1.2, places=6)
 
 
 if __name__ == "__main__":
