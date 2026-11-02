@@ -28,17 +28,17 @@ class ColorC1Tests(unittest.TestCase):
 
     def test_log2lin_cineon_white_and_roundtrip(self):
         image = np.full((2, 2, 4), 685, np.float32); image[..., 3] = 1
-        out = Evaluator._log2lin(image, {"black": 95, "white": 685, "gamma": 1, "log_direction": "log to lin"})
+        out = Evaluator._log2lin(image, {"black": 95, "white": 685, "gamma": 1, "log_direction": "log to lin", "older_log_maths": 1})
         np.testing.assert_allclose(out[..., :3], 1.0, atol=1e-7)
         codes = np.array([95, 200, 445, 685], np.float32)
         a = np.zeros((1, 4, 4), np.float32); a[..., :3] = codes[None, :, None]; a[..., 3] = 1
-        lin = Evaluator._log2lin(a, {"black": 95, "white": 685, "gamma": 1, "log_direction": "log to lin"})
-        back = Evaluator._log2lin(lin, {"black": 95, "white": 685, "gamma": 1, "log_direction": "lin to log"})
+        lin = Evaluator._log2lin(a, {"black": 95, "white": 685, "gamma": 1, "log_direction": "log to lin", "older_log_maths": 1})
+        back = Evaluator._log2lin(lin, {"black": 95, "white": 685, "gamma": 1, "log_direction": "lin to log", "older_log_maths": 1})
         np.testing.assert_allclose(back, a, atol=1e-5)
 
     def test_ploglin_hand_values_and_tiles(self):
         image = np.zeros((1, 3, 4), np.float32); image[0, :, :3] = np.array([445, 545, 345], np.float32)[:, None]; image[..., 3] = 1
-        p = {"linear_reference": .18, "log_reference": 445, "density_per_code_value": .002, "negative_gamma": 1}
+        p = {"linear_reference": .18, "log_reference": 445, "density_per_code_value": .002, "negative_gamma": 1, "older_log_maths": 1}
         out = Evaluator._ploglin(image, p)
         expected = .18 * 10 ** (np.array([0, .2, -.2], np.float32))
         np.testing.assert_allclose(out[0, :, 0], expected, atol=2e-6)

@@ -446,8 +446,17 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("matrix_21",), label="Matrix 2,1", soft_range=(-2, 2)),
         KnobGroup("float_slider", ("matrix_22",), label="Matrix 2,2", soft_range=(-2, 2)),
         KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "Log2Lin": _groups(KnobGroup("float", ("black",)), KnobGroup("float", ("white",)), KnobGroup("float", ("gamma",)), KnobGroup("enum", ("log_direction",), label="Direction"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "PLogLin": _groups(KnobGroup("float", ("linear_reference",), soft_range=(0.01, 1.0)), KnobGroup("float", ("log_reference",), soft_range=(-1023, 1023)), KnobGroup("float", ("density_per_code_value",), soft_range=(0.001, 0.1)), KnobGroup("float", ("negative_gamma",), soft_range=(0.1, 3.0)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Log2Lin": _groups(KnobGroup("float", ("black",)), KnobGroup("float", ("white",)), KnobGroup("float", ("gamma",)), KnobGroup("enum", ("log_direction",), label="Direction"),
+        KnobGroup("bool", ("ignore_black",), label="Ignore", help="The black offset is not subtracted, so the conversion is a pure log function."),
+        KnobGroup("bool", ("older_log_maths",), label="Older log maths",
+                  help="Read the file value as NodeBased's Log2Lin did before it followed Nuke: a pure power of (value - black) / (white - black) with gamma "
+                       "as the exponent, on a value that is not divided by 1023. Set on graphs saved before."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "PLogLin": _groups(KnobGroup("enum", ("log_direction",), label="Direction"), KnobGroup("float", ("linear_reference",), soft_range=(0.01, 1.0)), KnobGroup("float", ("log_reference",), soft_range=(-1023, 1023)), KnobGroup("float", ("density_per_code_value",), soft_range=(0.001, 0.1)), KnobGroup("float", ("negative_gamma",), soft_range=(0.1, 3.0)),
+        KnobGroup("bool", ("older_log_maths",), label="Older log maths",
+                  help="Read the file value as NodeBased's PLogLin did before it followed Nuke: a raw code value with density per code value alone as the slope "
+                       "(no division by negative gamma), alpha untouched and log to lin only. Set on graphs saved before."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "CrossTalk": _groups(*[KnobGroup("curve", (f"xt_curve_{o}_{c}",), label=f"{o.upper()} from {c.upper()}") for o in "rgb" for c in "rgb"],
         KnobGroup("bool", ("xt_fringe",), label="Fringe"), KnobGroup("enum", ("xt_unpremult",), label="Unpremult by"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
@@ -1780,8 +1789,8 @@ NUKE_LAYOUT = {
     "Toe": ("channels", "toe_lift"),
     "SoftClip": ("conversion", "softclip_min", "softclip_max"),
     "Posterize": ("channels", "colors"),
-    "Log2Lin": ("channels", "log_direction", "black", "white", "gamma"),
-    "PLogLin": ("channels", "linear_reference", "log_reference", "negative_gamma", "density_per_code_value"),
+    "Log2Lin": ("channels", "log_direction", "black", "ignore_black", "white", "gamma"),
+    "PLogLin": ("channels", "log_direction", "linear_reference", "log_reference", "negative_gamma", "density_per_code_value"),
     "Colorspace": ("channels", "transfer_in", "whitepoint_in", "primaries_in", "transfer_out", "whitepoint_out", "primaries_out"),
     "ColorLookup": ("channels", "use_precomputed", "range", "curve_master", "curve_red", "curve_green", "curve_blue", "curve_alpha", "source", "target"),
     "CrossTalk": ("xt_curve_r_r", "xt_curve_r_g", "xt_curve_r_b", "xt_curve_g_r", "xt_curve_g_g", "xt_curve_g_b", "xt_curve_b_r", "xt_curve_b_g", "xt_curve_b_b",
@@ -1810,8 +1819,8 @@ NUKE_SECTIONS = {"Grade": {"blackpoint": None}}
 # Labels in Nuke's wording where the knob table gives one and NodeBased's differed (first letter capital, as every label here).
 NUKE_LABELS = {
     "Grade": {"blackpoint": "Blackpoint", "whitepoint": "Whitepoint"},
-    "Log2Lin": {"log_direction": "Operation"},
-    "PLogLin": {"linear_reference": "Linear reference value", "log_reference": "Log reference value", "negative_gamma": "Negative gamma",
+    "Log2Lin": {"log_direction": "Operation", "ignore_black": "Ignore"},
+    "PLogLin": {"log_direction": "Operation", "linear_reference": "Linear reference value", "log_reference": "Log reference value", "negative_gamma": "Negative gamma",
                 "density_per_code_value": "Density per code value"},
     "ChannelMerge": {"a_channel": "A channel", "b_channel": "B channel", "out_channel": "Output"},
 }

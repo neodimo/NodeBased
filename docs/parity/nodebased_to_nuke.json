@@ -1657,6 +1657,7 @@
    "knobs": [
     {"nodebased": ["log_direction"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
     {"nodebased": ["black"], "nuke": ["black"], "kind": "same"},
+    {"nodebased": ["ignore_black"], "nuke": ["ignore_black"], "kind": "same"},
     {"nodebased": ["white"], "nuke": ["white"], "kind": "same"},
     {"nodebased": ["gamma"], "nuke": ["gamma"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
@@ -1666,7 +1667,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["older_log_maths"], "kind": "extra", "reason": "NodeBased-only: the older Log2Lin arithmetic (a pure power of the value between black and white); a new node does Nuke's Cineon conversion on a value over 1023, and a graph saved before keeps this on"}
    ],
    "value_map": {"operation": {"log to lin": "log2lin", "lin to log": "lin2log"}}
   },
@@ -1677,6 +1679,7 @@
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["log_direction"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
     {"nodebased": ["linear_reference"], "nuke": ["linref"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'linear reference value', scripting name `linref`"},
     {"nodebased": ["log_reference"], "nuke": ["logref"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'log reference value', scripting name `logref`"},
     {"nodebased": ["density_per_code_value"], "nuke": ["density"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `density`"},
@@ -1688,7 +1691,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["older_log_maths"], "kind": "extra", "reason": "NodeBased-only: the older PLogLin arithmetic (a raw code value, no division by the negative gamma, alpha untouched, log to lin only); a new node follows Josh Pines' formula on a value over 1023, and a graph saved before keeps this on"}
    ]
   },
   "MatchGrade": {

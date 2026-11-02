@@ -15,6 +15,10 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
                                       adjustment to the value.
     SoftClip      older_grey          1: "preserve hue and brightness" moves the colour toward the 0.2126 / 0.7152 / 0.0722 grey.
                                       Nuke's Rec 709 is 0.2125 / 0.7154 / 0.0721.
+    Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
+                                      (value - black) / (white - black) with gamma as the exponent.
+    PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
+                                      by the negative gamma), alpha is left alone and the node only converts log to linear.
 
 Toe's default lift changed from 0.05 to Nuke's 0 for new nodes: a node's params are stored whole, so no document changes and no knob is needed.
 """
@@ -28,6 +32,8 @@ NEW = {
     "HueCorrect": {"older_curve_maths": 0},
     "HSVTool": {"adjust_by_scaling": 0},
     "SoftClip": {"older_grey": 0},
+    "Log2Lin": {"older_log_maths": 0},
+    "PLogLin": {"older_log_maths": 0},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -35,8 +41,10 @@ OLD = {
     "HueCorrect": {"older_curve_maths": 1},
     "HSVTool": {"adjust_by_scaling": 1},
     "SoftClip": {"older_grey": 1},
+    "Log2Lin": {"older_log_maths": 1},
+    "PLogLin": {"older_log_maths": 1},
 }
-LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1)}
+LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1)}
 CHOICES = {"luminance_math": list(SATURATION_MATH)}
 
 

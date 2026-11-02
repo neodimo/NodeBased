@@ -564,10 +564,141 @@ def _posterize_cases():
                  "(NodeBased uses round(v * (n - 1)) / (n - 1) clamped to 0 to 1, n levels per channel)")]
 
 
+
+# ----------------------------------------------------------------------------------------------------- Log2Lin and PLogLin (step B)
+_CINEON_SOURCE = ("Kodak's Cineon conversion as Nuke's Log2Lin page describes it (black = the file value that becomes 0, white = the value that becomes 1, "
+                  "gamma = the exposed-light multiplier of the film density, 0.002 density per 10-bit code value, 1023 code values = 1.0)")
+_PINES_SOURCE = ("Josh Pines' log conversion, the formula Nuke's PLogLin page says it uses (K. McGaugh's summary on the OpenEXR list, 2 March 2005, "
+                 "lists.gnu.org/archive/html/openexr-devel/2005-03/msg00006.html): lin = linref * 10 ** ((code - logref) * density / negative gamma) for a "
+                 "10-bit code value, and the reverse log = logref + log10(max(lin, 1e-10) / linref) * negative gamma / density; code = 1023 * value")
+
+
+def log2lin_reference(v, black=95.0, white=685.0, gamma=0.6, ignore_black=False, to_lin=True):
+    """Cineon log to linear and back on float values (10-bit code / 1023). Returns (result, valid): the reverse is undefined at or below zero."""
+    v = np.asarray(v, np.float64)
+    step = 0.002 / gamma
+    offset = 0.0 if ignore_black else 10.0 ** ((black - white) * step)
+    gain = 1.0 / (1.0 - offset)
+    if to_lin:
+        return gain * (10.0 ** ((v * 1023.0 - white) * step) - offset), np.ones(v.shape, bool)
+    arg = v / gain + offset
+    with np.errstate(all="ignore"):
+        out = (white + np.log10(np.where(arg > 1e-10, arg, 1.0)) / step) / 1023.0
+    return out, arg > 1e-10
+
+
+def pines_reference(v, linref=0.18, logref=445.0, ngamma=0.6, density=0.002, to_lin=True):
+    v = np.asarray(v, np.float64)
+    if to_lin:
+        return linref * 10.0 ** ((v * 1023.0 - logref) * density / ngamma)
+    return (logref + np.log10(np.maximum(v, 1e-10) / linref) * ngamma / density) / 1023.0
+
+
+def _log_expected(fixture, fn, alpha_too=False):
+    def expected(fx):
+        src = fx[fixture].astype(np.float64)
+        ref = src.copy()
+        value, valid = fn(src[..., :4] if alpha_too else src[..., :3])
+        count = 4 if alpha_too else 3
+        ref[..., :count] = value
+        mask = np.ones(src.shape, bool)
+        mask[..., :count] = valid
+        return ref, mask
+    return expected
+
+
+def _log2lin_case(case_id, nb_params, nuke_knobs, statement, source="convention", fixture="L", **kwargs):
+    to_lin = nb_params.get("log_direction", "log to lin") == "log to lin"
+    reference = dict(kwargs, to_lin=to_lin)
+    note = statement + ("" if source == "guide" else f" ({_CINEON_SOURCE})")
+    return Case(case_id, "Log2Lin", "Log2Lin", tuple(nuke_knobs), (fixture,), "Log2Lin", dict(nb_params), (fixture,),
+                _log_expected(fixture, lambda v: log2lin_reference(v, **reference)), source, note)
+
+
+def _log2lin_cases():
+    out = []
+    out.append(_log2lin_case("log2lin_default_to_linear", {}, (), "the defaults (black 95, white 685, gamma 0.6) convert Cineon log to linear: "
+                             "lin = (10 ** ((code - white) * 0.002 / gamma) - offset) / (1 - offset) with offset = 10 ** ((black - white) * 0.002 / gamma)"))
+    def anchors(fx):
+        src = fx["L"].astype(np.float64)
+        ref = src.copy()
+        codes = np.rint(src[..., :3] * 1023.0)
+        at_black, at_white = codes == 95, codes == 685
+        ref[..., :3] = np.where(at_black, 0.0, np.where(at_white, 1.0, src[..., :3]))
+        valid = np.ones(src.shape, bool)
+        valid[..., :3] = at_black | at_white
+        return ref, valid
+    out.append(Case("log2lin_black_is_zero_white_is_one", "Log2Lin", "Log2Lin", (("black", 95.0), ("white", 685.0)), ("L",), "Log2Lin",
+                   {"black": 95.0, "white": 685.0}, ("L",), anchors, "guide",
+                   "Log2Lin: black ('the value in the Cineon file that is converted into 0') 95 becomes 0 and white ('converted into 1') 685 becomes 1; "
+                   "compared on the pixels that hold those two code values"))
+    out.append(_log2lin_case("log2lin_to_log", {"log_direction": "lin to log"}, (("operation", "lin2log"),),
+                             "lin2log is the reverse: code = white + log10(lin * (1 - offset) + offset) * gamma / 0.002, divided by 1023 (undefined at or below the black offset, "
+                             "so those pixels are not compared)", fixture="A"))
+    out.append(_log2lin_case("log2lin_ignore_black", {"ignore_black": 1}, (("ignore_black", True),),
+                             "ignore black: 'the black offset is not subtracted so that the conversion is a pure log function': lin = 10 ** ((code - white) * 0.002 / gamma)",
+                             ignore_black=True))
+    out.append(_log2lin_case("log2lin_ignore_black_to_log", {"ignore_black": 1, "log_direction": "lin to log"}, (("ignore_black", True), ("operation", "lin2log")),
+                             "ignore black on lin2log: code = white + log10(lin) * gamma / 0.002 (a pure log function)", fixture="A", ignore_black=True))
+    out.append(_log2lin_case("log2lin_custom_points", {"black": 64.0, "white": 940.0, "gamma": 0.5}, (("black", 64.0), ("white", 940.0), ("gamma", 0.5)),
+                             "black, white and gamma move the curve (here the video range 64 and 940 and gamma 0.5)", black=64.0, white=940.0, gamma=0.5))
+    out.append(_log2lin_case("log2lin_custom_points_to_log", {"black": 64.0, "white": 940.0, "gamma": 0.5, "log_direction": "lin to log"},
+                             (("black", 64.0), ("white", 940.0), ("gamma", 0.5), ("operation", "lin2log")),
+                             "lin2log with the video-range points and gamma 0.5", fixture="A", black=64.0, white=940.0, gamma=0.5))
+    out.append(Case("log2lin_alpha_untouched", "Log2Lin", "Log2Lin", (), ("L",), "Log2Lin", {}, ("L",),
+                    lambda fx: (fx["L"].astype(np.float64), np.concatenate([np.zeros(fx["L"].shape[:-1] + (3,), bool), np.ones(fx["L"].shape[:-1] + (1,), bool)], axis=-1)),
+                    "guide", "Log2Lin: the default channels are rgb, so alpha is left as it is"))
+    out.append(Case("log2lin_soft_clip", "Log2Lin", "Log2Lin", (), ("L",), "Log2Lin", None, ("L",),
+                    lambda fx: (fx["L"].astype(np.float64), np.zeros(fx["L"].shape, bool)), "convention",
+                    "Log2Lin: the soft clip region of Kodak's Cineon conversion",
+                    unscored="Kodak's Cineon specification describes an optional soft clip below the black point, but the Log2Lin page has no soft clip knob and states no formula "
+                    "for one, and NodeBased's node has none either, so the region below black is left out rather than guessed"))
+    return out
+
+
+def _pines_case(case_id, nb_params, nuke_knobs, statement, source="convention", fixture="L", alpha_too=True, **kwargs):
+    to_lin = nb_params.get("log_direction", "log to lin") == "log to lin"
+    note = statement + ("" if source == "guide" else f" ({_PINES_SOURCE})")
+    return Case(case_id, "PLogLin", "PLogLin", tuple(nuke_knobs), (fixture,), "PLogLin", dict(nb_params), (fixture,),
+                _log_expected(fixture, lambda v: (pines_reference(v, to_lin=to_lin, **kwargs), np.ones(v.shape, bool)), alpha_too), source, note)
+
+
+def _ploglin_cases():
+    out = []
+    out.append(_pines_case("ploglin_defaults", {}, (),
+                           "the defaults (linear reference 0.18, log reference 445, negative gamma 0.6, density 0.002) convert log to linear on every channel: "
+                           "the page's default channels are all, so alpha is converted as well"))
+
+    def anchor(fx):
+        src = fx["L"].astype(np.float64)
+        codes = np.rint(src * 1023.0)
+        ref = src.copy()
+        ref[..., :3] = np.where(codes[..., :3] == 445, 0.18, src[..., :3])
+        valid = np.zeros(src.shape, bool)
+        valid[..., :3] = codes[..., :3] == 445
+        return ref, valid
+    out.append(Case("ploglin_reference_point", "PLogLin", "PLogLin", (("linref", 0.18), ("logref", 445.0)), ("L",), "PLogLin",
+                    {"linear_reference": 0.18, "log_reference": 445.0}, ("L",), anchor, "guide",
+                    "PLogLin: the log reference value (445) is 'the logarithmic value that corresponds with the linear reference value' (0.18), so code 445 becomes 0.18; "
+                    "compared on the pixels that hold that code value"))
+    out.append(_pines_case("ploglin_to_log", {"log_direction": "lin to log"}, (("operation", "lin to log"),),
+                           "lin to log is the reverse: log = logref + log10(max(lin, 1e-10) / linref) * negative gamma / density, divided by 1023", fixture="A"))
+    out.append(_pines_case("ploglin_custom_reference", {"linear_reference": 0.5, "log_reference": 500.0}, (("linref", 0.5), ("logref", 500.0)),
+                           "linear reference and log reference move the anchor point (0.5 at code 500)", linref=0.5, logref=500.0))
+    out.append(_pines_case("ploglin_negative_gamma_and_density", {"negative_gamma": 0.8, "density_per_code_value": 0.003},
+                           (("ngamma", 0.8), ("density", 0.003)),
+                           "negative gamma divides and density per code value multiplies the code distance from the reference (the slope of the straight log line)",
+                           ngamma=0.8, density=0.003))
+    out.append(_pines_case("ploglin_custom_to_log", {"linear_reference": 0.5, "log_reference": 500.0, "negative_gamma": 0.8, "log_direction": "lin to log"},
+                           (("linref", 0.5), ("logref", 500.0), ("ngamma", 0.8), ("operation", "lin to log")),
+                           "lin to log with a moved reference and negative gamma 0.8", fixture="A", linref=0.5, logref=500.0, ngamma=0.8))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
     global Case, _all_valid
     from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
-            + _posterize_cases())
+            + _posterize_cases() + _log2lin_cases() + _ploglin_cases())

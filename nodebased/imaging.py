@@ -8544,26 +8544,51 @@ class Evaluator:
 
     @staticmethod
     def _log2lin(image, p):
+        """Nuke's Log2Lin: the Cineon conversion. A float value is a 10-bit code value over 1023; `black` becomes 0 and `white` becomes 1
+        (the 0.002 density per code value over `gamma` is the slope of the log line, and the black offset is subtracted unless `ignore_black`).
+        Reads rgb only; the chrome's `channels` limits it. The `older_log_maths` knob keeps the earlier arithmetic of documents saved before."""
         x = image.copy(); rgb = x[..., :3]
+        if p.get("older_log_maths", 0):
+            black, white = float(p["black"]), float(p["white"])
+            span = white - black
+            if abs(span) < 1e-12: span = 1e-12
+            if p["log_direction"] == "log to lin":
+                rgb[:] = np.sign(rgb - black) * np.abs((rgb - black) / span) ** max(float(p["gamma"]), 1e-6)
+            else:
+                rgb[:] = black + np.sign(rgb) * np.abs(rgb) ** (1.0 / max(float(p["gamma"]), 1e-6)) * span
+            return x
         black, white = float(p["black"]), float(p["white"])
-        span = white - black
-        if abs(span) < 1e-12: span = 1e-12
-        if p["log_direction"] == "log to lin":
-            rgb[:] = np.sign(rgb - black) * np.abs((rgb - black) / span) ** max(float(p["gamma"]), 1e-6)
+        step = 0.002 / max(float(p["gamma"]), 1e-6)
+        offset = 0.0 if p.get("ignore_black", 0) else 10.0 ** ((black - white) * step)
+        gain = 1.0 / max(1.0 - offset, 1e-12)
+        value = rgb.astype(np.float64)
+        if p.get("log_direction", "log to lin") == "log to lin":
+            rgb[:] = gain * (np.power(10.0, np.clip((value * 1023.0 - white) * step, -30.0, 30.0)) - offset)
         else:
-            rgb[:] = black + np.sign(rgb) * np.abs(rgb) ** (1.0 / max(float(p["gamma"]), 1e-6)) * span
+            rgb[:] = (white + np.log10(np.maximum(value / gain + offset, 1e-10)) / step) / 1023.0
         return x
 
     @staticmethod
     def _ploglin(image, p):
+        """Nuke's PLogLin, Josh Pines' conversion on a single grey point: linear = linref * 10 ** ((code - logref) * density / negative gamma)
+        with code = 1023 * value, and the reverse for `lin to log` (the linear value floored at 1e-10). The page's default channels are all, so
+        alpha is converted too (the chrome's `channels` limits it). `older_log_maths` keeps the earlier arithmetic of documents saved before."""
         x = image.copy(); rgb = x[..., :3]
         lr, cr = float(p["linear_reference"]), float(p["log_reference"])
         d = max(float(p["density_per_code_value"]), 1e-9)
-        gamma = max(float(p["negative_gamma"]), 1e-6)
-        # Signed density mapping is stable for negative scene values and has exact reference anchors.
-        delta = (rgb - cr) * d
-        mapped = lr * np.power(10.0, np.clip(delta, -30, 30))
-        rgb[:] = np.where(rgb < 0, -lr * np.power(10.0, np.clip((np.abs(rgb) - cr) * d, -30, 30)) ** gamma, mapped)
+        if p.get("older_log_maths", 0):
+            gamma = max(float(p["negative_gamma"]), 1e-6)
+            # Signed density mapping is stable for negative scene values and has exact reference anchors.
+            delta = (rgb - cr) * d
+            mapped = lr * np.power(10.0, np.clip(delta, -30, 30))
+            rgb[:] = np.where(rgb < 0, -lr * np.power(10.0, np.clip((np.abs(rgb) - cr) * d, -30, 30)) ** gamma, mapped)
+            return x
+        slope = d / max(float(p["negative_gamma"]), 1e-6)
+        value = x.astype(np.float64)
+        if p.get("log_direction", "log to lin") == "log to lin":
+            x[:] = lr * np.power(10.0, np.clip((value * 1023.0 - cr) * slope, -30.0, 30.0))
+        else:
+            x[:] = (cr + np.log10(np.maximum(value, 1e-10) / max(lr, 1e-10)) / slope) / 1023.0
         return x
 
     @staticmethod

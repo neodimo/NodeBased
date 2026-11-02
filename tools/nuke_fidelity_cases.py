@@ -65,6 +65,22 @@ def _fixture_colours():
     return c
 
 
+_LOG_CODES = (-20, 0, 64, 95, 150, 300, 445, 470, 685, 800, 940, 1023, 1100)    # Cineon code values (10-bit), the way a log scan holds them
+
+
+def _fixture_log():
+    """L: log-coded values for the log nodes. Each channel holds Cineon code values divided by 1023 (negative and above 1 included),
+    and the alpha cycle of A. The values 95 / 1023, 445 / 1023 and 685 / 1023 are the black, grey and white points of Nuke's defaults."""
+    out = np.zeros((H, W, 4), np.float32)
+    for y in range(H):
+        for x in range(W):
+            i = y * W + x
+            for c in range(3):
+                out[y, x, c] = np.float32(_LOG_CODES[(i + 5 * c) % len(_LOG_CODES)] / 1023.0)
+            out[y, x, 3] = _ALPHA[i % len(_ALPHA)]
+    return out
+
+
 def make_fixtures():
     a, b = _fixtures_ab()
     mask = np.zeros((H, W, 4), np.float32)
@@ -73,7 +89,7 @@ def make_fixtures():
             i = y * W + x
             for c in range(4):
                 mask[y, x, c] = _MASK[(i // (c + 1) + c) % len(_MASK)]
-    return {"A": a, "B": b, "mask": mask, "C": _fixture_colours()}
+    return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log()}
 
 
 # ---------------------------------------------------------------------------------------------------- Merge formulas

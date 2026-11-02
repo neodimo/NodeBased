@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 90.9 / 100** (167 nodes scored, rank-weighted; 93.2 counting only the nodes NodeBased has).
+**Overall fidelity: 91.0 / 100** (167 nodes scored, rank-weighted; 93.3 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -31,7 +31,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Draw | 83.1 | 62.3 | 17 |
 | Time | 96.1 | 78.2 | 13 |
 | Channel | 98.4 | 97.2 | 5 |
-| Color | 93.5 | 76.5 | 34 |
+| Color | 93.8 | 77.2 | 34 |
 | Filter | 89.1 | 67.6 | 32 |
 | Keyer | 87.3 | 64.6 | 11 |
 | Merge | 99.4 | 98.7 | 12 |
@@ -39,7 +39,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 99.4 | 98.9 | 5 |
 | Other | 80.3 | 43.0 | 12 |
 
-Behaviour checked: 18 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.
+Behaviour checked: 20 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.
 
 ## Per node
 
@@ -131,8 +131,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 88.1 | 80 (3/4) | 91 | 100 | 100 | - | no fixture |
 | 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
 | 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 68.0 | 40 (4/14) | 100 | 100 | 100 | - | no fixture |
-| 15 | Log2Lin | `Log2Lin` | supported | 88.2 | 80 (4/5) | 92 | 100 | 100 | - | no fixture |
-| 15 | PLogLin | `PLogLin` | supported | 83.8 | 80 (4/5) | 92 | 67 | 100 | - | no fixture |
+| 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | unmeasured |
+| 15 | PLogLin | `PLogLin` | supported | 96.7 | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | unmeasured |
 | 16 | ColorTransfer | - | supported | 0.0 | 0 (0/1) | - | 0 | - | - | no fixture |
 | 16 | MatchGrade | `MatchGrade` | supported | 26.0 | 8 (3/33) | - | 100 | - | - | no fixture |
 | 17 | Expression | `Expression` | supported | 60.0 | 25 (4/16) | 100 | 100 | 100 | - | no fixture |
@@ -445,6 +445,21 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `softclip_preserve_hue_and_brightness` | convention | pass | within tolerance | - |
 | `softclip_log_curve` | guide | not scored: the page says 'a logarithmic curve between softclip min and 1.0' and warns of artefacts when softclip min is not 0 or 1, but publishes no formula; only the end points are written down (the cases above) | - | - |
 | `posterize_colors` | guide | not scored: the page reads as a bit depth (8 gives 256 colors per channel, so the default 16 would give 65536 and show nothing), while the node is used with the knob as a level count and its default of 16 as visible banding; no formula is published and the two readings disagree (NodeBased uses round(v * (n - 1)) / (n - 1) clamped to 0 to 1, n levels per channel) | - | - |
+| `log2lin_default_to_linear` | convention | pass | within tolerance | - |
+| `log2lin_black_is_zero_white_is_one` | guide | pass | within tolerance | - |
+| `log2lin_to_log` | convention | pass | within tolerance | - |
+| `log2lin_ignore_black` | convention | pass | within tolerance | - |
+| `log2lin_ignore_black_to_log` | convention | pass | within tolerance | - |
+| `log2lin_custom_points` | convention | pass | within tolerance | - |
+| `log2lin_custom_points_to_log` | convention | pass | within tolerance | - |
+| `log2lin_alpha_untouched` | guide | pass | within tolerance | - |
+| `log2lin_soft_clip` | convention | not scored: Kodak's Cineon specification describes an optional soft clip below the black point, but the Log2Lin page has no soft clip knob and states no formula for one, and NodeBased's node has none either, so the region below black is left out rather than guessed | - | - |
+| `ploglin_defaults` | convention | pass | within tolerance | - |
+| `ploglin_reference_point` | guide | pass | within tolerance | - |
+| `ploglin_to_log` | convention | pass | within tolerance | - |
+| `ploglin_custom_reference` | convention | pass | within tolerance | - |
+| `ploglin_negative_gamma_and_density` | convention | pass | within tolerance | - |
+| `ploglin_custom_to_log` | convention | pass | within tolerance | - |
 
 ## What a reader should know about the reference data
 

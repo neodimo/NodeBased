@@ -668,12 +668,12 @@ LAYOUTS = {
     'SoftClip': ['Conversion', 'Softclip min', 'Softclip max', 'Older grey', 'Mix'],
     'Posterize': ['Channels', 'Colors', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
     'Log2Lin': [
-        'Channels', 'Operation', 'Black', 'White', 'Gamma', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
-        'Mix'
+        'Channels', 'Operation', 'Black', 'Ignore', 'White', 'Gamma', 'Older log maths', 'Mask', 'Inject', 'Invert', 'Fringe',
+        '(Un)premult by', 'Invert', 'Mix'
     ],
     'PLogLin': [
-        'Channels', 'Linear reference value', 'Log reference value', 'Negative gamma', 'Density per code value', 'Mask',
-        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Channels', 'Operation', 'Linear reference value', 'Log reference value', 'Negative gamma', 'Density per code value',
+        'Older log maths', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'Colorspace': [
         'Channels', 'Transfer In', 'Whitepoint In', 'Primaries In', 'Transfer Out', 'Whitepoint Out', 'Primaries Out', 'Mask',
