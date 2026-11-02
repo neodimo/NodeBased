@@ -1,0 +1,295 @@
+"""The 2D behaviour requirements of November 2026, measured for tools/audit_nuke_fidelity.py.
+
+Three checks the first audit (knob names, defaults, sockets, chrome, formula cases) could not see:
+
+* acts:   every paired knob changes NodeBased's output pixels on the fixture when it is moved off its default
+          (DiMo 11/1: a knob name without behaviour is the gap). Probed on `Evaluator._kernel`, no Nuke needed.
+* layout: the node's knobs sit in Nuke's order with Nuke's labels (DiMo 11/1 10:36 PM: "match known layouts").
+* splits: a Nuke AColor knob (r g b a) or WH knob (w h) is a splittable NodeBased param (core.SPLITTABLE), not one scalar
+          (DiMo 11/1 10:36 PM: "how some can hold multiple channel values").
+
+Everything here is deterministic: same checkout, same numbers, so the report's drift test keeps working.
+"""
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parent.parent
+SPLIT_JSON = ROOT / "docs" / "parity" / "nuke_split_knobs.json"
+PAIRED = ("same", "renamed", "components")       # pairings that name NodeBased params a probe can move ("panel" ones live elsewhere)
+ACT_TOL = 1e-6                                   # a knob acts when some output value moves by more than this
+_PROBES = {}
+# NodeBased kinds that hand their input on unchanged (taps and wiring). Their behaviour is the input, so neither a knob probe nor
+# a missing formula case says anything about them.
+TAPS = ("Viewer", "Write", "NoOp", "Dot", "PostageStamp", "Output", "Profile", "PlanarTracker")
+# Nuke knobs whose effect a one-frame pixel probe cannot see: they act over time, on metadata or on the bounding box only.
+# They are left out of `acts` (listed in the report with this reason), never counted as inert.
+NOT_PIXEL = {
+    "*": {name: "acts across frames (frame range, retiming, motion blur)" for name in (
+              "first", "last", "before", "after", "frame", "frame_mode", "origfirst", "origlast", "origset", "motionblur", "shutter",
+              "shutteroffset", "shuttercustomoffset")}
+         | {name: "acts on metadata, not pixels" for name in ("metainput", "rangeinput")}
+         | {name: "acts on the bounding box only, outside the fixture's format" for name in ("pbb", "intersect")},
+    "Blur": {"crop": "crop to format acts on the bounding box only"},
+    "Sharpen": {"crop": "crop to format acts on the bounding box only"},
+    "Soften": {"crop": "crop to format acts on the bounding box only"},
+    "Glow": {"crop": "crop to format acts on the bounding box only"},
+}
+# Nuke nodes whose knobs only act on data the fixture does not hold, so the probe is skipped for the whole node.
+NOT_PROBED = {
+    "Tracker": "tracks are solved across frames; a one-frame probe cannot move them",
+    "Roto": "shapes live in the node's payload and the default node holds none",
+    "RotoPaint": "strokes live in the node's payload and the default node holds none",
+}
+
+
+def not_pixel_reason(nuke_key, knob_name):
+    return NOT_PIXEL.get(nuke_key, {}).get(knob_name) or NOT_PIXEL["*"].get(knob_name)
+
+
+def load_split_table(path=SPLIT_JSON):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------------------------------------------- acts
+def _inputs_for(kind, fx, size):
+    from nodebased import core
+    spec = core.SPECS[kind]
+    images = [fx["A"], fx["B"], fx["C"]]
+    slots = [images[i % len(images)] for i in range(len(spec["inputs"]))]
+    slots += [None] * len(spec.get("optional_inputs", []))     # no mask, no optional input: the node's own behaviour
+    return slots
+
+
+def _base_params(kind, size):
+    from nodebased import core
+    p = dict(core.SPECS[kind]["params"])
+    h, w = size
+    for name, value in (("width", w), ("height", h)):          # generators render at the fixture's size, not 1920 x 1080
+        if name in p and isinstance(p[name], (int, float)) and not isinstance(p[name], bool):
+            p[name] = value
+    return p
+
+
+def _run(kind, params, slots):
+    from nodebased.imaging import Evaluator
+    out = Evaluator._kernel(kind, params, slots)
+    if isinstance(out, tuple):
+        out = out[0]
+    arr = np.asarray(out, dtype=np.float64)
+    if arr.ndim != 3 or arr.shape[-1] < 1:
+        raise TypeError("not an image")
+    return arr
+
+
+def candidates(name, value):
+    """Values to move one param to, off its default, inside its LIMITS and CHOICES. Empty when the param is not a scalar we can move."""
+    from nodebased import core
+    choices = core.CHOICES.get(name)
+    if choices is not None:
+        return [c for c in choices if c != value][:8]
+    if isinstance(value, bool):
+        return [not value]
+    if not isinstance(value, (int, float)):
+        return []
+    lo, hi = core.LIMITS.get(name, (None, None))
+    raw = [value + 1, value - 1, value * 2 + 0.5, value * 0.5 + 0.25, value + 0.37, value + 7]
+    if isinstance(value, int) and lo == 0 and hi == 1:
+        raw = [1 - value]
+    elif isinstance(value, int):
+        raw = [int(round(v)) for v in raw]
+    out = []
+    for v in raw:
+        if lo is not None:
+            v = max(lo, v)
+        if hi is not None:
+            v = min(hi, v)
+        if v != value and v not in out:
+            out.append(v)
+    return out
+
+
+def _moves(kind, base, slots, ref, name):
+    for v in candidates(name, base[name]):
+        try:
+            out = _run(kind, dict(base, **{name: v}), slots)
+        except Exception:  # noqa: BLE001 - a value the kernel refuses is not evidence either way
+            continue
+        if out.shape != ref.shape or np.nanmax(np.abs(np.nan_to_num(out - ref, nan=1.0, posinf=1.0, neginf=1.0))) > ACT_TOL:
+            return True
+    return False
+
+
+def probe_acts(kind, params, fx):
+    """{param: True | False} for each NodeBased param of `kind` named in `params`, or None when the kernel cannot run on the fixture.
+
+    A param that moves nothing alone is tried again with each other probed param moved first (Grade's `reverse` is
+    the identity at default levels), so only a param that changes nothing in any of those contexts reads False."""
+    key = (kind, tuple(sorted(params)))
+    if key in _PROBES:
+        return _PROBES[key]
+    size = fx["A"].shape[:2]
+    base = _base_params(kind, size)
+    slots = _inputs_for(kind, fx, size)
+    try:
+        ref = _run(kind, base, slots)
+    except Exception:  # noqa: BLE001
+        _PROBES[key] = None
+        return None
+    names = [n for n in params if n in base and candidates(n, base[n])]
+    acts = {n: _moves(kind, base, slots, ref, n) for n in names}
+    for n in [n for n, ok in acts.items() if not ok]:
+        for other in names:
+            if other == n:
+                continue
+            ctx = dict(base, **{other: candidates(other, base[other])[0]})
+            try:
+                ctx_ref = _run(kind, ctx, slots)
+            except Exception:  # noqa: BLE001
+                continue
+            if _moves(kind, ctx, slots, ctx_ref, n):
+                acts[n] = True
+                break
+    _PROBES[key] = acts
+    return acts
+
+
+def acts_component(nuke_key, kind, entries, knobs, fx, weight):
+    """(fraction, detail) over the counted Nuke knobs paired with movable NodeBased params; None when nothing can be probed."""
+    if nuke_key in NOT_PROBED:
+        return None, {"acts_note": NOT_PROBED[nuke_key]}
+    knobs = [k for k in knobs if not not_pixel_reason(nuke_key, k["name"])]
+    by_nuke = {}
+    for e in entries:
+        if e["kind"] in PAIRED:
+            for n in e["nuke"]:
+                by_nuke.setdefault(n, []).extend(e["nodebased"])
+    wanted = sorted({p for k in knobs for p in by_nuke.get(k["name"], [])})
+    acts = probe_acts(kind, wanted, fx)
+    if acts is None:
+        return None, {"acts_note": "the kernel does not run on the fixture"}
+    total = have = 0
+    inert, probed = [], 0
+    for k in knobs:
+        mine = [p for p in by_nuke.get(k["name"], []) if p in acts]
+        if not mine:
+            continue
+        probed += 1
+        total += weight[k["primary"]]
+        if any(acts[p] for p in mine):
+            have += weight[k["primary"]]
+        else:
+            inert.append(k["name"])
+    if not total:
+        return None, {}
+    return have / total, {"inert_knobs": inert, "acts_counts": (probed - len(inert), probed)}
+
+
+# -------------------------------------------------------------------------------------------------------------- layout
+def _norm_label(text):
+    return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+
+
+def _longest_increasing(seq):
+    tails = []
+    for x in seq:
+        lo, hi = 0, len(tails)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if tails[mid] < x:
+                lo = mid + 1
+            else:
+                hi = mid
+        tails[lo:lo + 1] = [x]
+    return len(tails)
+
+
+def layout_component(kind, entries, knobs):
+    """(fraction, detail): half the share of paired knobs already in Nuke's order (longest run kept in order), half the share
+    of paired single-param main-tab knobs whose label reads as the guide's label or the knob's scripting name. None when fewer than two paired knobs are laid out."""
+    from nodebased.knobs import knob_layout
+    groups = knob_layout(kind)
+    position, label_of = {}, {}
+    for i, g in enumerate(groups):
+        for p in g.params:
+            position.setdefault(p, i)
+            label_of.setdefault(p, g.label)
+    first = {}
+    for e in entries:
+        if e["kind"] in PAIRED:
+            for n in e["nuke"]:
+                first.setdefault(n, e)
+    seq, names = [], []
+    for k in knobs:
+        e = first.get(k["name"])
+        if e is None:
+            continue
+        spots = [position[p] for p in e["nodebased"] if p in position]
+        if spots:
+            seq.append(min(spots))
+            names.append(k["name"])
+    if len(seq) < 2:
+        return None, {}
+    kept = _longest_increasing(seq)
+    order = kept / len(seq)
+    labels_total = labels_ok = 0
+    wrong = []
+    # A guide label shared by several knobs is the row's label (Read's "Frame Range" over first, before, last, after), not one
+    # knob's, and "n/a" is the guide having none: neither says what one knob should read.
+    shared = {}
+    for k in knobs:
+        shared[_norm_label(k.get("label"))] = shared.get(_norm_label(k.get("label")), 0) + 1
+    for k in knobs:
+        e = first.get(k["name"])
+        theirs = _norm_label(k.get("label"))
+        if not k["primary"] or e is None or len(e["nodebased"]) != 1 or len(e["nuke"]) != 1 or theirs in ("", "na") or shared[theirs] > 1:
+            continue
+        ours = label_of.get(e["nodebased"][0])
+        if ours is None:
+            continue
+        labels_total += 1
+        if _norm_label(ours) in (theirs, _norm_label(k["name"])):
+            labels_ok += 1
+        else:
+            wrong.append((k["name"], ours, k["label"]))
+    if labels_total:
+        frac = 0.5 * order + 0.5 * labels_ok / labels_total
+    else:
+        frac = order
+    return frac, {"layout_order": (kept, len(seq)), "layout_labels": (labels_ok, labels_total), "label_mismatches": wrong}
+
+
+# -------------------------------------------------------------------------------------------------------------- splits
+def splits_component(nuke_key, kind, entries, table):
+    """(fraction, detail) over the Nuke knobs the split table lists for this node; None when the table lists none.
+
+    A knob counts 1 when a paired NodeBased param is in core.SPLITTABLE with the same split set, 0.5 when the pairing names at
+    least one NodeBased param per channel (Transform's scale_x / scale_y: per-channel values without Nuke's one-slider form), else 0."""
+    from nodebased import core
+    from nodebased.core import SPLIT_CHANNELS
+    listed = table["knobs"].get(nuke_key)
+    if not listed:
+        return None, {}
+    paired = {}
+    for e in entries:
+        if e["kind"] in PAIRED:
+            for n in e["nuke"]:
+                paired.setdefault(n, []).extend(p for p in e["nodebased"] if p not in paired.get(n, []))
+    got, missing, partial = 0.0, [], []
+    for name, channels in listed.items():
+        params = paired.get(name, [])
+        if not params or kind is None:
+            missing.append(name)
+        elif any(core.SPLITTABLE.get(kind, {}).get(p) == channels for p in params):
+            got += 1
+        elif len(params) >= len(SPLIT_CHANNELS[channels]):
+            got += 0.5
+            partial.append(name)
+        else:
+            missing.append(name)
+    return got / len(listed), {"split_missing": missing, "split_partial": partial,
+                               "split_counts": (len(listed) - len(missing) - len(partial), len(listed))}

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "source": "Nuke's knob class for each knob: AColor_Knob (one slider that splits into r g b a) and WH_Knob (one slider that splits into w h), as Nuke writes them in .nk scripts (for example `multiply {1 1 1 1}`, `size {4 4}`) and as the Nuke Python API names them (nuke.AColor_Knob, nuke.WH_Knob). The Reference Guide's tables do not state knob classes, so this table is not read from the guide.",
+  "status": "Curated, not exhaustive. Only knobs whose class is long-established are listed; a node that is not here has no splits component and is not penalised. To be confirmed against a Nuke install (scripts from tools/make_nuke_reference_pack.py can print each node's knob classes).",
+  "channels": {"rgba": "AColor_Knob: r, g, b, a", "wh": "WH_Knob: w, h"},
+  "knobs": {
+    "Grade": {"blackpoint": "rgba", "whitepoint": "rgba", "black": "rgba", "white": "rgba", "multiply": "rgba", "add": "rgba", "gamma": "rgba"},
+    "ColorCorrect": {"saturation": "rgba", "contrast": "rgba", "gamma": "rgba", "gain": "rgba", "offset": "rgba",
+                     "shadows.saturation": "rgba", "shadows.contrast": "rgba", "shadows.gamma": "rgba", "shadows.gain": "rgba", "shadows.offset": "rgba",
+                     "midtones.saturation": "rgba", "midtones.contrast": "rgba", "midtones.gamma": "rgba", "midtones.gain": "rgba", "midtones.offset": "rgba",
+                     "highlights.saturation": "rgba", "highlights.contrast": "rgba", "highlights.gamma": "rgba", "highlights.gain": "rgba", "highlights.offset": "rgba"},
+    "Multiply": {"value": "rgba"},
+    "Add": {"value": "rgba"},
+    "Gamma": {"value": "rgba"},
+    "Clamp": {"minimum": "rgba", "maximum": "rgba"},
+    "Blur": {"size": "wh"},
+    "Sharpen": {"size": "wh"},
+    "Soften": {"size": "wh"},
+    "Glow": {"size": "wh"},
+    "Erode (filter)": {"size": "wh"},
+    "Transform": {"scale": "wh"},
+    "Reformat": {"scale": "wh"}
+  }
+}

@@ -39,7 +39,11 @@ REPORT = ROOT / "docs" / "PARITY_2D_FIDELITY.md"
 GROUPS = ("Image", "Draw", "Time", "Channel", "Color", "Filter", "Keyer", "Merge", "Transform", "Metadata", "Other")
 # Component weights in a node's score. A component a node does not have (no Nuke inputs, no formula cases, no renders yet)
 # is left out and the rest are renormalised.
-WEIGHTS = {"knobs": 40, "defaults": 10, "sockets": 10, "chrome": 15, "math": 25, "pixels": 30}
+# The requirements of November 2026 (docs/PARITY_2D_FIDELITY.md, "How a node is scored"): knobs that act, Nuke's layout,
+# per-channel splits, and behaviour that counts against a node until it is checked.
+WEIGHTS = {"knobs": 30, "acts": 20, "defaults": 10, "sockets": 10, "chrome": 10, "math": 25, "layout": 10, "splits": 10, "pixels": 30}
+# The formula the report used from 2026-10-25 to 2026-11-02, still printed beside the new one so the history stays readable.
+PREVIOUS_WEIGHTS = {"knobs": 40, "defaults": 10, "sockets": 10, "chrome": 15, "math": 25, "pixels": 30}
 KNOB_WEIGHT = {True: 2, False: 1}                   # primary (main tab) knobs weigh 2, secondary knobs 1
 CHROME_ROLES = ("channels", "mask_channel", "mask_invert", "mask_inject", "mask_fringe", "unpremult", "unpremult_invert", "mix", "bbox")
 CHROME_LABEL = {"channels": "channels selector", "mask_channel": "mask channel", "mask_invert": "mask invert", "mask_inject": "mask inject",
@@ -185,7 +189,11 @@ def pixel_truth(cases, reference_dir):
 def score_pair(key, pair, nuke, reference_dir=None):
     """The component fractions and the 0..100 fidelity of one Nuke node against its NodeBased counterpart."""
     from nodebased import core
-    from nuke_fidelity_cases import cases_for
+    from nuke_fidelity_cases import cases_for, make_fixtures
+    import nuke_fidelity_requirements as req
+    global _FIXTURES
+    if _FIXTURES is None:
+        _FIXTURES = make_fixtures()
     res = {"nuke": key, "nodebased": pair.get("nodebased") or pair.get("document_settings"), "components": {}, "detail": {}}
     knobs = [k for k in nuke["knobs"] if k["counted"] and not k["role"].startswith("chrome:")]
     chrome = {}
@@ -193,7 +201,8 @@ def score_pair(key, pair, nuke, reference_dir=None):
         if k["role"].startswith("chrome:"):
             chrome.setdefault(k["role"][7:], []).append(k["name"])
     sockets = list(dict.fromkeys(i["name"] for i in nuke["inputs"]))
-    cases = [c for c in cases_for(key) if not c.unscored]
+    all_cases = cases_for(key)
+    cases = [c for c in all_cases if not c.unscored]
     document = pair.get("document_settings") is not None
     if pair.get("nodebased") is None and not document:
         mapped, entries = set(), []
@@ -257,13 +266,40 @@ def score_pair(key, pair, nuke, reference_dir=None):
         have = [r for r in roles if any(n in mapped for n in chrome[r])]
         res["components"]["chrome"] = len(have) / len(roles)
         res["detail"]["missing_chrome"] = [r for r in roles if r not in have]
-    # documented math
+    # knobs that act: each paired knob, moved off its default, changes the kernel's pixels on the fixture
+    kind = pair.get("nodebased")
+    tap = kind in req.TAPS
+    runs = kind is not None and not document and not tap and req.probe_acts(kind, [], _FIXTURES) is not None
+    if tap:
+        res["detail"]["tap"] = True
+    if runs and knobs:
+        frac, detail = req.acts_component(key, kind, entries, knobs, _FIXTURES, KNOB_WEIGHT)
+        res["detail"].update(detail)
+        if frac is not None:
+            res["components"]["acts"] = frac
+    # Nuke's layout: knob order and main-tab labels
+    if kind is not None and not document and knobs:
+        frac, detail = req.layout_component(kind, entries, knobs)
+        res["detail"].update(detail)
+        if frac is not None:
+            res["components"]["layout"] = frac
+    # per-channel splits (Nuke's AColor and WH knobs, docs/parity/nuke_split_knobs.json)
+    if not document:
+        frac, detail = req.splits_component(key, kind, entries, _split_table())
+        res["detail"].update(detail)
+        if frac is not None:
+            res["components"]["splits"] = frac
+    # documented math. A node whose kernel runs on the fixture and that has no scored case has unchecked behaviour: it scores 0
+    # here (the previous formula left it out). A node whose every case is listed unscored, with a reason, stays out.
     if cases:
         results = [run_case(c) for c in cases]
         passed = sum(1 for r in results if r["status"] == "pass")
         res["components"]["math"] = passed / len(results)
         res["detail"]["math"] = (passed, len(results))
         res["detail"]["math_failed"] = [r["id"] for r in results if r["status"] != "pass"]
+    elif runs and not all_cases and (knobs or sockets or chrome):
+        res["components"]["math"] = 0.0
+        res["detail"]["math_unchecked"] = True
     # pixel truth against Nuke renders
     truth = pixel_truth([c for c in cases_for(key)], reference_dir) if reference_dir else None
     if truth:
@@ -276,9 +312,25 @@ def score_pair(key, pair, nuke, reference_dir=None):
         res["score"] = 100.0 * sum(WEIGHTS[c] * f for c, f in live.items()) / sum(WEIGHTS[c] for c in live)
     else:
         res["score"] = None
+    old = {c: f for c, f in live.items() if c in PREVIOUS_WEIGHTS and not (c == "math" and res["detail"].get("math_unchecked"))}
+    if res["score"] is None or not old:
+        res["score_previous"] = res["score"]
+    else:
+        res["score_previous"] = 100.0 * sum(PREVIOUS_WEIGHTS[c] * f for c, f in old.items()) / sum(PREVIOUS_WEIGHTS[c] for c in old)
     res["document"] = document
     res["pixel_column"] = ("measured" if truth else ("unmeasured" if cases_for(key) else "no fixture"))
     return res
+
+
+_SPLITS = None
+
+
+def _split_table():
+    import nuke_fidelity_requirements as req
+    global _SPLITS
+    if _SPLITS is None:
+        _SPLITS = req.load_split_table()
+    return _SPLITS
 
 
 def build_units(nuke_doc, map_doc, reference_dir=None):
@@ -303,19 +355,19 @@ def build_units(nuke_doc, map_doc, reference_dir=None):
     return units, skipped
 
 
-def summarize(units):
-    scored = [u for u in units if u["score"] is not None]
+def summarize(units, field="score"):
+    scored = [u for u in units if u[field] is not None]
     total_w = sum(u["weight"] for u in scored)
-    overall = sum(u["weight"] * u["score"] for u in scored) / total_w
+    overall = sum(u["weight"] * u[field] for u in scored) / total_w
     by_group = {}
     for g in GROUPS:
         gs = [u for u in scored if u["group"] == g]
         if gs:
             w = sum(u["weight"] for u in gs)
-            by_group[g] = (sum(u["weight"] * u["score"] for u in gs) / w, len(gs), sum(u["score"] for u in gs) / len(gs))
+            by_group[g] = (sum(u["weight"] * u[field] for u in gs) / w, len(gs), sum(u[field] for u in gs) / len(gs))
     existing = [u for u in scored if u["nodebased"] is not None and not u.get("document")]
     w2 = sum(u["weight"] for u in existing)
-    overall_existing = sum(u["weight"] * u["score"] for u in existing) / w2
+    overall_existing = sum(u["weight"] * u[field] for u in existing) / w2
     return overall, overall_existing, by_group
 
 
@@ -345,6 +397,20 @@ def gap_text(u):
     mf = u["detail"].get("math_failed", [])
     if mf:
         parts.append("formula cases failing: " + ", ".join(f"`{n}`" for n in mf[:6]) + (f" and {len(mf) - 6} more" if len(mf) > 6 else ""))
+    if u["detail"].get("math_unchecked"):
+        parts.append("behaviour unchecked (no pixel case)")
+    inert = u["detail"].get("inert_knobs", [])
+    if inert:
+        parts.append("knobs that change no pixels: " + ", ".join(f"`{n}`" for n in inert[:6]) + (f" and {len(inert) - 6} more" if len(inert) > 6 else ""))
+    lo = u["detail"].get("layout_order")
+    if lo and lo[0] < lo[1]:
+        parts.append(f"knob order differs from Nuke's ({lo[0]} of {lo[1]} in order)")
+    ll = u["detail"].get("layout_labels")
+    if ll and ll[0] < ll[1]:
+        parts.append(f"{ll[1] - ll[0]} label{'s differ' if ll[1] - ll[0] != 1 else ' differs'} from Nuke's")
+    sm = u["detail"].get("split_missing", []) + u["detail"].get("split_partial", [])
+    if sm:
+        parts.append("not splittable like Nuke: " + ", ".join(f"`{n}`" for n in sm[:6]) + (f" and {len(sm) - 6} more" if len(sm) > 6 else ""))
     if u["nodebased"] is None:
         parts = [u.get("none_reason") or "no NodeBased node"]
     return "; ".join(parts) if parts else "nothing missing that the guide lists"
@@ -357,6 +423,7 @@ def build_report(reference_dir=None):
         if u["nodebased"] is None:
             u["none_reason"] = map_doc["pairs"][pair_key(u["group"], u["name"])].get("reason", "")
     overall, overall_existing, by_group = summarize(units)
+    previous, previous_existing, previous_groups = summarize(units, "score_previous")
     unscored = [u for u in units if u["score"] is None]
     lines = []
     w = lines.append
@@ -364,6 +431,10 @@ def build_report(reference_dir=None):
     w("")
     w(f"**Overall fidelity: {overall:.1f} / 100** ({len([u for u in units if u['score'] is not None])} nodes scored, rank-weighted; "
       f"{overall_existing:.1f} counting only the nodes NodeBased has).")
+    w("")
+    w(f"Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores "
+      f"{previous:.1f} ({previous_existing:.1f} counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, "
+      "Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.")
     w("")
     w("This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. "
       "[PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. "
@@ -373,16 +444,28 @@ def build_report(reference_dir=None):
     w("")
     w("## How a node is scored")
     w("")
-    w("Per node, five components, each a fraction from 0 to 1:")
+    w("Per node, up to nine components, each a fraction from 0 to 1. The parts marked *(11/2)* are the requirements added on 2026-11-02 "
+      "(DiMo, 11/1: \"I need these nodes in a much better place\" and \"match known layouts and how some can hold multiple channel values\"):")
     w("")
     w("| Component | Weight | What it counts |")
     w("|---|---|---|")
-    w("| knobs | 40 | The Nuke node's knobs from the guide's tables, minus the shared chrome below, enable checkboxes, Python callbacks, GPU options and (for Read, Write, Viewer) per-format option tabs. Each knob NodeBased pairs with one counts; knobs on the node's main tab weigh 2, the rest 1. |")
-    w("| defaults | 10 | Of the paired knobs whose Nuke default the guide states and whose NodeBased default is comparable, the fraction that agree. |")
-    w("| sockets | 10 | The Nuke node's input sockets (mask included, A/B and numbered inputs as listed) that a NodeBased input is paired with. |")
-    w("| chrome | 15 | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |")
-    w("| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). Only nodes with such cases have this component. |")
-    w("| pixels | 30 | Pixel truth against real Nuke renders. **Not measured yet**: it joins the formula once `--reference-dir` has renders; until then it is not in any number here. |")
+    w(f"| knobs | {WEIGHTS['knobs']} | The Nuke node's knobs from the guide's tables, minus the shared chrome below, enable checkboxes, Python callbacks, GPU options and (for Read, Write, Viewer) per-format option tabs. Each knob NodeBased pairs with one counts; knobs on the node's main tab weigh 2, the rest 1. |")
+    w(f"| acts | {WEIGHTS['acts']} | *(11/2)* Of the paired knobs, the share (main tab 2, the rest 1) that change NodeBased's output pixels when moved off their default on the fixture, "
+      "through `Evaluator._kernel` (`tools/nuke_fidelity_requirements.py`). A knob that moves nothing alone is tried again with each other paired knob moved first. "
+      "Knobs that act only over time, on metadata or on the bounding box are left out (listed below), and so are taps, whose behaviour is their input. Only nodes whose kernel runs on the fixture have this component. |")
+    w(f"| defaults | {WEIGHTS['defaults']} | Of the paired knobs whose Nuke default the guide states and whose NodeBased default is comparable, the fraction that agree. |")
+    w(f"| sockets | {WEIGHTS['sockets']} | The Nuke node's input sockets (mask included, A/B and numbered inputs as listed) that a NodeBased input is paired with. |")
+    w(f"| chrome | {WEIGHTS['chrome']} | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |")
+    w(f"| math | {WEIGHTS['math']} | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). *(11/2)* A node whose kernel runs on the fixture and that has no case at all scores 0 here (behaviour unchecked); "
+      "the previous formula left it out, which is how a node with no behaviour checked could score 100. A node whose every case is listed `not scored`, with its reason, and a tap, stay out. |")
+    w(f"| layout | {WEIGHTS['layout']} | *(11/2)* Nuke's knob layout: half is the share of paired knobs that sit in the guide table's order in the Properties panel "
+      "(the longest run already in order), half the share of paired main-tab knobs whose label reads as the guide's label or the knob's scripting name (case and punctuation ignored; "
+      "a label the guide gives a whole row of knobs, or `n/a`, is not compared). "
+      "Section breaks and which knobs share a row are not measured yet. |")
+    w(f"| splits | {WEIGHTS['splits']} | *(11/2)* For the Nuke knobs that split per channel (an AColor knob into r g b a, a WH knob into w h; "
+      "`docs/parity/nuke_split_knobs.json`, see below), the share that are splittable NodeBased params (`core.SPLITTABLE`). A knob paired with one NodeBased param "
+      "per channel and no one-slider form counts half. Only nodes the table lists have this component. |")
+    w(f"| pixels | {WEIGHTS['pixels']} | Pixel truth against real Nuke renders. **Not measured yet**: it joins the formula once `--reference-dir` has renders; until then it is not in any number here. |")
     w("")
     w("`fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. "
       "A Nuke node with no NodeBased counterpart scores 0. A node whose guide page lists no inputs or knobs cannot be measured and is left out (listed at the end).")
@@ -396,22 +479,32 @@ def build_report(reference_dir=None):
     w("")
     w("## By group")
     w("")
-    w("| Group | Rank-weighted | Plain mean | Nodes |")
-    w("|---|---|---|---|")
+    w("| Group | Rank-weighted | Plain mean | Previous formula | Nodes |")
+    w("|---|---|---|---|---|")
     for g in GROUPS:
         if g in by_group:
             rw, n, mean = by_group[g]
-            w(f"| {g} | {rw:.1f} | {mean:.1f} | {n} |")
+            w(f"| {g} | {rw:.1f} | {mean:.1f} | {previous_groups[g][0]:.1f} | {n} |")
     w("")
     checked = [u for u in units if u["score"] is not None and "math" in u["components"]]
     scored_nodes = [u for u in units if u["score"] is not None]
+    checked = [u for u in checked if not u["detail"].get("math_unchecked")]
+    unchecked = [u for u in scored_nodes if u["detail"].get("math_unchecked")]
+    probed = sum(u["detail"].get("acts_counts", (0, 0))[1] for u in scored_nodes)
+    acting = sum(u["detail"].get("acts_counts", (0, 0))[0] for u in scored_nodes)
+    split_nodes = [u for u in scored_nodes if "splits" in u["components"]]
     w(f"Behaviour checked: {len(checked)} of the {len(scored_nodes)} scored nodes have at least one scored pixel case against what the node computes "
-      "(the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.")
+      f"(the `math` column below); {len(unchecked)} nodes whose kernel runs on the fixture have none and score 0 on `math`.")
+    w("")
+    w(f"Knobs that act: {acting} of the {probed} paired knobs probed change the output pixels; "
+      f"{probed - acting} change nothing on the fixture (listed per node below). "
+      f"Splits: {sum(1 for u in split_nodes if u['components']['splits'] == 1)} of the {len(split_nodes)} nodes with split knobs in the table split all of them.")
     w("")
     w("## Per node")
     w("")
     w("Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D status, fidelity, then the component fractions as percentages "
-      "(`knobs` with the count of Nuke knobs covered, `defaults`, `sockets`, `chrome`, `math` with passed/total cases) and the pixel-truth column.")
+      "(`knobs` with the count of Nuke knobs covered, `acts` with acting/probed knobs, `defaults`, `sockets`, `chrome`, `math` with passed/total cases, "
+      "`unchecked` when no case exists, `layout`, `splits` with fully split/listed knobs) and the pixel-truth column. `Prev.` is the node under the previous formula.")
     for g in GROUPS:
         gu = [u for u in units if u["group"] == g]
         if not gu:
@@ -419,15 +512,19 @@ def build_report(reference_dir=None):
         w("")
         w(f"### {g}")
         w("")
-        w("| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |")
-        w("|---|---|---|---|---|---|---|---|---|---|---|")
+        w("| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |")
+        w("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for u in sorted(gu, key=lambda x: (x["rank"], x["name"])):
             c, d = u["components"], u["detail"]
             kc = f" ({d['knob_counts'][0]}/{d['knob_counts'][1]})" if "knob_counts" in d else ""
-            mc = f" ({d['math'][0]}/{d['math'][1]})" if "math" in d else ""
+            mc = f" ({d['math'][0]}/{d['math'][1]})" if "math" in d else (" unchecked" if d.get("math_unchecked") else "")
+            ac = f" ({d['acts_counts'][0]}/{d['acts_counts'][1]})" if "acts_counts" in d and "acts" in c else ""
+            sc = f" ({d['split_counts'][0]}/{d['split_counts'][1]})" if "split_counts" in d else ""
             w(f"| {u['rank']} | {u['name']} | {'`' + u['nodebased'] + '`' if u['nodebased'] else '-'} | {u['status']} | "
-              f"{pct(u['score']) if u['score'] is not None else 'n/a'} | {fmt(c.get('knobs'), 0)}{kc} | {fmt(c.get('defaults'), 0)} | "
-              f"{fmt(c.get('sockets'), 0)} | {fmt(c.get('chrome'), 0)} | {fmt(c.get('math'), 0)}{mc} | {u['pixel_column']} |")
+              f"{pct(u['score']) if u['score'] is not None else 'n/a'} | {pct(u['score_previous']) if u['score_previous'] is not None else 'n/a'} | "
+              f"{fmt(c.get('knobs'), 0)}{kc} | {fmt(c.get('acts'), 0)}{ac} | {fmt(c.get('defaults'), 0)} | "
+              f"{fmt(c.get('sockets'), 0)} | {fmt(c.get('chrome'), 0)} | {fmt(c.get('math'), 0)}{mc} | {fmt(c.get('layout'), 0)} | "
+              f"{fmt(c.get('splits'), 0)}{sc} | {u['pixel_column']} |")
     w("")
     w(f"## The {GAP_LIST} largest gaps")
     w("")
@@ -456,6 +553,48 @@ def build_report(reference_dir=None):
         err = f"{r['max_abs_error']:.3g}" if failed else ("within tolerance" if r["status"] == "pass" else "-")
         worst = str(tuple(r["worst"])) if failed else "-"
         w(f"| `{case.id}` | {case.source} | {status} | {err} | {worst} |")
+    w("")
+    w("## Requirements of 2026-11-02, per node")
+    w("")
+    w("### Knobs that change no pixels")
+    w("")
+    w("Each paired knob below was moved off its default to every value its `LIMITS` and `CHOICES` allow the probe to try, alone and with each other paired knob moved first, "
+      "and NodeBased's output did not change on the fixture. Either the knob is not implemented, or it acts only in a state the probe does not reach "
+      "(two other knobs moved together, a payload the default node does not hold). Implement it, or unpair it in `docs/parity/nodebased_to_nuke.json` with a reason.")
+    w("")
+    import nuke_fidelity_requirements as req
+    for u in [u for u in units if u["detail"].get("inert_knobs")]:
+        w(f"- {u['name']} (`{u['nodebased']}`): " + ", ".join(f"`{n}`" for n in u["detail"]["inert_knobs"]))
+    w("")
+    w("Not probed, because a one-frame pixel probe cannot see them: " + "; ".join(
+        f"{why}: " + ", ".join(f"`{n}`" for n in sorted(k for k, r in req.NOT_PIXEL["*"].items() if r == why))
+        for why in sorted(set(req.NOT_PIXEL["*"].values()))) + "; " + "; ".join(
+        f"{node}'s `{k}` ({r})" for node, ks in sorted(req.NOT_PIXEL.items()) if node != "*" for k, r in ks.items()) + ". "
+      "Whole nodes not probed: " + "; ".join(f"{n} ({r})" for n, r in sorted(req.NOT_PROBED.items())) + ". "
+      "Taps, whose behaviour is their input and which have neither `acts` nor `math`: " + ", ".join(f"`{t}`" for t in req.TAPS) + ".")
+    w("")
+    w("### Layout differences")
+    w("")
+    w("Labels below are NodeBased's, then the guide's.")
+    w("")
+    for u in [u for u in units if u["detail"].get("label_mismatches") or (u["detail"].get("layout_order") and u["detail"]["layout_order"][0] < u["detail"]["layout_order"][1])]:
+        lo = u["detail"].get("layout_order")
+        bits = []
+        if lo and lo[0] < lo[1]:
+            bits.append(f"{lo[0]} of {lo[1]} paired knobs in Nuke's order")
+        bits += [f"`{n}` reads \"{ours}\", Nuke \"{theirs}\"" for n, ours, theirs in u["detail"].get("label_mismatches", [])]
+        w(f"- {u['name']} (`{u['nodebased']}`): " + "; ".join(bits))
+    w("")
+    w("### Split knobs")
+    w("")
+    table = _split_table()
+    w(table["source"] + " " + table["status"])
+    w("")
+    for u in [u for u in units if "splits" in u["components"]]:
+        d = u["detail"]
+        state = "all split" if u["components"]["splits"] == 1 else ", ".join(
+            [f"`{n}` not splittable" for n in d.get("split_missing", [])] + [f"`{n}` per-channel params, no one-slider form" for n in d.get("split_partial", [])])
+        w(f"- {u['name']} (`{u['nodebased'] or '-'}`): {', '.join(f'`{k}` ({v})' for k, v in table['knobs'][u['nuke']].items())}. {state}.")
     w("")
     w("## What a reader should know about the reference data")
     w("")

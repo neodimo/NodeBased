@@ -196,7 +196,63 @@ class ScoringTests(unittest.TestCase):
         res = self.fake(knobs, inputs=("unnamed",), pair_knobs=[{"nodebased": ["multiply"], "nuke": ["multiply"], "kind": "same"}],
                         pair_inputs=[{"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}])
         w = audit.WEIGHTS
-        self.assertAlmostEqual(res["score"], 100 * (w["knobs"] + w["defaults"] + w["sockets"]) / (w["knobs"] + w["defaults"] + w["sockets"]))
+        live = res["components"]
+        self.assertEqual(set(live), {"knobs", "acts", "defaults", "sockets", "math"})
+        self.assertAlmostEqual(res["score"], 100 * sum(w[c] * f for c, f in live.items()) / sum(w[c] for c in live))
+        # Grade's kernel runs on the fixture and the fake node has no case, so its behaviour is unchecked: 0 on math.
+        self.assertEqual(live["math"], 0.0)
+        self.assertTrue(res["detail"]["math_unchecked"])
+        # The previous formula left unchecked behaviour out: knobs, defaults and sockets all full make 100.
+        self.assertAlmostEqual(res["score_previous"], 100.0)
+
+    def test_a_paired_knob_acts_when_it_moves_pixels(self):
+        knobs = [self.knob("multiply", default=1), self.knob("reverse", default=False)]
+        pair = [{"nodebased": ["multiply"], "nuke": ["multiply"], "kind": "same"}, {"nodebased": ["reverse"], "nuke": ["reverse"], "kind": "same"}]
+        res = self.fake(knobs, pair_knobs=pair)
+        # reverse is the identity at Grade's default levels; it acts once multiply has been moved first
+        self.assertEqual(res["detail"]["acts_counts"], (2, 2))
+        self.assertAlmostEqual(res["components"]["acts"], 1.0)
+
+    def test_a_knob_that_moves_nothing_is_listed_inert(self):
+        import nuke_fidelity_requirements as req
+        fx = __import__("nuke_fidelity_cases").make_fixtures()
+        self.assertEqual(req.probe_acts("Grade", ["multiply"], fx), {"multiply": True})
+        knobs = [self.knob("multiply", default=1), self.knob("mystery")]
+        pair = [{"nodebased": ["multiply"], "nuke": ["multiply"], "kind": "same"}, {"nodebased": ["channels"], "nuke": ["mystery"], "kind": "renamed", "reason": "x"}]
+        frac, detail = req.acts_component("Fake", "Grade", pair, knobs, fx, audit.KNOB_WEIGHT)
+        # Grade's kernel leaves `channels` to the node chrome, so moving it alone changes nothing: `mystery` is listed inert
+        self.assertEqual(detail["inert_knobs"], ["mystery"])
+        self.assertEqual(frac, 0.5)
+        frac, detail = req.acts_component("Fake", "Grade", pair, knobs + [self.knob("first")], fx, audit.KNOB_WEIGHT)
+        self.assertEqual(detail["acts_counts"], (1, 2))             # `first` acts over time: never probed
+
+    def test_layout_scores_order_and_labels(self):
+        import nuke_fidelity_requirements as req
+        knobs = [dict(self.knob("blackpoint"), label="Blackpoint"), dict(self.knob("gamma"), label="gamma"), dict(self.knob("black"), label="Something else")]
+        pair = [{"nodebased": [n], "nuke": [n], "kind": "same"} for n in ("blackpoint", "gamma", "black")]
+        frac, detail = req.layout_component("Grade", pair, knobs)
+        self.assertEqual(detail["layout_order"], (2, 3))            # Grade lays out black before gamma
+        self.assertEqual(detail["layout_labels"], (2, 3))           # "gamma" reads as the scripting name; Grade's "Lift" reads as neither
+        self.assertAlmostEqual(frac, 0.5 * 2 / 3 + 0.5 * 2 / 3)
+        self.assertEqual(req._longest_increasing([3, 1, 2, 5, 4]), 3)
+
+    def test_splits_count_splittable_params_and_half_for_per_channel_params(self):
+        import nuke_fidelity_requirements as req
+        table = {"knobs": {"Fake": {"multiply": "rgba", "size": "wh", "box": "wh"}}}
+        pair = [{"nodebased": ["multiply"], "nuke": ["multiply"], "kind": "same"},
+                {"nodebased": ["exposure"], "nuke": ["size"], "kind": "renamed", "reason": "x"},
+                {"nodebased": ["box_w", "box_h"], "nuke": ["box"], "kind": "components", "reason": "x"}]
+        frac, detail = req.splits_component("Fake", "Grade", pair, table)
+        self.assertEqual(detail["split_missing"], ["size"])
+        self.assertEqual(detail["split_partial"], ["box"])
+        self.assertAlmostEqual(frac, 1.5 / 3)
+        self.assertEqual(req.splits_component("Other", "Grade", pair, table), (None, {}))
+
+    def test_a_tap_has_no_behaviour_component(self):
+        res = audit.score_pair("Fake", {"nodebased": "NoOp", "inputs": [], "knobs": [{"nodebased": ["x"], "nuke": ["a"], "kind": "same"}]},
+                               {"inputs": [], "knobs": [self.knob("a")]})
+        self.assertNotIn("math", res["components"])
+        self.assertNotIn("acts", res["components"])
 
     def test_default_comparison_rules(self):
         c = audit.compare_default

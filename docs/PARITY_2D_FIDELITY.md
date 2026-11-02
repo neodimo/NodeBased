@@ -1,20 +1,25 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 91.2 / 100** (167 nodes scored, rank-weighted; 93.5 counting only the nodes NodeBased has).
+**Overall fidelity: 82.1 / 100** (167 nodes scored, rank-weighted; 84.1 counting only the nodes NodeBased has).
+
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.2 (93.5 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
 ## How a node is scored
 
-Per node, five components, each a fraction from 0 to 1:
+Per node, up to nine components, each a fraction from 0 to 1. The parts marked *(11/2)* are the requirements added on 2026-11-02 (DiMo, 11/1: "I need these nodes in a much better place" and "match known layouts and how some can hold multiple channel values"):
 
 | Component | Weight | What it counts |
 |---|---|---|
-| knobs | 40 | The Nuke node's knobs from the guide's tables, minus the shared chrome below, enable checkboxes, Python callbacks, GPU options and (for Read, Write, Viewer) per-format option tabs. Each knob NodeBased pairs with one counts; knobs on the node's main tab weigh 2, the rest 1. |
+| knobs | 30 | The Nuke node's knobs from the guide's tables, minus the shared chrome below, enable checkboxes, Python callbacks, GPU options and (for Read, Write, Viewer) per-format option tabs. Each knob NodeBased pairs with one counts; knobs on the node's main tab weigh 2, the rest 1. |
+| acts | 20 | *(11/2)* Of the paired knobs, the share (main tab 2, the rest 1) that change NodeBased's output pixels when moved off their default on the fixture, through `Evaluator._kernel` (`tools/nuke_fidelity_requirements.py`). A knob that moves nothing alone is tried again with each other paired knob moved first. Knobs that act only over time, on metadata or on the bounding box are left out (listed below), and so are taps, whose behaviour is their input. Only nodes whose kernel runs on the fixture have this component. |
 | defaults | 10 | Of the paired knobs whose Nuke default the guide states and whose NodeBased default is comparable, the fraction that agree. |
 | sockets | 10 | The Nuke node's input sockets (mask included, A/B and numbered inputs as listed) that a NodeBased input is paired with. |
-| chrome | 15 | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |
-| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). Only nodes with such cases have this component. |
+| chrome | 10 | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |
+| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). *(11/2)* A node whose kernel runs on the fixture and that has no case at all scores 0 here (behaviour unchecked); the previous formula left it out, which is how a node with no behaviour checked could score 100. A node whose every case is listed `not scored`, with its reason, and a tap, stay out. |
+| layout | 10 | *(11/2)* Nuke's knob layout: half is the share of paired knobs that sit in the guide table's order in the Properties panel (the longest run already in order), half the share of paired main-tab knobs whose label reads as the guide's label or the knob's scripting name (case and punctuation ignored; a label the guide gives a whole row of knobs, or `n/a`, is not compared). Section breaks and which knobs share a row are not measured yet. |
+| splits | 10 | *(11/2)* For the Nuke knobs that split per channel (an AColor knob into r g b a, a WH knob into w h; `docs/parity/nuke_split_knobs.json`, see below), the share that are splittable NodeBased params (`core.SPLITTABLE`). A knob paired with one NodeBased param per channel and no one-slider form counts half. Only nodes the table lists have this component. |
 | pixels | 30 | Pixel truth against real Nuke renders. **Not measured yet**: it joins the formula once `--reference-dir` has renders; until then it is not in any number here. |
 
 `fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. A Nuke node with no NodeBased counterpart scores 0. A node whose guide page lists no inputs or knobs cannot be measured and is left out (listed at the end).
@@ -25,257 +30,259 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 ## By group
 
-| Group | Rank-weighted | Plain mean | Nodes |
-|---|---|---|---|
-| Image | 85.9 | 90.0 | 6 |
-| Draw | 83.1 | 62.3 | 17 |
-| Time | 96.1 | 78.2 | 13 |
-| Channel | 98.4 | 97.2 | 5 |
-| Color | 94.4 | 80.7 | 34 |
-| Filter | 90.2 | 71.6 | 32 |
-| Keyer | 87.3 | 64.6 | 11 |
-| Merge | 99.4 | 98.7 | 12 |
-| Transform | 88.1 | 71.2 | 20 |
-| Metadata | 99.4 | 98.9 | 5 |
-| Other | 80.3 | 43.0 | 12 |
+| Group | Rank-weighted | Plain mean | Previous formula | Nodes |
+|---|---|---|---|---|
+| Image | 80.9 | 84.7 | 85.9 | 6 |
+| Draw | 72.8 | 58.1 | 83.1 | 17 |
+| Time | 96.1 | 78.7 | 96.1 | 13 |
+| Channel | 72.6 | 78.2 | 98.4 | 5 |
+| Color | 93.8 | 77.9 | 94.4 | 34 |
+| Filter | 81.4 | 68.2 | 90.2 | 32 |
+| Keyer | 65.7 | 51.7 | 87.3 | 11 |
+| Merge | 88.8 | 81.7 | 99.4 | 12 |
+| Transform | 70.7 | 66.8 | 88.1 | 20 |
+| Metadata | 99.0 | 98.2 | 99.4 | 5 |
+| Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 30 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.
+Behaviour checked: 30 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 43 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+
+Knobs that act: 271 of the 346 paired knobs probed change the output pixels; 75 change nothing on the fixture (listed per node below). Splits: 5 of the 13 nodes with split knobs in the table split all of them.
 
 ## Per node
 
-Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D status, fidelity, then the component fractions as percentages (`knobs` with the count of Nuke knobs covered, `defaults`, `sockets`, `chrome`, `math` with passed/total cases) and the pixel-truth column.
+Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D status, fidelity, then the component fractions as percentages (`knobs` with the count of Nuke knobs covered, `acts` with acting/probed knobs, `defaults`, `sockets`, `chrome`, `math` with passed/total cases, `unchecked` when no case exists, `layout`, `splits` with fully split/listed knobs) and the pixel-truth column. `Prev.` is the node under the previous formula.
 
 ### Image
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Read | `Read` | supported | 87.1 | 100 (32/32) | 35 | - | - | - | no fixture |
-| 2 | Write | `Write` | supported | 67.2 | 61 (27/56) | 42 | - | 100 | - | no fixture |
-| 3 | Viewer | `Viewer` | supported | 89.7 | 83 (20/24) | - | 100 | 100 | - | no fixture |
-| 4 | Constant | `Constant` | supported | 96.2 | 100 (4/4) | 75 | - | 100 | - | no fixture |
-| 5 | UDIM Import | - | missing | n/a | - | - | - | - | - | no fixture |
-| 6 | CurveTool | `CurveTool` | supported | 100.0 | 100 (12/12) | 100 | 100 | 100 | - | no fixture |
-| 7 | Profile | `Profile` | supported | 100.0 | 100 (2/2) | 100 | - | 100 | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Read | `Read` | supported | 81.7 | 87.1 | 100 (32/32) | - | 35 | - | - | - | 73 | - | no fixture |
+| 2 | Write | `Write` | supported | 66.9 | 67.2 | 61 (27/56) | - | 42 | - | 100 | - | 76 | - | no fixture |
+| 3 | Viewer | `Viewer` | supported | 90.0 | 89.7 | 83 (20/24) | - | - | 100 | 100 | - | - | - | no fixture |
+| 4 | Constant | `Constant` | supported | 71.4 | 96.2 | 100 (4/4) | 100 (2/2) | 75 | - | 100 | 0 unchecked | 75 | - | no fixture |
+| 5 | UDIM Import | - | missing | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 6 | CurveTool | `CurveTool` | supported | 98.1 | 100.0 | 100 (12/12) | - | 100 | 100 | 100 | - | 86 | - | no fixture |
+| 7 | Profile | `Profile` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | - | 100 | - | - | - | no fixture |
 
 ### Draw
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 81.8 | 66 (48/75) | 100 | 100 | 100 | - | no fixture |
-| 2 | Text | `Text` | supported | 98.2 | 98 (40/41) | 93 | 100 | 100 | - | no fixture |
-| 3 | Rectangle | `Rectangle` | supported | 98.2 | 100 (13/13) | 87 | 100 | 100 | - | no fixture |
-| 4 | Ramp | `Ramp` | supported | 92.2 | 89 (9/10) | 83 | 100 | 100 | - | no fixture |
-| 5 | Radial | `Radial` | supported | 84.9 | 74 (9/14) | 91 | 100 | 100 | - | no fixture |
-| 6 | Noise | `Noise` | supported | 95.7 | 98 (25/26) | 78 | 100 | 100 | - | no fixture |
-| 7 | RotoPaint | `RotoPaint` | supported | 91.3 | 84 (73/88) | 100 | 100 | 100 | - | no fixture |
-| 8 | LightWrap | `LightWrap` | supported | 98.6 | 100 (27/27) | 89 | 100 | 100 | - | no fixture |
-| 9 | Grain | `Grain` | supported | 51.7 | 56 (8/14) | 62 | 100 | 0 | - | no fixture |
-| 9 | ScannedGrain | `ScannedGrain` | supported | 20.0 | 0 (0/1) | - | 100 | - | - | no fixture |
-| 10 | DustBust | - | supported | 0.0 | 0 (0/5) | - | 0 | - | - | no fixture |
-| 10 | MarkerRemoval | - | supported | 0.0 | 0 (0/5) | - | 0 | - | - | no fixture |
-| 11 | Flare | `Flare` | supported | 27.1 | 7 (3/50) | 33 | 100 | - | - | no fixture |
-| 11 | Glint | `Glint` | supported | 38.4 | 31 (4/13) | 40 | 100 | 17 | - | no fixture |
-| 11 | Sparkles | `Sparkles` | supported | 22.6 | 9 (2/32) | 0 | 100 | - | - | no fixture |
-| 12 | Dither | `Dither` | supported | 69.3 | 50 (2/4) | 70 | 100 | 100 | - | no fixture |
-| 13 | Grid | `Grid` | supported | 89.6 | 83 (10/14) | 92 | 100 | 100 | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Roto | `Roto` | supported | 60.9 | 81.8 | 66 (48/75) | - | 100 | 100 | 100 | 0 unchecked | 81 | - | no fixture |
+| 2 | Text | `Text` | supported | 95.4 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 80 | - | no fixture |
+| 3 | Rectangle | `Rectangle` | supported | 93.2 | 98.2 | 100 (13/13) | - | 87 | 100 | 100 | - | 66 | - | no fixture |
+| 4 | Ramp | `Ramp` | supported | 89.5 | 92.2 | 89 (9/10) | - | 83 | 100 | 100 | - | 75 | - | no fixture |
+| 5 | Radial | `Radial` | supported | 84.1 | 84.9 | 74 (9/14) | - | 91 | 100 | 100 | - | 76 | - | no fixture |
+| 6 | Noise | `Noise` | supported | 92.2 | 95.7 | 98 (25/26) | - | 78 | 100 | 100 | - | 75 | - | no fixture |
+| 7 | RotoPaint | `RotoPaint` | supported | 66.8 | 91.3 | 84 (73/88) | - | 100 | 100 | 100 | 0 unchecked | 83 | - | no fixture |
+| 8 | LightWrap | `LightWrap` | supported | 66.1 | 98.6 | 100 (27/27) | 41 (8/27) | 89 | 100 | 100 | 0 unchecked | 89 | - | no fixture |
+| 9 | Grain | `Grain` | supported | 53.0 | 51.7 | 56 (8/14) | 89 (7/8) | 62 | 100 | 0 | 0 unchecked | 100 | - | no fixture |
+| 9 | ScannedGrain | `ScannedGrain` | supported | 15.4 | 20.0 | 0 (0/1) | - | - | 100 | - | 0 unchecked | - | - | no fixture |
+| 10 | DustBust | - | supported | 0.0 | 0.0 | 0 (0/5) | - | - | 0 | - | - | - | - | no fixture |
+| 10 | MarkerRemoval | - | supported | 0.0 | 0.0 | 0 (0/5) | - | - | 0 | - | - | - | - | no fixture |
+| 11 | Flare | `Flare` | supported | 35.4 | 27.1 | 7 (3/50) | 75 (2/3) | 33 | 100 | - | 0 unchecked | 67 | - | no fixture |
+| 11 | Glint | `Glint` | supported | 45.6 | 38.4 | 31 (4/13) | 100 (4/4) | 40 | 100 | 17 | 0 unchecked | 75 | - | no fixture |
+| 11 | Sparkles | `Sparkles` | supported | 40.6 | 22.6 | 9 (2/32) | 100 (2/2) | 0 | 100 | - | 0 unchecked | 100 | - | no fixture |
+| 12 | Dither | `Dither` | supported | 62.6 | 69.3 | 50 (2/4) | 100 (2/2) | 70 | 100 | 100 | 0 unchecked | 100 | - | no fixture |
+| 13 | Grid | `Grid` | supported | 86.5 | 89.6 | 83 (10/14) | - | 92 | 100 | 100 | - | 66 | - | no fixture |
 
 ### Time
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | TimeOffset | `TimeOffset` | supported | 100.0 | 100 (6/6) | 100 | 100 | - | - | no fixture |
-| 2 | FrameHold | `FrameHold` | supported | 100.0 | 100 (7/7) | 100 | 100 | - | - | no fixture |
-| 3 | Retime | `Retime` | supported | 97.7 | 97 (14/15) | 100 | 100 | - | - | no fixture |
-| 4 | TimeClip | `TimeClip` | supported | 100.0 | 100 (10/10) | 100 | 100 | - | - | no fixture |
-| 5 | FrameRange | `FrameRange` | supported | 100.0 | 100 (2/2) | 100 | 100 | - | - | no fixture |
-| 6 | AppendClip | `AppendClip` | supported | 100.0 | 100 (6/6) | 100 | 100 | - | - | no fixture |
-| 7 | TimeBlur | `TimeBlur` | supported | 91.7 | 100 (4/4) | 50 | 100 | - | - | no fixture |
-| 7 | TimeEcho | `TimeEcho` | supported | 61.1 | 67 (2/3) | 0 | 100 | - | - | no fixture |
-| 7 | TimeWarp | `TimeWarp` | supported | 69.4 | 67 (2/3) | 50 | 100 | - | - | no fixture |
-| 8 | Kronos | `Kronos` | supported | 24.2 | 18 (4/26) | 50 | 25 | - | - | no fixture |
-| 8 | OFlow | `OFlow` | supported | 56.1 | 48 (9/21) | 43 | 100 | - | - | no fixture |
-| 8 | SmartVector | `SmartVector` | supported | 16.2 | 12 (1/11) | 0 | 50 | - | - | no fixture |
-| 8 | VectorToMotion | `VectorToMotion` | supported | n/a | - | - | - | - | - | no fixture |
-| 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100 (2/2) | 100 | 100 | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | TimeOffset | `TimeOffset` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 2 | FrameHold | `FrameHold` | supported | 100.0 | 100.0 | 100 (7/7) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 3 | Retime | `Retime` | supported | 98.3 | 97.7 | 97 (14/15) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 4 | TimeClip | `TimeClip` | supported | 100.0 | 100.0 | 100 (10/10) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 5 | FrameRange | `FrameRange` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 6 | AppendClip | `AppendClip` | supported | 96.7 | 100.0 | 100 (6/6) | - | 100 | 100 | - | - | 80 | - | no fixture |
+| 7 | TimeBlur | `TimeBlur` | supported | 89.6 | 91.7 | 100 (4/4) | - | 50 | 100 | - | - | 88 | - | no fixture |
+| 7 | TimeEcho | `TimeEcho` | supported | 54.2 | 61.1 | 67 (2/3) | - | 0 | 100 | - | - | 25 | - | no fixture |
+| 7 | TimeWarp | `TimeWarp` | supported | 75.0 | 69.4 | 67 (2/3) | - | 50 | 100 | - | - | 100 | - | no fixture |
+| 8 | Kronos | `Kronos` | supported | 33.1 | 24.2 | 18 (4/26) | - | 50 | 25 | - | - | 71 | - | no fixture |
+| 8 | OFlow | `OFlow` | supported | 59.5 | 56.1 | 48 (9/21) | - | 43 | 100 | - | - | 69 | - | no fixture |
+| 8 | SmartVector | `SmartVector` | supported | 17.1 | 16.2 | 12 (1/11) | - | 0 | 50 | - | - | - | - | no fixture |
+| 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
 ### Channel
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Shuffle | `Shuffle` | supported | 100.0 | 100 (6/6) | 100 | 100 | - | - | no fixture |
-| 2 | ShuffleCopy | `ShuffleCopy` | supported | 100.0 | 100 (4/4) | - | 100 | - | - | no fixture |
-| 3 | Copy | `Copy` | supported | 97.8 | 100 (10/10) | 100 | 100 | 89 | - | no fixture |
-| 4 | ChannelMerge | `ChannelMerge` | supported | 90.7 | 100 (4/4) | 56 | 100 | 83 | - | no fixture |
-| 5 | Remove | `Remove` | supported | 97.3 | 100 (4/4) | 80 | 100 | 100 | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Shuffle | `Shuffle` | supported | 60.3 | 100.0 | 100 (6/6) | 17 (1/4) | 100 | 100 | - | 0 unchecked | 100 | - | no fixture |
+| 2 | ShuffleCopy | `ShuffleCopy` | supported | 85.0 | 100.0 | 100 (4/4) | - | - | 100 | - | - | 25 | - | no fixture |
+| 3 | Copy | `Copy` | supported | 75.6 | 97.8 | 100 (10/10) | 100 (8/8) | 100 | 100 | 89 | 0 unchecked | 80 | - | no fixture |
+| 4 | ChannelMerge | `ChannelMerge` | supported | 72.9 | 90.7 | 100 (4/4) | 100 (4/4) | 56 | 100 | 83 | 0 unchecked | 100 | - | no fixture |
+| 5 | Remove | `Remove` | supported | 97.1 | 97.3 | 100 (4/4) | - | 80 | 100 | 100 | - | 100 | - | no fixture |
 
 ### Color
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Grade | `Grade` | supported | 100.0 | 100 (10/10) | 100 | 100 | 100 | 100 (6/6) | unmeasured |
-| 2 | ColorCorrect | `ColorCorrect` | supported | 96.5 | 91 (21/23) | 100 | 100 | 100 | 100 (20/20) | unmeasured |
-| 3 | Invert | `Invert` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | unmeasured |
-| 4 | Saturation | `Saturation` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | 100 (13/13) | unmeasured |
-| 5 | Multiply | `Multiply` | supported | 98.8 | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | unmeasured |
-| 6 | Add | `Add` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | unmeasured |
-| 7 | Gamma | `Gamma` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | unmeasured |
-| 8 | Clamp | `Clamp` | supported | 99.4 | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | unmeasured |
-| 9 | HueCorrect | `HueCorrect` | supported | 80.0 | 50 (1/2) | 100 | 100 | 100 | 100 (15/15) | unmeasured |
-| 10 | ColorLookup | `ColorLookup` | supported | 90.0 | 75 (6/8) | 100 | 100 | 100 | 100 (7/7) | unmeasured |
-| 11 | Exposure | `Exposure` | supported | 93.6 | 86 (6/7) | 93 | 100 | 100 | 100 (2/2) | unmeasured |
-| 12 | HSVTool | `HSVTool` | partial | 80.8 | 59 (14/25) | 100 | 100 | - | 100 (11/11) | unmeasured |
-| 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | unmeasured |
-| 14 | Colorspace | `Colorspace` | supported | 83.6 | 78 (7/9) | 100 | 100 | 100 | 70 (14/20) | unmeasured |
-| 14 | OCIOColorspace | `OCIOColorspace` | supported | 61.9 | 29 (2/11) | 100 | 100 | 100 | - | no fixture |
-| 14 | OCIODisplay | `OCIODisplay` | supported | 37.6 | 23 (3/17) | 33 | 100 | - | - | no fixture |
-| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 88.1 | 80 (3/4) | 91 | 100 | 100 | - | no fixture |
-| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
-| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 68.0 | 40 (4/14) | 100 | 100 | 100 | - | no fixture |
-| 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | unmeasured |
-| 15 | PLogLin | `PLogLin` | supported | 96.7 | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | unmeasured |
-| 16 | ColorTransfer | - | supported | 0.0 | 0 (0/1) | - | 0 | - | - | no fixture |
-| 16 | MatchGrade | `MatchGrade` | supported | 26.0 | 8 (3/33) | - | 100 | - | - | no fixture |
-| 17 | Expression | `Expression` | supported | 100.0 | 100 (16/16) | 100 | 100 | 100 | 100 (15/15) | unmeasured |
-| 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | unmeasured |
-| 19 | Posterize | `Posterize` | supported | 98.5 | 100 (1/1) | 89 | 100 | 100 | - | unmeasured |
-| 19 | SoftClip | `SoftClip` | supported | 100.0 | 100 (3/3) | 100 | 100 | - | 100 (5/5) | unmeasured |
-| 19 | Toe | `Toe` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | unmeasured |
-| 20 | HistEQ | `HistEQ` | supported | 80.0 | 100 (1/1) | 100 | 100 | 0 | - | unmeasured |
-| 20 | Histogram | `Histogram` | supported | 65.1 | 67 (2/3) | 100 | 100 | 14 | - | no fixture |
-| 20 | MinColor | `MinColor` | supported | 100.0 | 100 (4/4) | 100 | 100 | 100 | - | unmeasured |
-| 20 | Sampler | `Sampler` | supported | 30.8 | 25 (1/4) | - | 100 | 0 | - | no fixture |
-| 21 | GenerateLUT | `GenerateLUT` | supported | 28.8 | 18 (1/9) | 0 | 100 | - | - | no fixture |
-| 21 | Vectorfield | `Vectorfield` | supported | 42.3 | 38 (4/10) | 0 | 100 | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Grade | `Grade` | supported | 100.0 | 100.0 | 100 (10/10) | 100 (10/10) | 100 | 100 | 100 | 100 (6/6) | 100 | 100 (7/7) | unmeasured |
+| 2 | ColorCorrect | `ColorCorrect` | supported | 97.9 | 96.5 | 91 (21/23) | 100 (20/20) | 100 | 100 | 100 | 100 (20/20) | 100 | 100 (20/20) | unmeasured |
+| 3 | Invert | `Invert` | supported | 98.9 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | - | - | unmeasured |
+| 4 | Saturation | `Saturation` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (13/13) | - | - | unmeasured |
+| 5 | Multiply | `Multiply` | supported | 98.9 | 98.8 | 100 (1/1) | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | - | 100 (1/1) | unmeasured |
+| 6 | Add | `Add` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | - | 100 (1/1) | unmeasured |
+| 7 | Gamma | `Gamma` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | - | 100 (1/1) | unmeasured |
+| 8 | Clamp | `Clamp` | supported | 90.5 | 99.4 | 100 (8/8) | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | 88 | 0 (0/2) | unmeasured |
+| 9 | HueCorrect | `HueCorrect` | supported | 82.4 | 80.0 | 50 (1/2) | - | 100 | 100 | 100 | 100 (15/15) | - | - | unmeasured |
+| 10 | ColorLookup | `ColorLookup` | supported | 72.5 | 90.0 | 75 (6/8) | 0 (0/2) | 100 | 100 | 100 | 100 (7/7) | 58 | - | unmeasured |
+| 11 | Exposure | `Exposure` | supported | 94.9 | 93.6 | 86 (6/7) | 100 (6/6) | 93 | 100 | 100 | 100 (2/2) | 92 | - | unmeasured |
+| 12 | HSVTool | `HSVTool` | partial | 80.0 | 80.8 | 59 (14/25) | 56 (9/14) | 100 | 100 | - | 100 (11/11) | 100 | - | unmeasured |
+| 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 14 | Colorspace | `Colorspace` | supported | 87.7 | 83.6 | 78 (7/9) | 100 (7/7) | 100 | 100 | 100 | 70 (14/20) | 100 | - | unmeasured |
+| 14 | OCIOColorspace | `OCIOColorspace` | supported | 45.9 | 61.9 | 29 (2/11) | - | 100 | 100 | 100 | 0 unchecked | 50 | - | no fixture |
+| 14 | OCIODisplay | `OCIODisplay` | supported | 46.3 | 37.6 | 23 (3/17) | 100 (1/1) | 33 | 100 | - | 0 unchecked | 83 | - | no fixture |
+| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 50.5 | 88.1 | 80 (3/4) | 0 (0/2) | 91 | 100 | 100 | 0 unchecked | 50 | - | no fixture |
+| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 76.2 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 0 unchecked | - | - | no fixture |
+| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 40.9 | 68.0 | 40 (4/14) | 0 (0/1) | 100 | 100 | 100 | 0 unchecked | 50 | - | no fixture |
+| 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
+| 15 | PLogLin | `PLogLin` | supported | 97.1 | 96.7 | 100 (5/5) | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | 100 | - | unmeasured |
+| 16 | ColorTransfer | - | supported | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
+| 16 | MatchGrade | `MatchGrade` | supported | 37.8 | 26.0 | 8 (3/33) | - | - | 100 | - | - | 67 | - | no fixture |
+| 17 | Expression | `Expression` | supported | 100.0 | 100.0 | 100 (16/16) | - | 100 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
+| 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
+| 19 | Posterize | `Posterize` | supported | 98.6 | 98.5 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | - | - | - | unmeasured |
+| 19 | SoftClip | `SoftClip` | supported | 93.7 | 100.0 | 100 (3/3) | 67 (2/3) | 100 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
+| 19 | Toe | `Toe` | supported | 91.3 | 100.0 | 100 (2/2) | 50 (1/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 20 | HistEQ | `HistEQ` | supported | 83.3 | 80.0 | 100 (1/1) | - | 100 | 100 | 0 | - | - | - | unmeasured |
+| 20 | Histogram | `Histogram` | supported | 73.5 | 65.1 | 67 (2/3) | - | 100 | 100 | 14 | - | 100 | - | no fixture |
+| 20 | MinColor | `MinColor` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 20 | Sampler | `Sampler` | supported | 35.0 | 30.8 | 25 (1/4) | - | - | 100 | 0 | - | - | - | no fixture |
+| 21 | GenerateLUT | `GenerateLUT` | supported | 30.9 | 28.8 | 18 (1/9) | - | 0 | 100 | - | - | - | - | no fixture |
+| 21 | Vectorfield | `Vectorfield` | supported | 44.2 | 42.3 | 38 (4/10) | - | 0 | 100 | - | - | 50 | - | no fixture |
 
 ### Filter
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Blur | `Blur` | supported | 99.0 | 100 (4/4) | 90 | 100 | 100 | 100 (4/4) | unmeasured |
-| 2 | Sharpen | `Sharpen` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | unmeasured |
-| 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | - | unmeasured |
-| 4 | Median | `Median` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | unmeasured |
-| 5 | Glow | `Glow` | supported | 98.8 | 100 (11/11) | 88 | 100 | 100 | 100 (4/4) | unmeasured |
-| 6 | Soften | `Soften` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | unmeasured |
-| 7 | DropShadow | `DropShadow` | supported | 92.6 | 100 (9/9) | 56 | 100 | - | - | no fixture |
-| 8 | Defocus | `Defocus` | supported | 66.3 | 40 (2/5) | 88 | 100 | 100 | - | no fixture |
-| 8 | ZDefocus | `ZDefocus` | supported | 56.5 | 27 (8/36) | 64 | 100 | 100 | - | no fixture |
-| 9 | DirBlur | `DirBlur` | supported | 94.7 | 100 (12/12) | 60 | 100 | 100 | - | no fixture |
-| 10 | EdgeBlur | `EdgeBlur` | supported | 55.2 | 22 (2/9) | 75 | 100 | 100 | - | no fixture |
-| 10 | EdgeExtend | `EdgeExtend` | supported | 40.0 | 0 (0/6) | 100 | 50 | 100 | - | no fixture |
-| 11 | Erode (fast) | `Erode` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | unmeasured |
-| 12 | DegrainSimple | `DegrainSimple` | supported | 95.6 | 100 (3/3) | 67 | 100 | 100 | - | no fixture |
-| 12 | Denoise | `Denoise` | supported | 18.1 | 6 (2/37) | 50 | 33 | - | - | no fixture |
-| 13 | MotionBlur | `MotionBlur` | supported | 26.4 | 33 (2/6) | 0 | 25 | - | - | no fixture |
-| 13 | MotionBlur2D | `MotionBlur2D` | supported | 63.9 | 75 (3/4) | 33 | 50 | - | - | no fixture |
-| 13 | MotionBlur3D | `MotionBlur3D` | supported | 55.6 | 50 (3/6) | 33 | 100 | - | - | no fixture |
-| 13 | VectorBlur | `VectorBlur` | supported | 57.9 | 29 (4/15) | 67 | 100 | 100 | - | no fixture |
-| 14 | Bilateral | `Bilateral` | supported | 61.9 | 40 (2/5) | 88 | 67 | 100 | - | no fixture |
-| 15 | Convolve | `Convolve` | supported | 100.0 | 100 (4/4) | 100 | 100 | 100 | - | unmeasured |
-| 15 | Matrix | `Matrix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | unmeasured |
-| 16 | BumpBoss | `BumpBoss` | supported | 42.2 | 0 (0/6) | 100 | 67 | 100 | - | no fixture |
-| 16 | EdgeDetect | `EdgeDetect` | supported | 80.6 | 64 (5/7) | 100 | 100 | 100 | - | unmeasured |
-| 16 | Emboss | `Emboss` | supported | 54.5 | 18 (2/13) | 86 | 100 | 100 | - | unmeasured |
-| 16 | Laplacian | `Laplacian` | supported | 100.0 | 100 (4/4) | 100 | 100 | 100 | 100 (2/2) | unmeasured |
-| 17 | Inpaint | `Inpaint` | supported | 98.8 | 100 (11/11) | 91 | 100 | 100 | - | no fixture |
-| 18 | GodRays | `GodRays` | supported | 37.1 | 30 (3/10) | 33 | 100 | 17 | - | no fixture |
-| 18 | LevelSet | `LevelSet` | supported | 100.0 | 100 (8/8) | 100 | 100 | - | - | no fixture |
-| 18 | VolumeRays | `VolumeRays` | supported | 23.2 | 4 (1/24) | - | 100 | - | - | no fixture |
-| 19 | ZSlice | `ZSlice` | supported | 76.7 | 100 (3/3) | 50 | 100 | 17 | - | no fixture |
-| 20 | Bokeh | - | supported | 0.0 | 0 (0/42) | - | 0 | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Blur | `Blur` | supported | 90.2 | 99.0 | 100 (4/4) | 100 (3/3) | 90 | 100 | 100 | 100 (4/4) | 88 | 0 (0/1) | unmeasured |
+| 2 | Sharpen | `Sharpen` | supported | 83.7 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 86 | 0 (0/1) | unmeasured |
+| 3 | Erode (filter) | `ErodeFilter` | supported | 90.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | - | 100 | 0 (0/1) | unmeasured |
+| 4 | Median | `Median` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
+| 5 | Glow | `Glow` | supported | 89.9 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 85 | 0 (0/1) | unmeasured |
+| 6 | Soften | `Soften` | supported | 83.7 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 86 | 0 (0/1) | unmeasured |
+| 7 | DropShadow | `DropShadow` | supported | 66.5 | 92.6 | 100 (9/9) | 89 (8/9) | 56 | 100 | - | 0 unchecked | 65 | - | no fixture |
+| 8 | Defocus | `Defocus` | supported | 59.3 | 66.3 | 40 (2/5) | 100 (2/2) | 88 | 100 | 100 | 0 unchecked | 75 | - | no fixture |
+| 8 | ZDefocus | `ZDefocus` | supported | 57.0 | 56.5 | 27 (8/36) | - | 64 | 100 | 100 | - | 52 | - | no fixture |
+| 9 | DirBlur | `DirBlur` | supported | 60.3 | 94.7 | 100 (12/12) | 30 (3/10) | 60 | 100 | 100 | 0 unchecked | 74 | - | no fixture |
+| 10 | EdgeBlur | `EdgeBlur` | supported | 53.6 | 55.2 | 22 (2/9) | 100 (2/2) | 75 | 100 | 100 | 0 unchecked | 75 | - | no fixture |
+| 10 | EdgeExtend | `EdgeExtend` | supported | 29.4 | 40.0 | 0 (0/6) | - | 100 | 50 | 100 | 0 unchecked | - | - | no fixture |
+| 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
+| 12 | DegrainSimple | `DegrainSimple` | supported | 88.1 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 50 | - | no fixture |
+| 12 | Denoise | `Denoise` | supported | 25.4 | 18.1 | 6 (2/37) | - | 50 | 33 | - | - | 50 | - | no fixture |
+| 13 | MotionBlur | `MotionBlur` | supported | 25.0 | 26.4 | 33 (2/6) | - | 0 | 25 | - | - | 25 | - | no fixture |
+| 13 | MotionBlur2D | `MotionBlur2D` | supported | 68.1 | 63.9 | 75 (3/4) | - | 33 | 50 | - | - | 100 | - | no fixture |
+| 13 | MotionBlur3D | `MotionBlur3D` | supported | 63.9 | 55.6 | 50 (3/6) | - | 33 | 100 | - | - | 100 | - | no fixture |
+| 13 | VectorBlur | `VectorBlur` | supported | 56.1 | 57.9 | 29 (4/15) | - | 67 | 100 | 100 | - | 38 | - | no fixture |
+| 14 | Bilateral | `Bilateral` | supported | 64.2 | 61.9 | 40 (2/5) | - | 88 | 67 | 100 | - | 75 | - | no fixture |
+| 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 16 | BumpBoss | `BumpBoss` | supported | 31.4 | 42.2 | 0 (0/6) | - | 100 | 67 | 100 | 0 unchecked | - | - | no fixture |
+| 16 | EdgeDetect | `EdgeDetect` | supported | 80.8 | 80.6 | 64 (5/7) | 86 (4/5) | 100 | 100 | 100 | - | 65 | - | unmeasured |
+| 16 | Emboss | `Emboss` | supported | 71.1 | 54.5 | 18 (2/13) | 100 (2/2) | 86 | 100 | 100 | - | 100 | - | unmeasured |
+| 16 | Laplacian | `Laplacian` | supported | 91.3 | 100.0 | 100 (4/4) | 50 (2/4) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 17 | Inpaint | `Inpaint` | supported | 98.7 | 98.8 | 100 (11/11) | - | 91 | 100 | 100 | - | 100 | - | no fixture |
+| 18 | GodRays | `GodRays` | supported | 45.5 | 37.1 | 30 (3/10) | 100 (3/3) | 33 | 100 | 17 | 0 unchecked | 83 | - | no fixture |
+| 18 | LevelSet | `LevelSet` | supported | 100.0 | 100.0 | 100 (8/8) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 18 | VolumeRays | `VolumeRays` | supported | 36.7 | 23.2 | 4 (1/24) | 100 (1/1) | - | 100 | - | 0 unchecked | - | - | no fixture |
+| 19 | ZSlice | `ZSlice` | supported | 71.4 | 76.7 | 100 (3/3) | - | 50 | 100 | 17 | - | 33 | - | no fixture |
+| 20 | Bokeh | - | supported | 0.0 | 0.0 | 0 (0/42) | - | - | 0 | - | - | - | - | no fixture |
 
 ### Keyer
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Keyer | `Keyer` | supported | 96.3 | 100 (10/10) | 78 | 100 | - | - | no fixture |
-| 2 | ChromaKeyer | `ChromaKeyer` | supported | 97.8 | 100 (16/16) | 87 | 100 | - | - | no fixture |
-| 3 | Difference | `Difference` | supported | 100.0 | 100 (4/4) | 100 | 100 | - | - | no fixture |
-| 4 | HueKeyer | `HueKeyer` | supported | 96.7 | 100 (4/4) | 75 | 100 | 100 | - | no fixture |
-| 5 | Keylight | `ScreenKeyer` | partial | 98.0 | 98 (34/35) | 97 | 100 | - | - | no fixture |
-| 6 | Primatte | - | missing | 0.0 | 0 (0/26) | - | 0 | 0 | - | no fixture |
-| 6 | Ultimatte | - | missing | 0.0 | 0 (0/60) | - | 0 | - | - | no fixture |
-| 7 | IBKColor | `IBKColor` | supported | 79.2 | 100 (6/6) | 25 | 50 | - | - | no fixture |
-| 7 | IBKGizmo | `IBKGizmo` | supported | 59.7 | 47 (7/15) | 71 | 100 | - | - | no fixture |
-| 8 | Cryptomatte | `Cryptomatte` | partial | 40.0 | 25 (1/4) | - | 100 | - | - | no fixture |
-| 8 | Encryptomatte | `Encryptomatte` | partial | 42.9 | 29 (1/4) | - | 100 | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Keyer | `Keyer` | supported | 70.4 | 96.3 | 100 (10/10) | 100 (9/9) | 78 | 100 | - | 0 unchecked | 61 | - | no fixture |
+| 2 | ChromaKeyer | `ChromaKeyer` | supported | 72.1 | 97.8 | 100 (16/16) | 85 (13/16) | 87 | 100 | - | 0 unchecked | 100 | - | no fixture |
+| 3 | Difference | `Difference` | supported | 76.2 | 100.0 | 100 (4/4) | 100 (4/4) | 100 | 100 | - | 0 unchecked | 100 | - | no fixture |
+| 4 | HueKeyer | `HueKeyer` | supported | 76.1 | 96.7 | 100 (4/4) | 100 (4/4) | 75 | 100 | 100 | 0 unchecked | 100 | - | no fixture |
+| 5 | Keylight | `ScreenKeyer` | partial | 70.9 | 98.0 | 98 (34/35) | 81 (27/34) | 97 | 100 | - | 0 unchecked | 91 | - | no fixture |
+| 6 | Primatte | - | missing | 0.0 | 0.0 | 0 (0/26) | - | - | 0 | 0 | - | - | - | no fixture |
+| 6 | Ultimatte | - | missing | 0.0 | 0.0 | 0 (0/60) | - | - | 0 | - | - | - | - | no fixture |
+| 7 | IBKColor | `IBKColor` | supported | 57.9 | 79.2 | 100 (6/6) | 67 (4/6) | 25 | 50 | - | 0 unchecked | 100 | - | no fixture |
+| 7 | IBKGizmo | `IBKGizmo` | supported | 54.8 | 59.7 | 47 (7/15) | 86 (6/7) | 71 | 100 | - | 0 unchecked | 93 | - | no fixture |
+| 8 | Cryptomatte | `Cryptomatte` | partial | 43.8 | 40.0 | 25 (1/4) | - | - | 100 | - | - | - | - | no fixture |
+| 8 | Encryptomatte | `Encryptomatte` | partial | 46.4 | 42.9 | 29 (1/4) | - | - | 100 | - | - | - | - | no fixture |
 
 ### Merge
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Merge | `Merge` | supported | 100.0 | 100 (9/9) | 100 | 100 | 100 | 100 (29/29) | unmeasured |
-| 2 | Premult | `Premult` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | unmeasured |
-| 3 | Unpremult | `Unpremult` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | unmeasured |
-| 4 | Switch | `Switch` | supported | 100.0 | 100 (1/1) | 100 | 100 | - | - | no fixture |
-| 5 | Dissolve | `Dissolve` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
-| 6 | KeyMix | `Keymix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | unmeasured |
-| 7 | AddMix | `AddMix` | supported | 100.0 | 100 (6/6) | 100 | 100 | 100 | - | no fixture |
-| 8 | Blend | `Blend` | supported | 93.8 | 100 (2/2) | 83 | 100 | 80 | - | no fixture |
-| 9 | CopyBBox | `CopyBBox` | supported | n/a | - | - | - | - | - | no fixture |
-| 9 | CopyRectangle | `CopyRectangle` | supported | 100.0 | 100 (5/5) | 100 | 100 | 100 | - | no fixture |
-| 10 | ContactSheet | `ContactSheet` | supported | 90.9 | 100 (11/11) | 45 | 100 | - | - | no fixture |
-| 11 | TimeDissolve | `TimeDissolve` | supported | 100.0 | 100 (3/3) | 100 | 100 | - | - | no fixture |
-| 12 | ZMerge | `ZMerge` | supported | 100.0 | 100 (3/3) | 100 | 100 | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Merge | `Merge` | supported | 94.2 | 100.0 | 100 (9/9) | 67 (2/3) | 100 | 100 | 100 | 100 (29/29) | 100 | - | unmeasured |
+| 2 | Premult | `Premult` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (1/1) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 3 | Unpremult | `Unpremult` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (1/1) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 4 | Switch | `Switch` | supported | 73.7 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | - | 0 unchecked | - | - | no fixture |
+| 5 | Dissolve | `Dissolve` | supported | 76.2 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 0 unchecked | - | - | no fixture |
+| 6 | KeyMix | `Keymix` | supported | 82.6 | 100.0 | 100 (2/2) | 0 (0/1) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 7 | AddMix | `AddMix` | supported | 76.5 | 100.0 | 100 (6/6) | 100 (2/2) | 100 | 100 | 100 | 0 unchecked | 80 | - | no fixture |
+| 8 | Blend | `Blend` | supported | 75.1 | 93.8 | 100 (2/2) | 100 (2/2) | 83 | 100 | 80 | 0 unchecked | 100 | - | no fixture |
+| 9 | CopyBBox | `CopyBBox` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 9 | CopyRectangle | `CopyRectangle` | supported | 60.9 | 100.0 | 100 (5/5) | 0 (0/5) | 100 | 100 | 100 | 0 unchecked | 100 | - | no fixture |
+| 10 | ContactSheet | `ContactSheet` | supported | 88.6 | 90.9 | 100 (11/11) | - | 45 | 100 | - | - | 86 | - | no fixture |
+| 11 | TimeDissolve | `TimeDissolve` | supported | 55.6 | 100.0 | 100 (3/3) | 0 (0/3) | 100 | 100 | - | 0 unchecked | 83 | - | no fixture |
+| 12 | ZMerge | `ZMerge` | supported | 97.2 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 83 | - | no fixture |
 
 ### Transform
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Transform | `Transform` | supported | 96.2 | 100 (15/15) | 77 | 100 | - | - | no fixture |
-| 2 | Crop | `Crop` | supported | 95.8 | 100 (5/5) | 75 | 100 | - | - | no fixture |
-| 3 | Tracker | `Tracker` | supported | 85.3 | 78 (41/54) | 79 | 100 | 100 | - | no fixture |
-| 4 | PlanarTracker | `PlanarTracker` | supported | n/a | - | - | - | - | - | no fixture |
-| 5 | Reformat | `Reformat` | supported | 83.0 | 81 (13/16) | 73 | 100 | - | - | no fixture |
-| 6 | CornerPin2D | `CornerPin` | supported | 100.0 | 100 (24/24) | 100 | 100 | - | - | no fixture |
-| 7 | Mirror | `Mirror` | supported | 100.0 | 100 (2/2) | 100 | 100 | - | - | no fixture |
-| 8 | Stabilize | `Stabilize` | supported | n/a | - | - | - | - | - | no fixture |
-| 9 | Position | `Position` | supported | 100.0 | 100 (1/1) | 100 | 100 | - | - | no fixture |
-| 10 | AdjustBBox | `AdjustBBox` | supported | 83.3 | 100 (1/1) | 0 | 100 | - | - | no fixture |
-| 11 | BlackOutside | `BlackOutside` | supported | 100.0 | - | - | 100 | - | - | no fixture |
-| 12 | STMap | `STMap` | supported | 98.1 | 100 (6/6) | 86 | 100 | 100 | - | no fixture |
-| 13 | IDistort | `IDistort` | supported | 94.3 | 100 (8/8) | 57 | 100 | 100 | - | no fixture |
-| 14 | GridWarp | `GridWarp` | supported | 13.1 | 6 (2/34) | 0 | 50 | 17 | - | no fixture |
-| 14 | SplineWarp | `SplineWarp` | supported | 28.6 | 18 (4/23) | 0 | 67 | 50 | - | no fixture |
-| 15 | Tile | `Tile` | supported | 78.3 | 80 (4/5) | 50 | 100 | - | - | no fixture |
-| 16 | VectorCornerPin | `VectorCornerPin` | supported | 20.0 | 0 (0/17) | - | 100 | - | - | no fixture |
-| 16 | VectorDistort | `VectorDistort` | supported | 44.4 | 33 (2/6) | 100 | 100 | 0 | - | no fixture |
-| 17 | PointsTo3D | `PointsTo3D` | supported | 48.3 | 60 (6/9) | 0 | 50 | - | - | no fixture |
-| 18 | Reconcile3D | `Reconcile3D` | supported | 36.7 | 13 (1/14) | 100 | 67 | - | - | no fixture |
-| 19 | TVIScale | `TVIScale` | supported | 100.0 | 100 (3/3) | 100 | 100 | 100 | - | no fixture |
-| 20 | LensDistortion | `Undistort` | supported | 17.8 | 2 (1/58) | 0 | 100 | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Transform | `Transform` | supported | 69.7 | 96.2 | 100 (15/15) | 91 (10/11) | 77 | 100 | - | 0 unchecked | 93 | 50 (0/1) | no fixture |
+| 2 | Crop | `Crop` | supported | 64.3 | 95.8 | 100 (5/5) | 50 (2/4) | 75 | 100 | - | 0 unchecked | 100 | - | no fixture |
+| 3 | Tracker | `Tracker` | supported | 61.1 | 85.3 | 78 (41/54) | - | 79 | 100 | 100 | 0 unchecked | 69 | - | no fixture |
+| 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 5 | Reformat | `Reformat` | supported | 73.2 | 83.0 | 81 (13/16) | - | 73 | 100 | - | - | 96 | 0 (0/1) | no fixture |
+| 6 | CornerPin2D | `CornerPin` | supported | 97.2 | 100.0 | 100 (24/24) | - | 100 | 100 | - | - | 83 | - | no fixture |
+| 7 | Mirror | `Mirror` | supported | 71.4 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | - | 0 unchecked | 50 | - | no fixture |
+| 8 | Stabilize | `Stabilize` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 9 | Position | `Position` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | - | - | - | no fixture |
+| 10 | AdjustBBox | `AdjustBBox` | supported | 80.0 | 83.3 | 100 (1/1) | - | 0 | 100 | - | - | - | - | no fixture |
+| 11 | BlackOutside | `BlackOutside` | supported | 100.0 | 100.0 | - | - | - | 100 | - | - | - | - | no fixture |
+| 12 | STMap | `STMap` | supported | 95.6 | 98.1 | 100 (6/6) | - | 86 | 100 | 100 | - | 83 | - | no fixture |
+| 13 | IDistort | `IDistort` | supported | 92.1 | 94.3 | 100 (8/8) | - | 57 | 100 | 100 | - | 88 | - | no fixture |
+| 14 | GridWarp | `GridWarp` | supported | 26.3 | 13.1 | 6 (2/34) | - | 0 | 50 | 17 | - | 100 | - | no fixture |
+| 14 | SplineWarp | `SplineWarp` | supported | 35.2 | 28.6 | 18 (4/23) | - | 0 | 67 | 50 | - | 75 | - | no fixture |
+| 15 | Tile | `Tile` | supported | 79.6 | 78.3 | 80 (4/5) | - | 50 | 100 | - | - | 88 | - | no fixture |
+| 16 | VectorCornerPin | `VectorCornerPin` | supported | 25.0 | 20.0 | 0 (0/17) | - | - | 100 | - | - | - | - | no fixture |
+| 16 | VectorDistort | `VectorDistort` | supported | 57.1 | 44.4 | 33 (2/6) | - | 100 | 100 | 0 | - | 100 | - | no fixture |
+| 17 | PointsTo3D | `PointsTo3D` | supported | 46.7 | 48.3 | 60 (6/9) | - | 0 | 50 | - | - | 50 | - | no fixture |
+| 18 | Reconcile3D | `Reconcile3D` | supported | 41.3 | 36.7 | 13 (1/14) | - | 100 | 67 | - | - | - | - | no fixture |
+| 19 | TVIScale | `TVIScale` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
+| 20 | LensDistortion | `Undistort` | supported | 21.0 | 17.8 | 2 (1/58) | - | 0 | 100 | - | - | - | - | no fixture |
 
 ### Metadata
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | ViewMetaData | `ViewMetaData` | supported | 100.0 | 100 (3/3) | - | 100 | - | - | no fixture |
-| 2 | ModifyMetaData | `ModifyMetaData` | supported | 100.0 | 100 (1/1) | - | 100 | - | - | no fixture |
-| 3 | CopyMetaData | `CopyMetaData` | supported | 100.0 | 100 (5/5) | 100 | 100 | - | - | no fixture |
-| 4 | AddTimeCode | `AddTimeCode` | supported | 94.4 | 100 (5/5) | 67 | 100 | - | - | no fixture |
-| 5 | CompareMetaData | `CompareMetaData` | supported | 100.0 | 100 (1/1) | - | 100 | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | ViewMetaData | `ViewMetaData` | supported | 100.0 | 100.0 | 100 (3/3) | - | - | 100 | - | - | - | - | no fixture |
+| 2 | ModifyMetaData | `ModifyMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | - | - | - | no fixture |
+| 3 | CopyMetaData | `CopyMetaData` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 4 | AddTimeCode | `AddTimeCode` | supported | 91.1 | 94.4 | 100 (5/5) | - | 67 | 100 | - | - | 80 | - | no fixture |
+| 5 | CompareMetaData | `CompareMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | - | - | - | no fixture |
 
 ### Other
 
-| Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Dot | `Dot` | supported | 100.0 | - | - | 100 | - | - | no fixture |
-| 2 | NoOp | `NoOp` | supported | 100.0 | - | - | 100 | - | - | no fixture |
-| 3 | Backdrop | `Backdrop` | supported | n/a | - | - | - | - | - | no fixture |
-| 4 | PostageStamp | `PostageStamp` | supported | n/a | - | - | - | - | - | no fixture |
-| 5 | Group | `Group` | supported | 100.0 | 100 (1/1) | 100 | 100 | - | - | no fixture |
-| 5 | Input | `Input` | supported | n/a | - | - | - | - | - | no fixture |
-| 5 | Output | `Output` | supported | n/a | - | - | - | - | - | no fixture |
-| 6 | BlinkScript | - | missing | 0.0 | 0 (0/19) | - | 0 | - | - | no fixture |
-| 7 | BurnIn | `BurnIn` | supported | 88.3 | 100 (18/18) | 30 | 100 | - | - | no fixture |
-| 8 | Link | - | missing | 0.0 | - | - | 0 | - | - | no fixture |
-| 8 | LiveGroup | - | missing | 0.0 | 0 (0/11) | - | 0 | - | - | no fixture |
-| 8 | LiveInput | - | missing | 0.0 | 0 (0/4) | - | - | - | - | no fixture |
-| 8 | VariableGroup | - | missing | 0.0 | 0 (0/1) | - | 0 | - | - | no fixture |
-| 10 | Precomp | `Precomp` | supported | 100.0 | 100 (9/9) | 100 | - | - | - | no fixture |
-| 11 | Root | `time and settings` | partial | 28.0 | 20 (7/43) | 60 | - | - | - | no fixture |
-| 13 | Assert | `Assert` | supported | n/a | - | - | - | - | - | no fixture |
-| 14 | AudioRead | - | missing | 0.0 | 0 (0/10) | - | - | - | - | no fixture |
+| Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Dot | `Dot` | supported | 100.0 | 100.0 | - | - | - | 100 | - | - | - | - | no fixture |
+| 2 | NoOp | `NoOp` | supported | 100.0 | 100.0 | - | - | - | 100 | - | - | - | - | no fixture |
+| 3 | Backdrop | `Backdrop` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 4 | PostageStamp | `PostageStamp` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 5 | Group | `Group` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | - | - | - | no fixture |
+| 5 | Input | `Input` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 5 | Output | `Output` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 6 | BlinkScript | - | missing | 0.0 | 0.0 | 0 (0/19) | - | - | 0 | - | - | - | - | no fixture |
+| 7 | BurnIn | `BurnIn` | supported | 84.6 | 88.3 | 100 (18/18) | - | 30 | 100 | - | - | 78 | - | no fixture |
+| 8 | Link | - | missing | 0.0 | 0.0 | - | - | - | 0 | - | - | - | - | no fixture |
+| 8 | LiveGroup | - | missing | 0.0 | 0.0 | 0 (0/11) | - | - | 0 | - | - | - | - | no fixture |
+| 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | no fixture |
+| 8 | VariableGroup | - | missing | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
+| 10 | Precomp | `Precomp` | supported | 97.1 | 100.0 | 100 (9/9) | - | 100 | - | - | - | 86 | - | no fixture |
+| 11 | Root | `time and settings` | partial | 30.0 | 28.0 | 20 (7/43) | - | 60 | - | - | - | - | - | no fixture |
+| 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | no fixture |
 
 ## The 30 largest gaps
 
@@ -283,36 +290,36 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | Roto (Draw #1) | `Roto` | 18.23 | 81.8 | 27 secondary knobs missing |
-| 2 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 3 | Write (Image #2) | `Write` | 16.38 | 67.2 | 29 secondary knobs missing |
-| 4 | Read (Image #1) | `Read` | 12.94 | 87.1 | nothing missing that the guide lists |
-| 5 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 6 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 7 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 8 | Root (Other #11) | `time and settings` | 6.55 | 28.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
-| 9 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 10 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 11 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 12 | Tracker (Transform #3) | `Tracker` | 4.90 | 85.3 | 13 secondary knobs missing |
-| 13 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.44 | 20.0 | primary knobs missing: `fullGrain` |
-| 14 | LensDistortion (Transform #20) | `Undistort` | 4.11 | 17.8 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
-| 15 | Transform (Transform #1) | `Transform` | 3.85 | 96.2 | nothing missing that the guide lists |
-| 16 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.75 | 40.0 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
-| 17 | Keyer (Keyer #1) | `Keyer` | 3.70 | 96.3 | nothing missing that the guide lists |
-| 18 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.57 | 42.9 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
-| 19 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.52 | 36.7 | 13 secondary knobs missing; sockets missing: `img` |
-| 20 | Viewer (Image #3) | `Viewer` | 3.42 | 89.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 21 | Denoise (Filter #12) | `Denoise` | 3.41 | 18.1 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise` |
-| 22 | Reformat (Transform #5) | `Reformat` | 3.41 | 83.0 | primary knobs missing: `box_fixed`, `clamp`, `black_outside` |
-| 23 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 24 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 25 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 26 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 27 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 28 | GridWarp (Transform #14) | `GridWarp` | 3.10 | 13.1 | 32 secondary knobs missing; sockets missing: `bg`, `dst`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 29 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.04 | 48.3 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img` |
-| 30 | Radial (Draw #5) | `Radial` | 3.03 | 84.9 | primary knobs missing: `plinear`; 4 secondary knobs missing: `ramp`, `p1`, `color0`, `p0` |
+| 1 | Shuffle (Channel #1) | `Shuffle` | 39.68 | 60.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `fromInput1`, `fromInput2`, `out2` |
+| 2 | Roto (Draw #1) | `Roto` | 39.13 | 60.9 | 27 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (8 of 13 in order) |
+| 3 | Transform (Transform #1) | `Transform` | 30.25 | 69.7 | behaviour unchecked (no pixel case); knobs that change no pixels: `skew_order`; knob order differs from Nuke's (13 of 15 in order); not splittable like Nuke: `scale` |
+| 4 | Keyer (Keyer #1) | `Keyer` | 29.63 | 70.4 | behaviour unchecked (no pixel case); knob order differs from Nuke's (6 of 9 in order); 4 labels differ from Nuke's |
+| 5 | Read (Image #1) | `Read` | 18.26 | 81.7 | knob order differs from Nuke's (20 of 27 in order); 3 labels differ from Nuke's |
+| 6 | Crop (Transform #2) | `Crop` | 17.86 | 64.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `reformat`, `crop` |
+| 7 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 8 | Write (Image #2) | `Write` | 16.54 | 66.9 | 29 secondary knobs missing; knob order differs from Nuke's (19 of 26 in order); 3 labels differ from Nuke's |
+| 9 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 13.97 | 72.1 | behaviour unchecked (no pixel case); knobs that change no pixels: `_replaceAlphaDiff`, `_replaceColor`, `_replaceAmount` |
+| 10 | Tracker (Transform #3) | `Tracker` | 12.96 | 61.1 | 13 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (24 of 35 in order) |
+| 11 | Blur (Filter #1) | `Blur` | 9.80 | 90.2 | 1 label differs from Nuke's; not splittable like Nuke: `size` |
+| 12 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 13 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 14 | Sharpen (Filter #2) | `Sharpen` | 8.15 | 83.7 | knobs that change no pixels: `quailty`; knob order differs from Nuke's (5 of 7 in order); not splittable like Nuke: `size` |
+| 15 | Copy (Channel #3) | `Copy` | 8.15 | 75.6 | node chrome missing: bbox handling; behaviour unchecked (no pixel case); knob order differs from Nuke's (6 of 10 in order) |
+| 16 | Difference (Keyer #3) | `Difference` | 7.94 | 76.2 | behaviour unchecked (no pixel case) |
+| 17 | ShuffleCopy (Channel #2) | `ShuffleCopy` | 7.50 | 85.0 | knob order differs from Nuke's (2 of 4 in order); 2 labels differ from Nuke's |
+| 18 | Constant (Image #4) | `Constant` | 7.14 | 71.4 | behaviour unchecked (no pixel case); knob order differs from Nuke's (3 of 4 in order) |
+| 19 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 20 | ChannelMerge (Channel #4) | `ChannelMerge` | 6.76 | 72.9 | node chrome missing: bbox handling; behaviour unchecked (no pixel case) |
+| 21 | Switch (Merge #4) | `Switch` | 6.58 | 73.7 | behaviour unchecked (no pixel case) |
+| 22 | Root (Other #11) | `time and settings` | 6.36 | 30.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
+| 23 | HueKeyer (Keyer #4) | `HueKeyer` | 5.98 | 76.1 | behaviour unchecked (no pixel case) |
+| 24 | Keylight (Keyer #5) | `ScreenKeyer` | 5.83 | 70.9 | 1 secondary knob missing: `about`; behaviour unchecked (no pixel case); knobs that change no pixels: `despillBias`, `insideReplaceMethod`, `insideReplaceColour`, `SourceXMethod`, `SourceYMethod`, `insideComponent` and 1 more; knob order differs from Nuke's (28 of 34 in order) |
+| 25 | Merge (Merge #1) | `Merge` | 5.80 | 94.2 | knobs that change no pixels: `screen_alpha` |
+| 26 | Reformat (Transform #5) | `Reformat` | 5.35 | 73.2 | primary knobs missing: `box_fixed`, `clamp`, `black_outside`; knob order differs from Nuke's (12 of 13 in order); not splittable like Nuke: `scale` |
+| 27 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 28 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 29 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 30 | DropShadow (Filter #7) | `DropShadow` | 4.78 | 66.5 | behaviour unchecked (no pixel case); knobs that change no pixels: `operation`; knob order differs from Nuke's (5 of 9 in order); 2 labels differ from Nuke's |
 
 ## Formula cases
 
@@ -558,6 +565,132 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `edgedetect_prewitt_response` | convention | not scored: the guide lists the three detectors and says nothing of their kernels, normalisation, or how the channels combine; tests check that a flat image gives no edge, that a step gives an edge on both sides of it, and that the threshold, blur and erode knobs act | - | - |
 | `edgedetect_simple_response` | convention | not scored: the guide lists the three detectors and says nothing of their kernels, normalisation, or how the channels combine; tests check that a flat image gives no edge, that a step gives an edge on both sides of it, and that the threshold, blur and erode knobs act | - | - |
 | `emboss_traditional_response` | convention | not scored: the guide says Emboss 'offsets the original input using the Angle and Width controls' and gives no formula, shading origin or scale; tests check that the picture's relief is symmetric when the angle turns by 180 degrees and that angle and width act | - | - |
+
+## Requirements of 2026-11-02, per node
+
+### Knobs that change no pixels
+
+Each paired knob below was moved off its default to every value its `LIMITS` and `CHOICES` allow the probe to try, alone and with each other paired knob moved first, and NodeBased's output did not change on the fixture. Either the knob is not implemented, or it acts only in a state the probe does not reach (two other knobs moved together, a payload the default node does not hold). Implement it, or unpair it in `docs/parity/nodebased_to_nuke.json` with a reason.
+
+- LightWrap (`LightWrap`): `disableluma`, `enableglow`, `saturation`, `LumaTolerance`, `white`, `gray`, `contrast`, `gamma`, `gain`, `offset`, `shadows_gamma`, `shadows_gain`, `shadows_offset`, `midtones_gamma`, `midtones_gain`, `midtones_offset`, `highlights_gamma`, `highlights_gain`, `highlights_offset`
+- Grain (`Grain`): `black`
+- Flare (`Flare`): `chroma_shift`
+- Shuffle (`Shuffle`): `fromInput1`, `fromInput2`, `out2`
+- ColorLookup (`ColorLookup`): `source`, `target`
+- HSVTool (`HSVTool`): `srccolor`, `dstcolor`, `huerolloffrange`, `satrolloffrange`, `brtrolloffrange`
+- OCIOLookTransform (`OCIOLookTransform`): `invert`
+- OCIOFileTransform (`OCIOFileTransform`): `invert`, `interpolation`
+- SoftClip (`SoftClip`): `softclip_min`
+- Toe (`Toe`): `invert`
+- Sharpen (`Sharpen`): `quailty`
+- Soften (`Soften`): `quailty`
+- DropShadow (`DropShadow`): `operation`
+- DirBlur (`DirBlur`): `holdout`, `BlurCenter`, `UseTarget`, `Samples`, `PixelAspect`, `Quality`, `pixeloffset`
+- EdgeDetect (`EdgeDetect`): `blurquality`
+- Laplacian (`Laplacian`): `quailty`, `crop`
+- ChromaKeyer (`ChromaKeyer`): `_replaceAlphaDiff`, `_replaceColor`, `_replaceAmount`
+- Keylight (`ScreenKeyer`): `despillBias`, `insideReplaceMethod`, `insideReplaceColour`, `SourceXMethod`, `SourceYMethod`, `insideComponent`, `outsideComponent`
+- IBKColor (`IBKColor`): `Size`, `mult`
+- IBKGizmo (`IBKGizmo`): `ublu`
+- Merge (`Merge`): `screen_alpha`
+- KeyMix (`Keymix`): `invertMask`
+- CopyRectangle (`CopyRectangle`): `area`, `area#2`, `area#3`, `area#4`, `softness`
+- TimeDissolve (`TimeDissolve`): `in`, `out`, `lut`
+- Transform (`Transform`): `skew_order`
+- Crop (`Crop`): `reformat`, `crop`
+
+Not probed, because a one-frame pixel probe cannot see them: acts across frames (frame range, retiming, motion blur): `after`, `before`, `first`, `frame`, `frame_mode`, `last`, `motionblur`, `origfirst`, `origlast`, `origset`, `shutter`, `shuttercustomoffset`, `shutteroffset`; acts on metadata, not pixels: `metainput`, `rangeinput`; acts on the bounding box only, outside the fixture's format: `intersect`, `pbb`; Blur's `crop` (crop to format acts on the bounding box only); Glow's `crop` (crop to format acts on the bounding box only); Sharpen's `crop` (crop to format acts on the bounding box only); Soften's `crop` (crop to format acts on the bounding box only). Whole nodes not probed: Roto (shapes live in the node's payload and the default node holds none); RotoPaint (strokes live in the node's payload and the default node holds none); Tracker (tracks are solved across frames; a one-frame probe cannot move them). Taps, whose behaviour is their input and which have neither `acts` nor `math`: `Viewer`, `Write`, `NoOp`, `Dot`, `PostageStamp`, `Output`, `Profile`, `PlanarTracker`.
+
+### Layout differences
+
+Labels below are NodeBased's, then the guide's.
+
+- Read (`Read`): 20 of 27 paired knobs in Nuke's order; `file` reads "Path", Nuke "File"; `proxy` reads "Proxy file", Nuke "Proxy"; `reload` reads "Reload count", Nuke "reload"
+- Write (`Write`): 19 of 26 paired knobs in Nuke's order; `file` reads "Path", Nuke "file"; `proxy` reads "Proxy file", Nuke "proxy"; `reload` reads "Reload count", Nuke "Reload"
+- Constant (`Constant`): 3 of 4 paired knobs in Nuke's order
+- CurveTool (`CurveTool`): 8 of 11 paired knobs in Nuke's order
+- Roto (`Roto`): 8 of 13 paired knobs in Nuke's order
+- Text (`Text`): 27 of 40 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
+- Rectangle (`Rectangle`): 6 of 13 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
+- Ramp (`Ramp`): 6 of 9 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
+- Radial (`Radial`): 6 of 9 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
+- Noise (`Noise`): 16 of 25 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"; `zoffset` reads "Z Slice", Nuke "z"
+- RotoPaint (`RotoPaint`): 8 of 12 paired knobs in Nuke's order
+- LightWrap (`LightWrap`): 21 of 27 paired knobs in Nuke's order
+- Flare (`Flare`): 2 of 3 paired knobs in Nuke's order
+- Glint (`Glint`): 3 of 4 paired knobs in Nuke's order; `repeat` reads "Rays", Nuke "no. of rays"
+- Grid (`Grid`): 6 of 10 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"; `size` reads "Line Width", Nuke "size"
+- AppendClip (`AppendClip`): 3 of 5 paired knobs in Nuke's order
+- TimeBlur (`TimeBlur`): 3 of 4 paired knobs in Nuke's order
+- TimeEcho (`TimeEcho`): 1 of 2 paired knobs in Nuke's order; `mode` reads "Method", Nuke "TimeEcho Method"; `framesbehind` reads "Frames", Nuke "Frames to look at"
+- Kronos (`Kronos`): 3 of 4 paired knobs in Nuke's order; `timingOutputSpeed` reads "Speed", Nuke "Output Speed"
+- OFlow (`OFlow`): 7 of 9 paired knobs in Nuke's order; `timingOutputSpeed` reads "Speed", Nuke "Output Speed"; `timingFrame2` reads "Speed", Nuke "Frame"
+- ShuffleCopy (`ShuffleCopy`): 2 of 4 paired knobs in Nuke's order; `in` reads "In1 layer", Nuke "1 in"; `in2` reads "In2 layer", Nuke "2 in"
+- Copy (`Copy`): 6 of 10 paired knobs in Nuke's order
+- Clamp (`Clamp`): 7 of 8 paired knobs in Nuke's order
+- ColorLookup (`ColorLookup`): 3 of 6 paired knobs in Nuke's order; `setA` reads "Alpha", Nuke "Set A"
+- Exposure (`Exposure`): 5 of 6 paired knobs in Nuke's order
+- OCIOColorspace (`OCIOColorspace`): `in_colorspace` reads "Src", Nuke "input"; `out_colorspace` reads "Dst", Nuke "output"
+- OCIODisplay (`OCIODisplay`): `invert` reads "Transform Direction", Nuke "invert direction"
+- OCIOLookTransform (`OCIOLookTransform`): 3 of 4 paired knobs in Nuke's order; `in_colorspace` reads "Src", Nuke "input"; `invert` reads "Transform Direction", Nuke "invert direction"; `out_colorspace` reads "Dst", Nuke "output"
+- OCIOFileTransform (`OCIOFileTransform`): `file` reads "Path", Nuke "file"
+- MatchGrade (`MatchGrade`): 2 of 3 paired knobs in Nuke's order
+- Vectorfield (`Vectorfield`): `vfield_file` reads "3D LUT (.cube, .3dl)", Nuke "vectorfield file"
+- Blur (`Blur`): `size` reads "Radius", Nuke "size"
+- Sharpen (`Sharpen`): 5 of 7 paired knobs in Nuke's order
+- Glow (`Glow`): 9 of 11 paired knobs in Nuke's order; `tolerance` reads "Threshold", Nuke "tolerance"
+- Soften (`Soften`): 5 of 7 paired knobs in Nuke's order
+- DropShadow (`DropShadow`): 5 of 9 paired knobs in Nuke's order; `softness` reads "Size", Nuke "softness"; `operation` reads "Operation (over bg)", Nuke "input"
+- Defocus (`Defocus`): `ratio` reads "Aspect", Nuke "aspect ratio"
+- ZDefocus (`ZDefocus`): 7 of 8 paired knobs in Nuke's order; `z_channel` reads "Depth layer", Nuke "depth channel"; `math` reads "Depth Math", Nuke "math"; `center` reads "Focal Plane", Nuke "focus plane (C)"; `max_size` reads "Maximum size", Nuke "maximum"; `filter_type` reads "Bokeh Shape", Nuke "filter type"
+- DirBlur (`DirBlur`): 9 of 12 paired knobs in Nuke's order; `BlurType` reads "Type", Nuke "BlurType"; `BlurLength` reads "Length", Nuke "BlurLength"; `BlurAngle` reads "Angle", Nuke "BlurAngle"
+- EdgeBlur (`EdgeBlur`): `edge_mult` reads "Edge multiplier", Nuke "edge mult"
+- Denoise (`Denoise`): `amount` reads "Strength", Nuke "Denoise Amount"
+- DegrainSimple (`DegrainSimple`): `rVal` reads "Red", Nuke "R blur"; `gVal` reads "Green", Nuke "G blur"; `bVal` reads "Blue", Nuke "B blur"
+- MotionBlur (`MotionBlur`): 1 of 2 paired knobs in Nuke's order; `shutterSamples` reads "Samples", Nuke "Shutter Samples"; `shutterTime` reads "Shutter", Nuke "Shutter Time"
+- VectorBlur (`VectorBlur`): 3 of 4 paired knobs in Nuke's order; `uv` reads "Vector layer", Nuke "uv channels"
+- Bilateral (`Bilateral`): `size` reads "Spatial size", Nuke "Size"
+- EdgeDetect (`EdgeDetect`): 4 of 5 paired knobs in Nuke's order; `edgedetector` reads "Edge Type", Nuke "Edge Detector"
+- GodRays (`GodRays`): 2 of 3 paired knobs in Nuke's order
+- ZSlice (`ZSlice`): 2 of 3 paired knobs in Nuke's order; `Zchan` reads "Depth layer", Nuke "Z"
+- Keyer (`Keyer`): 6 of 9 paired knobs in Nuke's order; `range#2` reads "Range", Nuke "A"; `range#3` reads "Range", Nuke "B"; `range#4` reads "Range", Nuke "C"; `range#5` reads "Range", Nuke "D"
+- Keylight (`ScreenKeyer`): 28 of 34 paired knobs in Nuke's order
+- IBKGizmo (`IBKGizmo`): `ublu` reads "Use BG luminance", Nuke "use bkg luminnance"
+- AddMix (`AddMix`): `A` reads "A channels", Nuke "A"; `B` reads "B channels", Nuke "B"
+- ContactSheet (`ContactSheet`): 8 of 11 paired knobs in Nuke's order
+- TimeDissolve (`TimeDissolve`): `lut` reads "Ease", Nuke "Curves"
+- ZMerge (`ZMerge`): `z_channel` reads "Depth layer", Nuke "Z channel"
+- Transform (`Transform`): 13 of 15 paired knobs in Nuke's order
+- Tracker (`Tracker`): 24 of 35 paired knobs in Nuke's order
+- Reformat (`Reformat`): 12 of 13 paired knobs in Nuke's order
+- CornerPin2D (`CornerPin`): 16 of 21 paired knobs in Nuke's order; `invert` reads "Direction", Nuke "invert"
+- Mirror (`Mirror`): `Horizontal` reads "Flip horizontal", Nuke "Horizontal"; `Vertical` reads "Flip vertical", Nuke "Vertical"
+- STMap (`STMap`): 4 of 6 paired knobs in Nuke's order
+- IDistort (`IDistort`): 6 of 8 paired knobs in Nuke's order
+- SplineWarp (`SplineWarp`): 2 of 4 paired knobs in Nuke's order
+- Tile (`Tile`): 3 of 4 paired knobs in Nuke's order
+- PointsTo3D (`PointsTo3D`): 3 of 6 paired knobs in Nuke's order
+- AddTimeCode (`AddTimeCode`): 4 of 5 paired knobs in Nuke's order; `startcode` reads "Start timecode", Nuke "startcode"
+- BurnIn (`BurnIn`): 10 of 18 paired knobs in Nuke's order
+- Precomp (`Precomp`): 5 of 7 paired knobs in Nuke's order
+
+### Split knobs
+
+Nuke's knob class for each knob: AColor_Knob (one slider that splits into r g b a) and WH_Knob (one slider that splits into w h), as Nuke writes them in .nk scripts (for example `multiply {1 1 1 1}`, `size {4 4}`) and as the Nuke Python API names them (nuke.AColor_Knob, nuke.WH_Knob). The Reference Guide's tables do not state knob classes, so this table is not read from the guide. Curated, not exhaustive. Only knobs whose class is long-established are listed; a node that is not here has no splits component and is not penalised. To be confirmed against a Nuke install (scripts from tools/make_nuke_reference_pack.py can print each node's knob classes).
+
+- Grade (`Grade`): `blackpoint` (rgba), `whitepoint` (rgba), `black` (rgba), `white` (rgba), `multiply` (rgba), `add` (rgba), `gamma` (rgba). all split.
+- ColorCorrect (`ColorCorrect`): `saturation` (rgba), `contrast` (rgba), `gamma` (rgba), `gain` (rgba), `offset` (rgba), `shadows.saturation` (rgba), `shadows.contrast` (rgba), `shadows.gamma` (rgba), `shadows.gain` (rgba), `shadows.offset` (rgba), `midtones.saturation` (rgba), `midtones.contrast` (rgba), `midtones.gamma` (rgba), `midtones.gain` (rgba), `midtones.offset` (rgba), `highlights.saturation` (rgba), `highlights.contrast` (rgba), `highlights.gamma` (rgba), `highlights.gain` (rgba), `highlights.offset` (rgba). all split.
+- Multiply (`Multiply`): `value` (rgba). all split.
+- Add (`Add`): `value` (rgba). all split.
+- Gamma (`Gamma`): `value` (rgba). all split.
+- Clamp (`Clamp`): `minimum` (rgba), `maximum` (rgba). `minimum` not splittable, `maximum` not splittable.
+- Blur (`Blur`): `size` (wh). `size` not splittable.
+- Sharpen (`Sharpen`): `size` (wh). `size` not splittable.
+- Erode (filter) (`ErodeFilter`): `size` (wh). `size` not splittable.
+- Glow (`Glow`): `size` (wh). `size` not splittable.
+- Soften (`Soften`): `size` (wh). `size` not splittable.
+- Transform (`Transform`): `scale` (wh). `scale` per-channel params, no one-slider form.
+- Reformat (`Reformat`): `scale` (wh). `scale` not splittable.
 
 ## What a reader should know about the reference data
 
