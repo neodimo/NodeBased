@@ -132,7 +132,8 @@ class ToolTests(unittest.TestCase):
         # The clone reads the plate (input), not the shapes, so rebuild with a real white square.
         d.execute({"op": "batch", "commands": [
             {"op": "create", "id": "sq", "type": "Rectangle",
-             "params": {"width": SIZE, "height": SIZE, "box_x": 4.0, "box_y": 4.0,
+             "params": {"legacy_draw_axes": 1,   # y down: this test is about the clone, not the Rectangle
+                        "width": SIZE, "height": SIZE, "box_x": 4.0, "box_y": 4.0,
                         "box_width": 12.0, "box_height": 12.0,
                         "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0}},
             {"op": "connect", "id": "sq", "input": "image", "source": "plate"},

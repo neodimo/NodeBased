@@ -127,6 +127,7 @@ class RotoPaintRenderTests(unittest.TestCase):
                                     source_offset=[2.0, 2.0])])
         d.execute({"op": "batch", "commands": [
             {"op": "create", "id": "patch", "type": "Rectangle"},
+            {"op": "set", "id": "patch", "param": "legacy_draw_axes", "value": 1},   # y down: this test is about the clone, not the Rectangle
             {"op": "set", "id": "patch", "param": "width", "value": 16},
             {"op": "set", "id": "patch", "param": "height", "value": 16},
             {"op": "set", "id": "patch", "param": "box_x", "value": 5.0},
