@@ -1,5 +1,26 @@
 ## 2026-11-02, 2D behaviour step S (Lane 2): per-channel knobs and Nuke's layout
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:05 AM on 2026-11-02 PDT)
+
+`main` moved `aa6820f3` -> `1f79a8c1` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `1f79a8c1` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-0046.log`, started 12:46 AM): **Ran 7807 tests in 580.428 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step S of 4: per-channel knob splitting and Nuke's knob layout for the colour nodes.** Commits:
+  - `cecec522` colour, keyer and channel nodes: main tab in Nuke's knob order and wording; Keyer range and HSVTool ranges share a row; the agent API takes split values
+  - `58f22e26` colour nodes: Grade, ColorCorrect, Multiply, Add and Gamma take a value per channel (r g b a), on the evaluator and tile paths
+  - `310c9639` split knobs: a knob can hold one value per channel (rgba or wh), with core.split_values, the split knob kind, a panel toggle and schema 29
+  Diff: 16 files changed, 1374 insertions(+), 49 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-parity`. `core.SPLITTABLE` / `split_values` / `is_split`, `KnobGroup("split")`, the panel split toggle, schema 29, Grade / ColorCorrect / Multiply / Add / Gamma split on the evaluator and tile paths, Nuke's main-tab order for 26 nodes (`knobs.NUKE_LAYOUT`). Tests: `tests/test_split_knobs.py`. Animation and expressions on split knobs are refused; a split Grade or ColorCorrect is processor-only. Details and what is left: the TASKLOG note of the same date.
 
 ## 2026-11-01, 2D behaviour step A of 3 (Lane 2): the colour grading nodes compute what Nuke computes

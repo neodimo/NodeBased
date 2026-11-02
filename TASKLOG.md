@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S of 4: per-channel knob splitting and Nuke's knob layout for the colour nodes (integrator tick)
+
+- **What was done:** `main` `aa6820f3` -> `1f79a8c1` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `1f79a8c1`: Ran 7807 tests in 580.428 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02, 2D behaviour step S (Lane 2, Claude Sonnet 5.5): per-channel (split) knobs and Nuke's layout for the colour nodes
 
 - **What was done, evidence:** a knob can hold one value per channel, like Nuke's AColor (r g b a) and WH (w h) knobs. `core.SPLITTABLE` lists the splittable params, `core.split_values(params, name, n)` reads a number or a list as a float32 array, validation applies per entry and refuses a list of the wrong length when it is set, `KnobGroup("split", ..., channels="rgba"|"wh")` lays one out, and the Properties panel gets a split button (4 or 2) with r g b a fields on one wrapping row, one undo step per toggle. Applied to Grade (blackpoint, whitepoint, lift, gain, multiply, offset, gamma), ColorCorrect (saturation, contrast, gamma, gain, offset for master, shadows, midtones, highlights) and Multiply, Add, Gamma, on the evaluator and the tile path (both call the same kernels; tiles of 7, 16 and 32 equal the frame with and without a mask). Pixel tests: each channel equals the unsplit node holding that entry, equals the Grade formula and the fidelity cases' ColorCorrect reference per channel, equal entries equal the unsplit node. The main tab of 26 nodes follows Nuke's knob order (tests/test_split_knobs.py, one test per node). `tests/test_split_knobs.py` has 80 tests.
