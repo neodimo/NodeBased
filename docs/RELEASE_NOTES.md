@@ -1,3 +1,29 @@
+# NodeBased 0.50.0-preview.1
+
+Preview build of 0.50.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.50.0 release that follows.
+
+## What changed since 0.49.0
+
+- **A video model that follows the camera.** Generate has a new provider, "cameractrl_svd" (CameraCtrl on Stable Video Diffusion XT). It reads the shot's exported camera for every frame and makes 25 frames at 576 by 320 on a 12 GB card, in about 30 seconds and 6.2 GB of video memory. It follows the camera's turning well: on a 20 degree pan the average rotation error is 0.72 degrees, against 4.25 for the earlier video model that ignores the camera. The worker uses the checkout's fused attention, so it fits on the card (the default attention needs 4 GiB per call).
+- **A distance scale for the camera's travel.** The provider takes a distance scale, set by hand or chosen from how far the reference frame's scene is from the camera, so the model's idea of distance can be matched to the scene's units. At scale 0.5 a one-unit dolly's position error halves (1.18 to 0.57 units).
+- **Generated footage gets its own camera limit.** The verifier now checks footage a video model produced against 0.4 units and 0.5 degrees, while renders keep 0.01 units and 0.25 degrees. A correct generated first frame already reads 0.05 to 0.27 units, so the render limit could never pass. Every verification report names the limit it used, and the queue's attempt detail shows it next to the verdict.
+- **A camera-following benchmark and score card.** `benchmarks/generative` runs the provider on a dolly, pan, truck and pan plus dolly, sweeps the distance scale, and scores each clip on camera, objects, lighting direction, colour balance and flicker.
+
+## Known limits
+
+- The camera-following model does not yet meet the verifier on any of the four test moves, even under the generative limit: dolly 0.62 units and 0.85 degrees, pan 0.72 degrees, truck 1.17 units and 2.70 degrees, pan plus dolly 0.64 units and 1.47 degrees. Colour balance holds on all four and flicker on three.
+- Layout and lighting hold for roughly the first 1.5 to 2.5 seconds of a dolly or pan, then drift. A sideways truck loses the scene by the third frame. This is a model limit, not check noise.
+- The field-of-view check still uses the render limit (0.1 degrees) and fails every generated clip; the model has no lens input and the solver's lens fit jumps from frame to frame. A generative field-of-view limit is waiting on a decision.
+- The objects verdict rests on the one tracked object; the other scene objects have no ID pass and read "not conditioned". All numbers come from one demo scene and one seed on Linux; Windows was not run with the model weights.
+- The model's weights (0.8 GB) and its environment are not bundled; they are set up separately.
+
+## Moved to 0.51.0
+
+- A field-of-view limit for generated footage (proposed 0.5 degrees).
+- Generating in shorter pieces re-anchored to a fresh render every ~10 frames, so layout and lighting do not drift.
+- More scenes and seeds for the camera-following benchmark.
+- Carried from 0.50.0: real curls in the fire's smoke, the next GPU playback bottleneck toward 24 fps, and measuring the 2D rows, Write's formats and NoTimeBlur against real Nuke renders.
+
 # NodeBased 0.49.0 — Write in TIFF, JPEG and DPX, NoTimeBlur, faster half-float playback, and a cleaner fire
 
 ## What changed since 0.48.0
