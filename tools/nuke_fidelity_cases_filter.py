@@ -929,6 +929,7 @@ def _draw_cases(Case, out):
              unscored="the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) "
                       "but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear")
     _noise_grid_cases(Case, out, case)
+    _defocus_cases(Case, out)
 
 
 def _noise_grid_cases(Case, out, case):
@@ -1019,3 +1020,108 @@ def _grain_dither_cases(Case, out, case):
          unscored="the page says the noise is random, up to 0.5 of the amount either way, and gives neither the generator nor its distribution; "
                   "tests/test_2d_behaviour_draw.py checks the bound, that the mean is the input's, that monodither gives every channel the same "
                   "offset, and that the seed, the frame and static seed change the pattern as the page says")
+
+
+FILTER_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/filter_nodes/"
+
+
+def ellipse_mean(a, rx, ry):
+    """The plain average of the pixels whose centres lie inside the ellipse of semi-axes (rx, ry) around each pixel."""
+    a = a.astype(np.float64)
+    px, py = int(math.floor(rx + 1e-9)), int(math.floor(ry + 1e-9))
+    padded = np.pad(a, ((py, py), (px, px), (0, 0)), mode="edge")
+    h, w = a.shape[:2]
+    total, count = np.zeros_like(a), 0
+    for dy in range(-py, py + 1):
+        for dx in range(-px, px + 1):
+            if (dx / rx) ** 2 + (dy / ry) ** 2 <= 1.0 + 1e-9:
+                total += padded[py + dy:py + dy + h, px + dx:px + dx + w]
+                count += 1
+    return total / count
+
+
+def _defocus_cases(Case, out):
+    """Defocus, ZDefocus and EdgeExtend (lane 9 step C). Defocus's disc is the page's "disc filter"; the pages for ZDefocus and EdgeExtend
+    state what their controls do but not the blur or the colour fill, so those pixels are reported unscored with the reason."""
+    def case(id, nuke, nuke_knobs, nb_params, expected, source, statement, unscored="", nb_inputs=("A",)):
+        out.append(Case(id=id, nuke=nuke, nuke_class=nuke, nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind=nuke, nb_params=nb_params,
+                        nb_inputs=nb_inputs, expected=expected, source=source, statement=statement, unscored=unscored))
+
+    def disc(rx, ry, channels=(0, 1, 2, 3)):
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            ref = src.copy()
+            blurred = ellipse_mean(src, rx, ry)
+            for c in channels:
+                ref[..., c] = blurred[..., c]
+            valid = np.zeros(src.shape, bool)
+            ry_, rx_ = int(math.ceil(ry)), int(math.ceil(rx))
+            valid[ry_:src.shape[0] - ry_, rx_:src.shape[1] - rx_, :] = True
+            return ref, valid
+        return expected
+    page = FILTER_GUIDE + "defocus.html"
+    note = ("the page calls the node a 'disc filter' that 'simulates the defocusing effect of a circular lens' and gives defocus as 'the size of "
+            "the defocus disc'; taken as the plain average of the pixels whose centres lie inside a disc of that radius (a convention: the page "
+            "does not give the weights at the disc's rim). Edge pixels are not compared")
+    case("defocus_disc_average", "Defocus", (("defocus", 2.0),), {"defocus": 2.0, "aspect": 1.0, "channels": "rgba"}, disc(2.0, 2.0),
+         "convention", f"Defocus at size 2: {note}")
+    case("defocus_aspect_ratio_widens_the_disc", "Defocus", (("defocus", 2.0), ("ratio", 2.0)), {"defocus": 2.0, "aspect": 2.0, "channels": "rgba"},
+         disc(4.0, 2.0), "guide", f"Defocus: aspect ratio 'adjusts the width of the defocus disc without altering its height' ({page}): "
+         "at size 2 and ratio 2 the disc is 4 pixels in radius across and 2 up (compared where the whole disc is in the frame)")
+    case("defocus_scaling_scales_both_axes", "Defocus", (("defocus", 1.0), ("scale", 3.0)), {"defocus": 1.0, "aspect": 1.0, "scale": 3.0, "channels": "rgba"},
+         disc(3.0, 3.0), "guide", f"Defocus: scaling 'scales the defocus disc simultaneously on the x and y axes' ({page}): size 1 at scale 3 is a disc of radius 3")
+    case("defocus_scaling_split_into_width_and_height", "Defocus", (("defocus", 1.0), ("scale", "3 2")),
+         {"defocus": 1.0, "aspect": 1.0, "scale": [3.0, 2.0], "channels": "rgba"}, disc(3.0, 2.0), "guide",
+         "Defocus: scaling can be 'split into separate width and height controls': size 1 at scale 3 wide and 2 high is a disc 3 across and 2 up")
+    case("defocus_channels_limit_the_effect", "Defocus", (("defocus", 2.0), ("channels", "rgb")), {"defocus": 2.0, "aspect": 1.0, "channels": "rgb"},
+         disc(2.0, 2.0, channels=(0, 1, 2)), "guide", f"Defocus: 'the defocus effect is only applied to these channels' ({page}): with rgb the alpha is the input's")
+    case("defocus_quality_and_method", "Defocus", (("quality", 20), ("method", "fullprecision")), None,
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "guide",
+         "Defocus: quality 'sets the interpolation used to smooth out the discs'; method accelerated or fullprecision",
+         unscored="NodeBased has no quality or method knob: its disc is always summed exactly, which is what fullprecision means; the page gives no "
+                  "interpolation to compare, so a quality below the default cannot be scored")
+
+    page = FILTER_GUIDE + "zdefocus.html"
+    depth = ("A", "mask")
+
+    def same_as_input(fx):
+        return fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)
+    direct = {"zdefocus_math": "direct", "legacy_zdefocus": 0, "size": 25.0, "max_size": 0.0, "bokeh_shape": "disc"}
+    case("zdefocus_direct_is_clamped_to_maximum", "ZDefocus", (("math", "direct"), ("size", 25.0), ("max_size", 0.0)), direct, same_as_input, "guide",
+         f"ZDefocus: with math direct 'the blur size will be 0.5 times the value of the size control (unless this is bigger than maximum, in which "
+         f"case it will be clamped to maximum)' ({page}): a maximum of 0 allows no blur whatever the depth", nb_inputs=depth)
+    case("zdefocus_direct_size_zero_is_no_blur", "ZDefocus", (("math", "direct"), ("size", 0.0)), {**direct, "size": 0.0, "max_size": 50.0}, same_as_input,
+         "guide", "ZDefocus: with math direct the blur size is the depth times the size control, so a size of 0 blurs nothing", nb_inputs=depth)
+    case("zdefocus_blur_by_distance", "ZDefocus", (("math", "depth"), ("center", 1.0), ("dof", 0.0)),
+         {"zdefocus_math": "depth", "legacy_zdefocus": 0, "focal_plane": 1.0, "depth_of_field": 1.0}, same_as_input, "convention",
+         "ZDefocus: the blur at a given distance from the focus plane, depth of field and size", nb_inputs=depth,
+         unscored="the page gives the depth-to-distance conversions and says the blur is 'the size of the blur at infinite depth' and grows nearer "
+                  "the camera, but not the formula between a distance, the focus plane, the depth of field and the size, nor the layer spacing "
+                  "(automatic layer spacing, depth layers, layer curve), the blend between layers, fill foreground or the filter shapes "
+                  "(disc, bladed, image, with shape, roundness, inner size and the rest); the properties it does state are tested in "
+                  "tests/test_2d_behaviour_draw.py: direct blur grows with depth to the maximum, -direct reverses the order, a larger maximum "
+                  "allows more blur, the focus plane stays sharp, and the filter choices change the pixels")
+
+    page = FILTER_GUIDE + "edgeextend.html"
+    straight = {"legacy_edge_extend": 0, "source_premultiplied": 0, "premultiply": 0, "erode": 0.0, "extend_size": 2.0, "extend_threshold": 0.5}
+
+    def solid(fx, scale_by_alpha):
+        src = fx["A"].astype(np.float64)
+        ref = src.copy()
+        if scale_by_alpha:
+            ref[..., :3] = src[..., :3] * src[..., 3:4]
+        known = src[..., 3] >= 0.5
+        return ref, np.broadcast_to(known[..., None], src.shape).copy()
+    case("edgeextend_solid_matte_keeps_its_colour", "EdgeExtend", (("premultiply", False),), straight, lambda fx: solid(fx, False), "convention",
+         f"EdgeExtend corrects colour 'at the edge of soft mattes' ({page}): where the source alpha is solid (at or above the threshold) the colour is the "
+         "source's own (compared there only), with the source straight and premultiply off")
+    case("edgeextend_premultiply_multiplies_by_alpha", "EdgeExtend", (("premultiply", True),), {**straight, "premultiply": 1}, lambda fx: solid(fx, True),
+         "guide", f"EdgeExtend: premultiply 'when enabled, EdgeExtend premultiplies the output image' ({page}): the output colour is the corrected colour "
+         "times the alpha (compared where the colour is the source's own)")
+    case("edgeextend_edge_colour", "EdgeExtend", (("erode", 0.0), ("detailAmount", 1.0)), straight, lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)),
+         "convention", "EdgeExtend: the colour that fills the soft edge of the matte, and what detail amount, the matte choices and the edge mask do",
+         unscored="the page says the node 'corrects unpremultiplied foreground color at the edge of soft mattes by eroding or dilating the sample "
+                  "region, pulling pixels from deeper inside or outside your matte' with an algorithm 'independent of the size of the fill regions', "
+                  "but gives neither that algorithm nor what detail amount recovers; the edge fill here is a ring-by-ring average, an approximation. "
+                  "tests/test_2d_behaviour_draw.py checks what the page states: positive erode takes colour from deeper inside the matte and "
+                  "negative erode from outside it, source is premultiplied unpremultiplies the source first, and premultiply multiplies the output")

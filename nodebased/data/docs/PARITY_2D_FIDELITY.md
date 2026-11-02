@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 87.4 / 100** (167 nodes scored, rank-weighted; 89.6 counting only the nodes NodeBased has).
+**Overall fidelity: 87.6 / 100** (167 nodes scored, rank-weighted; 89.8 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 91.9 (94.3 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 92.0 (94.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -37,16 +37,16 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Time | 96.1 | 78.9 | 96.1 | 13 |
 | Channel | 88.9 | 92.2 | 98.9 | 5 |
 | Color | 93.8 | 77.9 | 94.4 | 34 |
-| Filter | 81.5 | 68.2 | 90.2 | 32 |
+| Filter | 83.0 | 71.4 | 91.2 | 32 |
 | Keyer | 87.1 | 65.7 | 88.3 | 11 |
 | Merge | 88.8 | 81.7 | 99.4 | 12 |
 | Transform | 89.2 | 74.7 | 91.2 | 20 |
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 51 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 28 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 54 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 26 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 277 of the 349 paired knobs probed change the output pixels; 72 change nothing on the fixture (listed per node below). Splits: 8 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 281 of the 353 paired knobs probed change the output pixels; 72 change nothing on the fixture (listed per node below). Splits: 8 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -165,11 +165,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Glow | `Glow` | supported | 89.9 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 85 | 0 (0/1) | unmeasured |
 | 6 | Soften | `Soften` | supported | 83.7 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 86 | 0 (0/1) | unmeasured |
 | 7 | DropShadow | `DropShadow` | supported | 66.5 | 92.6 | 100 (9/9) | 89 (8/9) | 56 | 100 | - | 0 unchecked | 65 | - | no fixture |
-| 8 | Defocus | `Defocus` | supported | 59.3 | 66.3 | 40 (2/5) | 100 (2/2) | 88 | 100 | 100 | 0 unchecked | 75 | - | no fixture |
-| 8 | ZDefocus | `ZDefocus` | supported | 57.0 | 56.5 | 27 (8/36) | - | 64 | 100 | 100 | - | 52 | - | no fixture |
+| 8 | Defocus | `Defocus` | supported | 88.6 | 82.9 | 60 (3/5) | 100 (3/3) | 89 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
+| 8 | ZDefocus | `ZDefocus` | supported | 74.1 | 69.2 | 31 (9/36) | - | 67 | 100 | 100 | 100 (2/2) | 93 | - | unmeasured |
 | 9 | DirBlur | `DirBlur` | supported | 60.3 | 94.7 | 100 (12/12) | 30 (3/10) | 60 | 100 | 100 | 0 unchecked | 74 | - | no fixture |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 53.6 | 55.2 | 22 (2/9) | 100 (2/2) | 75 | 100 | 100 | 0 unchecked | 75 | - | no fixture |
-| 10 | EdgeExtend | `EdgeExtend` | supported | 29.4 | 40.0 | 0 (0/6) | - | 100 | 50 | 100 | 0 unchecked | - | - | no fixture |
+| 10 | EdgeExtend | `EdgeExtend` | supported | 82.6 | 75.0 | 50 (3/6) | 100 (3/3) | 100 | 50 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
 | 12 | DegrainSimple | `DegrainSimple` | supported | 88.1 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 50 | - | no fixture |
 | 12 | Denoise | `Denoise` | supported | 25.4 | 18.1 | 6 (2/37) | - | 50 | 33 | - | - | 50 | - | no fixture |
@@ -318,8 +318,8 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 26 | Keyer (Keyer #1) | `Keyer` | 4.23 | 95.8 | 4 labels differ from Nuke's |
 | 27 | TimeDissolve (Merge #11) | `TimeDissolve` | 4.04 | 55.6 | behaviour unchecked (no pixel case); knobs that change no pixels: `in`, `out`, `lut`; 1 label differs from Nuke's |
 | 28 | LensDistortion (Transform #20) | `Undistort` | 3.95 | 21.0 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
-| 29 | EdgeExtend (Filter #10) | `EdgeExtend` | 3.53 | 29.4 | primary knobs missing: `matte`, `sourceIsPremultiplied`, `erode`, `detailAmount`; 2 secondary knobs missing: `edgeMaskChannel`, `premultiply`; sockets missing: `Matte`; behaviour unchecked (no pixel case) |
-| 30 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.52 | 43.8 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
+| 29 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.52 | 43.8 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
+| 30 | AddMix (Merge #7) | `AddMix` | 3.35 | 76.5 | behaviour unchecked (no pixel case); 2 labels differ from Nuke's |
 
 ## Formula cases
 
@@ -751,6 +751,18 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `grain_pattern` | convention | not scored: the page describes the controls in words (size shrinks or enlarges, irregularity is 'the random quality', intensity is the contrast of the effect against the image) and gives no grain function or amplitude; tests/test_2d_behaviour_draw.py checks what follows from the words: zero intensity adds nothing, the grain is zero-mean, a larger size gives a coarser grain, the pattern changes with the frame and holds when the seed is minus the frame, black sets the grain at black, and each channel is controlled by its own knobs | - | - |
 | `dither_amount_zero_adds_nothing` | guide | pass | within tolerance | - |
 | `dither_pattern` | convention | not scored: the page says the noise is random, up to 0.5 of the amount either way, and gives neither the generator nor its distribution; tests/test_2d_behaviour_draw.py checks the bound, that the mean is the input's, that monodither gives every channel the same offset, and that the seed, the frame and static seed change the pattern as the page says | - | - |
+| `defocus_disc_average` | convention | pass | within tolerance | - |
+| `defocus_aspect_ratio_widens_the_disc` | guide | pass | within tolerance | - |
+| `defocus_scaling_scales_both_axes` | guide | pass | within tolerance | - |
+| `defocus_scaling_split_into_width_and_height` | guide | pass | within tolerance | - |
+| `defocus_channels_limit_the_effect` | guide | pass | within tolerance | - |
+| `defocus_quality_and_method` | guide | not scored: NodeBased has no quality or method knob: its disc is always summed exactly, which is what fullprecision means; the page gives no interpolation to compare, so a quality below the default cannot be scored | - | - |
+| `zdefocus_direct_is_clamped_to_maximum` | guide | pass | within tolerance | - |
+| `zdefocus_direct_size_zero_is_no_blur` | guide | pass | within tolerance | - |
+| `zdefocus_blur_by_distance` | convention | not scored: the page gives the depth-to-distance conversions and says the blur is 'the size of the blur at infinite depth' and grows nearer the camera, but not the formula between a distance, the focus plane, the depth of field and the size, nor the layer spacing (automatic layer spacing, depth layers, layer curve), the blend between layers, fill foreground or the filter shapes (disc, bladed, image, with shape, roundness, inner size and the rest); the properties it does state are tested in tests/test_2d_behaviour_draw.py: direct blur grows with depth to the maximum, -direct reverses the order, a larger maximum allows more blur, the focus plane stays sharp, and the filter choices change the pixels | - | - |
+| `edgeextend_solid_matte_keeps_its_colour` | convention | pass | within tolerance | - |
+| `edgeextend_premultiply_multiplies_by_alpha` | guide | pass | within tolerance | - |
+| `edgeextend_edge_colour` | convention | not scored: the page says the node 'corrects unpremultiplied foreground color at the edge of soft mattes by eroding or dilating the sample region, pulling pixels from deeper inside or outside your matte' with an algorithm 'independent of the size of the fill regions', but gives neither that algorithm nor what detail amount recovers; the edge fill here is a ring-by-ring average, an approximation. tests/test_2d_behaviour_draw.py checks what the page states: positive erode takes colour from deeper inside the matte and negative erode from outside it, source is premultiplied unpremultiplies the source first, and premultiply multiplies the output | - | - |
 
 ## Requirements of 2026-11-02, per node
 
@@ -819,8 +831,7 @@ Labels below are NodeBased's, then the guide's.
 - Glow (`Glow`): 9 of 11 paired knobs in Nuke's order; `tolerance` reads "Threshold", Nuke "tolerance"
 - Soften (`Soften`): 5 of 7 paired knobs in Nuke's order
 - DropShadow (`DropShadow`): 5 of 9 paired knobs in Nuke's order; `softness` reads "Size", Nuke "softness"; `operation` reads "Operation (over bg)", Nuke "input"
-- Defocus (`Defocus`): `ratio` reads "Aspect", Nuke "aspect ratio"
-- ZDefocus (`ZDefocus`): 7 of 8 paired knobs in Nuke's order; `z_channel` reads "Depth layer", Nuke "depth channel"; `math` reads "Depth Math", Nuke "math"; `center` reads "Focal Plane", Nuke "focus plane (C)"; `max_size` reads "Maximum size", Nuke "maximum"; `filter_type` reads "Bokeh Shape", Nuke "filter type"
+- ZDefocus (`ZDefocus`): `center` reads "Focus plane", Nuke "focus plane (C)"
 - DirBlur (`DirBlur`): 9 of 12 paired knobs in Nuke's order; `BlurType` reads "Type", Nuke "BlurType"; `BlurLength` reads "Length", Nuke "BlurLength"; `BlurAngle` reads "Angle", Nuke "BlurAngle"
 - EdgeBlur (`EdgeBlur`): `edge_mult` reads "Edge multiplier", Nuke "edge mult"
 - Denoise (`Denoise`): `amount` reads "Strength", Nuke "Denoise Amount"

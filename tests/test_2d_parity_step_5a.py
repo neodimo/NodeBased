@@ -61,7 +61,7 @@ class EdgeExtendTests(unittest.TestCase):
         return frame
 
     def test_dark_fringe_takes_the_edge_colour_and_it_extends_past_the_matte(self):
-        out = kernel("EdgeExtend", self._matte(), extend_size=3.0)
+        out = kernel("EdgeExtend", self._matte(), extend_size=3.0, legacy_edge_extend=1)
         for x in (9, 10, 11, 12):
             np.testing.assert_allclose(out[4, x, :3], (1.0, 0.0, 0.0), atol=1e-6, err_msg=f"column {x}")
         # first fully transparent pixel carries the edge colour; alpha untouched everywhere
@@ -72,7 +72,7 @@ class EdgeExtendTests(unittest.TestCase):
         np.testing.assert_array_equal(out[4, 14, :3], (0.0, 0.0, 0.0))
 
     def test_without_extension_the_fringe_is_dark(self):
-        out = kernel("EdgeExtend", self._matte(), extend_size=0.0)
+        out = kernel("EdgeExtend", self._matte(), extend_size=0.0, legacy_edge_extend=1)
         self.assertAlmostEqual(float(out[4, 10, 0]), 0.05 / 0.3, places=5)
         np.testing.assert_array_equal(out[4, 11, :3], (0.0, 0.0, 0.0))
 
@@ -172,7 +172,7 @@ class GraphTests(unittest.TestCase):
 
     def test_mix_zero_and_bypass(self):
         for kind, wires, params in (("EdgeBlur", dict(image="plate"), dict(edgeblur_size=8.0)),
-                                    ("EdgeExtend", dict(image="plate"), dict(extend_size=8.0)),
+                                    ("EdgeExtend", dict(image="plate"), dict(extend_size=8.0, legacy_edge_extend=1)),
                                     ("Dither", dict(image="plate"), dict(bits=2)),
                                     ("LightWrap", dict(fg="plate", bg="bg"), dict(wrap_diffuse=12.0))):
             with self.subTest(kind=kind):

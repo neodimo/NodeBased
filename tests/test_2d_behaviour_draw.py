@@ -22,10 +22,11 @@ from nodebased.raster import Raster
 from tests.test_2d_behaviour_filter_a import differs, evaluator_pixels, old_document, render, source_graph, tile_pixels
 
 import audit_nuke_fidelity as audit  # noqa: E402
+import nuke_fidelity_cases_filter as flt  # noqa: E402
 import nuke_fidelity_cases as ruler  # noqa: E402
 
 DRAW_NODES = ("Rectangle", "Radial", "Ramp", "Noise", "Grid")
-DONE_NODES = DRAW_NODES + ("Grain", "Dither")
+DONE_NODES = DRAW_NODES + ("Grain", "Dither", "Defocus", "ZDefocus", "EdgeExtend")
 W, H = 45, 37
 
 
@@ -687,6 +688,10 @@ class TileTests(unittest.TestCase):
         "Grain": dict(red_size=2.5, green_size=4.0, blue_size=6.0, red_i=0.8, green_i=0.2, blue_i=0.5, seed=9, black=0.2,
                       minimum_red=0.05, minimum_green=0.1, minimum_blue=0.02),
         "Grain inverted": dict(maskgrain=1, invert_mask=1, red_intensity=0.7, blue_intensity=0.2),
+        "Defocus": dict(defocus=3.0, aspect=1.5, scale=1.2),
+        "Defocus split": dict(defocus=2.5, aspect=0.6, scale=[1.5, 0.8], channels="rgb"),
+        "EdgeExtend": dict(extend_size=3.0, extend_threshold=0.4, erode=1.0, premultiply=1),
+        "EdgeExtend dilated": dict(extend_size=2.0, source_premultiplied=1, erode=-2.0, premultiply=0),
         "Grid ramp": dict(number_x=6, number_y=5, line_width=1.0, ramp="linear", p0_x=3.0, p0_y=4.0, p1_x=40.0, p1_y=30.0, color0_red=0.3, invert=1),
     }
 
@@ -764,6 +769,211 @@ class OlderDocumentTests(unittest.TestCase):
         self.assertEqual(SPECS["Ramp"]["params"]["ramp_type"], "linear")
         self.assertEqual(SPECS["Radial"]["params"]["plinear"], 0)
         validate(upgrade_document(copy.deepcopy(source_graph("Radial", {"width": W, "height": H}, False).doc)))
+
+
+# ------------------------------------------------------------------------------------------ Defocus, ZDefocus and EdgeExtend
+def impulse(n=41, value=1.0):
+    picture = np.zeros((n, n, 4), np.float32)
+    picture[n // 2, n // 2] = value
+    return picture
+
+
+def extent(plane, threshold=1e-9):
+    ys, xs = np.nonzero(plane > threshold)
+    return int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)
+
+
+class DefocusTests(unittest.TestCase):
+    def test_aspect_ratio_widens_the_disc_without_changing_its_height(self):
+        for aspect in (1.0, 2.0, 3.0):
+            with self.subTest(aspect=aspect):
+                out = kernel("Defocus", impulse(), defocus=4.0, aspect=aspect)[..., 0]
+                self.assertEqual(extent(out), (2 * int(4.0 * aspect) + 1, 9))
+
+    def test_scaling_scales_the_disc_and_splits_into_width_and_height(self):
+        both = kernel("Defocus", impulse(), defocus=2.0, scale=3.0)[..., 0]
+        self.assertEqual(extent(both), (13, 13))
+        split = kernel("Defocus", impulse(), defocus=2.0, scale=[3.0, 1.0])[..., 0]
+        self.assertEqual(extent(split), (13, 5))
+        np.testing.assert_allclose(kernel("Defocus", impulse(), defocus=2.0, scale=[3.0, 3.0]), kernel("Defocus", impulse(), defocus=6.0), atol=1e-7)
+
+    def test_the_disc_is_flat_and_its_weights_sum_to_one(self):
+        out = kernel("Defocus", impulse(), defocus=3.0)[..., 0]
+        weights = out[out > 0]
+        self.assertTrue(np.allclose(weights, weights[0]))
+        self.assertAlmostEqual(float(out.sum()), 1.0, places=5)
+
+    def test_scale_can_be_split_in_the_panel(self):
+        self.assertEqual(core.SPLITTABLE["Defocus"], {"scale": "wh"})
+        self.assertEqual(knobs.split_layout_problems(), [])
+
+    def test_the_main_tab_lays_its_knobs_out_in_nuke_order(self):
+        self.assertEqual(labels("Defocus")[:4], ["Channels", "Defocus", "Aspect ratio", "Scaling"])
+
+    def test_every_paired_knob_acts(self):
+        picture = background()
+        base = kernel("Defocus", picture, defocus=3.0, aspect=1.0)
+        for name, value in (("defocus", 5.0), ("aspect", 2.0), ("scale", 2.0), ("scale", [2.0, 1.0]), ("channels", "rgb")):
+            with self.subTest(knob=name):
+                self.assertTrue(differs(base, kernel("Defocus", picture, **{"defocus": 3.0, "aspect": 1.0, name: value})), name)
+
+    def test_an_older_node_narrows_the_height_by_the_aspect(self):
+        old = old_document("Defocus", dict(defocus=4.0, aspect=2.0), ("legacy_defocus", "scale"))["nodes"]["n"]["params"]
+        self.assertEqual(old["legacy_defocus"], 1)
+        out = kernel("Defocus", impulse(), **{k: v for k, v in old.items() if k in ("defocus", "aspect", "legacy_defocus", "scale")})[..., 0]
+        self.assertEqual(extent(out), (9, 5))                    # the older reading: width 4, height 4 / 2
+        picture = background()
+        reference = flt.ellipse_mean(picture, 4.0, 2.0)
+        np.testing.assert_allclose(kernel("Defocus", picture, defocus=4.0, aspect=2.0, legacy_defocus=1)[4:-4, 4:-4], reference[4:-4, 4:-4], atol=1e-6)
+        self.assertEqual(SPECS["Defocus"]["params"]["legacy_defocus"], 0)
+
+
+class ZDefocusTests(unittest.TestCase):
+    def zd(self, pixels, depth, **knobs_):
+        params = {**SPECS["ZDefocus"]["params"], **knobs_}
+        return np.asarray(Evaluator._zdefocus(np.asarray(pixels, np.float32), np.asarray(depth, np.float32), params), np.float64)
+
+    def dots(self):
+        picture = np.zeros((31, 31, 4), np.float32)
+        picture[15, 15] = 1.0
+        return picture
+
+    def test_direct_blur_is_the_depth_times_size_clamped_to_maximum(self):
+        for z, size, maximum, want in ((0.2, 10.0, 50.0, 2), (0.5, 10.0, 50.0, 5), (0.5, 10.0, 3.0, 3)):
+            with self.subTest(z=z, size=size, maximum=maximum):
+                out = self.zd(self.dots(), np.full((31, 31), z), zdefocus_math="direct", size=size, max_size=maximum)
+                self.assertEqual(extent(out[..., 0]), (2 * want + 1, 2 * want + 1))
+
+    def test_direct_with_zero_size_or_depth_leaves_the_picture(self):
+        picture = background(31, 31)
+        np.testing.assert_array_equal(self.zd(picture, np.full((31, 31), 0.7), zdefocus_math="direct", size=0.0), picture)
+        np.testing.assert_array_equal(self.zd(picture, np.zeros((31, 31)), zdefocus_math="direct", size=30.0), picture)
+
+    def test_minus_direct_blurs_the_same_but_reverses_the_layers(self):
+        # A near sample sharply in front of a far one: the blur of the far pixel must not take colour from the near one.
+        picture = np.zeros((9, 9, 4), np.float32)
+        picture[..., 3] = 1.0
+        picture[4, 4, :3] = 1.0                                      # a white pixel
+        depth = np.full((9, 9), 0.3, np.float32)
+        depth[4, 4] = 0.1                                             # the white pixel is nearer than the rest
+        direct = self.zd(picture, depth, zdefocus_math="direct", size=10.0, max_size=10.0)
+        reverse = self.zd(picture, -depth, zdefocus_math="-direct", size=10.0, max_size=10.0)
+        np.testing.assert_allclose(direct, reverse, atol=1e-6)                       # -direct with the negated depth is direct
+        flipped = self.zd(picture, depth, zdefocus_math="-direct", size=10.0, max_size=10.0)
+        self.assertTrue(differs(direct, flipped))                                   # the layers are the other way round
+
+    def test_the_maths_convert_the_depth_to_a_distance(self):
+        for mode, depth, focal in (("depth", 4.0, 4.0), ("far = 0", 0.25, 4.0), ("-depth", -4.0, 4.0), ("far = -0", -0.25, 4.0)):
+            with self.subTest(mode=mode):
+                out = self.zd(self.dots(), np.full((31, 31), depth), zdefocus_math=mode, focal_plane=focal, max_size=6.0)
+                np.testing.assert_array_equal(out, self.dots())                      # at the focus plane nothing blurs
+                off = self.zd(self.dots(), np.full((31, 31), depth), zdefocus_math=mode, focal_plane=focal + 1.0, depth_of_field=1.0, max_size=6.0)
+                self.assertTrue(differs(off, self.dots()))
+
+    def test_a_larger_maximum_allows_more_blur_and_a_larger_depth_of_field_less(self):
+        depth = np.full((31, 31), 3.0)
+        small = self.zd(self.dots(), depth, focal_plane=1.0, max_size=3.0)
+        large = self.zd(self.dots(), depth, focal_plane=1.0, max_size=6.0)
+        self.assertGreater(extent(large[..., 0])[0], extent(small[..., 0])[0])
+        wide = self.zd(self.dots(), depth, focal_plane=1.0, depth_of_field=8.0, max_size=6.0)
+        self.assertLessEqual(extent(wide[..., 0])[0], extent(large[..., 0])[0])
+
+    def test_every_paired_knob_acts(self):
+        picture = background(31, 31)
+        depth = np.tile(np.linspace(0.2, 3.0, 31, dtype=np.float32), (31, 1))
+        base = dict(zdefocus_math="direct", size=6.0, max_size=8.0, focal_plane=1.0)
+        reference = self.zd(picture, depth, **base)
+        for name, value in (("zdefocus_math", "far = 0"), ("size", 12.0), ("max_size", 3.0), ("bokeh_shape", "blades"), ("blade_count", 3),
+                            ("blade_rotation", 30.0)):
+            with self.subTest(knob=name):
+                changed = {**base, name: value}
+                if name in ("blade_count", "blade_rotation"):
+                    changed["bokeh_shape"] = "blades"
+                    reference_for = self.zd(picture, depth, **{**base, "bokeh_shape": "blades"})
+                else:
+                    reference_for = reference
+                self.assertTrue(differs(reference_for, self.zd(picture, depth, **changed)), name)
+        mid = self.zd(picture, depth, zdefocus_math="depth", focal_plane=1.0, depth_of_field=1.0, max_size=8.0)
+        for name, value in (("focal_plane", 2.0), ("depth_of_field", 3.0)):
+            with self.subTest(knob=name):
+                self.assertTrue(differs(mid, self.zd(picture, depth, zdefocus_math="depth", **{"focal_plane": 1.0, "depth_of_field": 1.0, "max_size": 8.0, name: value})))
+
+    def test_the_main_tab_lays_its_knobs_out_in_nuke_order(self):
+        shown = [label for label in labels("ZDefocus") if not label.startswith("Legacy")]
+        self.assertEqual(shown[:9], ["Channels", "Depth channel", "Math", "Focus plane", "Depth of field", "Size", "Maximum", "Filter type", "Blades"])
+        self.assertEqual(core.CHOICES["zdefocus_math"], ["direct", "depth", "far = 0", "-direct", "-depth", "far = -0"])
+
+    def test_an_older_node_keeps_the_older_depth_reading(self):
+        old = old_document("ZDefocus", dict(focal_plane=1.0, depth_of_field=1.0, max_size=6.0, depth_math="1/depth"),
+                           ("legacy_zdefocus", "zdefocus_math", "size"))["nodes"]["n"]["params"]
+        self.assertEqual(old["legacy_zdefocus"], 1)
+        depth = np.full((31, 31), 0.5)                                               # 1 / 0.5 = 2: one unit past the focus plane, a blur of 6
+        out = self.zd(self.dots(), depth, **{k: old[k] for k in ("focal_plane", "depth_of_field", "max_size", "depth_math", "legacy_zdefocus")})
+        self.assertEqual(extent(out[..., 0]), (13, 13))
+        self.assertEqual(SPECS["ZDefocus"]["params"]["legacy_zdefocus"], 0)
+
+
+class EdgeExtendTests(unittest.TestCase):
+    def matte(self):
+        """A straight-colour picture whose alpha rises across the middle columns: colour 1 inside, 0.2 in the soft edge."""
+        picture = np.zeros((11, 21, 4), np.float32)
+        picture[..., 3] = np.clip((np.arange(21) - 4.0) / 8.0, 0.0, 1.0)[None, :]
+        picture[..., :3] = np.where(picture[..., 3:4] >= 0.5, 1.0, 0.2)
+        return picture
+
+    straight = dict(legacy_edge_extend=0, source_premultiplied=0, premultiply=0, extend_size=4.0, extend_threshold=0.5)
+
+    def test_premultiply_multiplies_the_output_by_the_alpha(self):
+        picture = self.matte()
+        plain = kernel("EdgeExtend", picture, **self.straight)
+        premultiplied = kernel("EdgeExtend", picture, **{**self.straight, "premultiply": 1})
+        np.testing.assert_allclose(premultiplied[..., :3], plain[..., :3] * picture[..., 3:4], atol=1e-6)
+        np.testing.assert_array_equal(premultiplied[..., 3], picture[..., 3])
+
+    def test_the_source_is_unpremultiplied_only_when_it_is_said_to_be_premultiplied(self):
+        picture = self.matte()
+        picture[..., :3] *= picture[..., 3:4]
+        read_straight = kernel("EdgeExtend", picture, **self.straight)
+        read_premultiplied = kernel("EdgeExtend", picture, **{**self.straight, "source_premultiplied": 1})
+        solid = picture[..., 3] >= 0.99
+        np.testing.assert_allclose(read_straight[solid, :3], picture[solid, :3], atol=1e-6)
+        np.testing.assert_allclose(read_premultiplied[solid, :3], picture[solid, :3], atol=1e-6)      # alpha 1: the same either way
+        self.assertTrue(differs(read_straight[..., :3], read_premultiplied[..., :3]))
+
+    def test_positive_erode_takes_colour_from_deeper_inside_and_negative_from_outside(self):
+        picture = self.matte()
+        picture[..., :3] = np.linspace(0.0, 1.0, 21, dtype=np.float32)[None, :, None]            # colour rises into the matte
+        wide = {**self.straight, "extend_size": 8.0}
+        base = kernel("EdgeExtend", picture, **wide)
+        eroded = kernel("EdgeExtend", picture, **{**wide, "erode": 3.0})
+        dilated = kernel("EdgeExtend", picture, **{**wide, "erode": -3.0})
+        column = 6                                                   # a soft-edge column just inside the matte's start
+        self.assertGreater(eroded[5, column, 0], base[5, column, 0])           # the sample region moved in: brighter colour
+        self.assertLessEqual(dilated[5, column, 0], base[5, column, 0] + 1e-6)  # the sample region moved out: no brighter
+        self.assertTrue(differs(dilated, base) and differs(eroded, base))
+        np.testing.assert_array_equal(kernel("EdgeExtend", picture, **{**wide, "erode": 0.0}), base)
+
+    def test_the_main_tab_lays_its_knobs_out_in_nuke_order(self):
+        self.assertEqual(labels("EdgeExtend")[:5], ["Size", "Alpha threshold", "Source Is Premultiplied", "Erode", "Premultiply"])
+
+    def test_every_paired_knob_acts(self):
+        picture = self.matte()
+        base = kernel("EdgeExtend", picture, **self.straight)
+        for name, value in (("source_premultiplied", 1), ("premultiply", 1), ("erode", 2.0), ("erode", -2.0)):
+            with self.subTest(knob=name):
+                self.assertTrue(differs(base, kernel("EdgeExtend", picture, **{**self.straight, name: value})), name)
+
+    def test_an_older_node_reads_premultiplied_and_writes_straight_colour(self):
+        old = old_document("EdgeExtend", dict(extend_size=3.0, extend_threshold=0.5),
+                           ("legacy_edge_extend", "source_premultiplied", "premultiply", "erode"))["nodes"]["n"]["params"]
+        self.assertEqual((old["legacy_edge_extend"], old["source_premultiplied"], old["premultiply"], old["erode"]), (1, 1, 0, 0.0))
+        picture = np.zeros((7, 7, 4), np.float32)
+        picture[2:5, 2:5] = (0.4, 0.2, 0.1, 0.8)                                   # premultiplied: straight colour (0.5, 0.25, 0.125)
+        out = kernel("EdgeExtend", picture, **{k: v for k, v in old.items() if k in SPECS["EdgeExtend"]["params"]})
+        np.testing.assert_allclose(out[3, 3, :3], (0.5, 0.25, 0.125), atol=1e-6)
+        np.testing.assert_allclose(out[0, 0, :3], (0.5, 0.25, 0.125), atol=1e-6)    # the edge colour reaches out three pixels
+        np.testing.assert_array_equal(out[..., 3], picture[..., 3])
+        self.assertEqual(SPECS["EdgeExtend"]["params"]["legacy_edge_extend"], 0)
 
 
 if __name__ == "__main__":

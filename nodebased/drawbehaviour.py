@@ -30,6 +30,19 @@ document renders bit for bit as it did. A node created now gets the new reading 
 * Radial (`plinear`, `ramp`, `p0`, `p1`, `color0`): "perceptually linear" and the colour tab the Radial page lists next to Rectangle's.
   Older Radial nodes get the ramp off and plinear off, so they draw as before.
 
+* Defocus (`legacy_defocus`, `scale`): the page says `aspect ratio` "adjusts the width of the defocus disc without altering its height" and
+  `scaling` "scales the defocus disc simultaneously on the x and y axes" (it can be split into a width and a height). The older node
+  kept the width and shrank the height by the aspect. `defocus` stays the disc's radius in pixels (the page says only "the size").
+* ZDefocus (`legacy_zdefocus`, `zdefocus_math`, `size`): the page's `math` choices turn the depth channel into a distance, and `direct` makes
+  "the Z value in the depth channel directly controls blur: if Z is 0.5, then the blur size will be 0.5 times the value of the size
+  control (unless this is bigger than maximum, in which case it will be clamped to maximum)". `-direct` blurs by the same amount with
+  the layers in the opposite order. depth, -depth, far = 0 and far = -0 convert the channel to a distance by the page's formulas (Z,
+  -Z, 1/Z and -1/Z); the page names far = 1 and far = -1 without their near and far planes, so they are not offered. The older node had
+  only depth and 1/depth.
+* EdgeExtend (`legacy_edge_extend`, `source_premultiplied`, `premultiply`, `erode`): the page's Source Is Premultiplied (off by default:
+  "no premultiplication is assumed"), Premultiply (on by default: the output is premultiplied) and Erode ("negative values dilate the
+  matte and positive values erode the matte"). The older node read its input as premultiplied and wrote straight colour.
+
 Pure NumPy, so the evaluator, the tile executor and the tests read one arithmetic.
 """
 from __future__ import annotations
@@ -53,7 +66,14 @@ NEW["Noise"] = {FLAG: 0, **NOISE_COLOUR}
 NEW["Dither"] = {"legacy_dither": 0, "monodither": 0, "static_seed": 0, "bits": 0, "dither_amount": 0.1}
 NEW["Grain"] = {"legacy_grain": 0, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
                 "maskgrain": 1, "invert_mask": 0, "red_intensity": 0.416, "green_intensity": 0.46, "blue_intensity": 0.85}
+NEW["Defocus"] = {"legacy_defocus": 0, "scale": 1.0}
+NEW["ZDefocus"] = {"legacy_zdefocus": 0, "zdefocus_math": "depth", "size": 25.0}
+NEW["EdgeExtend"] = {"legacy_edge_extend": 0, "source_premultiplied": 0, "premultiply": 1, "erode": 0.0}
 LEGACY = {kind: {FLAG: 1} for kind in KINDS}
+LEGACY["Defocus"] = {"legacy_defocus": 1, "scale": 1.0}
+LEGACY["ZDefocus"] = {"legacy_zdefocus": 1, "zdefocus_math": "depth", "size": 25.0}
+LEGACY["EdgeExtend"] = {"legacy_edge_extend": 1, "source_premultiplied": 1, "premultiply": 0, "erode": 0.0}
+ZDEFOCUS_MATH = ("direct", "depth", "far = 0", "-direct", "-depth", "far = -0")
 LEGACY["Ramp"] = {FLAG: 1, "ramp_type": "linear"}
 LEGACY["Radial"] = {FLAG: 1, "plinear": 0, "ramp": "none", **RAMP_POINTS}
 LEGACY["Grid"] = {FLAG: 1, "ramp": "none", **RAMP_POINTS}
@@ -61,7 +81,8 @@ LEGACY["Noise"] = {FLAG: 1, **NOISE_COLOUR}
 LEGACY["Dither"] = {"legacy_dither": 1, "monodither": 0, "static_seed": 0}
 LEGACY["Grain"] = {"legacy_grain": 1, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
                    "maskgrain": 0, "invert_mask": 0}
-LIMITS = {FLAG: (0, 1), "plinear": (0, 1), "legacy_dither": (0, 1), "monodither": (0, 1), "static_seed": (0, 1), "legacy_grain": (0, 1),
+LIMITS = {"legacy_defocus": (0, 1), "legacy_zdefocus": (0, 1), "legacy_edge_extend": (0, 1), "source_premultiplied": (0, 1), "premultiply": (0, 1),
+          "erode": (-100.0, 100.0), FLAG: (0, 1), "plinear": (0, 1), "legacy_dither": (0, 1), "monodither": (0, 1), "static_seed": (0, 1), "legacy_grain": (0, 1),
           "red_i": (0.0, 1.0), "green_i": (0.0, 1.0), "blue_i": (0.0, 1.0), "minimum_red": (-1000.0, 1000.0), "minimum_green": (-1000.0, 1000.0),
           "minimum_blue": (-1000.0, 1000.0), "maskgrain": (0, 1)}
 GRAIN_SCALE = 0.12
@@ -296,3 +317,39 @@ def grain(image, p, origin, frame, value_noise):
     minimum = np.array([p.get("minimum_red", 0.0), p.get("minimum_green", 0.0), p.get("minimum_blue", 0.0)], dtype=np.float32)
     out[..., :3] = np.maximum(out[..., :3], minimum)
     return out
+
+
+# ---------------------------------------------------------------------------------------------------- Defocus, ZDefocus, EdgeExtend
+def defocus_radii(p):
+    """Semi-axes (rx, ry) of Defocus's disc in pixels. The page: `defocus` is the disc's size, `aspect ratio` widens it without altering
+    its height and `scaling` scales width and height (one number or a width and a height). An older node narrowed the height instead."""
+    from . import core
+    radius = abs(float(p.get("defocus", 6.0)))
+    aspect = float(p.get("aspect", 1.0))
+    if int(p.get("legacy_defocus", 1)):
+        return radius, radius / aspect if aspect > 0 else radius
+    sw, sh = (abs(float(v)) for v in core.split_values(p, "scale", 2, default=1.0))
+    return radius * (aspect if aspect > 0 else 1.0) * sw, radius * sh
+
+
+def zdefocus_distance(z, mode):
+    """The distance from the camera that a depth value means under the page's `math` choice (direct and -direct have none)."""
+    z = np.asarray(z, np.float32)
+    if mode == "-depth":
+        return -z
+    if mode == "far = 0":
+        return 1.0 / np.maximum(z, 1e-6)
+    if mode == "far = -0":
+        return 1.0 / np.maximum(-z, 1e-6)
+    return z
+
+
+def edge_extend_known(known, erode):
+    """The trusted region `known` (bool) moved by `erode` pixels with a box: positive erodes it, negative dilates it."""
+    n = int(round(abs(float(erode))))
+    if n == 0:
+        return known
+    height, width = known.shape
+    padded = np.pad(known, n, constant_values=bool(erode > 0))
+    stack = [padded[n + dy:n + dy + height, n + dx:n + dx + width] for dy in range(-n, n + 1) for dx in range(-n, n + 1)]
+    return np.logical_and.reduce(stack) if erode > 0 else np.logical_or.reduce(stack)

@@ -2107,7 +2107,9 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["scale"], "nuke": ["scale"], "kind": "same"},
+    {"nodebased": ["legacy_defocus"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Defocus followed the guide keep a disc narrowed in height by the aspect; lane 9 step C"}
    ]
   },
   "ZDefocus": {
@@ -2122,7 +2124,10 @@
     {"nodebased": ["depth_layer"], "nuke": ["z_channel"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'depth channel', scripting name `z_channel`"},
     {"nodebased": ["focal_plane"], "nuke": ["center"], "kind": "renamed", "reason": "focus plane"},
     {"nodebased": ["depth_of_field"], "nuke": ["dof"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `dof`"},
-    {"nodebased": ["depth_math"], "nuke": ["math"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'math', scripting name `math`"},
+    {"nodebased": ["zdefocus_math"], "nuke": ["math"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'math', scripting name `math` (direct, depth, far = 0 and their negatives; far = 1 and far = -1 need planes the page does not give)"},
+    {"nodebased": ["size"], "nuke": ["size"], "kind": "same"},
+    {"nodebased": ["legacy_zdefocus"], "kind": "extra", "reason": "NodeBased-only: graphs saved before ZDefocus followed the guide keep the older depth reading (blur from the distance to the focus plane); lane 9 step C"},
+    {"nodebased": ["depth_math"], "kind": "extra", "reason": "NodeBased-only: the older depth and 1/depth choices, read only while legacy_zdefocus is on; lane 9 step C"},
     {"nodebased": ["bokeh_shape"], "nuke": ["filter_type"], "kind": "renamed", "reason": "kernel type"},
     {"nodebased": ["blade_count"], "nuke": ["blades"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'blades', scripting name `blades`"},
     {"nodebased": ["blade_rotation"], "nuke": ["rotation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'rotation', scripting name `rotation`"},
@@ -2190,7 +2195,11 @@
     {"nodebased": ["extend_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["extend_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["source_premultiplied"], "nuke": ["sourceIsPremultiplied"], "kind": "renamed", "reason": "Source Is Premultiplied"},
+    {"nodebased": ["premultiply"], "nuke": ["premultiply"], "kind": "same"},
+    {"nodebased": ["erode"], "nuke": ["erode"], "kind": "same"},
+    {"nodebased": ["legacy_edge_extend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before EdgeExtend followed the guide read the input as premultiplied and write straight colour; lane 9 step C"}
    ]
   },
   "Erode (fast)": {

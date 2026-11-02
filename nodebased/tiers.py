@@ -356,11 +356,10 @@ def _zdefocus_rule(params, region, arity):
 
 
 def _defocus_rule(params, region, arity):
-    # The disc reaches `defocus` pixels along x and `defocus / aspect` along y; the padding is the
-    # larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
-    radius = abs(float(params.get("defocus", 0.0)))
-    aspect = float(params.get("aspect", 1.0))
-    reach = max(radius, radius / aspect if aspect > 0 else radius)
+    # The disc reaches rx pixels along x and ry along y (nodebased/drawbehaviour.py: defocus, aspect ratio and scaling); the padding
+    # is the larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
+    from . import drawbehaviour
+    reach = max(drawbehaviour.defocus_radii(params))
     support = 0 if reach < 0.5 else int(math.ceil(reach))
     return [region.expand(support, support)] + [region] * (arity - 1)
 
@@ -760,7 +759,7 @@ PIXEL_UNIT_PARAMS = {
     "BurnIn": ("font_size", "margin", "y_padding", "bar_x_border", "bar_y_border"),
     "Blur": ("radius",), "Laplacian": ("laplacian_size",), "EdgeDetect": ("edge_blur_size", "edge_erode_size"), "ErodeFilter": ("filter_size",), "Emboss": ("width",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
-    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size",), "DirBlur": ("length", "center_x", "center_y"),
+    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size", "size"), "DirBlur": ("length", "center_x", "center_y"),
     "VectorDistort": ("blur_size",), "Inpaint": ("translate_x", "translate_y", "center_x", "center_y"),
     "VectorCornerPin": tuple(f"corner{i}_{axis}" for i in range(1, 5) for axis in ("x", "y")),
     "DropShadow": ("distance", "shadow_size", "shrink_expand"),

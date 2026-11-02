@@ -81,7 +81,7 @@ class DefocusPixelTests(unittest.TestCase):
             np.testing.assert_allclose(plane, plane.T, atol=1e-7)
 
     def test_aspect_stretches_the_disc_along_x(self):
-        out = kernel("Defocus", dot(), defocus=6.0, aspect=2.0)[..., 0]
+        out = kernel("Defocus", dot(), defocus=6.0, aspect=2.0, legacy_defocus=1)[..., 0]
         ys, xs = np.nonzero(out)
         # rx = 6, ry = 3
         self.assertEqual((int(xs.min()), int(xs.max())), (14, 26))

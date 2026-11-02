@@ -7084,10 +7084,9 @@ class Evaluator:
 
     @staticmethod
     def _disc_radii(p):
-        """Semi-axes (rx, ry) of Defocus's disc: `defocus` wide, `aspect` = width / height."""
-        radius = abs(float(p.get("defocus", 6.0)))
-        aspect = float(p.get("aspect", 1.0))
-        return radius, radius / aspect if aspect > 0 else radius
+        """Semi-axes (rx, ry) of Defocus's disc (nodebased/drawbehaviour.py holds the reading, new and older)."""
+        from . import drawbehaviour
+        return drawbehaviour.defocus_radii(p)
 
     @staticmethod
     def _defocus(image, p):
@@ -7161,10 +7160,21 @@ class Evaluator:
         if depth.ndim == 3: depth = depth[..., 0]
         if depth.shape != image.shape[:2]:
             raise ValueError("ZDefocus depth must match the image dimensions")
-        z = np.maximum(depth, 1e-6)
-        if p.get("depth_math") == "1/depth": z = 1.0 / z
         focal = float(p.get("focal_plane", 1.0)); dof = max(1e-6, float(p.get("depth_of_field", 1.0)))
-        radii = np.minimum(float(p.get("max_size", 20.0)), np.abs(z - focal) / dof * float(p.get("max_size", 20.0)))
+        if int(p.get("legacy_zdefocus", 1)):
+            z = np.maximum(depth, 1e-6)
+            if p.get("depth_math") == "1/depth": z = 1.0 / z
+            radii = np.minimum(float(p.get("max_size", 20.0)), np.abs(z - focal) / dof * float(p.get("max_size", 20.0)))
+        else:
+            from . import drawbehaviour
+            mode = p.get("zdefocus_math", "depth")
+            if mode in ("direct", "-direct"):
+                # The page: blur = Z * size, clamped to maximum; -direct blurs the same with the layers the other way round.
+                radii = np.minimum(float(p.get("max_size", 20.0)), np.abs(depth) * float(p.get("size", 25.0)))
+                z = depth if mode == "direct" else -depth
+            else:
+                z = np.maximum(drawbehaviour.zdefocus_distance(depth, mode), 1e-6)
+                radii = np.minimum(float(p.get("max_size", 20.0)), np.abs(z - focal) / dof * float(p.get("max_size", 20.0)))
         radius = int(math.ceil(float(np.max(radii)))) if radii.size else 0
         if radius <= 0: return image.copy()
         h, w = depth.shape
@@ -7290,22 +7300,31 @@ class Evaluator:
 
     @staticmethod
     def _edge_extend(image, p):
-        # Pushes edge colour outward past the matte to kill dark fringes. The input is
-        # premultiplied; the output is its UNPREMULTIPLIED colour (follow with Premult, or feed a
-        # filter that would otherwise bleed black), alpha untouched. Pixels with alpha at or above
-        # `extend_threshold` are trusted sources. Every other pixel, including the low-alpha edge
-        # pixels that carry the fringe, takes the mean colour of its already-known 8 neighbours,
-        # one ring per step, for ceil(extend_size) steps: colour reaches ceil(extend_size) pixels
-        # out, which is the padded support `tiers._edge_extend_rule` declares. Pixels no source
-        # reaches keep their own straight colour (zero where alpha is zero).
+        # Pushes edge colour outward past the matte to kill dark fringes; alpha is untouched. Pixels with alpha at or above
+        # `extend_threshold` are trusted sources, after the matte is eroded (positive `erode`) or dilated (negative) by that many
+        # pixels: dilated, the soft pixels just outside the matte (alpha above 0) are trusted too, with their own colour. Every other
+        # pixel takes the mean colour of its already-known 8 neighbours, one ring per step, for ceil(extend_size) steps: colour reaches
+        # ceil(extend_size) pixels out, which is the padded support `tiers._edge_extend_rule` declares. Pixels no source reaches keep
+        # their own colour (zero where alpha is zero). The source is read as premultiplied only when `source_premultiplied` is on
+        # (the older node always did); the output is premultiplied by the alpha when `premultiply` is on (the older node wrote
+        # straight colour: follow it with Premult). `legacy_edge_extend` pins both older readings.
+        from . import drawbehaviour
         alpha = image[..., 3]
         threshold = max(float(p.get("extend_threshold", 0.5)), 1e-6)
-        safe = np.where(alpha > 0, alpha, 1.0)[..., None]
-        straight = np.where(alpha[..., None] > 0, image[..., :3] / safe, 0.0).astype(np.float32)
-        known = alpha >= threshold
+        legacy = int(p.get("legacy_edge_extend", 1))
+        if legacy or int(p.get("source_premultiplied", 0)):
+            safe = np.where(alpha > 0, alpha, 1.0)[..., None]
+            straight = np.where(alpha[..., None] > 0, image[..., :3] / safe, 0.0).astype(np.float32)
+        else:
+            straight = image[..., :3].astype(np.float32)
+        erode = float(p.get("erode", 0.0))
+        known = drawbehaviour.edge_extend_known(alpha >= threshold, erode)
+        if erode < 0:
+            known = (known & (alpha > 0)) | (alpha >= threshold)
         colour = np.where(known[..., None], straight, 0.0).astype(np.float32)
         height, width = alpha.shape
-        for _ in range(Evaluator._reach(p.get("extend_size", 3.0))):
+        reach = Evaluator._reach(p.get("extend_size", 3.0))
+        for _ in range(reach):
             weight = np.pad(known.astype(np.float32), 1)
             padded = np.pad(colour * known[..., None], ((1, 1), (1, 1), (0, 0)))
             total = np.zeros_like(colour)
@@ -7320,6 +7339,8 @@ class Evaluator:
             colour = np.where(fresh[..., None], total / np.maximum(count, 1.0)[..., None], colour)
             known = known | fresh
         rgb = np.where(known[..., None], colour, straight)
+        if not legacy and int(p.get("premultiply", 1)):
+            rgb = rgb * alpha[..., None]
         return np.concatenate([rgb, image[..., 3:4]], axis=2).astype(np.float32)
 
     @staticmethod

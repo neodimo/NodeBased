@@ -84,6 +84,7 @@ SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: spli
     # Nuke's AColor knobs on the colour nodes (docs/PARITY_2D.md). A kernel reads one through split_values, and each is laid out
     # as a KnobGroup("split", ...) in nodebased/knobs.py; tests/test_split_knobs.py checks the two lists agree.
     "AdjustBBox": {"numpixels": "wh"},      # Nuke's Add Pixels splits into a width and a height
+    "Defocus": {"scale": "wh"},             # Nuke's scaling: "You can also split the scaling into separate width and height controls"
     "Noise": {"size": "wh"},                # Nuke's x/ysize: "low y values relative to x produces horizontal noise"
     "Transform": {"scale": "wh"},           # Nuke's scale: "one or two values"; the older scale mode and scale X, Y stay for older documents
     "Reformat": {"scale": "wh"},            # Nuke's scale: "To scale each direction separately ... click the 2 button"
@@ -366,7 +367,7 @@ SPECS = {
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
-                "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0}},
+                "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus")}},
     "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask"],
                   "params": {"spatial_size": 3.0, "colour_sigma": 0.1, "mix": 1.0}},
     "Denoise": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -376,7 +377,7 @@ SPECS = {
     "ZDefocus": {"inputs": ["image"], "optional_inputs": ["depth", "kernel", "mask"],
                   "params": {"depth_layer": "depth", "focal_plane": 1.0, "depth_of_field": 1.0,
                              "max_size": 20.0, "depth_math": "depth", "bokeh_shape": "disc",
-                             "blade_count": 6, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0}},
+                             "blade_count": 6, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("ZDefocus")}},
     "ZMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                "params": {"depth_layer": "depth.Z", "backwards": False, "alpha_channel": "rgba.alpha",
                           "depth_math": "depth", "smoothing": 0.0, "mix": 1.0}},
@@ -413,7 +414,7 @@ SPECS = {
     # pixels from every pixel whose alpha is at least `extend_threshold`; alpha is unchanged and
     # the colour output is unpremultiplied (docs/PARITY_2D.md).
     "EdgeExtend": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {"extend_size": 3.0, "extend_threshold": 0.5, "mix": 1.0}},
+                   "params": {"extend_size": 3.0, "extend_threshold": 0.5, "mix": 1.0, **_drawbehaviour.new_params("EdgeExtend")}},
     # LightWrap (step 5a): Nuke's two-input finishing node. Inputs are named fg and bg as in Nuke,
     # so a bypass passes the foreground (the first slot). "wrap_diffuse" is Nuke's `diffuse`,
     # renamed because "diffuse" is a 0..1 LIMITS key on Relight. red/green/blue are the constant
@@ -2260,6 +2261,7 @@ CHOICES["curve_type"] = list(_curvetoolknobs.CURVE_TYPES)
 CHOICES["type"] = ["fBm", "turbulence"]
 CHOICES["ramp"] = ["none", "linear", "smooth0", "smooth1", "smooth"]
 CHOICES["ramp_type"] = list(_drawbehaviour.RAMP_TYPES)
+CHOICES["zdefocus_math"] = list(_drawbehaviour.ZDEFOCUS_MATH)
 LIMITS.update(_drawbehaviour.LIMITS)
 CHOICES.update({"Quality": ["low", "normal", "high"], "fillRegion": ["Matte Alpha", "Source Alpha"],
                 "detailSource": ["Source", "Detail"]})
