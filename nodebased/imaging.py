@@ -6529,17 +6529,34 @@ class Evaluator:
 
     @staticmethod
     def _hue_keyer(image, p):
+        # Nuke's HueKeyer reads the pixel's hue and takes the alpha from the `amount` curve at that hue (x axis hue in degrees, y axis the
+        # alpha value); the `sat_thrsh` curve is the saturation a pixel needs at that hue, and the hues below it are rejected (their
+        # amount counts as 0, fading in over the next threshold-width of saturation as HueCorrect's threshold does). `invert`, on by default,
+        # turns the amount into its complement, so a hue the curve raises to 1 becomes black in the alpha. `older_hue_window` is the node
+        # as it was (nodebased/behaviour2d.py): a window of hues around a centre with a softness, and a saturation range.
         rgb = image[..., :3]
         hue, sat = Evaluator._rgb_to_hue_sat(rgb)
-        center = float(p.get("hue_center", 0.0)) % 360.0
-        raw_dist = np.abs(hue - center) % 360.0
-        dist = np.minimum(raw_dist, 360.0 - raw_dist)
-        hue_gate = Evaluator._edge_falloff(dist, float(p.get("hue_width", 30.0)) / 2.0,
-                                           p.get("hue_softness", 15.0))
-        sat_gate = ((sat >= p.get("sat_min", 0.0)) & (sat <= p.get("sat_max", 1.0))).astype(np.float32)
-        alpha = (hue_gate * sat_gate).astype(np.float32)
-        if p.get("invert"):
-            alpha = 1.0 - alpha
+        if p.get("older_hue_window", 0):
+            center = float(p.get("hue_center", 0.0)) % 360.0
+            raw_dist = np.abs(hue - center) % 360.0
+            dist = np.minimum(raw_dist, 360.0 - raw_dist)
+            hue_gate = Evaluator._edge_falloff(dist, float(p.get("hue_width", 30.0)) / 2.0,
+                                               p.get("hue_softness", 15.0))
+            sat_gate = ((sat >= p.get("sat_min", 0.0)) & (sat <= p.get("sat_max", 1.0))).astype(np.float32)
+            alpha = (hue_gate * sat_gate).astype(np.float32)
+            if p.get("invert"):
+                alpha = 1.0 - alpha
+        else:
+            from . import behaviour2d, colorcurves
+            degrees = hue[..., 0].astype(np.float64) % 360.0
+            amount = colorcurves.evaluate_array(colorcurves.decode(p.get("curve_amount", behaviour2d.FLAT_ZERO)), degrees)[..., None]
+            threshold = colorcurves.evaluate_array(colorcurves.decode(p.get("curve_sat_thrsh", behaviour2d.FLAT_ZERO)), degrees)[..., None]
+            safe = np.where(threshold > 0.0, threshold, 1.0)
+            fade = np.clip((sat - threshold) / safe, 0.0, 1.0)
+            fade = np.where(threshold > 0.0, fade * fade * (3.0 - 2.0 * fade), 1.0)
+            alpha = (amount * fade).astype(np.float32)
+            if p.get("invert", 1):
+                alpha = (1.0 - alpha).astype(np.float32)
         if "output_enabled" in p or "output_channel" in p:
             # Nuke's output switch and channel: the matte goes to the chosen channel (the alpha by default).
             return _keyerknobs.hue_output(image, alpha, p)

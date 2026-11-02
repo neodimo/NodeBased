@@ -955,6 +955,13 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("range_d",), label="D", soft_range=(0, 1)),
         KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "HueKeyer": _groups(
+        KnobGroup("curve", ("curve_amount",), label="Amount",
+                  help="The alpha value the key writes for each hue: the x axis is the hue in degrees (0 red, 120 green, 240 blue), the y axis the amount."),
+        KnobGroup("curve", ("curve_sat_thrsh",), label="Saturation threshold",
+                  help="The saturation a pixel needs at each hue: raise it to reject the hues with low saturation."),
+        KnobGroup("bool", ("older_hue_window",), label="Older hue window",
+                  help="Key a window of hues (Hue center, Hue width, Hue softness) inside a saturation range, as the node did before it held Nuke's amount and "
+                       "saturation threshold curves. Set on graphs saved before."),
         KnobGroup("float_slider", ("hue_center",), label="Hue center", soft_range=(0, 360)),
         KnobGroup("float_slider", ("hue_width",), label="Hue width", soft_range=(0, 360)),
         KnobGroup("float_slider", ("hue_softness",), label="Hue softness", soft_range=(0, 180)),
@@ -1867,7 +1874,7 @@ NUKE_LAYOUT = {
     "Expression": (*[f"temp_{part}{slot}" for slot in range(4) for part in ("name", "expr")], *[name for c in "rgba" for name in (f"expr_channels_{c}", f"expr_{c}")]),
     "Keyer": ("key_input", "key_output", "key_combine", "invert", "keyer_operation",
               KnobGroup("xy", ("range_a", "range_b", "range_c", "range_d"), label="Range", captions=("A", "B", "C", "D"))),
-    "HueKeyer": ("channels", "hue_center", "hue_width", "hue_softness", "sat_min", "sat_max", "output_enabled", "output_channel", "invert"),
+    "HueKeyer": ("channels", "curve_amount", "curve_sat_thrsh", "output_enabled", "output_channel", "invert"),
     "ChromaKeyer": ("key_view", "key_red", "screen_gain", "screen_balance", "chroma_gain", "white_point", "black_point", "alpha_bias_red",
                     "inside_mask", "override_despill_bias", "despill_bias", "replace_mode", "replace_alpha_diff", "replace_red", "replace_amount",
                     "premultiply"),

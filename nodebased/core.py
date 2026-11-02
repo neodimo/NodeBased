@@ -825,12 +825,12 @@ SPECS = {
               "params": {"keyer_operation": "luminance", "range_a": 0.0, "range_b": 0.0,
                         "range_c": 1.0, "range_d": 1.0, "invert": 0, "mix": 1.0,
                         **_smallnodes.new_params("Keyer")}},
-    # HueKeyer: a hue range with softness (hue_center/hue_width/hue_softness, degrees) plus a hard
-    # saturation range (sat_min/sat_max). Nuke's own HueKeyer knobs are collapsed to these numeric
-    # fields -- see docs/PARITY_2D.md's note on the simplification.
+    # HueKeyer: Nuke's amount and saturation threshold curves over hue (curve_amount, curve_sat_thrsh; the alpha is 1 minus the
+    # amount while invert is on, as it is by default). hue_center/hue_width/hue_softness and sat_min/sat_max are the older hue
+    # window, read only while older_hue_window is on (graphs saved before).
     "HueKeyer": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
-                           "sat_min": 0.0, "sat_max": 1.0, "invert": 0, "mix": 1.0, **_keyerknobs.new_params("HueKeyer")}},
+                           "sat_min": 0.0, "sat_max": 1.0, "invert": 1, "mix": 1.0, **_keyerknobs.new_params("HueKeyer"), **_behaviour2d.new_params("HueKeyer")}},
     # ChromaKeyer (step K1): a colour key on an RGB `key` colour picked from the screen. Alpha ramps
     # from 0 at `key_tolerance` to 1 at `key_tolerance + key_softness` in units of the key colour's
     # own distance from grey, on brightness-normalised colour so shadowed screen keys like lit

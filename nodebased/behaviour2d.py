@@ -27,6 +27,8 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
                                       (a half pixel in), a blank expression is zero and the arithmetic is plain 32-bit float.
     HistEQ        histeqbins          256: the histogram held 256 entries. Nuke's Histogram Entries default is 4096 (a real knob, so it is
                                       the value an older document holds rather than a switch).
+    HueKeyer      older_hue_window    1: the matte is a hue window (Hue center, Hue width, Hue softness, a saturation range) and not the amount and
+                                      saturation threshold curves over hue that Nuke's HueKeyer holds in its `lut` knob. Set on graphs saved before.
     Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
                                       (value - black) / (white - black) with gamma as the exponent.
     PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
@@ -36,6 +38,8 @@ Toe's default lift changed from 0.05 to Nuke's 0 for new nodes: a node's params 
 """
 from __future__ import annotations
 
+# A curve over hue (degrees, 0 red, 120 green, 240 blue) that is 0 everywhere: Nuke's HueKeyer starts with no hue keyed and no saturation rejected.
+FLAT_ZERO = '{"interpolation":"linear","points":[[0,0],[360,0]]}'
 SATURATION_MATH = ("Rec 709", "Ccir 601", "Average", "Maximum", "Rec 709 (old weights)")
 
 NEW = {
@@ -50,6 +54,7 @@ NEW = {
     "ColorLookup": {"older_range_scaling": 0},
     "Expression": {"older_expression_syntax": 0},
     "HistEQ": {"histeqbins": 4096},
+    "HueKeyer": {"older_hue_window": 0, "curve_amount": FLAT_ZERO, "curve_sat_thrsh": FLAT_ZERO},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -63,8 +68,9 @@ OLD = {
     "ColorLookup": {"older_range_scaling": 1},
     "Expression": {"older_expression_syntax": 1},
     "HistEQ": {"histeqbins": 256},
+    "HueKeyer": {"older_hue_window": 1, "curve_amount": FLAT_ZERO, "curve_sat_thrsh": FLAT_ZERO},
 }
-LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536)}
+LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1)}
 CHOICES = {"luminance_math": list(SATURATION_MATH)}
 
 

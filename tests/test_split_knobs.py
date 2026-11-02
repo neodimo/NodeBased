@@ -695,8 +695,8 @@ LAYOUTS = {
     ],
     'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'Range', 'Mix'],
     'HueKeyer': [
-        'Channels', 'Hue center', 'Hue width', 'Hue softness', 'Saturation min', 'Saturation max', 'Output', 'Output channel',
-        'Invert', 'Mix'
+        'Channels', 'Amount', 'Saturation threshold', 'Output', 'Output channel', 'Invert', 'Older hue window', 'Hue center',
+        'Hue width', 'Hue softness', 'Saturation min', 'Saturation max', 'Mix'
     ],
     'ChromaKeyer': [
         'View', 'Key colour', 'Screen gain', 'Screen balance', 'Chroma gain', 'White point', 'Black point', 'Alpha bias',

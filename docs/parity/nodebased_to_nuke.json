@@ -2583,7 +2583,9 @@
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
-    {"nodebased": ["hue_center", "hue_width", "hue_softness", "sat_min", "sat_max"], "nuke": ["lut"], "kind": "components", "reason": "NodeBased replaces Nuke's hue/saturation curve with range params"},
+    {"nodebased": ["curve_amount", "curve_sat_thrsh"], "nuke": ["lut"], "kind": "components", "reason": "Nuke's `lut` knob holds two curves over hue, amount and sat_thrsh; NodeBased holds them as two curve params"},
+    {"nodebased": ["hue_center", "hue_width", "hue_softness", "sat_min", "sat_max"], "kind": "extra", "reason": "NodeBased-only: the hue window the node keyed with before it held Nuke's curves, read only while Older hue window is on"},
+    {"nodebased": ["older_hue_window"], "kind": "extra", "reason": "NodeBased-only: switches the node back to its older hue window on graphs saved before (nodebased/behaviour2d.py)"},
     {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},

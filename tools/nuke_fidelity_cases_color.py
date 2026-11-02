@@ -1103,10 +1103,137 @@ def _mincolor_cases():
     ]
 
 
+# ------------------------------------------------------------------------------------------------------------ Keyer (step C)
+_KEYER_GUIDE = ("Keyer (Nuke 17.0 Reference Guide, keyer.html): 'any pixel with a luminance value between B and C becomes opaque. Any pixel value that had a luminance "
+                "between C and D, or B and A, has a tapering value somewhere between opaque and transparent'")
+_KEYER_NUKE_OPERATION = {"red": "red keyer", "green": "green keyer", "blue": "blue keyer", "max": "max keyer", "min": "min keyer", "luminance": "luminance key",
+                         "saturation": "saturation key", "redscreen": "redscreen", "greenscreen": "greenscreen", "bluescreen": "bluescreen"}
+
+
+def keyer_trapezoid(value, a, b, c, d):
+    """The matte of the four range points: 0 up to A, a straight rise to 1 at B, 1 from B to C, a straight fall to 0 at D, 0 beyond (A < B <= C < D)."""
+    return np.minimum(np.clip((value - a) / (b - a), 0.0, 1.0), np.clip((d - value) / (d - c), 0.0, 1.0))
+
+
+def _keyer_value(operation, src):
+    r, g, b = src[..., 0], src[..., 1], src[..., 2]
+    return {"red": r, "green": g, "blue": b, "max": np.maximum(np.maximum(r, g), b), "min": np.minimum(np.minimum(r, g), b)}[operation]
+
+
+def _keyer_expected(operation, rng, invert=False, channel=3, from_alpha=False):
+    def expected(fx):
+        src = fx["A"].astype(np.float64)
+        value = src[..., 3] if from_alpha else _keyer_value(operation, src)
+        matte = keyer_trapezoid(value, *rng)
+        ref = src.copy()
+        ref[..., channel] = 1.0 - matte if invert else matte
+        return ref, _all_valid(ref)
+    return expected
+
+
+def _keyer_case(case_id, operation, rng, statement, source="convention", invert=False, nb_extra=None, nuke_extra=(), channel=3, from_alpha=False):
+    nb = {"keyer_operation": operation, "range_a": rng[0], "range_b": rng[1], "range_c": rng[2], "range_d": rng[3], **(nb_extra or {})}
+    if invert:
+        nb["invert"] = 1
+    nuke = (("operation", _KEYER_NUKE_OPERATION[operation]), ("range", "{%g %g %g %g}" % tuple(rng))) + (() if not invert else (("invert", True),)) + tuple(nuke_extra)
+    note = statement if source == "guide" else (f"{statement} ({_KEYER_GUIDE}; the keyed quantity is named by the operation: the page says the operations 'target certain colors "
+                                                  f"like green, or certain properties like saturation')")
+    return Case(case_id, "Keyer", "Keyer", nuke, ("A",), "Keyer", nb, ("A",), _keyer_expected(operation, rng, invert, channel, from_alpha), source, note)
+
+
+def _keyer_cases():
+    out = []
+    rng = (0.05, 0.4, 0.75, 1.5)
+    for operation in ("red", "green", "blue", "max", "min"):
+        out.append(_keyer_case(f"keyer_{operation}_trapezoid", operation, rng,
+                               f"the {operation} operation keys the {'channel' if len(operation) > 3 and operation not in ('max', 'min') else 'value'} through the A, B, C, D trapezoid: "
+                               "0 up to A, rising to 1 at B, 1 from B to C, falling to 0 at D, 0 above"))
+    out.append(_keyer_case("keyer_triangle_range", "red", (0.0, 0.5, 0.5, 1.0), "with B equal to C the opaque stretch is one point: a triangle from A through B to D"))
+    out.append(_keyer_case("keyer_hdr_range", "green", (-0.25, 0.5, 4.0, 12.5), "the range points are not limited to 0 to 1: negative and above-one values key by the same trapezoid"))
+    out.append(_keyer_case("keyer_alpha_input", "red", (0.1, 0.3, 0.6, 0.95), "with the input set to the alpha channel the alpha is the keyed quantity",
+                           nb_extra={"key_input": "rgba.alpha"}, nuke_extra=(("input", "rgba.alpha"),), from_alpha=True))
+    out.append(_keyer_case("keyer_invert", "red", rng, "invert gives the matte's complement, 1 minus the trapezoid", invert=True,
+                           source="convention"))
+    out.append(_keyer_case("keyer_output_channel", "red", rng, "the output knob names the channel the matte is rendered into (here red): the others keep their values",
+                           nb_extra={"key_output": "rgba.red"}, nuke_extra=(("output", "rgba.red"),), channel=0))
+    out.append(Case("keyer_output_none", "Keyer", "Keyer", (("output", "none"),), ("A",), "Keyer", {"key_output": "none"}, ("A",),
+                    lambda fx: (fx["A"].astype(np.float64), _all_valid(fx["A"])), "convention",
+                    "with the output set to none the image passes unchanged (Foundry's Difference and HueKeyer pages: disabling the output 'is the same as setting the channel to none')"))
+    for operation, what, reason in (
+            ("luminance", "luminance key", "the page says the key is on 'luminance' and shows the graph running 0 to 1, but not the weights of the red, green and blue; Foundry's Rec 709 form "
+                                           "(0.2125 / 0.7154 / 0.0721) and the exact Rec 709 form (0.2126 / 0.7152 / 0.0722) differ by up to 3e-4 of the value and the page names neither"),
+            ("saturation", "saturation key", "the page names 'saturation' as a keyed property and gives no formula: HSV saturation (max - min) / max, HSL saturation and (max - min) all fit the words"),
+            ("redscreen", "redscreen", "the page names no formula for the screen operations: 'red minus the larger of green and blue', 'red minus their mean' and 'red minus green' are all in use"),
+            ("greenscreen", "greenscreen", "same as redscreen: no formula for the green screen difference"),
+            ("bluescreen", "bluescreen", "same as redscreen: no formula for the blue screen difference")):
+        out.append(_unscored_case(f"keyer_{operation}_operation", "Keyer", "Keyer", f"Keyer: the {what} operation ({_KEYER_GUIDE})", reason))
+    out.append(_unscored_case("keyer_combine", "Keyer", "Keyer", "Keyer: combine (replace, intersect, union) joins the new matte to what the output channel already holds",
+                              "the page gives no formula for intersect and union: the smaller and the larger of the two mattes, their product and A + B - AB all read as 'intersect' and 'union' "
+                              "(tests/test_2d_behaviour_keyer.py checks that NodeBased's choice is the smaller and the larger)"))
+    return out
+
+
+# --------------------------------------------------------------------------------------------------------- HueKeyer (step C)
+_HK_GUIDE = ("HueKeyer (Nuke 17.0 Reference Guide): 'It calculates hue from the incoming red, green, and blue channels, and uses the amount curve to determine the value to "
+             "output in the alpha channel. In the graph, the x axis represents hue and the y axis the alpha value for that hue. [...] drag the point up to a value of 1 on the "
+             "y axis to set that hue to black in the alpha channel.' The `invert` knob is on by default")
+_HK_NO_SCRIPT = (" The guide gives no text form for the hue curves, so the reference pack's script leaves them at their defaults for this case; compare it with Nuke by hand "
+                 "(the x axis here is the hue in degrees, 0 red, 120 green, 240 blue).")
+
+
+def hue_of(rgb):
+    """The standard HSV hue in degrees (0 red, 120 green, 240 blue) of rgb pixels that are not grey."""
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    top, low = np.maximum(np.maximum(r, g), b), np.minimum(np.minimum(r, g), b)
+    spread = np.where(top > low, top - low, 1.0)
+    sector = np.where(top == r, ((g - b) / spread) % 6.0, np.where(top == g, (b - r) / spread + 2.0, (r - g) / spread + 4.0))
+    return (sector * 60.0) % 360.0
+
+
+def _hk_expected(points, invert=True, channel=3):
+    def expected(fx):
+        src = fx["C"].astype(np.float64)
+        amount = np.interp(hue_of(src[..., :3]), *zip(*points))
+        ref = src.copy()
+        ref[..., channel] = 1.0 - amount if invert else amount
+        return ref, _all_valid(ref)
+    return expected
+
+
+def _hk_case(case_id, points, statement, invert=True, nb_extra=None, channel=3, source="guide"):
+    nb = {"curve_amount": _cl_curve_json(points), **({} if invert else {"invert": 0}), **(nb_extra or {})}
+    nuke = (() if invert else (("invert", False),))
+    return Case(case_id, "HueKeyer", "HueKeyer", nuke, ("C",), "HueKeyer", nb, ("C",), _hk_expected(points, invert, channel), source, f"{statement} ({_HK_GUIDE}){_HK_NO_SCRIPT}")
+
+
+def _hue_keyer_cases():
+    out = []
+    green = ((0.0, 0.0), (90.0, 0.0), (120.0, 1.0), (150.0, 0.0), (360.0, 0.0))
+    out.append(_hk_case("huekeyer_default_keys_nothing", ((0.0, 0.0), (360.0, 0.0)), "with the amount curve at its default (0 everywhere) and invert on, the alpha is 1 for every hue"))
+    out.append(_hk_case("huekeyer_amount_green_to_black", green, "raising the amount curve to 1 at green sets green hues to black in the alpha (1 minus the amount) and leaves the other hues white"))
+    out.append(_hk_case("huekeyer_amount_curve_shape", ((0.0, 0.25), (60.0, 1.0), (180.0, 0.5), (240.0, 0.0), (300.0, 0.75), (360.0, 0.25)),
+                        "the alpha follows the amount curve between its points hue by hue (straight lines between points)"))
+    out.append(_hk_case("huekeyer_invert_off_is_the_amount", green, "with invert off the alpha is the amount curve itself: 1 at green, 0 elsewhere", invert=False))
+    out.append(_hk_case("huekeyer_output_channel", green, "the matte is rendered into the chosen output channel (here red) and the other channels keep their values",
+                        nb_extra={"output_channel": "rgba.red"}, channel=0, source="convention"))
+    for case_id, what, reason in (
+            ("huekeyer_sat_thrsh", "sat_thrsh: 'Increase this threshold to reject hues with low saturation'",
+             "the page does not say how a pixel below the threshold is rejected (a hard cut, or a fade in over some range), nor whether saturation is the HSV or the HSL one "
+             "(they differ widely for bright colours); tests/test_2d_behaviour_keyer.py checks that a higher threshold removes the keying from the lower-saturation hues"),
+            ("huekeyer_curve_smoothing", "the amount curve between points",
+             "the page does not name the spline the curve editor fits through added points, so only the straight segments, whose shape is the same in any editor, are compared"),
+            ("huekeyer_channels", "channels: 'The hue is calculated from these channels'",
+             "the page does not say what hue a pixel has when a channel is left out (as 0, or hue from the remaining two); NodeBased's channels knob limits the channels the node may "
+             "write, like every node with a channels knob")):
+        out.append(_unscored_case(case_id, "HueKeyer", "HueKeyer", f"HueKeyer: {what}", reason, fixture="C"))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
     global Case, _all_valid
     from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
-            + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases())
+            + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
+            + _keyer_cases() + _hue_keyer_cases())

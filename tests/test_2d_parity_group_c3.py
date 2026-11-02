@@ -82,7 +82,7 @@ class KernelPixelTests(unittest.TestCase):
     def test_hue_keyer_centred_on_red_keys_red_not_green(self):
         red = np.array([[[1.0, 0.0, 0.0, 1.0]]], dtype=np.float32)
         green = np.array([[[0.0, 1.0, 0.0, 1.0]]], dtype=np.float32)
-        params = {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+        params = {"older_hue_window": 1, "hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
                  "sat_min": 0.0, "sat_max": 1.0, "mix": 1.0}
         out_red = Evaluator._kernel("HueKeyer", params, [red])
         out_green = Evaluator._kernel("HueKeyer", params, [green])
@@ -91,14 +91,14 @@ class KernelPixelTests(unittest.TestCase):
 
     def test_hue_keyer_saturation_range_excludes_desaturated_pixels(self):
         pale_red = np.array([[[1.0, 0.9, 0.9, 1.0]]], dtype=np.float32)  # hue 0, low saturation
-        params = {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+        params = {"older_hue_window": 1, "hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
                  "sat_min": 0.5, "sat_max": 1.0, "mix": 1.0}
         out = Evaluator._kernel("HueKeyer", params, [pale_red])
         self.assertAlmostEqual(float(out[0, 0, 3]), 0.0)
 
     def test_hue_keyer_invert_flips_the_matte(self):
         red = np.array([[[1.0, 0.0, 0.0, 1.0]]], dtype=np.float32)
-        params = {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+        params = {"older_hue_window": 1, "hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
                  "sat_min": 0.0, "sat_max": 1.0, "invert": 1, "mix": 1.0}
         out = Evaluator._kernel("HueKeyer", params, [red])
         self.assertAlmostEqual(float(out[0, 0, 3]), 0.0)
@@ -140,7 +140,7 @@ class MaskMixTests(unittest.TestCase):
     def _params(self, mix):
         return {"Keyer": {"keyer_operation": "luminance", "range_a": 0.0, "range_b": 0.2,
                           "range_c": 0.4, "range_d": 0.6, "mix": mix},
-               "HueKeyer": {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+               "HueKeyer": {"older_hue_window": 1, "hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
                             "sat_min": 0.0, "sat_max": 1.0, "mix": mix}}
 
     def test_kinds_mix_zero_is_identity(self):
@@ -233,7 +233,7 @@ class BypassTests(unittest.TestCase):
     def visible_params(self, kind):
         return {"Keyer": dict(keyer_operation="luminance", range_a=0.0, range_b=0.3,
                               range_c=0.6, range_d=1.0),
-               "HueKeyer": dict(hue_center=90.0, hue_width=200.0, hue_softness=30.0,
+               "HueKeyer": dict(older_hue_window=1, invert=0, hue_center=90.0, hue_width=200.0, hue_softness=30.0,
                                 sat_min=0.5, sat_max=1.0)}[kind]
 
     def test_bypassed_kind_equals_its_input_on_both_paths(self):

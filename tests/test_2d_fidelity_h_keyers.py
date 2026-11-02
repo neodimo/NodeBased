@@ -388,7 +388,7 @@ class TileTests(unittest.TestCase):
 
 class HueKeyerTests(unittest.TestCase):
     def run_hue(self, pixel, **knobs):
-        params = {**SPECS["HueKeyer"]["params"], "hue_center": 0.0, "hue_width": 60.0, "hue_softness": 0.0, **knobs}
+        params = {**SPECS["HueKeyer"]["params"], "older_hue_window": 1, "invert": 0, "hue_center": 0.0, "hue_width": 60.0, "hue_softness": 0.0, **knobs}
         return Evaluator._kernel("HueKeyer", params, [one(*pixel)])[0, 0]
 
     def test_by_default_the_matte_goes_to_alpha(self):
@@ -413,7 +413,7 @@ class HueKeyerTests(unittest.TestCase):
         for knobs in (dict(output_channel="rgba.green"), dict(output_enabled=0)):
             g = Graph()
             plate = screen_graph(g, 97, 71)
-            g.add("node", "HueKeyer", dict(hue_center=120.0, hue_width=90.0, **knobs), image=plate)
+            g.add("node", "HueKeyer", dict(older_hue_window=1, invert=0, hue_center=120.0, hue_width=90.0, **knobs), image=plate)
             np.testing.assert_allclose(tile_pixels(g.doc, "node"), evaluator_pixels(g.doc, "node"), atol=1e-6)
 
 
