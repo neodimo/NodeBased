@@ -1,6 +1,7 @@
 """Presentation metadata for node properties (kept separate from the document schema)."""
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 
 from .core import CHOICES, LIMITS, SPECS
@@ -30,6 +31,7 @@ class KnobGroup:
     section: str | None = None     # a heading shown above the first knob of a run that shares it
     help: str | None = None        # one plain sentence shown under the knob and as its tooltip
     channels: str | None = None    # a "split" knob: its split set, "rgba" (r g b a) or "wh" (w h), as in core.SPLIT_CHANNELS
+    captions: tuple[str, ...] | None = None    # an "xy" row's field captions when they are not x, y, z (a Keyer's A B C D)
 
     def __post_init__(self):
         if self.kind == "split":
@@ -38,6 +40,8 @@ class KnobGroup:
                 raise ValueError(f"a split knob names one param and a split set of {sorted(SPLIT_CHANNELS)}")
         elif self.channels is not None:
             raise ValueError("only a split knob takes channels")
+        if self.captions is not None and (self.kind not in ("xy", "xyz") or len(self.captions) != len(self.params)):
+            raise ValueError("captions go with an xy row and name each of its fields")
         if self.label is None:
             object.__setattr__(self, "label", _default_label(self.params))
 
@@ -1744,3 +1748,109 @@ def _chrome_layout():
 
 
 _chrome_layout()
+
+
+# Nuke's main-tab layout for the colour, keyer and channel nodes (lane 2, step S). Each entry lists the node's own knobs in the order
+# docs/parity/nuke_nodes.json gives them (read through docs/parity/nodebased_to_nuke.json); a name is the first param of a group the
+# node already has, a KnobGroup replaces the groups holding its params (a Nuke row that NodeBased had split into one knob per field).
+# Knobs NodeBased added come after these and before the mask strip; the strip (mask, inject, invert, fringe, unpremult by, invert) and
+# Mix come last, as in Nuke, and `channels` is first where Nuke puts it. A node that has no entry keeps the layout it had. Nuke's
+# screenshots are not in the knob tables, so which knobs share a row is changed only where the table shows one Nuke knob that
+# NodeBased holds as several params (Keyer's range, an HSVTool range).
+_MASK_STRIP = ("maskChannelInput", "inject", "invert_mask", "fringe", "unpremult", "invert_unpremult")
+
+
+def _range_row(first, second, label):
+    return KnobGroup("xy", (first, second), label=label, captions=("min", "max"))
+
+
+NUKE_LAYOUT = {
+    "Grade": ("channels", "blackpoint", "whitepoint", "black", "white", "multiply", "offset", "gamma", "reverse", "black_clamp", "white_clamp"),
+    "ColorCorrect": ("channels",
+                     *(f"{prefix}{name}" for prefix in ("", "shadows_", "midtones_", "highlights_")
+                       for name in ("saturation", "contrast", "gamma", "gain", "offset")),
+                     "shadows_curve", "highlights_curve"),
+    "Saturation": ("channels", "saturation", "luminance_math"),
+    "HueCorrect": ("channels", "curve_sat", "curve_lum", "curve_red", "curve_green", "curve_blue", "curve_r_sup", "curve_g_sup", "curve_b_sup"),
+    "HSVTool": ("color_replace", "srccolor_r", "dstcolor_r",
+                _range_row("hue_range_min", "hue_range_max", "Hue range"), "hue_rotation", "hue_rolloff",
+                _range_row("saturation_range_min", "saturation_range_max", "Saturation range"), "sat_adjust", "saturation_rolloff", "set_saturation",
+                _range_row("brightness_range_min", "brightness_range_max", "Brightness range"), "brt_adjust", "brightness_rolloff", "set_brightness",
+                "output_alpha"),
+    "Toe": ("channels", "toe_lift"),
+    "SoftClip": ("conversion", "softclip_min", "softclip_max"),
+    "Posterize": ("channels", "colors"),
+    "Log2Lin": ("channels", "log_direction", "black", "white", "gamma"),
+    "PLogLin": ("channels", "linear_reference", "log_reference", "negative_gamma", "density_per_code_value"),
+    "Colorspace": ("channels", "transfer_in", "whitepoint_in", "primaries_in", "transfer_out", "whitepoint_out", "primaries_out"),
+    "ColorLookup": ("channels", "use_precomputed", "range", "curve_master", "curve_red", "curve_green", "curve_blue", "curve_alpha", "source", "target"),
+    "CrossTalk": ("xt_curve_r_r", "xt_curve_r_g", "xt_curve_r_b", "xt_curve_g_r", "xt_curve_g_g", "xt_curve_g_b", "xt_curve_b_r", "xt_curve_b_g", "xt_curve_b_b",
+                  "maskChannelInput", "inject", "invert_mask", "xt_fringe", "fringe", "xt_unpremult", "unpremult", "invert_unpremult"),
+    "Expression": ("expr_r", "expr_g", "expr_b", "expr_a"),
+    "Keyer": ("key_input", "key_output", "key_combine", "invert", "keyer_operation",
+              KnobGroup("xy", ("range_a", "range_b", "range_c", "range_d"), label="Range", captions=("A", "B", "C", "D"))),
+    "HueKeyer": ("channels", "hue_center", "hue_width", "hue_softness", "sat_min", "sat_max", "output_enabled", "output_channel", "invert"),
+    "ChromaKeyer": ("key_view", "key_red", "screen_gain", "screen_balance", "chroma_gain", "white_point", "black_point", "alpha_bias_red",
+                    "inside_mask", "override_despill_bias", "despill_bias", "replace_mode", "replace_alpha_diff", "replace_red", "replace_amount",
+                    "premultiply"),
+    "Difference": ("offset", "gain", "output_enabled", "output_channel"),
+    "IBKColor": ("screen_type", "fill_size", "darks", "lights", "screen_erode", "patch_black"),
+    "IBKGizmo": ("screen_type", "red_weight", "blue_green_weight", "luminance_match", "luminance_level", "screen_subtraction", "use_bg_luminance"),
+    "Copy": ("copy_red", "copy_green", "copy_blue", "copy_alpha", "channels", "metainput", "rangeinput"),
+    "ChannelMerge": ("a_channel", "operation", "b_channel", "out_channel"),
+    "Shuffle": ("fromInput1", "layer", "fromInput2", "in2", "red_from", "green_from", "blue_from", "alpha_from", "out2",
+                "red_from2", "green_from2", "blue_from2", "alpha_from2"),
+}
+# The mask strip in Nuke's wording (docs/parity/nuke_nodes.json: mask, inject, invert, fringe, (un)premult by, invert). Nuke has no
+# heading above it, so none is drawn.
+_STRIP_LABELS = {"maskChannelInput": "Mask", "inject": "Inject", "invert_mask": "Invert", "fringe": "Fringe",
+                 "unpremult": "(Un)premult by", "invert_unpremult": "Invert"}
+# Headings Nuke's tab does not have: Grade's "Levels" (its levels are the first knobs of the tab).
+NUKE_SECTIONS = {"Grade": {"blackpoint": None}}
+# Labels in Nuke's wording where the knob table gives one and NodeBased's differed (first letter capital, as every label here).
+NUKE_LABELS = {
+    "Grade": {"blackpoint": "Blackpoint", "whitepoint": "Whitepoint"},
+    "Log2Lin": {"log_direction": "Operation"},
+    "PLogLin": {"linear_reference": "Linear reference value", "log_reference": "Log reference value", "negative_gamma": "Negative gamma",
+                "density_per_code_value": "Density per code value"},
+    "ChannelMerge": {"a_channel": "A channel", "b_channel": "B channel", "out_channel": "Output"},
+}
+
+
+def _nuke_layouts():
+    for kind, wanted in NUKE_LAYOUT.items():
+        groups = [group for group in KNOB_LAYOUT[kind] if group.kind != "legacy"]
+        legacy = [group for group in KNOB_LAYOUT[kind] if group.kind == "legacy"]
+        by_first = {group.params[0]: group for group in groups}
+        placed, order = set(), []
+        for entry in wanted:
+            if isinstance(entry, KnobGroup):
+                held = [group for group in groups if set(group.params) & set(entry.params)]
+                assert {name for group in held for name in group.params} == set(entry.params), (kind, entry.params)
+                group = entry
+                placed.update(id(g) for g in held)
+            else:
+                group = by_first[entry]
+                placed.add(id(group))
+            order.append(group)
+        rest = [group for group in groups if id(group) not in placed]
+        strip = [by_first[name] for name in _MASK_STRIP if name in by_first and id(by_first[name]) not in placed]
+        mix = [group for group in rest if group.params == ("mix",)]
+        own = [group for group in rest if group not in strip and group not in mix]
+        ordered = [*order, *own, *strip, *mix]
+        labels = {**NUKE_LABELS.get(kind, {}), **{name: _STRIP_LABELS[name] for name in _MASK_STRIP if name in by_first}}
+        sections = NUKE_SECTIONS.get(kind, {})
+        final = []
+        for group in ordered:
+            changes = {}
+            if group.params[0] in labels:
+                changes["label"] = labels[group.params[0]]
+            if group.params[0] in sections:
+                changes["section"] = sections[group.params[0]]
+            elif group.section == "Channels and mask":
+                changes["section"] = None
+            final.append(dataclasses.replace(group, **changes) if changes else group)
+        KNOB_LAYOUT[kind] = [*final, *legacy]
+
+
+_nuke_layouts()

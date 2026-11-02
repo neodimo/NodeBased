@@ -164,11 +164,13 @@ class AnimatedKnobTests(unittest.TestCase):
         APP.processEvents()
 
     def spin(self, index=0):
-        """The Grade panel's numeric fields in order: index 0 is Exposure, 1 the next knob."""
-        return self.window.properties.findChildren(QDoubleSpinBox)[index]
+        """The Grade panel's fields by name: index 0 is Exposure, 1 is Multiply (Nuke's layout puts neither first)."""
+        name = ("exposure-field", "multiply-field")[index]
+        return next(box for box in self.window.properties.findChildren(QDoubleSpinBox) if box.objectName() == name)
 
     def button(self, param="exposure"):
-        return self.window.properties.findChild(QPushButton, "key-button")
+        return next(b for b in self.window.properties.findChildren(QPushButton)
+                    if b.objectName() == "key-button" and b.accessibleName() == f"{param} key")
 
     def curve(self):
         return ((self.window.dispatcher.document.get("animation") or {})

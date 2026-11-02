@@ -12542,7 +12542,7 @@ class Window(QMainWindow):
                 if group.kind in ("xy", "xyz"):
                     axis_fields = [numeric_field(param) for param in group.params]
                     units = []
-                    for axis, param, field in zip("xyz", group.params, axis_fields):
+                    for axis, param, field in zip(group.captions or "xyz", group.params, axis_fields):
                         unit = QWidget()
                         unit_layout = QHBoxLayout(unit)
                         unit_layout.setContentsMargins(0, 0, 0, 0)

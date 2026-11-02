@@ -137,6 +137,36 @@ class SplitValidationTests(unittest.TestCase):
             self.assertEqual(info["split"]["channels"]["wh"], ["w", "h"])
 
 
+class SplitAgentTests(unittest.TestCase):
+    """The agent's knob API takes a split knob as a list and tells the agent which knobs split (describe)."""
+
+    def proposal(self, **command):
+        from nodebased import agentloop
+        d = grade_dispatcher()
+        describe = d.execute({"op": "describe"})
+        return agentloop.validate_proposal({"commands": [{"op": "set", "id": "g", **command}], "done": False}, describe, d.document), agentloop
+
+    def test_a_list_for_a_split_knob_is_accepted_and_applied(self):
+        commands, _agentloop = self.proposal(param="multiply", value=[1.0, 2.0, 0.5, 1.0])
+        d = grade_dispatcher()
+        d.execute(commands[0])
+        self.assertEqual(d.document["nodes"]["g"]["params"]["multiply"], [1.0, 2.0, 0.5, 1.0])
+
+    def test_the_wrong_length_or_an_unsplittable_knob_is_refused_before_it_reaches_the_document(self):
+        from nodebased import agentloop
+        for param, value in (("multiply", [1.0, 2.0]), ("multiply", [1.0, "a", 1.0, 1.0]), ("exposure", [1.0, 1.0, 1.0, 1.0]),
+                             ("multiply", [1.0, 1.0, 1.0, 1e9])):
+            with self.subTest(param=param, value=value), self.assertRaises(agentloop.ProtocolError):
+                self.proposal(param=param, value=value)
+
+    def test_create_with_a_split_value(self):
+        from nodebased import agentloop
+        d = Dispatcher()
+        describe = d.execute({"op": "describe"})
+        agentloop.validate_proposal({"commands": [{"op": "create", "type": "ColorCorrect", "id": "c", "pos": [0, 0],
+                                                   "params": {"gain": [1.0, 1.5, 2.0, 1.0]}}], "done": False}, describe, d.document)
+
+
 class SplitDocumentTests(unittest.TestCase):
     def test_a_split_value_round_trips_through_save_load_and_undo(self):
         with split_registered():
@@ -600,6 +630,208 @@ class SplitPanelRealNodesTests(unittest.TestCase):
             self.assertIsNone(panel.findChild(QDoubleSpinBox, "shadows_gain-field"))
         finally:
             window.deleteLater()
+
+
+# ------------------------------------------------------------------------------------------------ layouts (part 3)
+import audit_nuke_fidelity as audit                                                    # noqa: E402
+
+NUKE_JSON = json.loads(audit.NUKE_JSON.read_text(encoding="utf-8"))["nodes"]
+MAPPING = json.loads(audit.MAP_JSON.read_text(encoding="utf-8"))["pairs"]
+
+# The main tab's labels in order, as the panel lays them out (docs/parity/nuke_nodes.json through docs/parity/nodebased_to_nuke.json).
+# Knobs NodeBased added (Exposure, Offset follows alpha, Divide by alpha, ...) sit after Nuke's own and before the mask strip. HistEQ,
+# MinColor and ScreenKeyer keep NodeBased's layout: Nuke's knobs for them are a different control set (HistEQ's histogram entries,
+# MinColor's search and delta) or the node is not in the Reference Guide's tables (ScreenKeyer).
+LAYOUTS = {
+    'Grade': [
+        'Channels', 'Blackpoint', 'Whitepoint', 'Lift', 'Gain', 'Multiply', 'Offset', 'Gamma', 'Reverse', 'Black clamp',
+        'White clamp', 'Exposure', 'Offset follows alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
+        'Mix'
+    ],
+    'ColorCorrect': [
+        'Channels', 'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset', 'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset',
+        'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset', 'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset',
+        'Shadows curve', 'Highlights curve', 'Divide by alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
+        'Mix'
+    ],
+    'Saturation': ['Channels', 'Saturation', 'Luminance math', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
+    'HueCorrect': [
+        'Channels', 'Sat', 'Lum', 'Red', 'Green', 'Blue', 'R Sup', 'G Sup', 'B Sup', 'Saturation threshold', 'Hue shift',
+        'Older curve maths', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+    ],
+    'HSVTool': [
+        'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Hue rolloff', 'Saturation range',
+        'Saturation adjustment', 'Saturation rolloff', 'Force saturation', 'Brightness range', 'Brightness adjustment',
+        'Brightness rolloff', 'Force brightness', 'Output to alpha', 'Adjust by scaling', 'Mix'
+    ],
+    'Toe': ['Channels', 'Lift', 'Toe width', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
+    'SoftClip': ['Conversion', 'Softclip min', 'Softclip max', 'Older grey', 'Mix'],
+    'Posterize': ['Channels', 'Colors', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
+    'Log2Lin': [
+        'Channels', 'Operation', 'Black', 'White', 'Gamma', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
+        'Mix'
+    ],
+    'PLogLin': [
+        'Channels', 'Linear reference value', 'Log reference value', 'Negative gamma', 'Density per code value', 'Mask',
+        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+    ],
+    'Colorspace': [
+        'Channels', 'Transfer In', 'Whitepoint In', 'Primaries In', 'Transfer Out', 'Whitepoint Out', 'Primaries Out', 'Mask',
+        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+    ],
+    'ColorLookup': [
+        'Channels', 'Use precomputed table', 'Range', 'Master', 'Red', 'Green', 'Blue', 'Alpha', 'Source', 'Target', 'Mask',
+        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+    ],
+    'CrossTalk': [
+        'R from R', 'R from G', 'R from B', 'G from R', 'G from G', 'G from B', 'B from R', 'B from G', 'B from B', 'Mask',
+        'Inject', 'Invert', 'Fringe', 'Fringe', 'Unpremult by', '(Un)premult by', 'Invert', 'Mix'
+    ],
+    'Expression': [
+        'R expression', 'G expression', 'B expression', 'A expression', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by',
+        'Invert', 'Mix'
+    ],
+    'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'Range', 'Mix'],
+    'HueKeyer': [
+        'Channels', 'Hue center', 'Hue width', 'Hue softness', 'Saturation min', 'Saturation max', 'Output', 'Output channel',
+        'Invert', 'Mix'
+    ],
+    'ChromaKeyer': [
+        'View', 'Key colour', 'Screen gain', 'Screen balance', 'Chroma gain', 'White point', 'Black point', 'Alpha bias',
+        'Inside mask', 'Use custom despill bias', 'Despill bias', 'Replace mode', 'Add in matte fix', 'Replace colour',
+        'Replace amount', 'Premultiply', 'Tolerance', 'Softness', 'Luminance gain', 'Shadow level', 'Highlight level', 'Despill',
+        'Invert', 'Mix'
+    ],
+    'Difference': ['Offset', 'Gain', 'Output', 'Output channel', 'Mix'],
+    'IBKColor': ['Screen type', 'Size', 'Darks', 'Lights', 'Erode', 'Patch black', 'Mix'],
+    'IBKGizmo': [
+        'Screen type', 'Red weight', 'Blue/green weight', 'Luminance match', 'Luminance level', 'Screen subtraction',
+        'Use BG luminance', 'Mix'
+    ],
+    'Copy': [
+        'Copy Red', 'Copy Green', 'Copy Blue', 'Copy Alpha', 'Layer copy', 'Metadata from', 'Range from', 'Mask', 'Inject',
+        'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+    ],
+    'ChannelMerge': ['A channel', 'Operation', 'B channel', 'Output', 'Mask', 'Inject', 'Invert', 'Fringe', 'Mix'],
+    'Shuffle': [
+        'Input 1', 'Layer 1', 'Input 2', 'Layer 2', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',
+        'Red from (second)', 'Green from (second)', 'Blue from (second)', 'Alpha from (second)'
+    ],
+    'HistEQ': ['Equalise', 'Mix'],
+    'MinColor': ['Frame start', 'Frame end', 'Find', 'Box origin', 'Box size', 'Result R', 'Result G', 'Result B', 'Result A'],
+    'ScreenKeyer': [
+        'Screen colour', 'Screen gain', 'Screen balance', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Alpha bias colour',
+        'Despill bias colour', 'Clip black', 'Clip white', 'Clip rollback', 'Screen shrink/grow', 'Screen softness',
+        'Screen pre-blur', 'Edge grade gain', 'Edge grade gamma', 'Edge grade saturation', 'Edge width', 'View',
+        'Unpremultiply result', 'Use alpha bias for despill', 'Screen despot black', 'Screen despot white', 'Screen replace',
+        'Screen replace colour', 'Midtones at', 'Shadow gain', 'Midtone gain', 'Highlight gain', 'Source alpha',
+        'Inside replace', 'Inside replace colour', 'Inside component', 'Outside component', 'Crop x method', 'Crop y method',
+        'Crop edge colour', 'Crop left', 'Crop right', 'Crop bottom', 'Crop top', 'Mix'
+    ],
+}
+
+
+def nuke_rank(kind):
+    """{param: position in Nuke's knob table} for the params the mapping pairs with a Nuke knob of `kind` (the table's order, all tabs)."""
+    nuke, pairs = NUKE_JSON.get(kind), MAPPING.get(kind)
+    if not nuke or not pairs:
+        return {}
+    by_nuke = {}
+    for entry in pairs["knobs"]:
+        for name in entry.get("nuke") or []:
+            by_nuke.setdefault(name, []).extend(entry["nodebased"])
+    seen, rank = {}, {}
+    for knob in nuke["knobs"]:
+        seen[knob["name"]] = seen.get(knob["name"], 0) + 1
+        if knob["role"] == "ui_only":
+            continue
+        name = knob["name"] if seen[knob["name"]] == 1 else f"{knob['name']}#{seen[knob['name']]}"
+        for param in by_nuke.get(name, []):
+            rank.setdefault(param, len(rank))
+    return rank
+
+
+def displayed(kind):
+    return [group.label for group in knobs.knob_layout(kind) if group.kind != "legacy"]
+
+
+class LayoutTests(unittest.TestCase):
+    def test_every_node_of_the_step_has_a_layout_test(self):
+        self.assertEqual(sorted(LAYOUTS), sorted([*knobs.NUKE_LAYOUT, "HistEQ", "MinColor", "ScreenKeyer"]))
+        self.assertEqual(len(LAYOUTS), 26)      # Grade, step A's seven, step B's eight and step C's ten
+
+    def test_the_mask_strip_and_mix_close_every_node_that_has_them(self):
+        tail = ["Mask", "Inject", "Invert", "Fringe", "(Un)premult by", "Invert", "Mix"]
+        for kind in ("Grade", "ColorCorrect", "Saturation", "HueCorrect", "Toe", "Posterize", "Log2Lin", "PLogLin", "Colorspace",
+                     "ColorLookup", "Expression", "Copy"):
+            with self.subTest(kind=kind):
+                labels = displayed(kind)
+                self.assertEqual(labels[-len(tail):], tail if "(Un)premult by" in labels else labels[-len(tail):])
+                self.assertEqual(labels[-1], "Mix")
+                self.assertEqual(labels[-7:-1], tail[:-1])
+
+    def test_channels_come_first_where_nuke_puts_them_first(self):
+        for kind, table in NUKE_JSON.items():
+            if kind not in LAYOUTS or not table["knobs"] or table["knobs"][0]["role"] != "chrome:channels":
+                continue
+            if not any(group.params == ("channels",) for group in knobs.knob_layout(kind)):
+                continue
+            with self.subTest(kind=kind):
+                self.assertEqual(displayed(kind)[0].lower(), "channels")
+
+    def test_nodebased_only_knobs_sit_between_nuke_knobs_and_the_mask_strip(self):
+        self.assertEqual(displayed("Grade")[10:14], ["White clamp", "Exposure", "Offset follows alpha", "Mask"])
+        self.assertEqual(displayed("ColorCorrect")[21:25], ["Shadows curve", "Highlights curve", "Divide by alpha", "Mask"])
+
+    def test_keyer_range_and_the_hsv_ranges_are_one_row_each(self):
+        keyer = [g for g in knobs.knob_layout("Keyer") if g.label == "Range"][0]
+        self.assertEqual((keyer.kind, keyer.params, keyer.captions), ("xy", ("range_a", "range_b", "range_c", "range_d"), ("A", "B", "C", "D")))
+        for label, params in (("Hue range", ("hue_range_min", "hue_range_max")), ("Saturation range", ("saturation_range_min", "saturation_range_max")),
+                              ("Brightness range", ("brightness_range_min", "brightness_range_max"))):
+            group = [g for g in knobs.knob_layout("HSVTool") if g.label == label][0]
+            self.assertEqual((group.kind, group.params, group.captions), ("xy", params, ("min", "max")))
+
+    def test_the_panel_lists_the_labels_in_that_order(self):
+        from nodebased.app import Window
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QLabel
+        window = Window()
+        try:
+            window.show()
+            for kind in ("Grade", "ColorCorrect", "Keyer", "HSVTool", "Copy"):
+                window.command({"op": "create", "id": f"n_{kind}", "type": kind, "pos": [0, 0]})
+                panel = window.build_node_panel(f"n_{kind}")
+                window.set_properties_widget(panel)
+                APP.processEvents()
+                shown = [text for _y, text in sorted((label.mapTo(panel, QPoint(0, 0)).y(), label.text())
+                                                     for label in panel.findChildren(QLabel) if label.isVisibleTo(panel) and label.text())]
+                remaining = iter(shown)
+                with self.subTest(kind=kind):
+                    for expected in LAYOUTS[kind]:
+                        self.assertTrue(any(text == expected for text in remaining), f"{kind}: {expected!r} out of order in {shown}")
+        finally:
+            window.deleteLater()
+
+
+def _layout_test(kind):
+    def test(self):
+        self.assertEqual(displayed(kind), LAYOUTS[kind], kind)
+        rank = nuke_rank(kind)
+        last = -1
+        for group in knobs.knob_layout(kind):
+            if group.kind == "legacy":
+                continue
+            ranks = [rank[param] for param in group.params if param in rank]
+            if not ranks:
+                continue
+            with self.subTest(group=group.label):
+                self.assertGreater(min(ranks), last, f"{kind}: {group.label} is before a knob Nuke lists earlier")
+            last = max(last, min(ranks))
+    return test
+
+
+for _kind in LAYOUTS:
+    setattr(LayoutTests, f"test_layout_{_kind}", _layout_test(_kind))
 
 
 if __name__ == "__main__":

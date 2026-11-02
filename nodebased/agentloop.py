@@ -109,7 +109,21 @@ def _validate_range(name, value, limits, index):
         raise ProtocolError(f"command {index}: {name}={value} is outside [{bounds[0]}, {bounds[1]}]")
 
 
-def _validate_param_value(name, value, limits, choices, index):
+def _split_entries(describe, kind, name):
+    """How many entries a split knob of `kind` holds (core.SPLITTABLE through describe), or None when `name` cannot be split."""
+    split = describe.get("split") or {}
+    channels = (split.get("params") or {}).get(kind, {}).get(name)
+    return None if channels is None else len(split["channels"][channels])
+
+
+def _validate_param_value(name, value, limits, choices, index, entries=None):
+    if entries is not None and isinstance(value, list):
+        # A split knob takes one number per channel (r g b a, or w h), each within the knob's range.
+        if len(value) != entries:
+            raise ProtocolError(f"command {index}: {name} takes {entries} numbers when split, not {len(value)}")
+        for entry in value:
+            _validate_range(name, entry, limits, index)
+        return
     if name in choices:
         if not isinstance(value, str) or value not in choices[name]:
             raise ProtocolError(f"command {index}: {name}={value!r} is not one of {choices[name]}")
@@ -153,7 +167,7 @@ def _validate_command(cmd, describe, known_types, index):
         for name, value in params.items():
             if name not in allowed_params:
                 raise ProtocolError(f"command {index}: {kind} has no parameter {name!r}")
-            _validate_param_value(name, value, limits, choices, index)
+            _validate_param_value(name, value, limits, choices, index, _split_entries(describe, kind, name))
         _validate_pos(cmd, index)
         node_id = cmd.get("id")
         if node_id is not None:
@@ -195,7 +209,7 @@ def _validate_command(cmd, describe, known_types, index):
             raise ProtocolError(f"command {index}: {kind} has no parameter {name!r}")
         if "value" not in cmd:
             raise ProtocolError(f"command {index}: set requires 'value'")
-        _validate_param_value(name, cmd["value"], limits, choices, index)
+        _validate_param_value(name, cmd["value"], limits, choices, index, _split_entries(describe, kind, name))
     elif op == "connect":
         slot = cmd.get("input")
         inputs = list(nodes_spec.get(kind, {}).get("inputs", [])) + \

@@ -40,6 +40,19 @@ APP.setStyle('Fusion')
 APP.setStyleSheet(STYLE)
 
 
+def exposure_slider(parent):
+    """Grade's Exposure slider (Nuke's layout puts the levels ahead of it)."""
+    return next(c for c in parent.findChildren(nodebased_app_module.FloatSliderControl) if c.spin.objectName() == 'exposure-field').slider
+
+
+def first_knob(parent):
+    """The panel's first numeric field the way these tests mean it: Grade's Exposure (Nuke's layout puts Channels and the levels
+    ahead of it), else the first field there is."""
+    boxes = parent.findChildren(QDoubleSpinBox)
+    return next((box for box in boxes if box.objectName() == 'exposure-field'), boxes[0])
+
+
+
 def release_window(test):
     """Delete a test's window instead of only closing it. unittest keeps every TestCase instance
     until the run ends, so a closed-but-referenced Window (its viewer, GPU state and caches) lived
@@ -187,7 +200,7 @@ class DesktopTests(unittest.TestCase):
         w.graph.setFocus()
         QTest.keyClick(w.graph, Qt.Key.Key_1)
         self.assertEqual(w.dispatcher.document['view'], 'grade')
-        editor = w.properties.findChildren(QDoubleSpinBox)[0]
+        editor = first_knob(w.properties)
         editor.setValue(1.5)
         editor.editingFinished.emit()
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['params']['exposure'] == 1.5))
@@ -1401,12 +1414,12 @@ class KeyframeUiTests(unittest.TestCase):
         APP.processEvents()
 
     def editor(self):
-        return self.window.properties.findChildren(QDoubleSpinBox)[0]
+        return first_knob(self.window.properties)
 
     def key_button(self):
-        """The keyframe button belonging to the first numeric knob."""
+        """The keyframe button belonging to the first numeric knob (Grade's Exposure)."""
         buttons = [b for b in self.window.properties.findChildren(QPushButton, 'key-button')
-                   if b.property('keyState') in ('none', 'between', 'keyed')]
+                   if b.property('keyState') in ('none', 'between', 'keyed') and b.accessibleName() == 'exposure key']
         self.assertTrue(buttons, 'no keyframe button on a numeric knob')
         return buttons[0]
 
@@ -1508,7 +1521,7 @@ class ExpressionTests(unittest.TestCase):
         self.window.set_time(first=1, last=20, current=1)
         self.window.graph.items_by_id['grade'].setSelected(True)
         APP.processEvents()
-        exposure = self.window.properties.findChildren(QDoubleSpinBox)[0]
+        exposure = first_knob(self.window.properties)
         self.window.open_expression_editor('grade', 'exposure', exposure)
         APP.processEvents()
 
@@ -1523,7 +1536,7 @@ class ExpressionTests(unittest.TestCase):
         for editor in editors:
             if editor.accessibleName() == 'grade.exposure expression':
                 return editor
-        exposure = self.window.properties.findChildren(QDoubleSpinBox)[0]
+        exposure = first_knob(self.window.properties)
         self.assertIsNotNone(self.window.open_expression_editor('grade', 'exposure', exposure),
                              'numeric inspector could not open expression editor')
         editor = self.window.properties.findChild(QLineEdit, 'expression-editor')
@@ -1543,13 +1556,13 @@ class ExpressionTests(unittest.TestCase):
         self.expression_button('set-expression').click()
         self.assertTrue(wait_until(lambda: w.dispatcher.document['expressions']['grade']['exposure']
                                    == 'frame * 0.5'))
-        knob = w.properties.findChildren(QDoubleSpinBox)[0]
+        knob = first_knob(w.properties)
         self.assertFalse(knob.isEnabled(), 'expression-driven knob should not invite base edits')
         key_buttons = [b for b in w.properties.findChildren(QPushButton) if b.text() == 'ƒ']
         self.assertEqual(len(key_buttons), 1)
         self.assertFalse(key_buttons[0].isEnabled())
         w.set_time(current=6)
-        self.assertTrue(wait_until(lambda: abs(w.properties.findChildren(QDoubleSpinBox)[0].value() - 3)
+        self.assertTrue(wait_until(lambda: abs(first_knob(w.properties).value() - 3)
                                    < 1e-6))
 
     def test_clear_expression_restores_base_and_is_undoable(self):
@@ -1560,7 +1573,7 @@ class ExpressionTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: 'exposure' in w.dispatcher.document['expressions']['grade']))
         self.expression_button('clear-expression').click()
         self.assertTrue(wait_until(lambda: 'grade' not in w.dispatcher.document['expressions']))
-        self.assertTrue(w.properties.findChildren(QDoubleSpinBox)[0].isEnabled())
+        self.assertTrue(first_knob(w.properties).isEnabled())
         w.command({'op': 'undo'})
         self.assertEqual(w.dispatcher.document['expressions']['grade']['exposure'], 'frame * 0.5')
 
@@ -1577,7 +1590,7 @@ class ExpressionTests(unittest.TestCase):
 
     def test_equals_opens_expression_editor_without_editing_the_knob(self):
         w = self.window
-        knob = w.properties.findChildren(QDoubleSpinBox)[0]
+        knob = first_knob(w.properties)
         knob.setFocus()
         before = knob.text()
         QTest.keyClick(knob, Qt.Key.Key_Equal)
@@ -1830,7 +1843,7 @@ class ProgressivePreviewTests(unittest.TestCase):
         w.timer.stop()
         w.graph.items_by_id['grade'].setSelected(True)
         w.inspect('grade')
-        slider = w.properties.widget().findChild(QSlider, 'knob-slider')
+        slider = exposure_slider(w.properties.widget())
         self.assertIsNotNone(slider)
         held = unittest.mock.patch.object(w, 'start_preview')
         held.start()
@@ -1849,7 +1862,7 @@ class ProgressivePreviewTests(unittest.TestCase):
         w.timer.stop()
         w.graph.items_by_id['grade'].setSelected(True)
         w.inspect('grade')
-        slider = w.properties.widget().findChild(QSlider, 'knob-slider')
+        slider = exposure_slider(w.properties.widget())
         self.assertIsNotNone(slider)
         self.assertTrue(slider.isVisibleTo(w))
         held = unittest.mock.patch.object(w, 'start_preview')
@@ -2054,7 +2067,7 @@ class InspectorMenuTests(unittest.TestCase):
         w = self.window
         panel = w.properties.widget()
         revision = w.dispatcher.revision
-        spin = panel.findChildren(QDoubleSpinBox)[0]
+        spin = first_knob(panel)
         spin.editingFinished.emit()      # exactly what focus moving to a popup menu does
         self.settle()
         self.assertEqual(w.dispatcher.revision, revision, 'a focus-out must not edit the document')
@@ -2074,7 +2087,7 @@ class InspectorMenuTests(unittest.TestCase):
     def test_a_real_knob_edit_still_rebuilds_the_panel(self):
         w = self.window
         panel = w.properties.widget()
-        spin = panel.findChildren(QDoubleSpinBox)[0]
+        spin = first_knob(panel)
         spin.setValue(spin.value() + 0.5)
         spin.editingFinished.emit()
         self.settle()
@@ -2735,7 +2748,7 @@ class KnobLayoutTests(unittest.TestCase):
 
     def grade_spin(self):
         self.select('grade')
-        return self.window.properties.widget().findChildren(QDoubleSpinBox)[0]
+        return first_knob(self.window.properties.widget())
 
     def test_float_slider_knob_renders_and_commits(self):
         spin = self.grade_spin()
@@ -2788,7 +2801,7 @@ class KnobLayoutTests(unittest.TestCase):
         editor.setText('frame * 0.5')
         QTest.mouseClick(panel.findChild(QPushButton, 'set-expression'), Qt.MouseButton.LeftButton)
         self.assertTrue(wait_until(lambda: self.window.dispatcher.document['expressions']['grade']['exposure'] == 'frame * 0.5'))
-        spin = self.window.properties.widget().findChildren(QDoubleSpinBox)[0]
+        spin = first_knob(self.window.properties.widget())
         self.assertIn('#c58cff', spin.styleSheet())
         menu = self.window.build_curve_menu('grade', 'exposure', spin)
         actions = [action.text() for action in menu.actions()]
@@ -3225,8 +3238,8 @@ class PropertiesWheelFocusTests(unittest.TestCase):
         APP.processEvents()
         # Grade's first knob is exposure (a FloatSliderControl: a spin box paired with a ruler
         # slider); neither of its two internal widgets is named, so take it by knob order.
-        exposure = panel.findChildren(QDoubleSpinBox)[0]
-        slider = panel.findChildren(QSlider)[0]
+        exposure = first_knob(panel)
+        slider = next(c for c in panel.findChildren(nodebased_app_module.FloatSliderControl) if c.spin.objectName() == 'exposure-field').slider
         before = exposure.value()
         self.assertFalse(exposure.hasFocus())
         self.assertFalse(slider.hasFocus())

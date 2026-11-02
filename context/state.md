@@ -1,3 +1,7 @@
+## 2026-11-02, 2D behaviour step S (Lane 2): per-channel knobs and Nuke's layout
+
+Branch `openclaw/nb-2d-parity`. `core.SPLITTABLE` / `split_values` / `is_split`, `KnobGroup("split")`, the panel split toggle, schema 29, Grade / ColorCorrect / Multiply / Add / Gamma split on the evaluator and tile paths, Nuke's main-tab order for 26 nodes (`knobs.NUKE_LAYOUT`). Tests: `tests/test_split_knobs.py`. Animation and expressions on split knobs are refused; a split Grade or ColorCorrect is processor-only. Details and what is left: the TASKLOG note of the same date.
+
 ## 2026-11-01, 2D behaviour step A of 3 (Lane 2): the colour grading nodes compute what Nuke computes
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:55 PM on 2026-11-01 PDT)
