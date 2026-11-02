@@ -695,10 +695,138 @@ def _ploglin_cases():
     return out
 
 
+
+# ------------------------------------------------------------------------------------------------------------ Colorspace (step B)
+_CS_GUIDE = "Colorspace (Nuke 17.0 Reference Guide)"
+_SRGB_SOURCE = "IEC 61966-2-1, the sRGB transfer function (linear below 0.04045 / 12.92, otherwise ((v + 0.055) / 1.055) ** 2.4)"
+_PRIMARIES_SOURCE = ("the published matrices between linear RGB spaces with a D65 white: ITU-R BT.2087-0 for Rec.709 to Rec.2020 and the P3-D65 matrix of "
+                     "SMPTE RP 431-2 / EG 432-1")
+_WHITES = {"D65": (0.3127, 0.3290), "D60": (0.32168, 0.33767), "DCI": (0.314, 0.351)}
+_PRIMARIES = {"Rec.709": ((0.64, 0.33), (0.30, 0.60), (0.15, 0.06)), "Rec.2020": ((0.708, 0.292), (0.170, 0.797), (0.131, 0.046)),
+              "P3-D65": ((0.680, 0.320), (0.265, 0.690), (0.150, 0.060))}
+# Rec.709 to Rec.2020 and to P3-D65 on linear light, as published (six digits).
+_M709_TO_2020 = np.array([[0.627404, 0.329283, 0.043313], [0.069097, 0.919540, 0.011362], [0.016391, 0.088013, 0.895595]])
+_M709_TO_P3D65 = np.array([[0.822462, 0.177538, 0.0], [0.033194, 0.966806, 0.0], [0.017083, 0.072397, 0.910520]])
+_BRADFORD = np.array([[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]])
+
+
+def _srgb_decode(v):
+    return np.where(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055) ** 2.4)
+
+
+def _srgb_encode(v):
+    return np.where(v <= 0.0031308, v * 12.92, 1.055 * np.maximum(v, 0.0) ** (1.0 / 2.4) - 0.055)
+
+
+def _xyz_of_xy(xy):
+    return np.array([xy[0] / xy[1], 1.0, (1.0 - xy[0] - xy[1]) / xy[1]])
+
+
+def rgb_to_xyz_matrix(primaries, white):
+    """Lindbloom's derivation: the primaries' XYZ columns scaled so that RGB (1, 1, 1) is the white point."""
+    columns = np.stack([_xyz_of_xy(xy) for xy in _PRIMARIES[primaries]], axis=1)
+    return columns * np.linalg.solve(columns, _xyz_of_xy(_WHITES[white]))[None, :]
+
+
+def bradford_adaptation(white_in, white_out):
+    source, target = _BRADFORD @ _xyz_of_xy(_WHITES[white_in]), _BRADFORD @ _xyz_of_xy(_WHITES[white_out])
+    return np.linalg.inv(_BRADFORD) @ np.diag(target / source) @ _BRADFORD
+
+
+def _cs_expected(fn, fixture="C"):
+    """`fn` takes the (h, w, 3) stored colour of the 0..1 fixture and returns the converted colour; alpha is left alone."""
+    def expected(fx):
+        src = fx[fixture].astype(np.float64)
+        ref = src.copy()
+        ref[..., :3] = fn(src[..., :3])
+        return ref, np.ones(src.shape, bool)
+    return expected
+
+
+def _cs_case(case_id, nb_params, nuke_knobs, statement, fn, source="convention", note_source="", fixture="C"):
+    note = f"{statement} ({note_source})" if note_source else statement
+    return Case(case_id, "Colorspace", "Colorspace", tuple(nuke_knobs), (fixture,), "Colorspace", dict(nb_params), (fixture,), _cs_expected(fn, fixture), source, note)
+
+
+def _colorspace_cases():
+    out = []
+    out.append(_cs_case("colorspace_srgb_to_linear", {"transfer_in": "sRGB"}, (("colorspace_in", "sRGB"),),
+                        "input sRGB, output linear (primaries and illuminants equal): the sRGB curve is undone", _srgb_decode, note_source=_SRGB_SOURCE))
+    out.append(_cs_case("colorspace_linear_to_srgb", {"transfer_out": "sRGB"}, (("colorspace_out", "sRGB"),),
+                        "input linear, output sRGB: the sRGB curve is applied", _srgb_encode, note_source=_SRGB_SOURCE))
+    out.append(_cs_case("colorspace_gamma22", {"transfer_in": "Gamma 2.2"}, (("colorspace_in", "Gamma2.2"),),
+                        "input Gamma 2.2: a pure power, linear = v ** 2.2", lambda v: v ** 2.2,
+                        note_source="a gamma encoding is the plain power by definition; the Foundry Reference Guide gives no formula for Nuke's Gamma2.2 choice"))
+    out.append(_cs_case("colorspace_gamma24_out", {"transfer_out": "Gamma 2.4"}, (("colorspace_out", "Gamma2.4"),),
+                        "output Gamma 2.4: v ** (1 / 2.4)", lambda v: v ** (1 / 2.4),
+                        note_source="a gamma encoding is the plain power by definition; the Foundry Reference Guide gives no formula for Nuke's Gamma2.4 choice"))
+    out.append(_cs_case("colorspace_srgb_to_gamma22", {"transfer_in": "sRGB", "transfer_out": "Gamma 2.2"},
+                        (("colorspace_in", "sRGB"), ("colorspace_out", "Gamma2.2")),
+                        "sRGB to Gamma 2.2 goes through linear light: (sRGB curve undone) ** (1 / 2.2)", lambda v: _srgb_decode(v) ** (1 / 2.2), note_source=_SRGB_SOURCE))
+    out.append(_cs_case("colorspace_primaries_709_to_2020", {"primaries_out": "Rec.2020"}, (("primary_out", "Rec.2020"),),
+                        "'It can adjust for different primaries': linear Rec.709 primaries to linear Rec.2020 primaries (white D65 both ways)",
+                        lambda v: v @ _M709_TO_2020.T, note_source=_PRIMARIES_SOURCE))
+    out.append(_cs_case("colorspace_primaries_2020_to_709", {"primaries_in": "Rec.2020"}, (("primary_in", "Rec.2020"),),
+                        "linear Rec.2020 primaries to linear Rec.709 primaries", lambda v: v @ np.linalg.inv(_M709_TO_2020).T, note_source=_PRIMARIES_SOURCE))
+    out.append(_cs_case("colorspace_primaries_709_to_p3d65", {"primaries_out": "P3-D65"}, (("primary_out", "P3-D65"),),
+                        "linear Rec.709 primaries to linear P3-D65 primaries", lambda v: v @ _M709_TO_P3D65.T, note_source=_PRIMARIES_SOURCE))
+    out.append(_cs_case("colorspace_primaries_with_curves", {"transfer_in": "sRGB", "primaries_out": "Rec.2020", "transfer_out": "Gamma 2.4"},
+                        (("colorspace_in", "sRGB"), ("primary_out", "Rec.2020"), ("colorspace_out", "Gamma2.4")),
+                        "decode the input curve, convert the primaries on linear light, encode the output curve",
+                        lambda v: np.maximum(_srgb_decode(v) @ _M709_TO_2020.T, 0.0) ** (1 / 2.4), note_source=_SRGB_SOURCE + "; " + _PRIMARIES_SOURCE))
+
+    def same_xyz(fn_white_in, fn_white_out):
+        m_in, m_out = rgb_to_xyz_matrix("Rec.709", fn_white_in), rgb_to_xyz_matrix("Rec.709", fn_white_out)
+        return lambda v: v @ (np.linalg.inv(m_out) @ m_in).T
+    out.append(_cs_case("colorspace_illuminant_keeps_xyz", {"whitepoint_out": "D60"}, (("illuninant_out", "D60"),),
+                        "with Bradford matrix off, 'the input and output colors have the same CIE colorspace XYZ values': the RGB values change so the XYZ stays "
+                        "(Rec.709 primaries on a D65 white to the same primaries on a D60 white)", same_xyz("D65", "D60"), source="guide"))
+    out.append(_cs_case("colorspace_illuminant_keeps_xyz_dci", {"whitepoint_in": "DCI", "whitepoint_out": "D65"},
+                        (("illuninant_in", "DCI"), ("illuninant_out", "D65")), "the same rule with a DCI white as the input illuminant", same_xyz("DCI", "D65"), source="guide"))
+
+    def bradford(white_in, white_out):
+        m_in, m_out = rgb_to_xyz_matrix("Rec.709", white_in), rgb_to_xyz_matrix("Rec.709", white_out)
+        return lambda v: v @ (np.linalg.inv(m_out) @ bradford_adaptation(white_in, white_out) @ m_in).T
+    out.append(_cs_case("colorspace_bradford_adapts", {"whitepoint_out": "D60", "bradford_matrix": 1}, (("illuninant_out", "D60"), ("bradford_matrix", True)),
+                        "Bradford matrix on, with different illuminants: 'an illuminant adaptation transform. This alters colors so they appear the same' "
+                        "(the Bradford cone-response matrix, Lindbloom form)", bradford("D65", "D60"), note_source="the Bradford adaptation transform as published by B. Lindbloom and used in ICC profiles"))
+    out.append(_cs_case("colorspace_bradford_equal_illuminants", {"bradford_matrix": 1}, (("bradford_matrix", True),),
+                        "Bradford matrix on with equal illuminants changes nothing: 'if the illuminants are not the same, you can enable this'", lambda v: v, source="guide"))
+
+    def premultiplied_colour(fx):
+        src = fx["C"].astype(np.float64)
+        ref = src.copy()
+        ref[..., :3] = _srgb_decode(src[..., :3])
+        return ref, np.ones(src.shape, bool)
+    out.append(Case("colorspace_does_not_divide_by_alpha", "Colorspace", "Colorspace", (("colorspace_in", "sRGB"),), ("C",), "Colorspace",
+                    {"transfer_in": "sRGB"}, ("C",), premultiplied_colour, "guide",
+                    f"{_CS_GUIDE}: only '(un)premult by' divides the image by a channel 'before it is processed', so the stored colour is converted as it is, whatever the alpha"))
+    # The in/out choices the page lists and NodeBased has no equivalent for.
+    missing = (
+        ("colorspace_hsv", "HSV, HSL and the other hue-based spaces", (("colorspace_out", "HSV"),),
+         "the page lists HSV among the formats it converts to; NodeBased's Colorspace has no HSV, HSL or HSB choice (the hue tools Saturation, HSVTool and HueCorrect work in HSV internally)"),
+        ("colorspace_ycbcr", "YCbCr / YPbPr", (("colorspace_out", "YCbCr"),),
+         "the page lists YUV-type formats; NodeBased has no YCbCr, YPbPr or YUV choice"),
+        ("colorspace_cie", "CIE XYZ, Yxy, Lab and LCh", (("colorspace_out", "CIE-XYZ"),),
+         "the page lists CIE formats; NodeBased converts through XYZ internally but cannot output XYZ, Yxy, Lab or LCh"),
+        ("colorspace_cineon", "Cineon and the other log encodings", (("colorspace_in", "Cineon"),),
+         "Nuke's colorspace list holds Cineon, Panalog, REDLog, ViperLog, AlexaV3LogC and the vendor logs; NodeBased's Colorspace has linear, sRGB, Gamma 2.2 and Gamma 2.4 only (Log2Lin and PLogLin do Cineon separately)"),
+        ("colorspace_rec709_curve", "the Rec.709 camera curve", (("colorspace_in", "rec709"),),
+         "Nuke's rec709 input is ITU-R BT.709's camera transfer function, a different curve from sRGB's; NodeBased has no such choice"),
+        ("colorspace_other_illuminants", "the other illuminants (A, B, C, D50 and so on)", (("illuninant_out", "A"),),
+         "the page names illuminant A (a household tungsten bulb) and D65 as examples; NodeBased offers D65, D60 and DCI"),
+    )
+    for case_id, what, nuke_knobs, reason in missing:
+        out.append(Case(case_id, "Colorspace", "Colorspace", nuke_knobs, ("C",), "Colorspace", None, ("C",),
+                        lambda fx: (fx["C"].astype(np.float64), np.zeros(fx["C"].shape, bool)), "guide",
+                        f"{_CS_GUIDE}: conversion to or from {what}", inexpressible=reason))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
     global Case, _all_valid
     from nuke_fidelity_cases import Case, _all_valid
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
-            + _posterize_cases() + _log2lin_cases() + _ploglin_cases())
+            + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases())

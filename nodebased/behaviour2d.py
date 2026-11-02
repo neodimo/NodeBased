@@ -15,6 +15,9 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
                                       adjustment to the value.
     SoftClip      older_grey          1: "preserve hue and brightness" moves the colour toward the 0.2126 / 0.7152 / 0.0722 grey.
                                       Nuke's Rec 709 is 0.2125 / 0.7154 / 0.0721.
+    Colorspace    divide_by_alpha     1: divide the colour by alpha before converting and multiply it back after; Nuke converts the stored colour.
+                  bradford_matrix     1: adapt the colour between two illuminants with the Bradford matrix, as NodeBased always did. Nuke's knob is
+                                      off by default, which keeps the XYZ values equal and lets the RGB values change.
     Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
                                       (value - black) / (white - black) with gamma as the exponent.
     PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
@@ -34,6 +37,7 @@ NEW = {
     "SoftClip": {"older_grey": 0},
     "Log2Lin": {"older_log_maths": 0},
     "PLogLin": {"older_log_maths": 0},
+    "Colorspace": {"divide_by_alpha": 0, "bradford_matrix": 0},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -43,8 +47,9 @@ OLD = {
     "SoftClip": {"older_grey": 1},
     "Log2Lin": {"older_log_maths": 1},
     "PLogLin": {"older_log_maths": 1},
+    "Colorspace": {"divide_by_alpha": 1, "bradford_matrix": 1},
 }
-LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1)}
+LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1)}
 CHOICES = {"luminance_math": list(SATURATION_MATH)}
 
 

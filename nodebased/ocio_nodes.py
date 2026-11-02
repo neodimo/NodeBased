@@ -78,14 +78,19 @@ def _encode(rgb, transfer):
 
 
 def _colorspace(p, pixels):
+    """Nuke's Colorspace on the stored colour: decode the input curve, go through CIE XYZ between the two sets of primaries (each built on its own
+    illuminant, so the XYZ values stay the same), encode the output curve. `bradford_matrix` adds the Bradford illuminant adaptation when the two
+    illuminants differ; `divide_by_alpha` is the older behaviour of dividing the colour by alpha first and multiplying it back (Nuke's own
+    (un)premult by does the dividing when asked)."""
     src = np.asarray(pixels, dtype=np.float32)
     alpha = src[..., 3:4]
-    rgb = np.divide(src[..., :3], alpha, out=np.zeros_like(src[..., :3]), where=alpha != 0)
+    divide = bool(p.get("divide_by_alpha", 0))
+    rgb = np.divide(src[..., :3], alpha, out=np.zeros_like(src[..., :3]), where=alpha != 0) if divide else src[..., :3]
     try:
         a = _rgb_to_xyz(p["primaries_in"], p["whitepoint_in"])
         b = _rgb_to_xyz(p["primaries_out"], p["whitepoint_out"])
         xyz = _decode(rgb, p["transfer_in"]) @ a.T
-        if p["whitepoint_in"] != p["whitepoint_out"]:
+        if p["whitepoint_in"] != p["whitepoint_out"] and p.get("bradford_matrix", 0):
             source_white = _BRADFORD @ _xy_xyz(_WHITE[p["whitepoint_in"]])
             target_white = _BRADFORD @ _xy_xyz(_WHITE[p["whitepoint_out"]])
             adapt = np.linalg.inv(_BRADFORD) @ np.diag(target_white / source_white) @ _BRADFORD
@@ -94,7 +99,7 @@ def _colorspace(p, pixels):
     except (KeyError, ValueError, np.linalg.LinAlgError) as error:
         raise ValueError(f"Colorspace: invalid primaries, transfer or white point: {error}") from None
     out = src.copy()
-    out[..., :3] = converted * alpha
+    out[..., :3] = converted * alpha if divide else converted
     return out
 
 

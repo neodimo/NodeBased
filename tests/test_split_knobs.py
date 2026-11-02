@@ -676,8 +676,8 @@ LAYOUTS = {
         'Older log maths', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'Colorspace': [
-        'Channels', 'Transfer In', 'Whitepoint In', 'Primaries In', 'Transfer Out', 'Whitepoint Out', 'Primaries Out', 'Mask',
-        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Channels', 'Transfer In', 'Whitepoint In', 'Primaries In', 'Transfer Out', 'Whitepoint Out', 'Primaries Out',
+        'Bradford matrix', 'Divide by alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'ColorLookup': [
         'Channels', 'Use precomputed table', 'Range', 'Master', 'Red', 'Green', 'Blue', 'Alpha', 'Source', 'Target', 'Mask',

@@ -344,7 +344,7 @@ SPECS = {
     "OCIOFileTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"path": "", "transform_direction": "forward", "file_interpolation": "linear", "config": "", "mix": 1.0}},
     "OCIOLookTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0}},
     "OCIOLogConvert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"ocio_log_operation": "log to lin", "channels": "rgb", "config": "", "mix": 1.0}},
-    "Colorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"primaries_in": "Rec.709", "primaries_out": "Rec.709", "transfer_in": "Linear", "transfer_out": "Linear", "whitepoint_in": "D65", "whitepoint_out": "D65", "mix": 1.0}},
+    "Colorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"primaries_in": "Rec.709", "primaries_out": "Rec.709", "transfer_in": "Linear", "transfer_out": "Linear", "whitepoint_in": "D65", "whitepoint_out": "D65", "mix": 1.0, **_behaviour2d.new_params("Colorspace")}},
     "Tile": {"inputs": ["image"], "params": {"rows": 2, "columns": 2, "mirror_x": 0, "mirror_y": 0, "mix": 1.0}},
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0}},

@@ -28,3 +28,23 @@ class Legacy:
         mapped = lr * np.power(10.0, np.clip(delta, -30, 30))
         rgb[:] = np.where(rgb < 0, -lr * np.power(10.0, np.clip((np.abs(rgb) - cr) * d, -30, 30)) ** gamma, mapped)
         return x
+
+    @staticmethod
+    def _colorspace(image, p):
+        """ocio_nodes._colorspace as it was: divides by alpha, always adapts between two illuminants with Bradford."""
+        from nodebased.ocio_nodes import _BRADFORD, _WHITE, _decode, _encode, _rgb_to_xyz, _xy_xyz
+        src = np.asarray(image, dtype=np.float32)
+        alpha = src[..., 3:4]
+        rgb = np.divide(src[..., :3], alpha, out=np.zeros_like(src[..., :3]), where=alpha != 0)
+        a = _rgb_to_xyz(p["primaries_in"], p["whitepoint_in"])
+        b = _rgb_to_xyz(p["primaries_out"], p["whitepoint_out"])
+        xyz = _decode(rgb, p["transfer_in"]) @ a.T
+        if p["whitepoint_in"] != p["whitepoint_out"]:
+            source_white = _BRADFORD @ _xy_xyz(_WHITE[p["whitepoint_in"]])
+            target_white = _BRADFORD @ _xy_xyz(_WHITE[p["whitepoint_out"]])
+            adapt = np.linalg.inv(_BRADFORD) @ np.diag(target_white / source_white) @ _BRADFORD
+            xyz = xyz @ adapt.T
+        converted = _encode(xyz @ np.linalg.inv(b).T, p["transfer_out"])
+        out = src.copy()
+        out[..., :3] = converted * alpha
+        return out

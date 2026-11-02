@@ -50,15 +50,17 @@ class CaseTests(unittest.TestCase):
                 result = audit.run_case(case)
                 if case.unscored:
                     self.assertEqual(result["status"], "not scored")
+                elif case.inexpressible:
+                    self.assertEqual(result["status"], "inexpressible")
                 else:
                     self.assertEqual(result["status"], "pass", f"{case.id}: {result}")
 
     def test_every_scored_case_compares_pixels_the_node_changes(self):
         """A case whose valid mask is empty, or whose reference equals its input everywhere, would pass whatever the kernel does."""
         fx = fidelity.make_fixtures()
-        identity_by_design = {"log2lin_alpha_untouched"}
+        identity_by_design = {"log2lin_alpha_untouched", "colorspace_bradford_equal_illuminants"}
         for case in fidelity.CASES:
-            if case.nuke not in self.NODE_KEYS or case.unscored:
+            if case.nuke not in self.NODE_KEYS or case.unscored or case.inexpressible:
                 continue
             ref, valid = case.expected(fx)
             source = fx[case.nb_inputs[0]].astype(np.float64)
@@ -69,15 +71,15 @@ class CaseTests(unittest.TestCase):
 
     def test_unscored_cases_say_why(self):
         for case in fidelity.CASES:
-            if case.nuke in self.NODE_KEYS and case.unscored:
-                self.assertGreater(len(case.unscored), 30, case.id)
+            if case.nuke in self.NODE_KEYS and (case.unscored or case.inexpressible):
+                self.assertGreater(len(case.unscored or case.inexpressible), 30, case.id)
 
     def test_every_case_names_a_source(self):
         for case in fidelity.CASES:
             if case.nuke in self.NODE_KEYS:
                 self.assertIn(case.source, ("guide", "convention"), case.id)
                 if case.source == "convention":
-                    self.assertTrue(any(word in case.statement for word in ("Kodak", "McGaugh", "Foundry", "Reference Guide", "IEC", "ITU", "SMPTE", "SDK")), case.id)
+                    self.assertTrue(any(word in case.statement for word in ("Kodak", "McGaugh", "Foundry", "Reference Guide", "IEC", "ITU", "SMPTE", "SDK", "Lindbloom", "Wikipedia", "Natron", "Geremia")), case.id)
 
 
 class OlderDocumentTests(unittest.TestCase):
@@ -221,6 +223,71 @@ class PLogLinOlderDocumentTests(OlderDocumentTests):
         np.testing.assert_array_equal(colour[..., 3], src[..., 3])
         self.assertFalse(np.array_equal(everything[..., 3], src[..., 3]))
         np.testing.assert_array_equal(everything[..., :3], colour[..., :3])
+
+
+# ================================================================================================================ Colorspace
+OLD_KNOBS["Colorspace"] = ("divide_by_alpha", "bradford_matrix")
+_CS_BASE = {"transfer_in": "sRGB", "primaries_out": "Rec.2020", "whitepoint_out": "D60"}
+_CS_CHANGES = {
+    "channels": CHROME["channels"], "maskChannelInput": CHROME["maskChannelInput"], "invert_mask": CHROME["invert_mask"],
+    "fringe": CHROME["fringe"], "unpremult": CHROME["unpremult"], "mix": CHROME["mix"], "inject": {"inject": 1},
+    "invert_unpremult": ({"unpremult": "rgba.alpha"}, {"invert_unpremult": 1}),
+    "colorspace_in": {"transfer_in": "Gamma 2.2"}, "colorspace_out": {"transfer_out": "Gamma 2.4"},
+    "illuninant_in": {"whitepoint_in": "DCI"}, "illuninant_out": {"whitepoint_out": "DCI"},
+    "primary_in": {"primaries_in": "P3-D65"}, "primary_out": {"primaries_out": "P3-D65"},
+    "bradford_matrix": {"bradford_matrix": 1},
+}
+
+
+class ColorspaceKnobsActTests(KnobsActTests):
+    BASES = {"Colorspace": _CS_BASE}
+    CHANGES = {"Colorspace": _CS_CHANGES}
+
+    def test_every_paired_knob_acts(self):
+        self._check_kind("Colorspace")
+
+
+class ColorspaceTilesTests(TilesMatchTests):
+    TILE_PARAMS = {"Colorspace": [dict(_CS_BASE), {"transfer_out": "sRGB", "primaries_out": "P3-D65"},
+                                  {"transfer_in": "Gamma 2.4", "whitepoint_out": "DCI", "bradford_matrix": 1, "divide_by_alpha": 1}]}
+
+    def test_tiles_equal_the_whole_frame(self):
+        self._check("Colorspace")
+
+
+class ColorspaceOlderDocumentTests(OlderDocumentTests):
+    LEGACY = {"Colorspace": ("_colorspace", [dict(_CS_BASE), {"transfer_out": "sRGB", "primaries_out": "P3-D65", "mix": 0.5},
+                                              {"transfer_in": "Gamma 2.4", "whitepoint_out": "DCI"}, {}])}
+
+    def test_an_older_document_keeps_its_pixels(self):
+        self._check("Colorspace")
+
+    def test_a_new_node_converts_the_stored_colour_and_keeps_xyz(self):
+        params = SPECS["Colorspace"]["params"]
+        self.assertEqual((params["divide_by_alpha"], params["bradford_matrix"]), (0, 0))
+        src = fixture_image()
+        full = dict(params, transfer_in="sRGB")
+        converted = Evaluator._kernel("Colorspace", full, [src])
+        # the stored colour is converted wherever the alpha is: a pixel's result does not depend on its alpha
+        other = src.copy()
+        other[..., 3] = 0.25
+        np.testing.assert_array_equal(Evaluator._kernel("Colorspace", full, [other])[..., :3], converted[..., :3])
+
+    def test_bradford_only_matters_between_different_illuminants(self):
+        src = fixture_image()
+        same = dict(SPECS["Colorspace"]["params"], transfer_in="sRGB", bradford_matrix=1)
+        np.testing.assert_array_equal(Evaluator._kernel("Colorspace", same, [src]),
+                                      Evaluator._kernel("Colorspace", dict(same, bradford_matrix=0), [src]))
+        moved = dict(same, whitepoint_out="D60")
+        self.assertFalse(np.array_equal(Evaluator._kernel("Colorspace", moved, [src]),
+                                        Evaluator._kernel("Colorspace", dict(moved, bradford_matrix=0), [src])))
+
+    def test_the_choices_nodebased_lacks_are_listed_in_the_cases(self):
+        lacking = {c.id for c in fidelity.CASES if c.nuke == "Colorspace" and c.inexpressible}
+        self.assertEqual(lacking, {"colorspace_hsv", "colorspace_ycbcr", "colorspace_cie", "colorspace_cineon", "colorspace_rec709_curve",
+                                   "colorspace_other_illuminants"})
+        from nodebased.core import CHOICES
+        self.assertEqual(CHOICES["transfer_in"], ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"])
 
 
 if __name__ == "__main__":

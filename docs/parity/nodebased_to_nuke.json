@@ -1534,6 +1534,7 @@
     {"nodebased": ["transfer_out"], "nuke": ["colorspace_out"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `colorspace_out`"},
     {"nodebased": ["whitepoint_in"], "nuke": ["illuninant_in"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input', scripting name `illuninant_in`"},
     {"nodebased": ["whitepoint_out"], "nuke": ["illuninant_out"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `illuninant_out`"},
+    {"nodebased": ["bradford_matrix"], "nuke": ["bradford_matrix"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
@@ -1541,7 +1542,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["divide_by_alpha"], "kind": "extra", "reason": "NodeBased-only: the older behaviour of dividing the colour by its alpha before converting and multiplying it back; a new node converts the stored colour as Nuke does, and a graph saved before keeps this on"}
    ],
    "skip_default": ["primary_in", "primary_out", "colorspace_in", "colorspace_out"]
   },
