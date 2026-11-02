@@ -1,5 +1,27 @@
 ## 2026-11-02 - Lane 2 (2D behaviour), step C of 3: the keyers and channel nodes compute what Nuke computes
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:05 AM on 2026-11-02 PDT)
+
+`main` moved `b6a8835d` -> `59b98b2a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `59b98b2a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-0955.log`, started 9:55 AM): **Ran 8044 tests in 587.888 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step C of 3: the keyers and the channel nodes compute what Nuke computes.** Commits:
+  - `e0b1212c` notes: step C TASKLOG and state, PARITY_2D rows for HueKeyer, ChannelMerge and ChromaKeyer
+  - `18067814` Copy, ChannelMerge and Shuffle compute what Nuke computes: ChannelMerge has the guide's fourteen operations (union by default, multiply and divide stop two negatives turning positive, the older operation kept behind Older operations), 9 + 14 + 7 cases scored, knob, tile and older-document tests
+  - `ac733aff` ChromaKeyer, Difference, Keylight and the IBK pair: cases for what the pages state (Difference scored on identical inputs), the rest not scored with reasons, behaviour and knob tests for each, ChromaKeyer premultiplies by default as the page says
+  - `8a950ea7` Keyer cases pin the A, B, C, D trapezoid; HueKeyer keys from Nuke's amount and saturation threshold curves over hue (the old hue window stays behind Older hue window): 9 scored cases, 7 not scored with reasons
+  Diff: 19 files changed, 1785 insertions(+), 104 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-parity`. HueKeyer, ChannelMerge and ChromaKeyer's premultiply default changed behind `older_hue_window`, `older_channel_operations` and the stored
 value (nodebased/behaviour2d.py). Cases: tools/nuke_fidelity_cases_color.py. Tests: tests/test_2d_behaviour_keyer.py. Verified: the cases, every paired knob acts,
 tiles, older documents. Not verified: IBKGizmo's eight missing knobs (no page), IBKColor's darks/lights meaning, any real Nuke render.

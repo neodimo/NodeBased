@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step C of 3: the keyers and the channel nodes compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `b6a8835d` -> `59b98b2a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `59b98b2a`: Ran 8044 tests in 587.888 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02, 2D behaviour step C of 3 (Lane 2, Claude Sonnet 5.5): Keyer, HueKeyer, ChromaKeyer, Difference, ScreenKeyer, IBKColor, IBKGizmo, Copy, ChannelMerge, Shuffle
 
 - **What was done (evidence):** read the Nuke 17.0 pages of the ten nodes and the kernels on both paths; `tools/nuke_fidelity_cases_color.py` gains 88 cases
