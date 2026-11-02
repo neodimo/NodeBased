@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of 3: the log, colourspace and lookup nodes compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `b32de38b` -> `cc2bf235` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `cc2bf235`: Ran 7961 tests in 578.852 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02, 2D behaviour step B of 3 (Lane 2, Claude Sonnet 5.5), finished by Gonzo: CrossTalk, Expression, HistEQ, MinColor
 
 - **What happened:** the step B worker committed Log2Lin/PLogLin, Colorspace and ColorLookup, then crashed at 1:34 AM (its CLI output passed the 8 MiB limit) with CrossTalk, Expression, HistEQ and MinColor written but uncommitted. Its own targeted runs of those modules were green (`run/tests-L2b-ex4.log`, `tests-L2b-mc4.log`); it had just started a full run.

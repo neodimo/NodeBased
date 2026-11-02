@@ -1,5 +1,27 @@
 ## 2026-11-01 - Lane 9 (2D behaviour), step A of 3: the Filter nodes Blur to Emboss compute what the guide states
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:25 AM on 2026-11-02 PDT)
+
+`main` moved `b32de38b` -> `cc2bf235` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `cc2bf235` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-0907.log`, started 9:07 AM): **Ran 7961 tests in 578.852 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of 3: the log, colourspace and lookup nodes compute what Nuke computes.** Commits:
+  - `cdaf97a6` tests: ColorLookup's range test checks Nuke's mapping, and the old domain scaling under older_range_scaling
+  - `70cc0da8` CrossTalk, Expression, HistEQ and MinColor compute what Nuke computes: the crashed step B worker's last four nodes, MinColor's channels knob labelled Channels
+  - `fb3f4d5d` ColorLookup maps through its curves whatever Range holds, honours a wired mask, and its Set buttons add points: 11 cases, seven scored
+  - `a56903f7` Colorspace converts the stored colour and keeps XYZ between illuminants unless Bradford matrix is on: 20 cases, six choices NodeBased lacks listed
+  Diff: 21 files changed, 1755 insertions(+), 76 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:55 AM on 2026-11-02 PDT)
 
 `main` moved `51ffc5d1` -> `0f99ba86` (lane commits cherry-picked onto main in lane order) and then to this
