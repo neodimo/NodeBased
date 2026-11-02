@@ -137,6 +137,8 @@ def map_grade(p):
     (exposure and multiply scale premultiplied RGB, offset adds ``alpha * offset``); otherwise it is the ramp, gamma and
     clamps of ``gradeknobs`` (``mode`` 1). ``reverse`` has no kernel here: that Grade runs on the CPU. Alpha is untouched."""
     from . import gradeknobs
+    if gradeknobs.has_split(p):
+        raise Unsupported("Grade with per-channel (split) knobs has no GPU kernel yet")
     exposure, multiply, offset = p["exposure"], p["multiply"], p["offset"]
     mix = float(p.get("mix", 1.0))
     if gradeknobs.is_legacy(p):
@@ -167,9 +169,11 @@ class ColorCorrectPlan:
 
 def map_color_correct(p):
     """Pack the CPU ColorCorrect's small curve and pass program for WGSL."""
-    from .core import SPECS
+    from .core import SPECS, SPLITTABLE
     from . import colorcurves
     q = {**SPECS["ColorCorrect"]["params"], **p}
+    if any(isinstance(q.get(name), (list, tuple)) for name in SPLITTABLE.get("ColorCorrect", ())):
+        raise Unsupported("ColorCorrect with per-channel (split) knobs has no GPU kernel yet")
     # A large effective tone exponent amplifies float32 pow differences on
     # HDR/low-alpha pixels beyond the pixel gate. Keep those uncommon knob
     # combinations on the CPU until a higher-precision GPU path is available.

@@ -413,6 +413,10 @@ def inner_params(cfg, p):
             q["channels"] = "rgba"
         elif "channels" in q:
             q["channels"] = FILTER_CHROME[cfg.kind][0]
+        from .core import SPLITTABLE
+        if cfg.kind in SPLITTABLE:
+            # A kernel with per-channel (split) knobs grades alpha with its own entry only when alpha is among the selected channels.
+            q["_alpha_selected"] = bool(cfg.channel_set.rgba[3])
     return q
 
 

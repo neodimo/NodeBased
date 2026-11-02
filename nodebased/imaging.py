@@ -6005,25 +6005,34 @@ class Evaluator:
         return out
 
     @staticmethod
+    def _channel_value(p, name, default, c):
+        """Channel `c`'s value of a knob that may be split (r g b a): the one number, or that channel's entry."""
+        value = p.get(name, default)
+        if isinstance(value, (list, tuple)):
+            from .core import split_values
+            return split_values(p, name, 4)[c]
+        return value
+
+    @staticmethod
     def _channel_multiply(image, p):
         out = image.copy()
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
-            out[..., c] = image[..., c] * p.get("multiply", 1.0)
+            out[..., c] = image[..., c] * Evaluator._channel_value(p, "multiply", 1.0, c)
         return out
 
     @staticmethod
     def _channel_add(image, p):
         out = image.copy()
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
-            out[..., c] = image[..., c] + p.get("offset", 0.0)
+            out[..., c] = image[..., c] + Evaluator._channel_value(p, "offset", 0.0, c)
         return out
 
     @staticmethod
     def _channel_gamma(image, p):
         out = image.copy()
-        g = p.get("gamma", 1.0)
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
             v = image[..., c]
+            g = Evaluator._channel_value(p, "gamma", 1.0, c)
             # sign * |x|^(1/gamma), as ColorCorrect's gamma does: avoids raising a negative HDR
             # value to a fractional power.
             out[..., c] = np.sign(v) * np.abs(v) ** (1.0 / g)
@@ -8390,10 +8399,12 @@ class Evaluator:
         offset adds, contrast is the range's around its pivot (shadows 0.04, midtones 0.18, highlights
         0.65) then the master's around 0.18. Values at or below 0 skip contrast and gamma and are scaled
         by what 1 becomes through them. The three results are blended by the weights."""
-        from .core import SPECS
+        from .core import SPECS, SPLITTABLE
         from . import colorcurves
         q = {**SPECS["ColorCorrect"]["params"], **p}
         controls = ("saturation", "contrast", "gamma", "gain", "offset")
+        if any(isinstance(q.get(name), (list, tuple)) for name in SPLITTABLE.get("ColorCorrect", ())):
+            return Evaluator._color_correct_split(image, q)
         if all(float(q[name]) == (0.0 if name == "offset" else 1.0) for name in controls) and all(
                 float(q[f"{zone}_{name}"]) == (0.0 if name == "offset" else 1.0)
                 for zone in ("shadows", "midtones", "highlights") for name in controls):
@@ -8460,6 +8471,76 @@ class Evaluator:
                 break
             result += w * corrected
         return np.concatenate([result * alpha if divide else result, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _color_correct_split(image, q):
+        """ColorCorrect with per-channel knobs: the same arithmetic as `_color_correct`, with each channel's own entry of every
+        saturation, contrast, gamma, gain and offset (master and ranges). Alpha takes its entry (all but saturation, which needs a
+        colour) only when the node's channels include alpha (`_alpha_selected`, set by the chrome wrapper)."""
+        from .core import split_values
+        from . import colorcurves
+        controls = ("saturation", "contrast", "gamma", "gain", "offset")
+        count = 4 if q.get("_alpha_selected", False) else 3
+
+        def entries(name):
+            return split_values(q, name, 4)[:count]
+
+        alpha = image[..., 3:4]
+        divide = bool(q.get("divide_by_alpha", 0))
+        straight = (np.divide(image[..., :3], alpha, out=np.zeros_like(image[..., :3]), where=alpha > 1e-8)
+                    if divide else image[..., :3])
+        lum = 0.2125 * straight[..., 0:1] + 0.7154 * straight[..., 1:2] + 0.0721 * straight[..., 2:3]
+
+        def weight(curve_text):
+            curve = colorcurves.decode(curve_text)
+            xs = [point[0] for point in curve["points"]]
+            return colorcurves.evaluate_array(curve, np.clip(np.asarray(lum, dtype=np.float64), xs[0], xs[-1]))
+
+        shadows, highlights = weight(q["shadows_curve"]), weight(q["highlights_curve"])
+        weights = {"shadows": shadows, "midtones": 1.0 - shadows - highlights, "highlights": highlights}
+        pivots = {"shadows": 0.04, "midtones": 0.18, "highlights": 0.65}
+        master = {name: entries(name) for name in controls}
+        channels = straight if count == 3 else np.concatenate([straight, alpha], axis=2)
+        passes = {}
+        for zone, w in weights.items():
+            knob = {name: entries(f"{zone}_{name}") for name in controls}
+            pivot = pivots[zone] if np.any(knob["contrast"] != 1.0) else None
+            key = (tuple(tuple(knob[name].tolist()) for name in controls), pivot)
+            passes[key] = (passes[key][0], passes[key][1] + w) if key in passes else (knob, w)
+        result = np.zeros_like(channels)
+        for (_signature, pivot), (knob, w) in passes.items():
+            saturation = (knob["saturation"] * master["saturation"]).astype(np.float32)
+            saturation[3:] = 1.0                       # alpha has no colour to desaturate
+            gamma = np.maximum(knob["gamma"] * master["gamma"], np.float32(1e-6)).astype(np.float32)
+            gain = (knob["gain"] * master["gain"]).astype(np.float32)
+            offset = (knob["offset"] + master["offset"]).astype(np.float32)
+            c_zone, c_master = knob["contrast"], master["contrast"]
+            zone_on, master_on, gamma_on = c_zone != 1.0, c_master != 1.0, gamma != 1.0
+
+            def tone(x):
+                if pivot is not None:
+                    x = np.where(zone_on, (x / np.float32(pivot)) ** c_zone * np.float32(pivot), x)
+                if master_on.any():
+                    x = np.where(master_on, (x / np.float32(0.18)) ** c_master * np.float32(0.18), x)
+                if gamma_on.any():
+                    x = np.where(gamma_on, x ** (np.float32(1.0) / gamma), x)
+                return x
+
+            x = channels
+            if np.any(saturation[:3] != 1.0):
+                x = channels.copy()
+                x[..., :3] = lum + saturation[:3] * (straight - lum)
+            unit = tone(np.ones(count, np.float32))
+            positive = x > 0.0
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                x = np.where(positive, tone(np.where(positive, x, np.float32(1.0))), x * unit)
+            corrected = x * gain + offset if (np.any(gain != 1.0) or np.any(offset != 0.0)) else x
+            if len(passes) == 1:
+                result = corrected
+                break
+            result = result + w * corrected
+        rgb = result[..., :3] * alpha if divide else result[..., :3]
+        return np.concatenate([rgb, result[..., 3:4] if count == 4 else alpha], axis=2).astype(np.float32)
 
     @staticmethod
     def _log2lin(image, p):

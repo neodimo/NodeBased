@@ -144,17 +144,17 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("size",))),
     "Grade": _groups(
         KnobGroup("float_slider", ("exposure",), soft_range=(-10, 10)),
-        KnobGroup("float_slider", ("multiply",), soft_range=(-4, 4)),
-        KnobGroup("float_slider", ("offset",), soft_range=(-10, 10)),
-        KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1),
+        KnobGroup("split", ("multiply",), soft_range=(-4, 4), channels="rgba"),
+        KnobGroup("split", ("offset",), soft_range=(-10, 10), channels="rgba"),
+        KnobGroup("split", ("blackpoint",), label="Black point", soft_range=(-1, 1), channels="rgba",
                   help="The input value that becomes the lift: pixels of this value are set to the black (lift) level.", section="Levels"),
-        KnobGroup("float_slider", ("whitepoint",), label="White point", soft_range=(0, 4),
+        KnobGroup("split", ("whitepoint",), label="White point", soft_range=(0, 4), channels="rgba",
                   help="The input value that becomes the gain: pixels of this value are set to the white (gain) level."),
-        KnobGroup("float_slider", ("black",), label="Lift", soft_range=(-1, 1),
+        KnobGroup("split", ("black",), label="Lift", soft_range=(-1, 1), channels="rgba",
                   help="The level that pixels at the black point are set to."),
-        KnobGroup("float_slider", ("white",), label="Gain", soft_range=(0, 4),
+        KnobGroup("split", ("white",), label="Gain", soft_range=(0, 4), channels="rgba",
                   help="The level that pixels at the white point are set to."),
-        KnobGroup("float_slider", ("gamma",), label="Gamma", soft_range=(0.1, 4),
+        KnobGroup("split", ("gamma",), label="Gamma", soft_range=(0.1, 4), channels="rgba",
                   help="A constant gamma applied after the ramp: above 1 lightens the midtones."),
         KnobGroup("bool", ("reverse",), label="Reverse",
                   help="Undo this grade further downstream: the opposite gamma, then the opposite ramp."),
@@ -166,8 +166,8 @@ KNOB_LAYOUT = {
     # Laid out like Nuke's: a section per range, each with the same five sliders, then the Ranges
     # lookup curves (Nuke keeps those on a second tab), then mix.
     "ColorCorrect": _groups(
-        *[KnobGroup("float_slider", (f"{prefix}{name}",), label=name.title(), soft_range=soft,
-                    section=section)
+        *[KnobGroup("split", (f"{prefix}{name}",), label=name.title(), soft_range=soft,
+                    section=section, channels="rgba")
           for prefix, section in (("", "Master"), ("shadows_", "Shadows"), ("midtones_", "Midtones"),
                                   ("highlights_", "Highlights"))
           for name, soft in (("saturation", (0, 4)), ("contrast", (0, 4)), ("gamma", (0.2, 5)),
@@ -201,13 +201,13 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("MaxClampTo_enable",), label="Replace maximum"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Multiply": _groups(
-        KnobGroup("float_slider", ("multiply",), soft_range=(-4, 4)),
+        KnobGroup("split", ("multiply",), soft_range=(-4, 4), channels="rgba"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Add": _groups(
-        KnobGroup("float_slider", ("offset",), soft_range=(-10, 10)),
+        KnobGroup("split", ("offset",), soft_range=(-10, 10), channels="rgba"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Gamma": _groups(
-        KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
+        KnobGroup("split", ("gamma",), soft_range=(0.1, 4), channels="rgba"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Saturation": _groups(
         KnobGroup("float_slider", ("saturation",), soft_range=(0, 4)),

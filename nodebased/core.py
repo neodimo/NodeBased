@@ -80,7 +80,14 @@ SCHEMA_VERSION = 29
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
 SPLIT_CHANNELS = {"rgba": ("r", "g", "b", "a"), "wh": ("w", "h")}
-SPLITTABLE: dict[str, dict[str, str]] = {}      # node kind -> {param name: split set}
+SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: split set}
+    # Nuke's AColor knobs on the colour nodes (docs/PARITY_2D.md). A kernel reads one through split_values, and each is laid out
+    # as a KnobGroup("split", ...) in nodebased/knobs.py; tests/test_split_knobs.py checks the two lists agree.
+    "Grade": {name: "rgba" for name in ("blackpoint", "whitepoint", "black", "white", "multiply", "offset", "gamma")},
+    "ColorCorrect": {f"{prefix}{name}": "rgba" for prefix in ("", "shadows_", "midtones_", "highlights_")
+                     for name in ("saturation", "contrast", "gamma", "gain", "offset")},
+    "Multiply": {"multiply": "rgba"}, "Add": {"offset": "rgba"}, "Gamma": {"gamma": "rgba"},
+}
 
 
 def split_count(kind, name):

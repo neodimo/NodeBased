@@ -30,6 +30,8 @@ NEW = {"blackpoint": 0.0, "whitepoint": 1.0, "black": 0.0, "white": 1.0, "gamma"
        "white_clamp": 0, "offset_by_alpha": 0}
 OLD = dict(NEW, black_clamp=0, offset_by_alpha=1)
 KINDS = ("Grade",)
+# The knobs that hold one value per channel (an AColor knob in Nuke): a list is r, g, b, a. See core.SPLITTABLE.
+SPLIT_NAMES = ("blackpoint", "whitepoint", "black", "white", "multiply", "offset", "gamma")
 SPAN_FLOOR = 1e-12            # a whitepoint equal to the blackpoint would divide by zero: the span is held at this size
 
 
@@ -46,9 +48,16 @@ def _get(p, name):
     return p.get(name, OLD.get(name, 0.0))
 
 
+def has_split(p):
+    """True when any of the node's knobs holds a per-channel list."""
+    return any(isinstance(p.get(name), (list, tuple)) for name in SPLIT_NAMES)
+
+
 def is_legacy(p):
     """True when every step-E knob is at the value that leaves the node's old arithmetic untouched (the old path then runs
-    byte for byte)."""
+    byte for byte). A node with a split knob never is."""
+    if has_split(p):
+        return False
     return (float(_get(p, "blackpoint")) == 0.0 and float(_get(p, "whitepoint")) == 1.0
             and float(_get(p, "black")) == 0.0 and float(_get(p, "white")) == 1.0
             and float(_get(p, "gamma")) == 1.0 and not _get(p, "reverse")
@@ -105,9 +114,60 @@ def grade_rgb(rgb, alpha, p):
     return out.astype(np.float32)
 
 
+def channel_terms(p, n):
+    """The per-channel form of `terms`: float64 arrays `(slope, shift, alpha_offset, gamma)` of length `n` (3 for r g b, 4 with
+    alpha), each channel read from its own entry of a split knob (or the one number every channel shares)."""
+    from .core import split_values
+
+    def value(name):
+        return split_values(p, name, 4, default=OLD.get(name, 0.0))[:n].astype(np.float64)
+
+    span = value("whitepoint") - value("blackpoint")
+    span = np.where(np.abs(span) < SPAN_FLOOR, np.where(span >= 0, SPAN_FLOOR, -SPAN_FLOOR), span)
+    slope = (2.0 ** float(p.get("exposure", 0.0))) * value("multiply") * (value("white") - value("black")) / span
+    offset = value("offset")
+    follows = bool(_get(p, "offset_by_alpha"))
+    shift = (np.zeros(n) if follows else offset) + value("black") - slope * value("blackpoint")
+    return slope, shift, (offset if follows else np.zeros(n)), value("gamma")
+
+
+def grade_channels(x, alpha, p):
+    """Grade on an (h, w, n) array, n = 3 (r g b) or 4 (r g b a), with each channel's own entry of every split knob. `alpha`
+    is the (h, w, 1) alpha that an alpha-following offset is scaled by. Returns float32."""
+    n = x.shape[-1]
+    slope, shift, follow, gamma = channel_terms(p, n)
+    slope32, shift32 = slope.astype(np.float32), shift.astype(np.float32)
+    follow32 = follow.astype(np.float32)
+    gamma32, inverse32 = gamma.astype(np.float32), (1.0 / gamma).astype(np.float32)
+    flat = np.abs(slope) < SPAN_FLOOR
+    if _get(p, "reverse"):
+        y = x.astype(np.float32)
+        y = np.where(y > 0, np.power(np.maximum(y, 0), gamma32), y).astype(np.float32)
+        if np.any(follow != 0.0):
+            y = y - alpha * follow32
+        safe = np.where(flat, np.float32(1.0), slope32)
+        out = np.where(flat, y, ((y - shift32) / safe)).astype(np.float32)     # a flat ramp cannot be undone: the channel stays
+    else:
+        out = x * slope32 + shift32
+        if np.any(follow != 0.0):
+            out = out + alpha * follow32
+        out = np.where(out > 0, np.power(np.maximum(out, 0), inverse32), out)
+    if _get(p, "black_clamp"):
+        out = np.maximum(out, np.float32(0.0))
+    if _get(p, "white_clamp"):
+        out = np.minimum(out, np.float32(1.0))
+    return out.astype(np.float32)
+
+
 def grade(image, p):
-    """Grade on an (h, w, 4) float array: colour graded, alpha kept."""
+    """Grade on an (h, w, 4) float array: colour graded, alpha kept, or graded with its own entries when a split knob is set and
+    the node's channels include alpha (the chrome wrapper passes that as `_alpha_selected`)."""
     out = np.empty_like(image, dtype=np.float32)
+    if has_split(p):
+        count = 4 if p.get("_alpha_selected", False) else 3
+        out[...] = image
+        out[..., :count] = grade_channels(image[..., :count], image[..., 3:4], p)
+        return out
     out[..., :3] = grade_rgb(image[..., :3], image[..., 3:4], p)
     out[..., 3] = image[..., 3]
     return out
