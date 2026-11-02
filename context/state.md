@@ -1,5 +1,24 @@
 ## 2026-11-02, 2D behaviour step S (Lane 2): per-channel knobs and Nuke's layout
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:25 AM on 2026-11-02 PDT)
+
+`main` moved `aabf15e3` -> `e7b07b5a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e7b07b5a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-0115.log`, started 1:15 AM): **Ran 7823 tests in 582.990 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step B of 3: the log, colourspace and lookup nodes compute what Nuke computes.** Commits:
+  - `9728af37` Log2Lin and PLogLin compute what Nuke computes: Cineon conversion on a value over 1023 with Ignore black, Josh Pines' formula with an Operation knob and alpha under channels all
+  Diff: 13 files changed, 522 insertions(+), 42 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:05 AM on 2026-11-02 PDT)
 
 `main` moved `aa6820f3` -> `1f79a8c1` (lane commits cherry-picked onto main in lane order) and then to this

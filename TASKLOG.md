@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step B of 3: the log, colourspace and lookup nodes compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `aabf15e3` -> `e7b07b5a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `e7b07b5a`: Ran 7823 tests in 582.990 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S of 4: per-channel knob splitting and Nuke's knob layout for the colour nodes (integrator tick)
 
 - **What was done:** `main` `aa6820f3` -> `1f79a8c1` plus this docs commit. Evidence and per-lane commit
