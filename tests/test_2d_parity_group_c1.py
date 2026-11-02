@@ -224,8 +224,8 @@ class BypassTests(unittest.TestCase):
     def visible_params(self, kind):
         return {"Erode": dict(erode_size=4.0), "Dilate": dict(dilate_size=4.0),
                # A checker cell is 8px; the median window must exceed that to disturb a cell's
-               # interior, so this needs a bigger radius than Erode/Dilate need to visibly differ.
-               "Median": dict(median_size=9.0), "Sharpen": dict(sharpen_amount=3.0, sharpen_size=4.0),
+               # interior, so this needs a bigger size than Erode/Dilate need to visibly differ (size is the window width, so 17 reaches 8 pixels).
+               "Median": dict(median_size=17.0), "Sharpen": dict(sharpen_amount=3.0, sharpen_size=4.0),
                "Glow": dict(glow_threshold=-1.0, brightness=2.0), "Mirror": dict(flip_x=1)}[kind]
 
     def test_bypassed_kind_equals_its_input_on_both_paths(self):

@@ -1432,8 +1432,10 @@ class TileExecutor:
             elif kind == "Sharpen":
                 filtered = imaging.Evaluator._sharpen(image, params, (image_artifact.region.x, image_artifact.region.y))
             elif kind in ("Matrix", "Laplacian"):
-                filtered = imaging.Evaluator._matrix(image, params, laplacian=kind == "Laplacian")
-            elif kind == "EdgeDetect": filtered = imaging.Evaluator._edge_detect(image, params)
+                filtered = imaging.Evaluator._matrix(image, params, laplacian=kind == "Laplacian",
+                                                     origin=(image_artifact.region.x, image_artifact.region.y))
+            elif kind == "EdgeDetect":
+                filtered = imaging.Evaluator._edge_detect(image, params, (image_artifact.region.x, image_artifact.region.y))
             elif kind == "Emboss": filtered = imaging.Evaluator._emboss(image, params)
             elif kind == "BumpBoss": filtered = imaging.Evaluator._bump_boss(image, params)
             elif kind == "ErodeFilter": filtered = imaging.Evaluator._erode_filter(image, params)

@@ -14,7 +14,7 @@ Per node, five components, each a fraction from 0 to 1:
 | defaults | 10 | Of the paired knobs whose Nuke default the guide states and whose NodeBased default is comparable, the fraction that agree. |
 | sockets | 10 | The Nuke node's input sockets (mask included, A/B and numbered inputs as listed) that a NodeBased input is paired with. |
 | chrome | 15 | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |
-| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). Only nodes with such cases have this component. |
+| math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form where the page names the knobs but states no formula (Grade, Exposure; marked *convention*). Only nodes with such cases have this component. |
 | pixels | 30 | Pixel truth against real Nuke renders. **Not measured yet**: it joins the formula once `--reference-dir` has renders; until then it is not in any number here. |
 
 `fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. A Nuke node with no NodeBased counterpart scores 0. A node whose guide page lists no inputs or knobs cannot be measured and is left out (listed at the end).
@@ -31,15 +31,13 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Draw | 83.1 | 62.3 | 17 |
 | Time | 96.1 | 78.2 | 13 |
 | Channel | 98.4 | 97.2 | 5 |
-| Color | 93.8 | 77.2 | 34 |
-| Filter | 89.1 | 67.6 | 32 |
+| Color | 92.8 | 75.2 | 34 |
+| Filter | 90.2 | 71.6 | 32 |
 | Keyer | 87.3 | 64.6 | 11 |
 | Merge | 99.4 | 98.7 | 12 |
 | Transform | 88.1 | 71.2 | 20 |
 | Metadata | 99.4 | 98.9 | 5 |
 | Other | 80.3 | 43.0 | 12 |
-
-Behaviour checked: 20 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); the rest are scored on their knobs, defaults, sockets and chrome alone.
 
 ## Per node
 
@@ -113,17 +111,17 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Grade | `Grade` | supported | 100.0 | 100 (10/10) | 100 | 100 | 100 | 100 (6/6) | unmeasured |
-| 2 | ColorCorrect | `ColorCorrect` | supported | 96.5 | 91 (21/23) | 100 | 100 | 100 | 100 (20/20) | unmeasured |
+| 2 | ColorCorrect | `ColorCorrect` | supported | 95.4 | 91 (21/23) | 100 | 100 | 100 | - | no fixture |
 | 3 | Invert | `Invert` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | unmeasured |
-| 4 | Saturation | `Saturation` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | 100 (13/13) | unmeasured |
+| 4 | Saturation | `Saturation` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
 | 5 | Multiply | `Multiply` | supported | 98.8 | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | unmeasured |
 | 6 | Add | `Add` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | unmeasured |
 | 7 | Gamma | `Gamma` | supported | 98.9 | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | unmeasured |
 | 8 | Clamp | `Clamp` | supported | 99.4 | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | unmeasured |
-| 9 | HueCorrect | `HueCorrect` | supported | 80.0 | 50 (1/2) | 100 | 100 | 100 | 100 (15/15) | unmeasured |
+| 9 | HueCorrect | `HueCorrect` | supported | 73.3 | 50 (1/2) | 100 | 100 | 100 | - | no fixture |
 | 10 | ColorLookup | `ColorLookup` | supported | 100.0 | 100 (8/8) | 100 | 100 | 100 | - | no fixture |
 | 11 | Exposure | `Exposure` | supported | 93.6 | 86 (6/7) | 93 | 100 | 100 | 100 (2/2) | unmeasured |
-| 12 | HSVTool | `HSVTool` | partial | 80.8 | 59 (14/25) | 100 | 100 | - | 100 (11/11) | unmeasured |
+| 12 | HSVTool | `HSVTool` | partial | 72.8 | 59 (14/25) | 100 | 100 | - | - | no fixture |
 | 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | unmeasured |
 | 14 | Colorspace | `Colorspace` | supported | 82.2 | 67 (6/9) | 100 | 100 | 100 | - | no fixture |
 | 14 | OCIOColorspace | `OCIOColorspace` | supported | 61.9 | 29 (2/11) | 100 | 100 | 100 | - | no fixture |
@@ -131,15 +129,15 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 88.1 | 80 (3/4) | 91 | 100 | 100 | - | no fixture |
 | 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
 | 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 68.0 | 40 (4/14) | 100 | 100 | 100 | - | no fixture |
-| 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | unmeasured |
-| 15 | PLogLin | `PLogLin` | supported | 96.7 | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | unmeasured |
+| 15 | Log2Lin | `Log2Lin` | supported | 88.2 | 80 (4/5) | 92 | 100 | 100 | - | no fixture |
+| 15 | PLogLin | `PLogLin` | supported | 83.8 | 80 (4/5) | 92 | 67 | 100 | - | no fixture |
 | 16 | ColorTransfer | - | supported | 0.0 | 0 (0/1) | - | 0 | - | - | no fixture |
 | 16 | MatchGrade | `MatchGrade` | supported | 26.0 | 8 (3/33) | - | 100 | - | - | no fixture |
 | 17 | Expression | `Expression` | supported | 60.0 | 25 (4/16) | 100 | 100 | 100 | - | no fixture |
 | 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | - | no fixture |
-| 19 | Posterize | `Posterize` | supported | 98.5 | 100 (1/1) | 89 | 100 | 100 | - | unmeasured |
-| 19 | SoftClip | `SoftClip` | supported | 100.0 | 100 (3/3) | 100 | 100 | - | 100 (5/5) | unmeasured |
-| 19 | Toe | `Toe` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | unmeasured |
+| 19 | Posterize | `Posterize` | supported | 98.5 | 100 (1/1) | 89 | 100 | 100 | - | no fixture |
+| 19 | SoftClip | `SoftClip` | supported | 100.0 | 100 (3/3) | 100 | 100 | - | - | no fixture |
+| 19 | Toe | `Toe` | supported | 71.7 | 50 (1/2) | 88 | 100 | 100 | - | no fixture |
 | 20 | HistEQ | `HistEQ` | supported | 76.9 | 100 (1/1) | - | 100 | 0 | - | no fixture |
 | 20 | Histogram | `Histogram` | supported | 65.1 | 67 (2/3) | 100 | 100 | 14 | - | no fixture |
 | 20 | MinColor | `MinColor` | supported | 15.4 | 0 (0/4) | - | 100 | 0 | - | no fixture |
@@ -151,19 +149,19 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | knobs | defaults | sockets | chrome | math | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Blur | `Blur` | supported | 98.7 | 100 (4/4) | 90 | 100 | 100 | - | no fixture |
-| 2 | Sharpen | `Sharpen` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | no fixture |
-| 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | - | no fixture |
-| 4 | Median | `Median` | supported | 98.3 | 100 (2/2) | 88 | 100 | 100 | - | no fixture |
-| 5 | Glow | `Glow` | supported | 98.4 | 100 (11/11) | 88 | 100 | 100 | - | no fixture |
-| 6 | Soften | `Soften` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | no fixture |
+| 1 | Blur | `Blur` | supported | 99.0 | 100 (4/4) | 90 | 100 | 100 | 100 (4/4) | unmeasured |
+| 2 | Sharpen | `Sharpen` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | unmeasured |
+| 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | - | unmeasured |
+| 4 | Median | `Median` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | unmeasured |
+| 5 | Glow | `Glow` | supported | 98.8 | 100 (11/11) | 88 | 100 | 100 | 100 (4/4) | unmeasured |
+| 6 | Soften | `Soften` | supported | 97.9 | 100 (7/7) | 85 | 100 | 100 | - | unmeasured |
 | 7 | DropShadow | `DropShadow` | supported | 92.6 | 100 (9/9) | 56 | 100 | - | - | no fixture |
 | 8 | Defocus | `Defocus` | supported | 66.3 | 40 (2/5) | 88 | 100 | 100 | - | no fixture |
 | 8 | ZDefocus | `ZDefocus` | supported | 56.5 | 27 (8/36) | 64 | 100 | 100 | - | no fixture |
 | 9 | DirBlur | `DirBlur` | supported | 94.7 | 100 (12/12) | 60 | 100 | 100 | - | no fixture |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 55.2 | 22 (2/9) | 75 | 100 | 100 | - | no fixture |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 40.0 | 0 (0/6) | 100 | 50 | 100 | - | no fixture |
-| 11 | Erode (fast) | `Erode` | supported | 98.1 | 100 (1/1) | 86 | 100 | 100 | - | no fixture |
+| 11 | Erode (fast) | `Erode` | supported | 100.0 | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | unmeasured |
 | 12 | DegrainSimple | `DegrainSimple` | supported | 95.6 | 100 (3/3) | 67 | 100 | 100 | - | no fixture |
 | 12 | Denoise | `Denoise` | supported | 18.1 | 6 (2/37) | 50 | 33 | - | - | no fixture |
 | 13 | MotionBlur | `MotionBlur` | supported | 26.4 | 33 (2/6) | 0 | 25 | - | - | no fixture |
@@ -171,12 +169,12 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 13 | MotionBlur3D | `MotionBlur3D` | supported | 55.6 | 50 (3/6) | 33 | 100 | - | - | no fixture |
 | 13 | VectorBlur | `VectorBlur` | supported | 57.9 | 29 (4/15) | 67 | 100 | 100 | - | no fixture |
 | 14 | Bilateral | `Bilateral` | supported | 61.9 | 40 (2/5) | 88 | 67 | 100 | - | no fixture |
-| 15 | Convolve | `Convolve` | supported | 46.7 | 0 (0/4) | 100 | 100 | 100 | - | no fixture |
-| 15 | Matrix | `Matrix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | - | no fixture |
+| 15 | Convolve | `Convolve` | supported | 100.0 | 100 (4/4) | 100 | 100 | 100 | - | unmeasured |
+| 15 | Matrix | `Matrix` | supported | 100.0 | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | unmeasured |
 | 16 | BumpBoss | `BumpBoss` | supported | 42.2 | 0 (0/6) | 100 | 67 | 100 | - | no fixture |
-| 16 | EdgeDetect | `EdgeDetect` | supported | 66.1 | 36 (2/7) | 100 | 100 | 100 | - | no fixture |
-| 16 | Emboss | `Emboss` | supported | 54.5 | 18 (2/13) | 86 | 100 | 100 | - | no fixture |
-| 16 | Laplacian | `Laplacian` | supported | 44.4 | 0 (0/4) | 83 | 100 | 100 | - | no fixture |
+| 16 | EdgeDetect | `EdgeDetect` | supported | 80.6 | 64 (5/7) | 100 | 100 | 100 | - | unmeasured |
+| 16 | Emboss | `Emboss` | supported | 54.5 | 18 (2/13) | 86 | 100 | 100 | - | unmeasured |
+| 16 | Laplacian | `Laplacian` | supported | 100.0 | 100 (4/4) | 100 | 100 | 100 | 100 (2/2) | unmeasured |
 | 17 | Inpaint | `Inpaint` | supported | 98.8 | 100 (11/11) | 91 | 100 | 100 | - | no fixture |
 | 18 | GodRays | `GodRays` | supported | 37.1 | 30 (3/10) | 33 | 100 | 17 | - | no fixture |
 | 18 | LevelSet | `LevelSet` | supported | 100.0 | 100 (8/8) | 100 | 100 | - | - | no fixture |
@@ -370,96 +368,40 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `grade_reverse` | convention | pass | within tolerance | - |
 | `exposure_stops` | convention | pass | within tolerance | - |
 | `exposure_stops_blackpoint` | convention | pass | within tolerance | - |
-| `cc_master_chain` | convention | pass | within tolerance | - |
-| `cc_gamma_true_power` | convention | pass | within tolerance | - |
-| `cc_saturation_zero` | convention | pass | within tolerance | - |
-| `cc_saturation_two` | convention | pass | within tolerance | - |
-| `cc_master_contrast_pivot` | convention | pass | within tolerance | - |
-| `cc_shadows_contrast_pivot` | convention | pass | within tolerance | - |
-| `cc_midtones_contrast_pivot` | convention | pass | within tolerance | - |
-| `cc_highlights_contrast_pivot` | convention | pass | within tolerance | - |
-| `cc_shadows_offset` | convention | pass | within tolerance | - |
-| `cc_midtones_offset` | convention | pass | within tolerance | - |
-| `cc_highlights_offset` | convention | pass | within tolerance | - |
-| `cc_shadows_saturation_gamma_gain` | convention | pass | within tolerance | - |
-| `cc_midtones_saturation_gamma_gain` | convention | pass | within tolerance | - |
-| `cc_highlights_saturation_gamma_gain` | convention | pass | within tolerance | - |
-| `cc_ranges_sum_to_one` | guide | pass | within tolerance | - |
-| `cc_master_woven_into_ranges` | convention | pass | within tolerance | - |
-| `cc_everything` | convention | pass | within tolerance | - |
-| `cc_stored_colour_not_straight` | guide | pass | within tolerance | - |
-| `cc_mix_half` | guide | pass | within tolerance | - |
-| `cc_mask` | guide | pass | within tolerance | - |
-| `saturation_rec709_zero` | convention | pass | within tolerance | - |
-| `saturation_rec709_half` | convention | pass | within tolerance | - |
-| `saturation_ccir601_zero` | convention | pass | within tolerance | - |
-| `saturation_ccir601_half` | convention | pass | within tolerance | - |
-| `saturation_average_zero` | convention | pass | within tolerance | - |
-| `saturation_average_half` | convention | pass | within tolerance | - |
-| `saturation_maximum_zero` | convention | pass | within tolerance | - |
-| `saturation_maximum_half` | convention | pass | within tolerance | - |
-| `saturation_rec709_boost` | convention | pass | within tolerance | - |
-| `saturation_rec709_negative` | convention | pass | within tolerance | - |
-| `saturation_default_is_identity` | guide | pass | within tolerance | - |
-| `saturation_mix_half` | guide | pass | within tolerance | - |
-| `saturation_mask` | guide | pass | within tolerance | - |
-| `huecorrect_defaults` | guide | pass | within tolerance | - |
-| `huecorrect_sat_0` | convention | pass | within tolerance | - |
-| `huecorrect_sat_0.5` | convention | pass | within tolerance | - |
-| `huecorrect_sat_2` | convention | pass | within tolerance | - |
-| `huecorrect_lum_2` | convention | pass | within tolerance | - |
-| `huecorrect_red_gain` | convention | pass | within tolerance | - |
-| `huecorrect_green_gain` | convention | pass | within tolerance | - |
-| `huecorrect_blue_gain` | convention | pass | within tolerance | - |
-| `huecorrect_r_sup_0` | convention | pass | within tolerance | - |
-| `huecorrect_g_sup_0` | convention | pass | within tolerance | - |
-| `huecorrect_b_sup_0.5` | convention | pass | within tolerance | - |
-| `huecorrect_g_sup_0.25` | convention | pass | within tolerance | - |
-| `huecorrect_red_gain_around_red` | convention | pass | within tolerance | - |
-| `huecorrect_g_sup_around_green` | convention | pass | within tolerance | - |
-| `huecorrect_mix_half_masked` | guide | pass | within tolerance | - |
-| `huecorrect_sat_thrsh` | convention | not scored: the only published measurements are two points (threshold 0.5: a red gain of 2 became 1.4 at saturation 0.5 and 1.64 at saturation 0.83), which do not fix the fade's shape | - | - |
-| `hsv_defaults_leave_colour` | convention | pass | within tolerance | - |
-| `hsv_hue_rotation_40` | convention | pass | within tolerance | - |
-| `hsv_hue_rotation_in_range` | convention | pass | within tolerance | - |
-| `hsv_hue_rotation_negative` | convention | pass | within tolerance | - |
-| `hsv_saturation_adjust_down` | convention | pass | within tolerance | - |
-| `hsv_saturation_adjust_up_in_range` | convention | pass | within tolerance | - |
-| `hsv_saturation_force` | convention | pass | within tolerance | - |
-| `hsv_brightness_adjust_down` | convention | pass | within tolerance | - |
-| `hsv_brightness_force_in_range` | convention | pass | within tolerance | - |
-| `hsv_all_three_ranges` | convention | pass | within tolerance | - |
-| `hsv_hue_rolloff_reaches_past_the_range` | convention | pass | within tolerance | - |
-| `hsv_rolloff_shape` | convention | not scored: neither the guide nor the sources say whether the fade is linear, smooth or something else, so a pixel inside the rolloff band has no stated value | - | - |
-| `hsv_default_output_matte` | convention | not scored: the 17.0 page lists the output checkbox as enabled with rgba.alpha and 'is' hue, which reads as a default HSVTool writing the hue range matte into alpha (Natron's port does); NodeBased keeps the source alpha. Whether Nuke's default really overwrites alpha cannot be confirmed without a render | - | - |
-| `hsv_color_replacement` | convention | not scored: in Nuke the two pickers are a helper that sets the ranges and adjustments (Natron: 'Changing this parameter sets the hue, saturation and brightness ranges for this color'); the ranges and rolloffs it chooses are not published, so no per-pixel value can be written down | - | - |
-| `hsv_masks` | convention | not scored: the masks are channel knobs of the node in Nuke and extra input sockets in NodeBased, and how a mask combines with the range weights is not published | - | - |
-| `hsv_hdr_values` | convention | not scored: the sources describe HSV for 0 to 1 colour; what Nuke does to hue, saturation and value outside it is not published | - | - |
-| `toe_black_to_lift_white_untouched` | guide | pass | within tolerance | - |
-| `toe_default_lift_is_none` | guide | pass | within tolerance | - |
-| `toe_rolloff_shape` | guide | not scored: the guide says only that the lift fades toward the whites; the shape of the rolloff, where it ends, and what a negative value does are not published (NodeBased fades it by (1 - x / 0.2) squared up to 0.2, a width its own `toe` knob sets) | - | - |
-| `softclip_none` | guide | pass | within tolerance | - |
-| `softclip_log_endpoints` | guide | pass | within tolerance | - |
-| `softclip_log_from_zero` | guide | pass | within tolerance | - |
-| `softclip_preserve_hue_and_saturation` | convention | pass | within tolerance | - |
-| `softclip_preserve_hue_and_brightness` | convention | pass | within tolerance | - |
-| `softclip_log_curve` | guide | not scored: the page says 'a logarithmic curve between softclip min and 1.0' and warns of artefacts when softclip min is not 0 or 1, but publishes no formula; only the end points are written down (the cases above) | - | - |
-| `posterize_colors` | guide | not scored: the page reads as a bit depth (8 gives 256 colors per channel, so the default 16 would give 65536 and show nothing), while the node is used with the knob as a level count and its default of 16 as visible banding; no formula is published and the two readings disagree (NodeBased uses round(v * (n - 1)) / (n - 1) clamped to 0 to 1, n levels per channel) | - | - |
-| `log2lin_default_to_linear` | convention | pass | within tolerance | - |
-| `log2lin_black_is_zero_white_is_one` | guide | pass | within tolerance | - |
-| `log2lin_to_log` | convention | pass | within tolerance | - |
-| `log2lin_ignore_black` | convention | pass | within tolerance | - |
-| `log2lin_ignore_black_to_log` | convention | pass | within tolerance | - |
-| `log2lin_custom_points` | convention | pass | within tolerance | - |
-| `log2lin_custom_points_to_log` | convention | pass | within tolerance | - |
-| `log2lin_alpha_untouched` | guide | pass | within tolerance | - |
-| `log2lin_soft_clip` | convention | not scored: Kodak's Cineon specification describes an optional soft clip below the black point, but the Log2Lin page has no soft clip knob and states no formula for one, and NodeBased's node has none either, so the region below black is left out rather than guessed | - | - |
-| `ploglin_defaults` | convention | pass | within tolerance | - |
-| `ploglin_reference_point` | guide | pass | within tolerance | - |
-| `ploglin_to_log` | convention | pass | within tolerance | - |
-| `ploglin_custom_reference` | convention | pass | within tolerance | - |
-| `ploglin_negative_gamma_and_density` | convention | pass | within tolerance | - |
-| `ploglin_custom_to_log` | convention | pass | within tolerance | - |
+| `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
+| `blur_box_1` | convention | pass | within tolerance | - |
+| `blur_box_2` | convention | pass | within tolerance | - |
+| `blur_box_quality_not_limiting` | guide | pass | within tolerance | - |
+| `blur_gaussian_weights` | convention | not scored: the guide does not state the gaussian's sigma for a given size (only that gaussian is the default and the smoothest), so its weights cannot be written down without guessing; the shape facts (separable, normalised, symmetric, size 0 the identity) are tested in tests/test_2d_behaviour_filter_a.py | - | - |
+| `blur_triangle_weights` | convention | not scored: the guide names the triangle filter but not its weights or how size maps to its width; shape facts are tested instead | - | - |
+| `blur_quadratic_weights` | convention | not scored: the guide names the quadratic filter but not its weights or how size maps to its width; shape facts are tested instead | - | - |
+| `blur_quality_scaled` | guide | not scored: the guide does not give the scale factor, the down-scaling filter or the block alignment, so the pixels cannot be written down; tests check that the result is smooth, bounded and tile-exact | - | - |
+| `erode_fast_positive_1_grows_light` | convention | pass | within tolerance | - |
+| `erode_fast_negative_1_grows_dark` | convention | pass | within tolerance | - |
+| `erode_fast_positive_2_grows_light` | convention | pass | within tolerance | - |
+| `erode_fast_negative_2_grows_dark` | convention | pass | within tolerance | - |
+| `erode_fast_zero_is_identity` | guide | pass | within tolerance | - |
+| `erode_filter_exact_response` | convention | not scored: the guide states the direction (positive size lets darker areas expand, negative lets brighter ones) and that the filter trades speed for quality, but not the response curve or the footprint; the direction facts are tested in tests/test_2d_behaviour_filter_a.py | - | - |
+| `median_size_3` | convention | pass | within tolerance | - |
+| `median_size_5` | convention | pass | within tolerance | - |
+| `median_ignore_top_line` | guide | pass | within tolerance | - |
+| `sharpen_amount_response` | convention | not scored: the guide says only that Sharpen/Soften 'use Laplacian' (blur minus the original) 'to sharpen/soften specific channels' and gives amount, minimum and maximum no description, so the scale of amount, the sign convention and the range's role cannot be written down without guessing; tests/test_2d_behaviour_filter_a.py checks the behaviour that follows from the names (flat is unchanged, sharpen raises contrast, soften lowers it) | - | - |
+| `soften_amount_response` | convention | not scored: the guide says only that Sharpen/Soften 'use Laplacian' (blur minus the original) 'to sharpen/soften specific channels' and gives amount, minimum and maximum no description, so the scale of amount, the sign convention and the range's role cannot be written down without guessing; tests/test_2d_behaviour_filter_a.py checks the behaviour that follows from the names (flat is unchanged, sharpen raises contrast, soften lowers it) | - | - |
+| `glow_exact_response` | convention | not scored: the guide describes size only as 'values less than 15 increase the dark pixels' (garbled) and does not say how the blurred bright part is scaled, tinted or added, so the glow's pixels cannot be written down | - | - |
+| `glow_tolerance_above_everything` | guide | pass | within tolerance | - |
+| `glow_brightness_zero` | guide | pass | within tolerance | - |
+| `glow_tint_black` | guide | pass | within tolerance | - |
+| `glow_effect_only_without_glow` | guide | pass | within tolerance | - |
+| `convolve_filter_weights` | guide | not scored: the shared fixtures carry no small filter image and the evaluator's single-kernel path has no filter input, so the case is run on a 3 x 3 filter in tests/test_2d_behaviour_filter_a.py | - | - |
+| `matrix_edge_detect_example` | guide | pass | within tolerance | - |
+| `matrix_normalize_box` | guide | pass | within tolerance | - |
+| `matrix_asymmetric_orientation` | convention | not scored: the guide's description ('multiplying each pixel by the matching matrix value') does not say whether the weights are flipped, so only symmetric matrices are scored | - | - |
+| `laplacian_box_1` | guide | pass | within tolerance | - |
+| `laplacian_box_2` | guide | pass | within tolerance | - |
+| `edgedetect_sobel_response` | convention | not scored: the guide lists the three detectors and says nothing of their kernels, normalisation, or how the channels combine; tests check that a flat image gives no edge, that a step gives an edge on both sides of it, and that the threshold, blur and erode knobs act | - | - |
+| `edgedetect_prewitt_response` | convention | not scored: the guide lists the three detectors and says nothing of their kernels, normalisation, or how the channels combine; tests check that a flat image gives no edge, that a step gives an edge on both sides of it, and that the threshold, blur and erode knobs act | - | - |
+| `edgedetect_simple_response` | convention | not scored: the guide lists the three detectors and says nothing of their kernels, normalisation, or how the channels combine; tests check that a flat image gives no edge, that a step gives an edge on both sides of it, and that the threshold, blur and erode knobs act | - | - |
+| `emboss_traditional_response` | convention | not scored: the guide says Emboss 'offsets the original input using the Angle and Width controls' and gives no formula, shading origin or scale; tests check that the picture's relief is symmetric when the angle turns by 180 degrees and that angle and width act | - | - |
 
 ## What a reader should know about the reference data
 

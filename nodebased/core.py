@@ -208,6 +208,7 @@ from . import rotoknobs as _rotoknobs
 from . import textknobs as _textknobs
 from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
+from . import filterbehaviour as _filterbehaviour
 from . import timeknobs as _timeknobs
 from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
@@ -274,21 +275,27 @@ SPECS = {
     # are keyed by parameter name across every node and Checker's own "size" is an unrelated,
     # unsigned, integer pixel-grid spacing.
     "Erode": {"inputs": ["image"], "optional_inputs": ["mask"],
-              "params": {"erode_size": 1.0, "channels": "rgba", "mix": 1.0}},
+              # Nuke's own default is size 0 (lane 9 step A); positive grows light pixels, negative grows dark ones (`legacy_erode_sign` 1 is the older reading).
+              "params": {"erode_size": 0.0, "channels": "rgba", "mix": 1.0, **_filterbehaviour.new_params("Erode")}},
     "Dilate": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"dilate_size": 1.0, "channels": "rgba", "mix": 1.0}},
     "Median": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"median_size": 1.0, "channels": "rgba", "mix": 1.0, "ignore_top_line": 0}},
+               "params": {"median_size": 3.0, "channels": "rgba", "mix": 1.0, "ignore_top_line": 0, **_filterbehaviour.new_params("Median")}},
     "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0,
                            **_blurknobs.new_params("Sharpen")}},
     "Matrix": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"matrix_size": "3", "normalize": 0, **{f"weight{i}": (1.0 if i == 4 else 0.0) for i in range(49)}, "mix": 1.0}},
-    "Convolve": {"inputs": ["image", "kernel"], "optional_inputs": ["mask"], "params": {"kernel_size": "1", "mix": 1.0}},
+               "params": {"matrix_size": "3", "normalize": 0, **{f"weight{i}": (1.0 if i == 4 else 0.0) for i in range(49)}, "mix": 1.0,
+                          **_filterbehaviour.new_params("Matrix")}},
+    "Convolve": {"inputs": ["image", "kernel"], "optional_inputs": ["mask"],
+                 # Lane 9 step A: the filter channel, normalize, use input channels and the filter bounds; `kernel_size` is the older reading's (`legacy_convolve` 1).
+                 "params": {"kernel_size": "1", "mix": 1.0, **_filterbehaviour.new_params("Convolve")}},
     "Laplacian": {"inputs": ["image"], "optional_inputs": ["mask"],
-                  "params": {"channels": "rgb", "mix": 1.0}},
+                  # Nuke's Laplacian (lane 9 step A): the blur at `laplacian_size` minus the original; `legacy_laplacian` 1 is the older fixed 3x3 cross.
+                  "params": {"channels": "rgba", "mix": 1.0, "laplacian_size": 3.0, **_blurknobs.new_params("Laplacian"),
+                             **_filterbehaviour.new_params("Laplacian")}},
     "EdgeDetect": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {"edge_type": "Sobel", "threshold": 0.0, "mix": 1.0}},
+                   "params": {"edge_type": "Sobel", "threshold": 0.0, "mix": 1.0, **_filterbehaviour.new_params("EdgeDetect")}},
     "Emboss": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"angle": 135.0, "width": 1.0, "mix": 1.0}},
     "BumpBoss": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -1627,7 +1634,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1),
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
-          "filter_size": (0.0, 500.0), "threshold": (0.0, 100.0),
+          "filter_size": (-500.0, 500.0), "threshold": (0.0, 100.0),
+          "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
@@ -2040,7 +2048,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "flow_backend": ["auto", "cpu", "gpu"], "lens_backend": ["auto", "cpu", "gpu"],
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
-           "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
+           "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"], "filter_bounds": ["shape", "format"],
            "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"],
            "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],
            "filter_type": ["box", "triangle", "quadratic", "gaussian"],

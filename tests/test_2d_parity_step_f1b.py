@@ -89,7 +89,7 @@ class FilterF1bTests(unittest.TestCase):
         for key, kind, params in (("src", "Checker", {"width": 12, "height": 10, "size": 1}),
                                   ("k", "Constant", {"width": 1, "height": 1, "red": 1.0,
                                                        "green": 1.0, "blue": 1.0, "alpha": 1.0}),
-                                  ("fx", "Convolve", {"kernel_size": "1"})):
+                                  ("fx", "Convolve", {"kernel_size": "1", "legacy_convolve": 1})):    # the older reading is the tiled one (lane 9 step A)
             d.execute({"op": "create", "id": key, "type": kind, "params": params})
         d.execute({"op": "connect", "id": "fx", "input": "image", "source": "src"})
         d.execute({"op": "connect", "id": "fx", "input": "kernel", "source": "k"})

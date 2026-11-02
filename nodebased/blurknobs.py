@@ -32,7 +32,7 @@ import numpy as np
 
 KINDS = ("Blur", "Sharpen", "Soften")      # the three nodes that are a blur; Glow (step H) reuses the same dictionaries below
 FILTERS = ("box", "triangle", "quadratic", "gaussian")
-SIZE_PARAM = {"Blur": "radius", "Sharpen": "sharpen_size", "Soften": "soften_size", "Glow": "glow_size"}
+SIZE_PARAM = {"Blur": "radius", "Sharpen": "sharpen_size", "Soften": "soften_size", "Glow": "glow_size", "Laplacian": "laplacian_size"}
 WIDE = 1000000.0
 NO_QUALITY_LIMIT = 1000.0       # larger than any size the nodes accept (500), so an older node never scales the picture
 
@@ -41,12 +41,14 @@ NEW = {
     "Sharpen": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "minimum": 0.0, "maximum": 1.0},
     "Soften": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "minimum": 0.0, "maximum": 1.0, "amount": 1.0},
     "Glow": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1},                    # fidelity step H
+    "Laplacian": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1},               # lane 9 step A (filterbehaviour.py)
 }
 OLD = {
     "Blur": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1},
     "Sharpen": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1, "minimum": -WIDE, "maximum": WIDE},
     "Soften": {"kernel_filter": "gaussian", "quality": NO_QUALITY_LIMIT, "crop": 1, "minimum": -WIDE, "maximum": WIDE, "amount": 1.0},
     "Glow": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1},
+    "Laplacian": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1},
 }
 
 

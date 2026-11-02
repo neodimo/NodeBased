@@ -466,20 +466,34 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         size = int(str(params.get("kernel_size", "1")) or 1)
         support = (size if size in (1, 3, 5, 7) else 1) // 2
         return (support, support)
+    if kind == "Laplacian":
+        from . import blurknobs, filterbehaviour
+        if not filterbehaviour.laplacian_is_legacy(params):
+            support = blurknobs.halo("Laplacian", params)
+            return (support, support)
+        return (1, 1)
     if kind in ("Matrix", "Laplacian"):
         # Mirror tiers._matrix_rule: half the kernel size, rounded down.
         support = int(str(params.get("matrix_size", "3")) or 3) // 2
         return (support, support)
-    if kind in ("EdgeDetect", "Emboss", "BumpBoss"):
+    if kind == "EdgeDetect":
+        from . import filterbehaviour
+        support = filterbehaviour.edge_halo(params)
+        return (support, support)
+    if kind in ("Emboss", "BumpBoss"):
         return (1, 1)
     if kind == "ErodeFilter":
         import math
-        size = float(params.get("filter_size", 0.0))
+        size = abs(float(params.get("filter_size", 0.0)))
         support = 0 if size < 0.5 else int(math.ceil(size))
         if params.get("filter_type", "box") == "gaussian" and support:
             support += int(math.ceil(max(1.0, size * 0.5)))
         return (support, support)
-    if kind in ("Erode", "Dilate", "Median"):
+    if kind == "Median":
+        from . import filterbehaviour
+        support = filterbehaviour.median_support(params)
+        return (support, support)
+    if kind in ("Erode", "Dilate"):
         import math
         # Same "ceil the pixel-radius param" rule as Blur, mirroring tiers.py's per-kind rule.
         param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size",

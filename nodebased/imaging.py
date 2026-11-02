@@ -4073,7 +4073,7 @@ class Evaluator:
             if mask is not None and mask.display != source.display:
                 raise ValueError(f"Mask display window {mask.display} does not match source {source.display}")
             out = source.data
-            filtered = Evaluator._convolve(source.fit(out), kernel.pixels, p)
+            filtered = Evaluator._convolve(source.fit(out), kernel.pixels, p, kernel)
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display)
@@ -5040,7 +5040,7 @@ class Evaluator:
             return Evaluator._transformed_window(source.data, p)
         if kind == "CornerPin":
             return Evaluator._cornerpin_window(source.data, p)
-        if kind in ("Blur", "Sharpen", "Soften", "Glow") and not p.get("crop", 1):
+        if kind in ("Blur", "Sharpen", "Soften", "Glow", "Laplacian") and not p.get("crop", 1):
             # "Crop to format" off: the window grows by the filter's reach, the new edge being transparent black.
             from . import blurknobs
             return blurknobs.grown_window(kind, p, source.data)
@@ -5270,8 +5270,8 @@ class Evaluator:
         if kind == "Sharpen":
             return Evaluator._sharpen(source.fit(out), p, (out.x, out.y))
         if kind in ("Matrix", "Laplacian"):
-            return Evaluator._matrix(source.fit(out), p, laplacian=kind == "Laplacian")
-        if kind == "EdgeDetect": return Evaluator._edge_detect(source.fit(out), p)
+            return Evaluator._matrix(source.fit(out), p, laplacian=kind == "Laplacian", origin=(out.x, out.y))
+        if kind == "EdgeDetect": return Evaluator._edge_detect(source.fit(out), p, (out.x, out.y))
         if kind == "Emboss": return Evaluator._emboss(source.fit(out), p)
         if kind == "BumpBoss": return Evaluator._bump_boss(source.fit(out), p)
         if kind == "ErodeFilter": return Evaluator._erode_filter(source.fit(out), p)
@@ -5526,13 +5526,13 @@ class Evaluator:
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("Matrix", "Laplacian"):
-            filtered = Evaluator._matrix(inputs[0], p, laplacian=kind == "Laplacian")
+            filtered = Evaluator._matrix(inputs[0], p, laplacian=kind == "Laplacian", origin=origin)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter"):
             op = {"EdgeDetect": Evaluator._edge_detect, "Emboss": Evaluator._emboss,
                   "BumpBoss": Evaluator._bump_boss, "ErodeFilter": Evaluator._erode_filter}[kind]
-            filtered = op(inputs[0], p)
+            filtered = Evaluator._edge_detect(inputs[0], p, origin) if kind == "EdgeDetect" else op(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Glow":
@@ -6586,7 +6586,8 @@ class Evaluator:
 
     @staticmethod
     def _erode(image, p):
-        return Evaluator._morph(image, p.get("erode_size", 1.0), p.get("channels", "rgba"))
+        from . import filterbehaviour
+        return Evaluator._morph(image, filterbehaviour.erode_size(p), p.get("channels", "rgba"))
 
     @staticmethod
     def _dilate(image, p):
@@ -6596,8 +6597,8 @@ class Evaluator:
 
     @staticmethod
     def _median(image, p):
-        size = p.get("median_size", 1.0)
-        support = 0 if size < 0.5 else int(math.ceil(size))
+        from . import filterbehaviour
+        support = filterbehaviour.median_support(p)
         out = image.copy()
         if support == 0:
             return out
@@ -6616,8 +6617,11 @@ class Evaluator:
         return out
 
     @staticmethod
-    def _matrix(image, p, laplacian=False):
+    def _matrix(image, p, laplacian=False, origin=(0, 0)):
         """Apply the selected odd square convolution; edge pixels extend nearest samples."""
+        from . import filterbehaviour
+        if laplacian and not filterbehaviour.laplacian_is_legacy(p):
+            return filterbehaviour.laplacian(image, p, Evaluator._CHANNEL_SETS, origin)
         if laplacian:
             weights = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=np.float32)
             normalize = False
@@ -6644,10 +6648,15 @@ class Evaluator:
         result = image.copy()
         for c in Evaluator._CHANNEL_SETS.get(p.get("channels", "rgba"), (0, 1, 2, 3)):
             result[..., c] = out[..., c]
-        return result.astype(np.float32)
+        return filterbehaviour.matrix_clip(result.astype(np.float32), p) if not laplacian else result.astype(np.float32)
 
     @staticmethod
-    def _convolve(image, kernel, p):
+    def _convolve(image, kernel, p, kernel_raster=None):
+        from . import filterbehaviour
+        if not filterbehaviour.convolve_is_legacy(p):
+            if kernel_raster is None:
+                kernel_raster = Raster.of(np.asarray(kernel, np.float32))
+            return filterbehaviour.convolve(image, kernel_raster, p)
         size = int(str(p.get("kernel_size", "1")) or 1)
         size = size if size in (1, 3, 5, 7) else 1
         if kernel.shape[0] < size or kernel.shape[1] < size:
@@ -6665,7 +6674,9 @@ class Evaluator:
         return out.astype(np.float32)
 
     @staticmethod
-    def _edge_detect(image, p):
+    def _edge_detect(image, p, origin=(0, 0)):
+        from . import filterbehaviour
+        image = filterbehaviour.edge_pre_blur(image, p, origin)       # Nuke's "blur size": a blur before the edges are found
         rgb = image[..., :3].mean(axis=2)
         method = p.get("edge_type", "Sobel")
         if method == "Laplacian":
@@ -6682,6 +6693,8 @@ class Evaluator:
         response = np.maximum(response - float(p.get("threshold", 0.0)), 0.0)
         out = image.copy()
         out[..., :3] = response[..., None]
+        if filterbehaviour.edge_erode_reach(p):
+            out = Evaluator._morph(out, float(p.get("edge_erode_size", 0.0)), "rgb")      # Nuke's "erode size": an erode after
         return out
 
     @staticmethod
@@ -6744,6 +6757,9 @@ class Evaluator:
         # and quadratic are progressively smoother polynomial ease curves, and gaussian instead
         # reaches for a true post-erode blur, as it already did.
         size = float(p.get("filter_size", 1.0))
+        if size <= -0.5:
+            # The guide: a negative size lets brighter areas expand into darker ones, the erosion of the negated picture.
+            return -Evaluator._erode_filter(-image, {**p, "filter_size": -size})
         if size < 0.5:
             return image.copy()
         filter_type = p.get("filter_type", "box")

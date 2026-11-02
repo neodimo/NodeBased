@@ -185,7 +185,11 @@ def _support_rule(param_name):
 
 _erode_rule = _support_rule("erode_size")
 _dilate_rule = _support_rule("dilate_size")
-_median_rule = _support_rule("median_size")
+def _median_rule(params, region, arity):
+    from . import filterbehaviour
+    support = filterbehaviour.median_support(params)
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
 def _blurknobs_rule(kind):
     """`_support_rule` for Sharpen and Soften, whose reach also grows when `quality` scales the picture down."""
     def rule(params, region, arity):
@@ -201,11 +205,27 @@ def _matrix_rule(params, region, arity):
     support = int(str(params.get("matrix_size", "3")) or 3) // 2
     return [region.expand(support, support)] + [region] * (arity - 1)
 
+def _laplacian_rule(params, region, arity):
+    """The new Laplacian is a blur (blurknobs reach); an older node is the fixed 3 x 3 cross."""
+    from . import blurknobs, filterbehaviour
+    if filterbehaviour.laplacian_is_legacy(params):
+        return _matrix_rule({}, region, arity)
+    support = blurknobs.halo("Laplacian", params)
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
+def _edge_detect_rule(params, region, arity):
+    """EdgeDetect reads one pixel each way, plus its pre-blur and post erode (nodebased/filterbehaviour.py)."""
+    from . import filterbehaviour
+    support = filterbehaviour.edge_halo(params)
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
 def _one_pixel_rule(params, region, arity):
     return [region.expand(1, 1)] + [region] * (arity - 1)
 
 def _erode_filter_rule(params, region, arity):
-    size = float(params.get("filter_size", 0.0))
+    size = abs(float(params.get("filter_size", 0.0)))
     support = 0 if size < 0.5 else int(math.ceil(size))
     if params.get("filter_type", "box") == "gaussian" and support:
         support += int(math.ceil(max(1.0, size * 0.5)))
@@ -547,9 +567,9 @@ REGION_RULES = {
     "Median": _median_rule,
     "Sharpen": _sharpen_rule,
     "Matrix": _matrix_rule,
-    "Laplacian": _matrix_rule,
+    "Laplacian": _laplacian_rule,
     "Convolve": _convolve_rule,
-    "EdgeDetect": _one_pixel_rule,
+    "EdgeDetect": _edge_detect_rule,
     "Emboss": _one_pixel_rule,
     "BumpBoss": _one_pixel_rule,
     "ErodeFilter": _erode_filter_rule,
@@ -732,7 +752,7 @@ PIXEL_UNIT_PARAMS = {
              "translate_x", "translate_y", "center_x", "center_y", "p0_x", "p0_y", "p1_x", "p1_y", "shadow_distance", "shadow_softness",
              "shadow_expand"),
     "BurnIn": ("font_size", "margin", "y_padding", "bar_x_border", "bar_y_border"),
-    "Blur": ("radius",), "ErodeFilter": ("filter_size",), "Emboss": ("width",),
+    "Blur": ("radius",), "Laplacian": ("laplacian_size",), "EdgeDetect": ("edge_blur_size", "edge_erode_size"), "ErodeFilter": ("filter_size",), "Emboss": ("width",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size",), "DirBlur": ("length", "center_x", "center_y"),
     "VectorDistort": ("blur_size",), "Inpaint": ("translate_x", "translate_y", "center_x", "center_y"),

@@ -256,6 +256,13 @@ def step_h_params(kind):
             **metaknobs.upgrade_params(kind), **curvetoolknobs.upgrade_params(kind)}
 
 
+def step_l9a_params(kind):
+    """The legacy flags the 2D behaviour lane (lane 9, step A) added to the Filter nodes, at the values that leave an older
+    document's node as it was."""
+    from . import filterbehaviour
+    return filterbehaviour.upgrade_params(kind)
+
+
 def upgrade_nodes(nodes):
     """Give an older document's nodes the chrome knobs at their no-change defaults. Walks Group graphs."""
     for node in nodes.values():
@@ -269,6 +276,7 @@ def upgrade_nodes(nodes):
         added = {**added, **step_c_params(node.get("type")), **step_d_params(node.get("type")), **step_e_params(node.get("type")), **step_f_params(node.get("type")), **step_g_params(node.get("type")), **step_h_params(node.get("type"))}
         from . import behaviour2d
         added.update(behaviour2d.upgrade_params(node.get("type")))      # Nuke's behaviour for the colour nodes (lane 2, November 2026)
+        added.update(step_l9a_params(node.get("type")))
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)
@@ -448,7 +456,11 @@ def needs_full_frame(kind, p):
     if kind == "Glow" and str(p.get("width_channel", "none")).strip().lower() not in ("", "none") \
             and not _is_rgba_token(p.get("width_channel")):
         return True          # a width channel from a named layer is only on the whole-image path
-    if kind in ("Blur", "Sharpen", "Soften", "Glow"):
+    if kind == "Convolve":
+        from . import filterbehaviour
+        if not filterbehaviour.convolve_is_legacy(p):
+            return True      # the filter is its whole bounding box, which a tile does not hold
+    if kind in ("Blur", "Sharpen", "Soften", "Glow", "Laplacian"):
         from . import blurknobs
         if blurknobs.needs_full_frame(kind, p):
             return True      # a window that grows, or a picture scaled down to fit `quality`, is not a tile's business

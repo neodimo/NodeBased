@@ -1970,7 +1970,8 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
-    {"nodebased": ["ignore_top_line"], "nuke": ["ignore_top_line"], "kind": "same"}
+    {"nodebased": ["ignore_top_line"], "nuke": ["ignore_top_line"], "kind": "same"},
+    {"nodebased": ["legacy_median_radius"], "kind": "extra", "reason": "NodeBased-only: graphs saved before size meant the filter width keep the older radius reading; lane 9 step A"}
    ]
   },
   "Glow": {
@@ -2154,7 +2155,8 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["legacy_erode_sign"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the sign followed the guide keep the older reading (positive shrinks the light pixels); lane 9 step A"}
    ]
   },
   "Denoise": {
@@ -2286,12 +2288,17 @@
    ],
    "knobs": [
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["kernel_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["kernel_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose; it sizes the filter only while `legacy_convolve` is on"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["normalize"], "nuke": ["normalize"], "kind": "same"},
+    {"nodebased": ["filter_channel"], "nuke": ["filter_channel"], "kind": "same"},
+    {"nodebased": ["use_input_channels"], "nuke": ["use_input_channels"], "kind": "same"},
+    {"nodebased": ["filter_bounds"], "nuke": ["filter_bounds"], "kind": "same"},
+    {"nodebased": ["legacy_convolve"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Convolve followed the guide keep the older reading (top-left corner of the red channel at Kernel size, always normalised); lane 9 step A"}
    ]
   },
   "Matrix": {
@@ -2308,7 +2315,8 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["legacy_matrix_unclipped"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the guide's 0-1 clip keep unclipped results; lane 9 step A"}
    ],
    "skip_default": ["matrix"]
   },
@@ -2322,7 +2330,10 @@
     {"nodebased": ["edge_type"], "nuke": ["edgedetector"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Edge Detector', scripting name `edgedetector`"},
     {"nodebased": ["threshold"], "nuke": ["threshold"], "kind": "same"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"}
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["edge_blur_size"], "nuke": ["blursize"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Blur size', scripting name `blursize`"},
+    {"nodebased": ["edge_erode_size"], "nuke": ["erodesize"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Erode size', scripting name `erodesize`"},
+    {"nodebased": ["edge_blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Blur quality', scripting name `blurquality`"}
    ]
   },
   "Emboss": {
@@ -2371,7 +2382,12 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["laplacian_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `size`"},
+    {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `filter`"},
+    {"nodebased": ["quality"], "nuke": ["quailty"], "kind": "renamed", "reason": "the guide spells the scripting name `quailty`"},
+    {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["legacy_laplacian"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Laplacian had a size, filter and quality keep the fixed 3x3 cross; lane 9 step A"}
    ]
   },
   "Inpaint": {

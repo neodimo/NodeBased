@@ -290,7 +290,7 @@ class ProxyTierTests(unittest.TestCase):
         """A pixel-unit param outside the table would silently mean two things at two tiers."""
         pixel_names = {"width", "height", "size", "radius", "x", "y",
                        "translate_x", "translate_y", "center_x", "center_y",
-                       "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels", "spatial_size", "denoise_strength", "red_amount", "green_amount", "blue_amount", "max_size",
+                       "erode_size", "dilate_size", "median_size", "laplacian_size", "edge_blur_size", "edge_erode_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels", "spatial_size", "denoise_strength", "red_amount", "green_amount", "blue_amount", "max_size",
                        "blur_size", "corner1_x", "corner1_y", "corner2_x", "corner2_y",
                        "corner3_x", "corner3_y", "corner4_x", "corner4_y",
                        # Step 5a: EdgeBlur, EdgeExtend and LightWrap blur reaches are pixel lengths.
