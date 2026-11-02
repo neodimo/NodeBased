@@ -1,3 +1,9 @@
+## 2026-11-01 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step A of 3: ColorCorrect, Saturation and the hue tools compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `5015cef7` -> `e875bb16` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `e875bb16`: Ran 7727 tests in 572.739 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-01, 2D behaviour step A of 3 (Lane 2, Claude Sonnet 5.5): the colour grading nodes compute what Nuke computes
 
 - **What was done — evidence:** seven nodes (ColorCorrect, Saturation, HueCorrect, HSVTool, Toe, SoftClip, Posterize) now have pixel cases for the behaviour Nuke has, not only knob pairings. 75 cases in `tools/nuke_fidelity_cases_color.py`: 66 pass, 0 fail, 9 not scored with the reason (a new fixture `C` in `tools/nuke_fidelity_cases.py` gives the HSV cases colour inside 0 to 1). Sources: the 17.0 guide where it states the behaviour (`guide`); where it states none, A. Geremia's measurements of ColorCorrect, Saturation and HueCorrect on Nuke 17, Foundry's "Correcting HSV" page and Natron's HSVTool page (`convention`, cited in each case). Nodes with behaviour checked: 12 -> 18 overall; of this step's seven, 0 -> 6 (Posterize's only case is not scored). Overall fidelity 90.851 -> 90.930 (Color group 92.849 -> 93.531); the cases are what moved, the knob counts did not.

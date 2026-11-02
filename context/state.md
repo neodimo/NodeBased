@@ -1,5 +1,27 @@
 ## 2026-11-01, 2D behaviour step A of 3 (Lane 2): the colour grading nodes compute what Nuke computes
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:55 PM on 2026-11-01 PDT)
+
+`main` moved `5015cef7` -> `e875bb16` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e875bb16` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1101-2345.log`, started 11:45 PM): **Ran 7727 tests in 572.739 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step A of 3: ColorCorrect, Saturation and the hue tools compute what Nuke computes.** Commits:
+  - `2397ca10` fidelity cases: the colour cases import their base lazily, so loading tools.nuke_fidelity_cases first no longer re-enters it half built
+  - `9607622c` docs: TASKLOG and state note for the 2D behaviour step A (colour grading nodes)
+  - `16fa12c0` HueCorrect, HSVTool, Toe, SoftClip and Posterize compute what Nuke computes: 42 more behaviour cases and the kernels they exposed
+  - `7f1d6be5` ColorCorrect and Saturation compute what Nuke computes: behaviour cases, stored-colour correction, Saturation's four luminance maths
+  Diff: 24 files changed, 1811 insertions(+), 67 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-parity`. Seven nodes, 75 cases in `tools/nuke_fidelity_cases_color.py` (66 pass, 9 not scored with reasons), fixture `C` added to
 `tools/nuke_fidelity_cases.py`. The cases ran against the kernels and exposed six that disagreed; each is fixed on the evaluator and the tile path, with a knob
 that keeps an older document's pixels (`nodebased/behaviour2d.py`, applied by `ops2d_chrome.upgrade_nodes`, no schema bump): ColorCorrect `divide_by_alpha`
