@@ -7,7 +7,7 @@ from .core import CHOICES, LIMITS, SPECS
 
 
 KNOB_KINDS = ("float_slider", "int", "bool", "enum", "xy", "xyz", "float", "color", "file_read",
-              "file_write", "string", "multiline")
+              "file_write", "string", "multiline", "split")
 
 
 def _default_label(params):
@@ -29,8 +29,15 @@ class KnobGroup:
     soft_range: tuple[float, float] | None = None
     section: str | None = None     # a heading shown above the first knob of a run that shares it
     help: str | None = None        # one plain sentence shown under the knob and as its tooltip
+    channels: str | None = None    # a "split" knob: its split set, "rgba" (r g b a) or "wh" (w h), as in core.SPLIT_CHANNELS
 
     def __post_init__(self):
+        if self.kind == "split":
+            from .core import SPLIT_CHANNELS
+            if self.channels not in SPLIT_CHANNELS or len(self.params) != 1:
+                raise ValueError(f"a split knob names one param and a split set of {sorted(SPLIT_CHANNELS)}")
+        elif self.channels is not None:
+            raise ValueError("only a split knob takes channels")
         if self.label is None:
             object.__setattr__(self, "label", _default_label(self.params))
 
@@ -1594,6 +1601,17 @@ def _scalar_kind(node_type, param, value=None):
 def _fallback_layout(node_type):
     return [KnobGroup(_scalar_kind(node_type, param, default), (param,))
             for param, default in SPECS[node_type]["params"].items()]
+
+
+def split_layout_problems():
+    """Where core.SPLITTABLE and the layouts' "split" groups disagree: a param declared splittable with no split group (or the
+    other split set), or a split group on a param core does not list. Empty when they agree."""
+    from .core import SPLITTABLE
+    declared = {(kind, name): channels for kind, names in SPLITTABLE.items() for name, channels in names.items()}
+    laid_out = {(kind, group.params[0]): group.channels
+                for kind, groups in KNOB_LAYOUT.items() for group in groups if group.kind == "split"}
+    return sorted(f"{kind}.{name}: core {declared.get((kind, name))}, layout {laid_out.get((kind, name))}"
+                  for kind, name in set(declared) | set(laid_out) if declared.get((kind, name)) != laid_out.get((kind, name)))
 
 
 def knob_layout(node_type):

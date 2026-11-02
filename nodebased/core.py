@@ -75,7 +75,35 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
+# Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
+# param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
+# only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
+SPLIT_CHANNELS = {"rgba": ("r", "g", "b", "a"), "wh": ("w", "h")}
+SPLITTABLE: dict[str, dict[str, str]] = {}      # node kind -> {param name: split set}
+
+
+def split_count(kind, name):
+    """How many entries the split list of `kind`.`name` holds, or None when the param cannot be split."""
+    channels = SPLITTABLE.get(kind, {}).get(name)
+    return None if channels is None else len(SPLIT_CHANNELS[channels])
+
+
+def is_split(params, name):
+    """True when `params[name]` holds a per-channel list rather than one number."""
+    return isinstance(params.get(name), (list, tuple))
+
+
+def split_values(params, name, n, default=None):
+    """The value of a splittable param as a float32 array of length `n`: a number is repeated `n` times, a list is taken as given.
+    A list of any other length is an error (never padded or cut). `default` stands in for a param the dict does not hold."""
+    import numpy as np
+    value = params.get(name, default) if default is not None else params[name]
+    if isinstance(value, (list, tuple)):
+        if len(value) != n:
+            raise ValueError(f"{name} holds {len(value)} values but its split set takes {n}")
+        return np.asarray(value, np.float32)
+    return np.full(n, value, np.float32)
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -2659,6 +2687,10 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _tviscale_legacy(doc["nodes"])
         doc["version"] = 28
+    if isinstance(doc, dict) and doc.get("version") == 28:
+        # v28 -> v29 lets a splittable knob (SPLITTABLE) hold one value per channel. Nothing existing changes: a scalar is still
+        # one number for every channel. The bump keeps an older NodeBased from loading a list it would misread.
+        doc["version"] = 29
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -2978,6 +3010,25 @@ def validate_time(time):
         raise ValueError("time.current must fall inside the frame range")
 
 
+def _validate_split(doc, node_id, kind, name, value):
+    """A splittable param holding a list: one finite, in-range number per channel of its split set. A list is refused while the
+    param is animated or driven by an expression (the two forms do not combine yet)."""
+    n = split_count(kind, name)
+    if type(value) is not list or len(value) != n:
+        raise ValueError(f"{name} must be one number or a list of {n} numbers "
+                         f"({', '.join(SPLIT_CHANNELS[SPLITTABLE[kind][name]])})")
+    lo, hi = parameter_limits(kind, name)
+    for entry in value:
+        if type(entry) not in (float, int) or not math.isfinite(entry):
+            raise ValueError(f"{name} must hold finite numbers")
+        if not lo <= entry <= hi:
+            raise ValueError(f"{name} must be between {lo} and {hi}")
+    if name in ((doc.get("animation") or {}).get("curves") or {}).get(node_id, {}):
+        raise ValueError(f"{name} is animated: a split value cannot be animated yet; clear its curve first")
+    if name in (doc.get("expressions") or {}).get(node_id, {}):
+        raise ValueError(f"{name} is driven by an expression: a split value cannot be driven yet; clear the expression first")
+
+
 def validate(doc, _depth=0):
     if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data", "expressions", "references"} or doc["version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported or malformed NodeBased document")
@@ -3039,6 +3090,9 @@ def validate(doc, _depth=0):
             if (name in CHOICES and value not in CHOICES[name] and not (kind == "LevelSet" and name in ("channel", "output"))
                     and not _chrome.is_open_choice(kind, name)):
                 raise ValueError(f"Invalid {name}: {value}")
+            if isinstance(value, (list, tuple)) and name in SPLITTABLE.get(kind, {}):
+                _validate_split(doc, key, kind, name, value)
+                continue
             if isinstance(default, str):
                 if not isinstance(value, str) or len(value) > 32768:
                     raise ValueError(f"{name} must be a path string")
@@ -3247,6 +3301,8 @@ class Dispatcher:
             # Local import keeps the top-level Dispatcher import cycle-free.
             from .animation import CURVE_INTERPOLATIONS as _CURVE_INTERPOLATIONS, FRAME_LIMITS as _FRAME_LIMITS
             return {"protocol": 1, "nodes": copy.deepcopy(SPECS), "limits": LIMITS,
+                    "split": {"channels": {name: list(names) for name, names in SPLIT_CHANNELS.items()},
+                              "params": copy.deepcopy(SPLITTABLE)},
                     "node_limits": NODE_LIMITS, "choices": CHOICES,
                     "time": copy.deepcopy(self.document["time"]), "time_limits": TIME_LIMITS,
                     "sequence_patterns": ["printf (plate.%04d.exr)", "hash (plate.####.exr)", "still (plate.exr)"],
@@ -3537,6 +3593,9 @@ class Dispatcher:
             value = cmd["value"]
             if node["type"] == "Read" and name == "path" and isinstance(value, str) and value:
                 value = str(Path(value).expanduser().resolve())
+            if isinstance(value, (list, tuple)) and name in SPLITTABLE.get(node["type"], {}):
+                # A split value is stored as a plain list of floats (whole numbers included), so a document holds one form of it.
+                value = [float(v) if type(v) in (float, int) else v for v in value]
             node["params"][name] = value
             if node["type"] == "Reformat" and name == "format":
                 _resolve_reformat_format(node["params"], doc)
@@ -3686,6 +3745,8 @@ class Dispatcher:
             raise ValueError(
                 f"animation edit {op!r}: parameter {param!r} is not numeric "
                 f"({type(spec_default).__name__})")
+        if op in ("set_key", "set_curve") and is_split(node["params"], param):
+            raise ValueError(f"animation edit {op!r}: {param!r} is split into channels; collapse it before animating it")
         if param in (doc["expressions"].get(node_id) or {}):
             raise ValueError(
                 f"animation edit {op!r}: {param!r} is driven by an expression; clear the "
@@ -3778,6 +3839,8 @@ class Dispatcher:
         if isinstance(spec_default, str) or isinstance(spec_default, bool):
             raise ValueError(f"expression edit {op!r}: parameter {param!r} is not numeric "
                              f"({type(spec_default).__name__})")
+        if op == "set_expression" and is_split(node["params"], param):
+            raise ValueError(f"expression edit {op!r}: {param!r} is split into channels; collapse it before driving it")
         root = doc["expressions"]
 
         if op == "clear_expression":

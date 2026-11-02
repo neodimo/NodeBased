@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, CancelledError
 import collections
 import contextlib
 import copy
+import dataclasses
 import json
 import math
 import numpy as np
@@ -39,7 +40,7 @@ from .updater import Updater
 from .core import _downstream_of
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
-                   DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES)
+                   DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
 from . import graphlook
@@ -12220,7 +12221,12 @@ class Window(QMainWindow):
                     if node["type"] == "Grade" else (("Lift", "lift"), ("Gamma", "gamma"), ("Gain", "gain"))
                 for label_text, param in bindings:
                     limits = parameter_limits(node["type"], param)
-                    wheel = PropertiesColorWheel(resolved[param], limits, SPECS[node["type"]]["params"].get(param))
+                    shown = resolved[param]
+                    wheel = PropertiesColorWheel(shown[0] if isinstance(shown, list) else shown, limits,
+                                                 SPECS[node["type"]]["params"].get(param))
+                    if isinstance(shown, list):
+                        wheel.setEnabled(False)
+                        wheel.setToolTip("This knob is split into channels; edit them in the rows below")
                     wheel.motion = self.motion
                     wheel.setObjectName(f"{param}-color-wheel")
                     wheel.editingFinished.connect(
@@ -12585,6 +12591,58 @@ class Window(QMainWindow):
                     continue
                 param = group.params[0]
                 value = node["params"][param]
+                split_toggle = None
+                if group.kind == "split":
+                    split_names = SPLIT_CHANNELS[group.channels]
+                    split_now = isinstance(value, list)
+                    animated_now = bool(curves.get(param)) or param in expressions
+                    split_toggle = QToolButton()
+                    split_toggle.setObjectName(f"{param}-split")
+                    split_toggle.setCheckable(True)
+                    split_toggle.setChecked(split_now)
+                    split_toggle.setText("1" if split_now else str(len(split_names)))
+                    split_toggle.setFixedWidth(24)
+                    split_toggle.setToolTip(
+                        "Animated knobs cannot be split into channels yet" if curves.get(param)
+                        else "Knobs driven by an expression cannot be split into channels yet" if param in expressions
+                        else f"Back to one value for all channels" if split_now
+                        else f"Split into {', '.join(split_names)}")
+                    split_toggle.setEnabled(split_now or not animated_now)
+                    split_toggle.clicked.connect(
+                        lambda checked=False, k=key, p=param, n=len(split_names), w=split_toggle: self.toggle_split(k, p, n, w))
+                    if split_now:
+                        units = []
+                        for index, channel in enumerate(split_names):
+                            field = FittedDoubleSpinBox()
+                            field.setObjectName(f"{param}-{channel}-field")
+                            field.setProperty("nodebased_node_id", key)
+                            field.setProperty("nodebased_param", param)
+                            field.setProperty("knob_channel", True)
+                            field.setRange(*parameter_limits(node["type"], param))
+                            field.setDecimals(3)
+                            field.setSingleStep(0.1)
+                            field.setValue(value[index])
+                            field.setKeyboardTracking(False)
+                            hide_spin_buttons(field)
+                            field.editingFinished.connect(
+                                lambda k=key, p=param, i=index, w=field: self.commit_split_entry(k, p, i, w.value()))
+                            unit = QWidget()
+                            unit_layout = QHBoxLayout(unit)
+                            unit_layout.setContentsMargins(0, 0, 0, 0)
+                            unit_layout.setSpacing(4)
+                            unit_layout.addWidget(QLabel(channel))
+                            unit_layout.addWidget(field, 1)
+                            units.append(unit)
+                        split_row = QWidget()
+                        split_row.setObjectName(f"{param}-split-row")
+                        split_layout = QHBoxLayout(split_row)
+                        split_layout.setContentsMargins(0, 0, 0, 0)
+                        split_layout.setSpacing(4)
+                        split_layout.addWidget(WrappingRow(units, spacing=3), 1)
+                        split_layout.addWidget(split_toggle, 0, Qt.AlignmentFlag.AlignTop)
+                        form.addRow(group.label, split_row)
+                        continue
+                    group = dataclasses.replace(group, kind="float_slider", channels=None)      # an unsplit knob is today's slider
                 if group.kind == "curve":
                     row = QWidget(); line = QHBoxLayout(row); line.setContentsMargins(0, 0, 0, 0)
                     edit = QPushButton("Edit curve…")
@@ -12652,6 +12710,15 @@ class Window(QMainWindow):
                         card_layout.setContentsMargins(8, 6, 8, 6)
                         card_layout.addRow(group.label, animated)
                         form.addRow(card)
+                    elif split_toggle is not None:
+                        split_row = QWidget()
+                        split_row.setObjectName(f"{param}-split-row")
+                        split_layout = QHBoxLayout(split_row)
+                        split_layout.setContentsMargins(0, 0, 0, 0)
+                        split_layout.setSpacing(4)
+                        split_layout.addWidget(animated, 1)
+                        split_layout.addWidget(split_toggle)
+                        form.addRow(group.label, split_row)
                     else:
                         form.addRow(group.label, animated)
                 else:
@@ -14962,6 +15029,31 @@ class Window(QMainWindow):
     def node_curve(self, key, param):
         """The curve for ``(node, param)``, or None when that parameter is not animated."""
         return (self.graph_document().get("animation") or {}).get("curves", {}).get(key, {}).get(param)
+
+    def toggle_split(self, key, param, n, button):
+        """The split button of a per-channel knob: one value becomes n equal entries, or the entries become one value. One command,
+        so one undo step. Entries that differ collapse to the first one, after asking."""
+        value = self.graph_nodes()[key]["params"][param]
+        if isinstance(value, list):
+            if len(set(value)) > 1 and QMessageBox.question(
+                    self, "Collapse to one value",
+                    f"The channels hold different values. Keep only the first ({value[0]:g}) for all of them?"
+            ) != QMessageBox.StandardButton.Yes:
+                button.setChecked(True)
+                return
+            new = float(value[0])
+        else:
+            new = [float(value)] * n
+        self.defer_command({"op": "set", "id": key, "param": param, "value": new})
+
+    def commit_split_entry(self, key, param, index, entry):
+        """One channel field of a split knob was edited: write the whole list back."""
+        value = self.graph_nodes()[key]["params"][param]
+        if not isinstance(value, list) or float(value[index]) == float(entry):
+            return
+        value = list(value)
+        value[index] = float(entry)
+        self.defer_command({"op": "set", "id": key, "param": param, "value": value})
 
     def commit_param(self, key, param, value):
         """Route a knob edit to the base parameter, or to a key when the knob is animated.

@@ -520,7 +520,9 @@ def resolve_nodes(nodes, section, frame, spec_params_for, coerce):
         if node is None:
             raise ExpressionError(f"Reference to {target}.{param}: node does not exist")
         try:
-            return float(node["params"][param])
+            value = node["params"][param]
+            # A split knob holds a list; an expression reading it sees the first channel (r, or w).
+            return float(value[0] if isinstance(value, (list, tuple)) and value else value)
         except (KeyError, TypeError, ValueError):
             raise ExpressionError(f"Reference to {target}.{param}: not a numeric parameter") from None
 
