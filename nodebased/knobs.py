@@ -117,31 +117,35 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("uscale",), label="Uniform scale"),
         KnobGroup("xyz", ("pivot_x", "pivot_y", "pivot_z"), label="Pivot")),
     "Read": _groups(
-        KnobGroup("file_read", ("path",)), KnobGroup("enum", ("colorspace",)),
-        KnobGroup("enum", ("alpha_mode",)), KnobGroup("string", ("layer",)),
-        KnobGroup("int", ("subimage",)), KnobGroup("int", ("frame_offset",)),
-        KnobGroup("enum", ("missing",), label="On error"),
-        # Nuke's Read knobs that change what is read (nodebased/readknobs.py).
+        # Nuke's Read tab in the guide's order and words (docs/parity/nuke_nodes.json): File, Localization Policy, Format, Proxy, Proxy Format,
+        # Frame Range, Frame, Original Range, Missing Frames, Reload, Input Transform, Premultiplied, Raw Data, Auto Alpha. The knobs only
+        # NodeBased has follow them.
+        KnobGroup("file_read", ("path",), label="File"),
+        KnobGroup("enum", ("localizationPolicy",), label="Localization policy"),
         KnobGroup("enum", ("read_format",), label="Format"),
+        KnobGroup("file_read", ("proxy",), label="Proxy"), KnobGroup("enum", ("proxy_format",), label="Proxy format"),
         KnobGroup("int", ("first",), label="First frame"), KnobGroup("enum", ("before",), label="Before first"),
         KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("after",), label="After last"),
         KnobGroup("enum", ("frame_mode",), label="Frame mode"), KnobGroup("string", ("frame_expr",), label="Frame"),
         KnobGroup("int", ("origfirst",), label="Original first"), KnobGroup("int", ("origlast",), label="Original last"),
-        KnobGroup("bool", ("raw",), label="Raw data"), KnobGroup("bool", ("premultiplied",), label="Premultiplied"),
+        KnobGroup("enum", ("missing",), label="Missing frames"),
+        KnobGroup("int", ("reload",), label="Reload"),
+        KnobGroup("enum", ("colorspace",), label="Input transform"),
+        KnobGroup("bool", ("premultiplied",), label="Premultiplied"), KnobGroup("bool", ("raw",), label="Raw data"),
         KnobGroup("bool", ("auto_alpha",), label="Auto alpha"),
-        # Localization, proxy and context variables (nodebased/localize.py, readproxy.py, pathcontext.py); the Reload and Update
-        # localization buttons sit under them in the panel.
-        KnobGroup("enum", ("localizationPolicy",), label="Localization policy"),
-        KnobGroup("file_read", ("proxy",), label="Proxy file"), KnobGroup("enum", ("proxy_format",), label="Proxy format"),
-        KnobGroup("int", ("reload",), label="Reload count"),
+        # NodeBased's own: how alpha is read, which layer and sub-image, and the frame offset kept for older documents.
+        KnobGroup("enum", ("alpha_mode",)), KnobGroup("string", ("layer",)),
+        KnobGroup("int", ("subimage",)), KnobGroup("int", ("frame_offset",)),
+        # Context variables (nodebased/pathcontext.py); the Reload and Update localization buttons sit under the panel.
         KnobGroup("string", ("key1",), label="Context key 1"), KnobGroup("string", ("value1",), label="Context value 1"),
         KnobGroup("string", ("key2",), label="Context key 2"), KnobGroup("string", ("value2",), label="Context value 2"),
         KnobGroup("string", ("key3",), label="Context key 3"), KnobGroup("string", ("value3",), label="Context value 3"),
         KnobGroup("string", ("key4",), label="Context key 4"), KnobGroup("string", ("value4",), label="Context value 4")),
     "Constant": _groups(
+        # Nuke's order (docs/parity/nuke_nodes.json): channels, color, format, frame range.
         KnobGroup("enum", ("channels",)),
-        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("int", ("first",), label="First frame"), KnobGroup("int", ("last",), label="Last frame")),
     "Checker": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -1256,15 +1260,17 @@ KNOB_LAYOUT = {
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],
     "Write": _groups(
-        KnobGroup("file_write", ("path",)), KnobGroup("enum", ("file_type",)),
-        KnobGroup("enum", ("bit_depth",)), KnobGroup("bool", ("bundle",), label="Conditioning bundle"),
-        # Nuke's Write knobs (nodebased/writenode.py).
-        KnobGroup("string", ("channels",), label="Channels"), KnobGroup("enum", ("colorspace",), label="Output transform"),
+        # Nuke's Write tab in the guide's order and words (docs/parity/nuke_nodes.json): channels, file, proxy, frame, output transform,
+        # premultiplied, raw data, views, file type (and that format's own knobs), create directories, render order, frame range, limit
+        # to range, read file, missing frames, reload, read all lines. The knobs only NodeBased has (bit depth, conditioning bundle) follow.
+        KnobGroup("string", ("channels",), label="Channels"),
+        KnobGroup("file_write", ("path",), label="File"), KnobGroup("file_write", ("proxy",), label="Proxy"),
+        KnobGroup("enum", ("frame_mode",), label="Frame mode"), KnobGroup("string", ("frame_expr",), label="Frame"),
+        KnobGroup("enum", ("colorspace",), label="Output transform"),
         KnobGroup("bool", ("premultiplied",), label="Premultiplied"), KnobGroup("bool", ("raw",), label="Raw data"),
-        KnobGroup("enum", ("views",), label="Views"), KnobGroup("enum", ("frame_mode",), label="Frame mode"),
-        KnobGroup("string", ("frame_expr",), label="Frame"), KnobGroup("bool", ("create_directories",), label="Create directories"),
-        KnobGroup("bool", ("use_limit",), label="Limit to range"), KnobGroup("int", ("first",), label="First frame"),
-        KnobGroup("int", ("last",), label="Last frame"), KnobGroup("enum", ("exr_compression",), label="EXR compression"),
+        KnobGroup("enum", ("views",), label="Views"),
+        KnobGroup("enum", ("file_type",), label="File type"), KnobGroup("enum", ("bit_depth",)),
+        KnobGroup("enum", ("exr_compression",), label="EXR compression"),
         # Fidelity step M: each file format's own knobs; Properties shows only those of the format the Write writes
         # (writenode.hidden_params).
         KnobGroup("float_slider", ("exr_dw_compression_level",), label="Compression level", soft_range=(0, 100)),
@@ -1278,10 +1284,13 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("jpeg_sub_sampling",), label="JPEG sub-sampling"),
         KnobGroup("enum", ("dpx_datatype",), label="DPX data type"), KnobGroup("bool", ("dpx_fill",), label="DPX fill"),
         KnobGroup("bool", ("dpx_big_endian",), label="DPX big endian"), KnobGroup("enum", ("dpx_transfer",), label="DPX transfer"),
-        # Read file, render order and context variables (nodebased/writenode.py, pathcontext.py); the Render buttons sit under them.
-        KnobGroup("file_write", ("proxy",), label="Proxy file"), KnobGroup("bool", ("reading",), label="Read file"),
-        KnobGroup("bool", ("read_all_lines",), label="Read all lines"), KnobGroup("enum", ("on_error",), label="Missing frames"),
-        KnobGroup("int", ("reload",), label="Reload count"), KnobGroup("int", ("render_order",), label="Render order"),
+        KnobGroup("bool", ("create_directories",), label="Create directories"), KnobGroup("int", ("render_order",), label="Render order"),
+        KnobGroup("int", ("first",), label="First frame"), KnobGroup("int", ("last",), label="Last frame"),
+        KnobGroup("bool", ("use_limit",), label="Limit to range"),
+        KnobGroup("bool", ("reading",), label="Read file"), KnobGroup("enum", ("on_error",), label="Missing frames"),
+        KnobGroup("int", ("reload",), label="Reload"), KnobGroup("bool", ("read_all_lines",), label="Read all lines"),
+        KnobGroup("bool", ("bundle",), label="Conditioning bundle"),
+        # Context variables (nodebased/pathcontext.py); the Render buttons sit under them.
         KnobGroup("string", ("key1",), label="Context key 1"), KnobGroup("string", ("value1",), label="Context value 1"),
         KnobGroup("string", ("key2",), label="Context key 2"), KnobGroup("string", ("value2",), label="Context value 2"),
         KnobGroup("string", ("key3",), label="Context key 3"), KnobGroup("string", ("value3",), label="Context value 3"),
