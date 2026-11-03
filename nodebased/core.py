@@ -219,6 +219,7 @@ from . import textknobs as _textknobs
 from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import filterbehaviour as _filterbehaviour
+from . import effectbehaviour as _effectbehaviour
 from . import transformbehaviour as _transformbehaviour
 from . import drawbehaviour as _drawbehaviour
 from . import timeknobs as _timeknobs
@@ -414,7 +415,10 @@ SPECS = {
     # `edge_mult` scales the width of the band around the alpha edge the blur is confined to
     # (band = edge_mult * size pixels each side of the edge).
     "EdgeBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
-                 "params": {"edgeblur_size": 4.0, "edge_mult": 1.0, "channels": "rgba", "mix": 1.0}},
+                 # Step G (lane 2): Nuke's defaults (size 3, edge mult 2) for a new node, Nuke's filter, quality and crop, the matte channel,
+                 # tint and brightness; a saved node keeps its own values and gets the old ones on load (effectbehaviour.UPGRADE).
+                 "params": {"edgeblur_size": 3.0, "edge_mult": 2.0, "channels": "rgba", "mix": 1.0, **_blurknobs.new_params("EdgeBlur"),
+                            **_effectbehaviour.new_params("EdgeBlur")}},
     # EdgeExtend (step 5a): dilates the unpremultiplied edge colour outward by `extend_size`
     # pixels from every pixel whose alpha is at least `extend_threshold`; alpha is unchanged and
     # the colour output is unpremultiplied (docs/PARITY_2D.md).
@@ -1667,7 +1671,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_dropshadow_angle": (0, 1), "legacy_dirblur_knobs": (0, 1), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
-          "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
+          "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "edgeblur_tint": (0.0, 100.0), "edgeblur_brightness": (0.0, 100.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (0, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
@@ -2087,6 +2091,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "transfer_in": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"], "transfer_out": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"],
            "whitepoint_in": ["D65", "D60", "DCI"], "whitepoint_out": ["D65", "D60", "DCI"],
            "height_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
+           "edge_matte": ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue"],
            "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],

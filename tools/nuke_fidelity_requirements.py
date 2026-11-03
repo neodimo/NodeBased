@@ -65,6 +65,11 @@ NOT_PIXEL = {
     # Lane 2 step E (11/2): TimeDissolve's kernel is a Dissolve at one `which`; the frame range and the curve turn the frame into that `which` in the graph walk.
     "TimeDissolve": {k: "acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)"
                      for k in ("in", "out", "lut")},
+    # Lane 2 step G (11/2): EdgeBlur acts on a hard matte's edge band and on the size/quality relation; the fixture's alpha changes at every pixel.
+    "EdgeBlur": {"controlchannel": "picks the channel whose edges are blurred; the fixture's channels all change at every pixel, so the band is full whichever is read (tests/test_2d_behaviour_extra_filter.py shows it on a hard matte)",
+                 "edge_mult": "sets the width of the edge band; the fixture's alpha changes at every pixel, so the band is full at every value the probe tries (tests/test_2d_behaviour_extra_filter.py shows the band narrow)",
+                 "quality": "acts only when size exceeds quality, which is the size knob moved too (tests/test_2d_behaviour_filter_a.py shows the scaling for Blur; the cases here do the same for EdgeBlur)",
+                 "crop": "crop to format acts on the bounding box only (tests/test_2d_behaviour_extra_filter.py shows the window grow)"},
     "Crop": {"reformat": "makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)",
              "crop": "black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)"},
 }

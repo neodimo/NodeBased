@@ -1473,7 +1473,7 @@ class TileExecutor:
                     return imaging.Evaluator._merge_gated(str(params.get("operation", "over")), shadowed, bg_artifact.pixels,
                                                           params.get("mix", 1.0), mask_pixels)
             elif kind == "EdgeBlur":
-                filtered = imaging.Evaluator._edge_blur(image, params)
+                filtered = imaging.Evaluator._edge_blur(image, params, origin=(image_artifact.region.x, image_artifact.region.y))
             elif kind == "EdgeExtend":
                 filtered = imaging.Evaluator._edge_extend(image, params)
             elif kind == "Dither":

@@ -2196,7 +2196,14 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["edge_matte"], "nuke": ["controlchannel"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'matte input', scripting name `controlchannel`"},
+    {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `filter`"},
+    {"nodebased": ["quality"], "nuke": ["quality"], "kind": "same"},
+    {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["edgeblur_tint"], "nuke": ["tint"], "kind": "renamed", "reason": "same control under another name; `tint` is a global name other nodes use"},
+    {"nodebased": ["edgeblur_brightness"], "nuke": ["brightness"], "kind": "renamed", "reason": "same control under another name; `brightness` is Glow's"},
+    {"nodebased": [], "nuke": ["output"], "kind": "unsupported", "reason": "Nuke's output sets the channel the edge blur is written to; NodeBased writes the blur into the channels the `channels` knob names, and has no second output channel to route it to"}
    ]
   },
   "EdgeExtend": {

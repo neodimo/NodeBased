@@ -81,6 +81,26 @@ def _fixture_log():
     return out
 
 
+def _fixture_edge():
+    """E: a textured plate (values 0 to 1 in every colour channel) whose alpha is a hard rectangle, 1 on x 5 to 10 and y 3 to 8 and 0 elsewhere,
+    for the nodes that act on a matte's edge."""
+    out = np.zeros((H, W, 4), np.float32)
+    for y in range(H):
+        for x in range(W):
+            out[y, x, 0] = ((3 * x + 5 * y) % 7) / 6.0
+            out[y, x, 1] = ((2 * x + 7 * y) % 5) / 4.0
+            out[y, x, 2] = ((x + y) % 3) / 2.0
+            out[y, x, 3] = 1.0 if (5 <= x <= 10 and 3 <= y <= 8) else 0.0
+    return out
+
+
+def _fixture_point():
+    """P: transparent black with one white pixel, rgba 1, at x 12 and y 6 (a point to smear along a ray)."""
+    out = np.zeros((H, W, 4), np.float32)
+    out[6, 12, :] = 1.0
+    return out
+
+
 def make_fixtures():
     a, b = _fixtures_ab()
     mask = np.zeros((H, W, 4), np.float32)
@@ -89,7 +109,7 @@ def make_fixtures():
             i = y * W + x
             for c in range(4):
                 mask[y, x, c] = _MASK[(i // (c + 1) + c) % len(_MASK)]
-    return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log()}
+    return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log(), "E": _fixture_edge(), "P": _fixture_point()}
 
 
 # ---------------------------------------------------------------------------------------------------- Merge formulas
@@ -343,7 +363,7 @@ def _cases():
 
 CASES = _cases()
 # Behaviour cases from the 2D behaviour lanes (lanes 2 and 9), each in its own module.
-for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter", "nuke_fidelity_cases_merge"):
+for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter", "nuke_fidelity_cases_merge", "nuke_fidelity_cases_extra"):
     try:
         CASES += __import__(_mod).cases()
     except ModuleNotFoundError as _exc:

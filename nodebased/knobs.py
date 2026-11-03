@@ -375,9 +375,19 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("legacy_dropshadow_angle",), label="Legacy angle",
                   help="Read the angle from the right, counter-clockwise, as graphs saved before DropShadow followed the guide do.")),
     "EdgeBlur": _groups(
-        KnobGroup("float_slider", ("edgeblur_size",), label="Size", soft_range=(0, 100)),
-        KnobGroup("float_slider", ("edge_mult",), label="Edge multiplier", soft_range=(0, 4)),
-        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("enum", ("channels",)),
+        KnobGroup("enum", ("edge_matte",), label="Matte input", help="The channel the edges are detected on."),
+        KnobGroup("float_slider", ("edgeblur_size",), label="Size", soft_range=(0, 100), help="The size of the blur applied to the detected edges."),
+        KnobGroup("enum", ("kernel_filter",), label="Filter", help="The blur's shape: box is the fastest, gaussian the smoothest."),
+        KnobGroup("float_slider", ("quality",), label="Quality", soft_range=(1, 100),
+                  help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
+        KnobGroup("bool", ("crop",), label="Crop to format",
+                  help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
+        KnobGroup("float_slider", ("edge_mult",), label="Edge mult", soft_range=(0, 4),
+                  help="The width of the edge band in sizes: lower values give sharper edges."),
+        KnobGroup("float_slider", ("edgeblur_tint",), label="Tint", soft_range=(0, 2), help="The multiplier for the red, green and blue of the edge blur."),
+        KnobGroup("float_slider", ("edgeblur_brightness",), label="Brightness", soft_range=(0, 2), help="The multiplier for all channels of the edge blur."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "EdgeExtend": _groups(
         KnobGroup("float_slider", ("extend_size",), label="Size", soft_range=(0, 50)),
         KnobGroup("float_slider", ("extend_threshold",), label="Alpha threshold", soft_range=(0, 1)),
@@ -2118,6 +2128,11 @@ NUKE_LAYOUT_LANE9.update({
     "RotoPaint": _ROTO_ORDER,
 })
 NUKE_LABELS.setdefault("Roto", {})["invert"] = "Invert matte"       # the mask row's own knob reads "Invert"
+
+# Lane 2 step G (11/2): EdgeBlur, GodRays and BumpBoss in the guide's order (docs/parity/nuke_nodes.json), the mask strip and mix closing the tab.
+NUKE_LAYOUT_LANE9.update({
+    "EdgeBlur": ("channels", "edge_matte", "edgeblur_size", "kernel_filter", "quality", "crop", "edge_mult", "edgeblur_tint", "edgeblur_brightness"),
+})
 
 
 def _nuke_layouts():

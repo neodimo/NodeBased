@@ -5113,7 +5113,7 @@ class Evaluator:
             return Evaluator._edge_window(kind, p, Evaluator._transformed_window(source.data, p), source)
         if kind == "CornerPin":
             return Evaluator._edge_window(kind, p, Evaluator._cornerpin_window(source.data, p), source)
-        if kind in ("Blur", "Sharpen", "Soften", "Glow", "Laplacian") and not p.get("crop", 1):
+        if kind in ("Blur", "Sharpen", "Soften", "Glow", "Laplacian", "EdgeBlur") and not p.get("crop", 1):
             # "Crop to format" off: the window grows by the filter's reach, the new edge being transparent black.
             from . import blurknobs
             return blurknobs.grown_window(kind, p, source.data)
@@ -5369,7 +5369,7 @@ class Evaluator:
         if kind == "DropShadow":
             return Evaluator._drop_shadow(source.fit(out), p)
         if kind == "EdgeBlur":
-            return Evaluator._edge_blur(source.fit(out), p)
+            return Evaluator._edge_blur(source.fit(out), p, origin=(out.x, out.y))
         if kind == "EdgeExtend":
             return Evaluator._edge_extend(source.fit(out), p)
         if kind == "Dither":
@@ -5661,7 +5661,7 @@ class Evaluator:
             if kind == "Dither":
                 filtered = Evaluator._dither(inputs[0], p, frame=frame)
             else:
-                filtered = getattr(Evaluator, {"EdgeBlur": "_edge_blur", "EdgeExtend": "_edge_extend"}[kind])(inputs[0], p)
+                filtered = Evaluator._edge_blur(inputs[0], p, origin) if kind == "EdgeBlur" else Evaluator._edge_extend(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("Grain", "Posterize", "SoftClip", "HSVTool", "Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain"):
@@ -7336,25 +7336,10 @@ class Evaluator:
         return 0 if size < 0.5 else int(math.ceil(size))
 
     @staticmethod
-    def _edge_blur(image, p):
-        # Nuke's EdgeBlur: blur only where the matte has an edge. The band is the alpha's own
-        # morphological gradient, box dilate minus box erode over `edge_mult * size` pixels, so
-        # it is 1 for a hard matte within that distance of the edge on both sides, fractional
-        # across a soft edge, and 0 in a flat interior or exterior. The result is
-        # image + band * (Gaussian(image, size) - image): pixels outside the band are the input,
-        # bit for bit, even when they hold detail a plain Blur would smear.
-        size = abs(float(p.get("edgeblur_size", 4.0)))
-        out = image.copy()
-        band_width = size * max(0.0, float(p.get("edge_mult", 1.0)))
-        if size < 0.5 or band_width < 0.5:
-            return out
-        alpha = image[..., 3:4]
-        band = np.clip(Evaluator._box_extreme(alpha, band_width, use_max=True)
-                       - Evaluator._box_extreme(alpha, band_width, use_max=False), 0.0, 1.0)
-        blurred = Evaluator._gaussian_2d(image, size)
-        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
-            out[..., c] = image[..., c] + band[..., 0] * (blurred[..., c] - image[..., c])
-        return out.astype(np.float32)
+    def _edge_blur(image, p, origin=(0, 0)):
+        # Nuke's EdgeBlur (nodebased/effectbehaviour.py): the blur of `size` confined to the matte's edge band.
+        from . import effectbehaviour
+        return effectbehaviour.edge_blur(image, p, origin)
 
     @staticmethod
     def _edge_extend(image, p):

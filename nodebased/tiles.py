@@ -529,9 +529,8 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
     if kind == "EdgeBlur":
         import math
         # Mirror `tiers._edge_blur_rule`: the wider of the blur reach and the alpha band.
-        size = abs(float(params.get("edgeblur_size", 0.0)))
-        band = size * max(0.0, float(params.get("edge_mult", 1.0)))
-        support = max(0 if size < 0.5 else int(math.ceil(size)), 0 if band < 0.5 else int(math.ceil(band)))
+        from . import effectbehaviour
+        support = effectbehaviour.edge_halo(params)
         return (support, support)
     if kind == "EdgeExtend":
         import math

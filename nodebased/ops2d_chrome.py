@@ -283,6 +283,8 @@ def upgrade_nodes(nodes):
         added.update(transformbehaviour.upgrade_params(node.get("type")))      # the Transform group (lane 9 step B)
         from . import drawbehaviour
         added.update(drawbehaviour.upgrade_params(node.get("type")))           # the Draw group (lane 9 step C)
+        from . import effectbehaviour
+        added.update(effectbehaviour.upgrade_params(node.get("type")))         # EdgeBlur, GodRays, BumpBoss (lane 2 step G)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)
@@ -466,7 +468,7 @@ def needs_full_frame(kind, p):
         from . import filterbehaviour
         if not filterbehaviour.convolve_is_legacy(p):
             return True      # the filter is its whole bounding box, which a tile does not hold
-    if kind in ("Blur", "Sharpen", "Soften", "Glow", "Laplacian"):
+    if kind in ("Blur", "Sharpen", "Soften", "Glow", "Laplacian", "EdgeBlur"):
         from . import blurknobs
         if blurknobs.needs_full_frame(kind, p):
             return True      # a window that grows, or a picture scaled down to fit `quality`, is not a tile's business

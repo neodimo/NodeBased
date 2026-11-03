@@ -244,9 +244,8 @@ _soften_rule = _blurknobs_rule("Soften")
 def _edge_blur_rule(params, region, arity):
     # The Gaussian reads ceil(size) pixels and the alpha band ceil(edge_mult * size); the wider
     # of the two decides the padding.
-    size = abs(float(params.get("edgeblur_size", 0.0)))
-    band = size * max(0.0, float(params.get("edge_mult", 1.0)))
-    support = max(0 if size < 0.5 else int(math.ceil(size)), 0 if band < 0.5 else int(math.ceil(band)))
+    from . import effectbehaviour
+    support = effectbehaviour.edge_halo(params)
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 
