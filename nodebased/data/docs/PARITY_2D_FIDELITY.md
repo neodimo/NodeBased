@@ -2,7 +2,7 @@
 
 **Overall fidelity: 95.7 / 100** (167 nodes scored, rank-weighted; 98.1 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.2 (97.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.3 (97.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -32,7 +32,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
-| Image | 97.5 | 97.5 | 97.5 | 6 |
+| Image | 98.2 | 97.8 | 98.1 | 6 |
 | Draw | 92.1 | 83.8 | 90.9 | 17 |
 | Time | 98.3 | 90.6 | 98.0 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
@@ -56,8 +56,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Read | `Read` | supported | 98.8 | 98.8 | 100 (32/32) | - | 94 | - | - | - | 100 | - | no fixture |
-| 2 | Write | `Write` | supported | 98.6 | 98.7 | 100 (27/27) | - | 92 | - | 100 | - | 100 | - | no fixture |
+| 1 | Read | `Read` | supported | 100.0 | 100.0 | 100 (32/32) | - | 100 | - | - | - | 100 | - | no fixture |
+| 2 | Write | `Write` | supported | 99.3 | 99.4 | 100 (27/27) | - | 96 | - | 100 | - | 100 | - | no fixture |
 | 3 | Viewer | `Viewer` | supported | 90.0 | 89.7 | 83 (20/24) | - | - | 100 | 100 | - | - | - | no fixture |
 | 4 | Constant | `Constant` | supported | 97.6 | 97.2 | 100 (4/4) | 100 (2/2) | 75 | - | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 5 | UDIM Import | - | missing | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
@@ -308,18 +308,18 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 16 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
 | 17 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
 | 18 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 19 | Read (Image #1) | `Read` | 1.25 | 98.8 | nothing missing that the guide lists |
-| 20 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
-| 21 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
-| 22 | SmartVector (Time #8) | `SmartVector` | 1.18 | 62.1 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
-| 23 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
-| 24 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
-| 25 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
-| 26 | Kronos (Time #8) | `Kronos` | 1.07 | 65.8 | primary knobs missing: `resetInputRange`, `motionEstimation`, `vectorDetail`, `strength`, `smoothness`, `resampleType`; 11 secondary knobs missing: `shutterTime`, `autoShutterTime`, `output`, `matteChannel`, `flickerCompensation` ...; sockets missing: `FgVecs BgVecs`, `MoSrc`, `Matte` |
-| 27 | GridWarp (Transform #14) | `GridWarp` | 1.06 | 70.2 | 29 secondary knobs missing |
-| 28 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
-| 29 | ZSlice (Filter #19) | `ZSlice` | 1.00 | 81.0 | node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 30 | HSVTool (Color #12) | `HSVTool` | 0.97 | 88.4 | 11 secondary knobs missing: `huereset`, `HMask`, `invert_hue_mask`, `satreset`, `SMask` ... |
+| 19 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 20 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 21 | SmartVector (Time #8) | `SmartVector` | 1.18 | 62.1 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
+| 22 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
+| 23 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
+| 24 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
+| 25 | Kronos (Time #8) | `Kronos` | 1.07 | 65.8 | primary knobs missing: `resetInputRange`, `motionEstimation`, `vectorDetail`, `strength`, `smoothness`, `resampleType`; 11 secondary knobs missing: `shutterTime`, `autoShutterTime`, `output`, `matteChannel`, `flickerCompensation` ...; sockets missing: `FgVecs BgVecs`, `MoSrc`, `Matte` |
+| 26 | GridWarp (Transform #14) | `GridWarp` | 1.06 | 70.2 | 29 secondary knobs missing |
+| 27 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
+| 28 | ZSlice (Filter #19) | `ZSlice` | 1.00 | 81.0 | node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 29 | HSVTool (Color #12) | `HSVTool` | 0.97 | 88.4 | 11 secondary knobs missing: `huereset`, `HMask`, `invert_hue_mask`, `satreset`, `SMask` ... |
+| 30 | ContactSheet (Merge #10) | `ContactSheet` | 0.91 | 90.9 | nothing missing that the guide lists |
 
 ## Formula cases
 
@@ -1259,7 +1259,7 @@ Nuke's knob class for each knob: AColor_Knob (one slider that splits into r g b 
 - The guide's mask input is listed as a socket only on some pages whose nodes do have a mask channel knob (for example Crop has neither). The sockets component counts what each page lists.
 - Keyer's `range` knob is listed in the guide's table with 1 for every point; Nuke's own range starts at 0 0 1 1 (A, B, C, D), which is what the node has, so its first two points are skipped by the defaults component (`skip_default`).
 - A text default the guide lists as `none` is an empty field in NodeBased (Read and Write `proxy`, `file`, `frame`, the metadata `key` and `value` rows, Write's `file_type` Auto); the mapping's `value_map` reads the empty value as `none`. Read's `proxy_format` starts at `file` (the proxy takes its own size) where the guide lists 1024x778, a size that depends on the project, so it is skipped.
-- Defaults NodeBased keeps on purpose (2D behaviour step M): BurnIn's text slots, which hold `[metadata input/filename]`, `[frame]` and `[metadata timecode]` where the guide lists the Hiero expressions `hiero/clip`, `hiero/shot`, `hiero/track` and `hiero/sequence/timecode` (NodeBased has no Hiero metadata), and its `fontfamily`, empty where the guide lists Utopia (the system font stands in); Write's `create_directories`, on, so a render into a new folder does not fail where the guide lists off. Read's `auto_alpha` (on, the guide: off) and Write's `channels` (all, the guide: rgb) are not yet changed: `readknobs.active` and `writenode.active` take the default to be the Read and Write of before, and several test modules pin that (listed as open in the step M report). The audit lists all of these as differences.
+- Defaults NodeBased keeps on purpose (2D behaviour step M): BurnIn's text slots, which hold `[metadata input/filename]`, `[frame]` and `[metadata timecode]` where the guide lists the Hiero expressions `hiero/clip`, `hiero/shot`, `hiero/track` and `hiero/sequence/timecode` (NodeBased has no Hiero metadata), and its `fontfamily`, empty where the guide lists Utopia (the system font stands in); Write's `create_directories`, on, so a render into a new folder does not fail where the guide lists off. A new Read starts with `auto_alpha` off and a new Write on `channels` rgb, as the guide lists (`readknobs.NEW_NODE_DEFAULTS`, `writenode.NEW_NODE_DEFAULTS`); a saved Read or Write that lacks the knob reads with the value of before (`readknobs.DEFAULTS`, `writenode.DEFAULTS`: auto alpha on, every channel), so older documents render and write as they did. The audit lists all of these as differences.
 - Features NodeBased keeps in a payload or panel rather than in a node param (Roto and RotoPaint shape and stroke fields, the Viewer's look and proxy state, the metadata viewers) are paired as `panel` entries, each citing the document that describes it; they count as covered. A Nuke knob NodeBased cannot honour is paired as `unsupported` with the reason; it counts as missing, so listing it explains a gap without closing it. Roto's CornerPin export tab is not paired.
 
 ### Guide pages without a row in PARITY_2D.md
