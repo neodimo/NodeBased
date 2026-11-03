@@ -1,5 +1,24 @@
 ## 2026-11-03 - lane 9 (2D behaviour), step H: GridWarp and SplineWarp
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:35 AM on 2026-11-03 PDT)
+
+`main` moved `ae42d3b7` -> `97ccfc91` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `97ccfc91` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0125.log`, started 1:25 AM): **Ran 8555 tests in 583.205 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step H of 2: GridWarp and SplineWarp get Nuke's inputs, mask controls and a checked warp.** Commits:
+  - `bdf3eb21` GridWarp: dst and bg inputs, Output, Background and its mix, the mask strip; SplineWarp: Premultiply input, Output mask, Crop to format, Bbox boundary curve, Layer warp, Pair warp; graphs saved before keep their window and layers; the audit report is rebuilt (2D behaviour, lane 9 step H)
+  Diff: 14 files changed, 615 insertions(+), 41 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 GridWarp has `dst` and `bg` inputs, `grid_output`, `background`, `background_mix` and the mask strip; SplineWarp has `premultiply`, `outputMask`, `crop_to_format`, `boundary_bbox`, `layer_warp`, `pair_warp` and `channels`. Code in `nodebased/warpknobs.py`, kernel `Evaluator._warp_node`. Tests `tests/test_2d_behaviour_warp_h.py` (19). Fidelity GridWarp 26.3 -> 70.2, SplineWarp 35.2 -> 82.1, overall 93.2 -> 93.3. See TASKLOG for what is open.
 
 ## 2026-11-03 - Lane 9 (2D behaviour), step G: Bilateral, Sharpen and VectorCornerPin

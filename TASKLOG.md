@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step H of 2: GridWarp and SplineWarp get Nuke's inputs, mask controls and a checked warp (integrator tick)
+
+- **What was done:** `main` `ae42d3b7` -> `97ccfc91` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `97ccfc91`: Ran 8555 tests in 583.205 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step H: GridWarp and SplineWarp
 
 - **What was done (evidence):** `nodebased/warpknobs.py` holds the tables and helpers; kernel in `Evaluator._warp_node`. GridWarp gains the `dst` and `bg` inputs (after the mask, so a saved edge keeps its slot; GridWarpTracker's `vectors` slot is untouched), `grid_output` (source / source warped / destination / destination warped), `background` and `background_mix`, and the shared chrome (channels, mask channel, invert, inject, fringe). SplineWarp gains `premultiply`, `outputMask` (a `mask_splinwarp` layer, alpha 1 where the warp moved the picture), `crop_to_format`, `boundary_bbox`, `layer_warp` and `pair_warp`, and `channels`. `key` and `curves` are paired as `panel` entries: the payload's `pairs` list is the curves, the keys are the animation keys of each point's scalars.
