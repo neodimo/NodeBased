@@ -1,5 +1,28 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step K of 2: the thirteen knobs that change nothing, and Nuke's labels and order
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:05 AM on 2026-11-03 PDT)
+
+`main` moved `69aa0d36` -> `530df4a7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `530df4a7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0355.log`, started 3:55 AM): **Ran 8758 tests in 590.295 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step K of 2: the thirteen knobs that change nothing, and Nuke's labels and order on the filter and transform panels.** Commits:
+  - `edc795b3` TASKLOG and state: lane 9 step K
+  - `580b9b57` Fidelity report and mapping after step K: no knob left that changes no pixels, the named panels in the guide's order
+  - `259ee028` Labels and order on the ZDefocus, Denoise, DegrainSimple, MotionBlur, VectorBlur, ZSlice, CornerPin, STMap, IDistort, PointsTo3D and Text panels follow the guide
+  - `029a3003` DirBlur: Quality scales the blur down, PixelAspect widens the pixel, Holdout channel keeps pixels out of a zoom blur; saved graphs keep their pixels
+  - `d9b5619b` LightWrap: Disable luminance based wrap, Enable Glow, LumaTolerance, white and midtone bias act; list the quality, crop and static seed knobs that need a size or frames
+  Diff: 16 files changed, 502 insertions(+), 152 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** three code commits plus a report commit; targeted gate green (tests.test_2d_behaviour_filter_k 17 tests, filter_f, draw, transform, lens_j, filter_layout, retime_vectors, group_3b, step_5a, tiers, audit, knowledge, tiles, bypass, knobs, core, the properties-label and fluid-panel desktop tests).
   - LightWrap (new flag `legacy_lightwrap_luma`, saved nodes 1): Disable luminance based wrap divides the background light by its luminance (one brightness whatever the background); Enable Glow drops the matte factor so the wrap extends outside the alpha; LumaTolerance fades background darker than it out of the wrap; midtone bias (`gray`) is the contrast pivot and `white` the gamma fixed point of the CCorrect tab (run in ColorCorrect's order). Guide-silent details are stated in the code comments.
   - DirBlur (existing `legacy_dirblur_knobs`): Quality high/normal/low scales the picture down by 1/2/4, blurs and scales back up (new nodes default to high, Nuke's 1); PixelAspect widens the pixel (linear direction, radial circle); Holdout on keeps pixels whose alpha is not black out of a zoom blur's average. Quality scaling and a non-square pixel read the whole frame like zoom and radial (not tiled).

@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step K of 2: the thirteen knobs that change nothing, and Nuke's labels and order on the filter and transform panels (integrator tick)
+
+- **What was done:** `main` `69aa0d36` -> `530df4a7` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `530df4a7`: Ran 8758 tests in 590.295 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step K of 2: the thirteen knobs that change nothing, and Nuke's labels and order
 
 - **What was done (evidence):** three code commits plus a report commit; targeted gate green (tests.test_2d_behaviour_filter_k 17 tests, filter_f, draw, transform, lens_j, filter_layout, retime_vectors, group_3b, step_5a, tiers, audit, knowledge, tiles, bypass, knobs, core, the properties-label and fluid-panel desktop tests).
