@@ -45,6 +45,7 @@ from pathlib import Path
 import numpy as np
 
 from . import cachetier
+from . import drawbehaviour as _drawbehaviour
 from . import groups
 from . import imaging
 from . import ops2d_chrome as _chrome
@@ -1094,12 +1095,12 @@ class TileExecutor:
             return plate
         result = plate.copy()
         coverage = matte[..., 3]
-        result[..., 3] = coverage
+        result[..., 3] = _drawbehaviour.roto_alpha(coverage, plate[..., 3], params)
         mode = params.get("premultiply_mode", "none")
         if mode in ("rgb", "rgba"):
             result[..., :3] *= coverage[..., None]
         if mode == "rgba":
-            result[..., 3] *= coverage
+            result[..., 3] = _drawbehaviour.roto_premultiply_alpha(result[..., 3], coverage, params)
         return result
 
     @staticmethod

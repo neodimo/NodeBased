@@ -351,6 +351,33 @@ for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter", "nuke_fi
             raise
 
 
+def _run_payload_document(case):
+    """Run a Roto or RotoPaint case whose shapes (`_shapes`) or strokes (`_items`) live in the node's payload, which a bare kernel call cannot
+    carry. The document holds the node at the fixture's size, and a flat plate (`_bg`, straight RGBA) on its background input when given;
+    `_second` is a second flat plate for RotoPaint's source input. The picture the evaluator returns for the node is the answer."""
+    from nodebased.core import Dispatcher, empty_document
+    from nodebased.imaging import Evaluator
+    knobs = dict(case.nb_params)
+    shapes, items = knobs.pop("_shapes", None), knobs.pop("_items", None)
+    bg, second = knobs.pop("_bg", None), knobs.pop("_second", None)
+    paint = items is not None
+    kind = case.nb_kind
+    d = Dispatcher(empty_document())
+    d.execute({"op": "create", "id": "n", "type": kind, "params": {"width": W, "height": H, **knobs}})
+
+    def plate(name, colour, slot):
+        d.execute({"op": "create", "id": name, "type": "Constant", "params": {"width": W, "height": H, "red": colour[0], "green": colour[1],
+                                                                                 "blue": colour[2], "alpha": colour[3]}})
+        d.execute({"op": "connect", "id": "n", "input": slot, "source": name})
+    if bg is not None:
+        plate("bg", bg, "image" if paint else "bg")
+    if second is not None:
+        plate("second", second, "input2")
+    d.execute({"op": "set_paint_items", "id": "n", "items": items} if paint else {"op": "set_shapes", "id": "n", "shapes": shapes})
+    d.execute({"op": "view", "id": "n"})
+    return np.asarray(Evaluator().evaluate_raster(d.document, target="n").pixels, dtype=np.float64)
+
+
 def run_nodebased(case, fx=None):
     """Run a case on NodeBased's evaluator kernel; returns the output array, or None when NodeBased cannot express the case.
 
@@ -360,6 +387,8 @@ def run_nodebased(case, fx=None):
     The array returned is what the viewer shows of the result: the format's rectangle, zero where the data window does not reach."""
     if case.nb_params is None:
         return None
+    if "_shapes" in case.nb_params or "_items" in case.nb_params:
+        return _run_payload_document(case)
     from nodebased import core
     from nodebased.imaging import Evaluator
     fx = fx or make_fixtures()

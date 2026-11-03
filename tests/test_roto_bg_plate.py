@@ -1,4 +1,5 @@
 """Roto's plate path and first-draw viewer cue."""
+import copy
 import os
 import unittest
 
@@ -43,9 +44,14 @@ class RotoPlateTests(unittest.TestCase):
         plate = evaluator.evaluate_raster(with_shape, target="plate").pixels
         result = evaluator.evaluate_raster(with_shape, target="r").pixels
         np.testing.assert_array_equal(result[..., :3], plate[..., :3])
-        self.assertEqual(float(result[0, 0, 3]), 0.0)
-        self.assertGreater(float(result[5, 5, 3]), 0.0)
+        # Replace is off: the shape is drawn into the plate's alpha, which stays where the shape does not reach (lane 9 step E).
+        self.assertEqual(float(result[0, 0, 3]), float(plate[0, 0, 3]))
+        self.assertGreaterEqual(float(result[5, 5, 3]), float(plate[5, 5, 3]))
         self.assertEqual(with_shape["nodes"]["r"]["params"]["premultiply_mode"], "none")
+        with_shape["nodes"]["r"]["params"]["replace"] = 1
+        replaced = evaluator.evaluate_raster(with_shape, target="r").pixels
+        self.assertEqual(float(replaced[0, 0, 3]), 0.0)
+        self.assertGreater(float(replaced[5, 5, 3]), 0.0)
 
     def test_rgb_premultiply_is_applied_only_when_selected(self):
         shape = triangle()
@@ -53,7 +59,9 @@ class RotoPlateTests(unittest.TestCase):
                            for point in shape["points"]]
         document = self.plate_document([shape], premultiply_mode="rgb")
         result = Evaluator().evaluate_raster(document, target="r").pixels
-        coverage = result[..., 3:4]
+        bare = copy.deepcopy(document)
+        bare["nodes"]["r"]["params"].update(replace=1, premultiply_mode="none", width=32, height=32)
+        coverage = Evaluator().evaluate_raster(bare, target="r").pixels[..., 3:4]
         plate = Evaluator().evaluate_raster(document, target="plate").pixels
         np.testing.assert_allclose(result[..., :3], plate[..., :3] * coverage, atol=1e-7)
 

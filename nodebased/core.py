@@ -622,7 +622,7 @@ SPECS = {
     # through and the shape's coverage becomes its alpha, at the plate's own format. Nuke's
     # premultiply control defaults to none.
     "Roto": {"inputs": [], "optional_inputs": ["bg", "mask"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none",
-                                                                    **_rotoknobs.new_params("Roto")}},
+                                                                    **_rotoknobs.new_params("Roto"), **_drawbehaviour.new_params("Roto")}},
     # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
     # second image is the reveal source; clone samples from the plate at a source frame.
     # D1: "Detect specks..." samples dustbust_frame_start..dustbust_frame_end and proposes clone

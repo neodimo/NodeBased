@@ -789,7 +789,9 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("global_motionblur",), label="Global samples"),
         KnobGroup("float_slider", ("global_motionblur_shutter",), label="Global shutter", soft_range=(0, 2)),
         KnobGroup("enum", ("global_motionblur_shutter_offset_type",), label="Global shutter offset"),
-        KnobGroup("float", ("global_motionblur_shutter_offset",), label="Global custom offset")),
+        KnobGroup("float", ("global_motionblur_shutter_offset",), label="Global custom offset"),
+        KnobGroup("bool", ("legacy_roto_alpha",), label="Legacy alpha",
+                  help="Write the matte over a wired background's alpha, as graphs saved before Roto followed the guide's Replace do.")),
     "Precomp": _groups(
         KnobGroup("string", ("file",), label="File"), KnobGroup("string", ("output_node",), label="Output node"),
         KnobGroup("bool", ("use_output",), label="Use output node"), KnobGroup("int", ("frame_offset",), label="Frame offset"),
@@ -2091,6 +2093,18 @@ NUKE_LABELS.update({
     "Glow": {"glow_threshold": "Tolerance"},
     "EdgeDetect": {"edge_type": "Edge Detector"},
 })
+
+
+# Lane 9 step E (11/2): Roto and RotoPaint, in the guide's order (docs/parity/nuke_nodes.json): output, premultiply, clip to and replace lead,
+# then the format (Roto), the mask row, the output mask, opacity, the Motion Blur tab's switches and values, and the tracking channels last.
+_ROTO_ORDER = ("output", "premultiply_mode", "cliptype", "replace", "maskChannelInput", "inject", "invert_mask", "fringe", "outputMask", "opacity",
+               "shape_motionblur_on", "global_motionblur_on", "global_motionblur", "global_motionblur_shutter",
+               "global_motionblur_shutter_offset_type", "global_motionblur_shutter_offset", "channels")
+NUKE_LAYOUT_LANE9.update({
+    "Roto": (*_ROTO_ORDER[:4], "width", "height", *_ROTO_ORDER[4:]),
+    "RotoPaint": _ROTO_ORDER,
+})
+NUKE_LABELS.setdefault("Roto", {})["invert"] = "Invert matte"       # the mask row's own knob reads "Invert"
 
 
 def _nuke_layouts():

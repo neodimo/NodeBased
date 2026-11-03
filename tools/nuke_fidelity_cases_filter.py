@@ -774,6 +774,7 @@ def cases():
                          "size does not divide; tests/test_2d_behaviour_transform.py checks the layout (every tile is the same scaled picture), "
                          "the mirrors and the filters")
     _draw_cases(Case, out)
+    _roto_cases(Case, out)
     return out
 
 
@@ -1125,3 +1126,183 @@ def _defocus_cases(Case, out):
                   "but gives neither that algorithm nor what detail amount recovers; the edge fill here is a ring-by-ring average, an approximation. "
                   "tests/test_2d_behaviour_draw.py checks what the page states: positive erode takes colour from deeper inside the matte and "
                   "negative erode from outside it, source is premultiplied unpremultiplies the source first, and premultiply multiplies the output")
+
+
+# ------------------------------------------------------------------------------------------------ Roto (lane 9, step E)
+ROTO_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/draw_nodes/roto.html"
+ROTO_PLATE = (0.2, 0.4, 0.6, 1.0)            # a flat background, straight RGBA with alpha 1, so its stored colour equals these numbers
+_KAPPA = 0.5522847498                        # the Bezier handle length, as a fraction of the radius, that draws a quarter circle
+
+
+def roto_point(x, y, ix=0.0, iy=0.0, ox=0.0, oy=0.0):
+    return {"x": float(x), "y": float(y), "in_x": ix, "in_y": iy, "out_x": ox, "out_y": oy}
+
+
+def roto_box(x0, y0, x1, y1, **extra):
+    """A closed shape with four corner points, as the shape list stores it (edge feather, the model the viewer's new shapes use)."""
+    shape = {"name": "box", "mode": "union", "opacity": 1.0, "feather": 0.0, "feather_model": "edge",
+             "points": [roto_point(x0, y0), roto_point(x1, y0), roto_point(x1, y1), roto_point(x0, y1)]}
+    shape.update(extra)
+    return shape
+
+
+def roto_circle(cx, cy, r, **extra):
+    """Four Bezier points with quarter-circle handles (offsets from the point, as the shape list stores them)."""
+    k = _KAPPA * r
+    pts = [roto_point(cx + r, cy, 0, -k, 0, k), roto_point(cx, cy + r, k, 0, -k, 0),
+           roto_point(cx - r, cy, 0, k, 0, -k), roto_point(cx, cy - r, -k, 0, k, 0)]
+    shape = {"name": "ellipse", "mode": "union", "opacity": 1.0, "feather": 0.0, "feather_model": "edge", "points": pts}
+    shape.update(extra)
+    return shape
+
+
+def _roto_cases(Case, out):
+    """Roto: what the shapes in the node's payload draw (the guide's Roto page: output, premultiply, replace, opacity, feather, invert,
+    the shape list and the Transform tab). Shapes are written in the case's `_shapes`, a flat plate in `_bg`; see
+    nuke_fidelity_cases._run_payload_document. Pixel i spans [i, i + 1) in x and in y (a pixel's centre is at i + 0.5), the form the
+    NDK's pixel coordinates use; a pixel the outline only partly covers is not scored unless a case says its rule."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored=""):
+        out.append(Case(id=id, nuke="Roto", nuke_class="Roto", nuke_knobs=nuke_knobs, nuke_inputs=("bg",), nb_kind="Roto",
+                        nb_params=nb_params, nb_inputs=(), expected=expected, source=source, statement=statement, unscored=unscored))
+
+    yy, xx = np.mgrid[0:12, 0:16]
+    cx, cy = xx + 0.5, yy + 0.5                      # pixel centres
+
+    def alpha_of(cover, valid=None, bg=None):
+        """The reference for a node that draws its matte into alpha only: alpha = `cover`, compared in the alpha channel; the other
+        channels are compared with the plate (when there is one) or left out."""
+        def expected(fx):
+            ref = np.zeros((12, 16, 4))
+            valid_all = np.zeros((12, 16, 4), bool)
+            ref[..., 3] = cover
+            valid_all[..., 3] = True if valid is None else valid
+            if bg is not None:
+                ref[..., :3] = np.asarray(bg[:3])
+                valid_all[..., :3] = True
+            return ref, valid_all
+        return expected
+
+    def inside_box(x0, y0, x1, y1):
+        return ((xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)).astype(np.float64)
+
+    sq = (4, 3, 10, 8)                               # pixels 4..9 across and 3..7 down: every edge on a pixel boundary
+    case("roto_bezier_square_fill", (("output", "alpha"),), {"_shapes": [roto_box(*sq)]}, alpha_of(inside_box(*sq)), "convention",
+         f"Roto ({ROTO_GUIDE}): a closed Bezier square renders 1 into the output channel inside and 0 outside; the outline lies on pixel "
+         "boundaries (pixel i spans [i, i + 1)), so no pixel is partly covered and none is left out")
+    case("roto_bezier_ellipse_fill", (("output", "alpha"),), {"_shapes": [roto_circle(8, 6, 4)]},
+         lambda fx: (lambda dist: alpha_of((dist < 2.8).astype(np.float64), valid=(dist < 2.8) | (dist > 5.2))(fx))(np.hypot(cx - 8, cy - 6)),
+         "convention", "Roto: a closed Bezier circle of radius 4 fills to 1 inside and 0 outside; the pixels within 1.2 of the outline (partly covered, "
+         "and the Bezier circle is within 0.03% of a true one) are not scored")
+    case("roto_edge_pixel_coverage", (("output", "alpha"),), {"_shapes": [roto_box(6.5, 3, 10, 8)]},
+         alpha_of(np.where((xx == 6), 0.5, inside_box(7, 3, 10, 8)), valid=(xx != 6)), "convention",
+         "Roto: a pixel the outline cuts in half; every other pixel of the square is scored, this one is not",
+         unscored="the guide does not say how Roto antialiases a pixel an outline cuts through (the covered fraction of the pixel is the "
+                  "usual choice and what NodeBased draws: this pixel reads 0.5); interior and exterior pixels are scored by the cases above")
+
+    fb = (5, 4, 9, 8)                                # the feather box; a feather of 2 reaches pixels 3..4 on the left and 9..10 on the right
+
+    def feather_cover(width, curve):
+        dx = np.maximum(np.maximum(fb[0] - cx, cx - fb[2]), 0.0)
+        dy = np.maximum(np.maximum(fb[1] - cy, cy - fb[3]), 0.0)
+        beyond = np.hypot(dx, dy)                    # distance outside the rectangle
+        cover = np.where(beyond > 0, curve(np.clip(1.0 - beyond / width, 0.0, 1.0)), 1.0)
+        straight = (np.abs(dx) < 1e-9) | (np.abs(dy) < 1e-9)       # the corners' feather is the outline's own business: not scored
+        return cover, straight
+    cov, straight = feather_cover(2.0, lambda t: t)
+    case("roto_feather_widens_outward_linearly", (("feather", 2.0), ("feather_type", "linear")), {"_shapes": [roto_box(*fb, feather=2.0)]},
+         alpha_of(cov, valid=straight), "guide",
+         f"Roto feather ({ROTO_GUIDE}): 'with positive feather values the feather effect is outward'; feather type linear: 'the falloff changes "
+         "linearly from the shape edge to the feather edge': the pixel whose centre is d outside the edge reads 1 - d / feather (0.75, 0.25, 0 for "
+         "a feather of 2); the corners are not scored")
+    inner = np.minimum(np.minimum(cx - 4, 12 - cx), np.minimum(cy - 3, 9 - cy))          # distance inside the edge (negative outside)
+    case("roto_negative_feather_falls_inward", (("feather", -2.0),), {"_shapes": [roto_box(4, 3, 12, 9, feather=-2.0)]},
+         alpha_of(np.clip(inner / 2.0, 0.0, 1.0)), "guide",
+         "Roto feather: 'if your feather values are negative, the feather effect is inward': inside the edge by d the pixel reads d / |feather| "
+         "up to 1 (0.25, 0.75 for a feather of -2); outside the edge 0")
+    case("roto_feather_smooth_is_half_way_at_half_the_feather", (("feather", 4.0), ("feather_type", "smooth")),
+         {"_shapes": [roto_box(6.5, 4, 10.5, 8, feather=4.0, feather_falloff="smooth")]},
+         lambda fx: alpha_of(np.full((12, 16), 0.5), valid=((xx == 4) | (xx == 12)) & (yy >= 4) & (yy < 8))(fx), "guide",
+         "Roto feather type smooth: 'the center point of the feather falloff lies halfway between the shape edge and the feather edge': half the "
+         "feather out (2 of 4) the matte reads 0.5 (compared at those pixels only)")
+    case("roto_feather_smooth_curve", (("feather_type", "smooth0"),), {"_shapes": [roto_box(*fb, feather=2.0)]}, alpha_of(np.zeros((12, 16)), valid=np.zeros((12, 16), bool)),
+         "guide", "Roto feather types smooth0 and smooth1: where the falloff's centre lies, and the curve through it",
+         unscored="the guide says where each curve's centre lies ('closer to the shape edge', 'closer to the feather edge', 'halfway') but gives "
+                  "no curve; only the halfway property of smooth is scored, by the case above. NodeBased draws smooth as a smoothstep and has no "
+                  "smooth0 or smooth1 (listed in the step E report)")
+
+    case("roto_shape_opacity_scales_fill", (("opacity", 0.5),), {"_shapes": [roto_box(*sq, opacity=0.5)]}, alpha_of(0.5 * inside_box(*sq)), "guide",
+         f"Roto opacity ({ROTO_GUIDE}): 'the opacity of a roto shape in the shape list; 1 is totally opaque and 0 is transparent': an opacity "
+         "of 0.5 draws half the matte")
+    case("roto_node_opacity_scales_fill", (("opacity", 0.25),), {"_shapes": [roto_box(*sq)], "opacity": 0.25}, alpha_of(0.25 * inside_box(*sq)), "guide",
+         "Roto opacity: the node's own opacity knob scales the whole matte, 1 opaque and 0 transparent")
+    case("roto_shape_invert_complements", (("inverted", True),), {"_shapes": [roto_box(*sq, invert=True)]}, alpha_of(1.0 - inside_box(*sq)), "guide",
+         f"Roto shape list ({ROTO_GUIDE}): 'invert the shape or group': the matte inside the shape is 0 and outside it 1")
+    other = (7, 5, 13, 10)
+    both = np.clip(inside_box(*sq) * 0.5 + inside_box(*other) * 0.5 - inside_box(*sq) * inside_box(*other) * 0.25, 0, 1)
+    case("roto_overlap_blends_over", (("blending_mode", "over"),),
+         {"_shapes": [roto_box(*sq, opacity=0.5), roto_box(*other, opacity=0.5, name="second")]}, alpha_of(both), "convention",
+         "Roto blending mode over (the default of the shape list): the second shape is composited over the first, alpha = a + b (1 - a), so "
+         "where two half-opaque shapes overlap the matte reads 0.75; the formula is Merge over's (guide: A + B(1 - a))")
+    plus = np.clip(inside_box(*sq) * 0.5 + inside_box(*other) * 0.5, 0, 1)
+    case("roto_overlap_blends_plus", (("blending_mode", "plus"),),
+         {"_shapes": [roto_box(*sq, opacity=0.5), roto_box(*other, opacity=0.5, name="second", blend_mode="plus")]}, alpha_of(plus), "convention",
+         "Roto blending mode plus: the second shape's matte is added to what is below, clamped at 1 (Merge plus: A + B)")
+    case("roto_overlap_blends_minus", (("blending_mode", "minus"),),
+         {"_shapes": [roto_box(*sq), roto_box(*other, name="second", blend_mode="minus")]}, alpha_of(np.zeros((12, 16)), valid=np.zeros((12, 16), bool)),
+         "convention", "Roto blending mode minus", unscored="the guide names the mode but not its direction (the shape taken from what is below, or what "
+         "is below taken from the shape: Merge's minus and from are opposites), so no pixel is scored; NodeBased subtracts the shape from what is below")
+
+    shifted = inside_box(sq[0] + 2, sq[1] + 1, sq[2] + 2, sq[3] + 1)
+    case("roto_transform_translate_moves_the_shape", (("translate", [2, 1]),),
+         {"_shapes": [roto_box(*sq, transform={"translate_x": 2.0, "translate_y": 1.0})]}, alpha_of(shifted), "guide",
+         f"Roto Transform tab ({ROTO_GUIDE}): translate 'moves the selected shape on the x and y axes': 2 right and 1 down")
+    case("roto_visible_off_draws_nothing", (("visible", False),), {"_shapes": [roto_box(*sq, visible=False)]}, alpha_of(np.zeros((12, 16))), "guide",
+         "Roto shape list: 'whether the shape is visible and rendered or not': a shape that is not visible draws nothing")
+
+    # Output channels, premultiply and replace act on a wired background.
+    plate_a = (0.2, 0.4, 0.6, 0.8)
+    def colour_of_plate(fx):
+        ref = np.zeros((12, 16, 4))
+        valid = np.zeros((12, 16, 4), bool)
+        ref[..., :3] = np.asarray(ROTO_PLATE[:3])
+        valid[..., :3] = True
+        return ref, valid
+    case("roto_output_alpha_keeps_the_colour", (("output", "alpha"),), {"_shapes": [roto_box(*sq)], "_bg": ROTO_PLATE}, colour_of_plate, "guide",
+         f"Roto output ({ROTO_GUIDE}): 'the roto shapes are rendered into these output channels' (alpha is the default): with the plate wired the "
+         "colour channels stay the plate's, inside the shape and out (the alpha channel is not compared)")
+    case("roto_output_rgb_keeps_the_alpha", (("output", "rgb"),), {"_shapes": [roto_box(*sq)], "_bg": plate_a, "output": "rgb"},
+         alpha_of(np.full((12, 16), 0.8)), "guide",
+         "Roto output rgb: the shapes are rendered into the colour channels only, so the plate's alpha (0.8) is left as it was")
+    case("roto_existing_alpha_kept_outside_the_shapes", (("output", "alpha"), ("replace", False)), {"_shapes": [roto_box(*sq)], "_bg": plate_a},
+         alpha_of(np.where(inside_box(*sq) > 0, 1.0, 0.8)), "guide",
+         f"Roto replace ({ROTO_GUIDE}): 'when enabled, existing channels are cleared to black before drawing into them ... the incoming image "
+         "already has an alpha channel which you want to throw away': with replace off the incoming alpha stays where the shapes do not reach "
+         "(0.8) and a fully opaque shape over it reads 1")
+    case("roto_replace_clears_the_existing_alpha", (("replace", True),), {"_shapes": [roto_box(*sq)], "_bg": plate_a, "replace": 1},
+         alpha_of(inside_box(*sq)), "guide",
+         "Roto replace on: the incoming alpha is cleared before drawing, so the matte is the shapes' alone (0 outside them)")
+    cov_f, straight_f = feather_cover(2.0, lambda t: t)
+    feathered = [roto_box(*fb, feather=2.0)]
+
+    def premult_rgb(fx):
+        ref = np.zeros((12, 16, 4))
+        valid = np.zeros((12, 16, 4), bool)
+        ref[..., :3] = np.asarray(ROTO_PLATE[:3]) * cov_f[..., None]
+        valid[..., :3] = straight_f[..., None]
+        return ref, valid
+    case("roto_premultiply_rgb_multiplies_by_the_matte", (("premultiply", "rgb"),),
+         {"_shapes": feathered, "_bg": ROTO_PLATE, "premultiply_mode": "rgb"}, premult_rgb, "guide",
+         f"Roto premultiply ({ROTO_GUIDE}): 'premultiply multiplies the chosen input channels with a mask representing the roto shapes ... where "
+         "there are no roto shapes the input channels are set to black; where the roto shapes are opaque the input channels keep their full value': "
+         "rgb is the plate times the matte (the alpha channel is not compared)")
+
+    def premult_rgba(fx):
+        ref = np.zeros((12, 16, 4))
+        valid = np.zeros((12, 16, 4), bool)
+        ref[..., 3] = cov_f * cov_f
+        valid[..., 3] = straight_f
+        return ref, valid
+    case("roto_premultiply_rgba_squares_the_alpha", (("premultiply", "rgba"),),
+         {"_shapes": feathered, "_bg": (0.0, 0.0, 0.0, 0.0), "premultiply_mode": "rgba"}, premult_rgba, "guide",
+         "Roto premultiply rgba: 'selecting rgba premultiplies the alpha against itself (a*a)': on an empty plate the alpha holds the matte, "
+         "so it ends as the matte squared (0.5625 where the matte reads 0.75); the colour channels are not compared")

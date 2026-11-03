@@ -3727,11 +3727,11 @@ class Evaluator:
                 # Once shapes exist, their matte owns alpha as in Nuke's default output=alpha.
                 return Raster(plate_pixels.copy(), out, out, plate.layers, plate.meta)
             pixels = plate_pixels.copy()
-            pixels[..., 3] = coverage
+            pixels[..., 3] = _draw.roto_alpha(coverage, plate_pixels[..., 3], p)
             if p.get("premultiply_mode", "none") in ("rgb", "rgba"):
                 pixels[..., :3] *= coverage[..., None]
             if p.get("premultiply_mode", "none") == "rgba":
-                pixels[..., 3] *= coverage
+                pixels[..., 3] = _draw.roto_premultiply_alpha(pixels[..., 3], coverage, p)
             return Raster(pixels, out, out, plate.layers, plate.meta)
         if kind in DRAW_KINDS:
             # A fourth kind of generator: still states its own format like Roto, but also takes an

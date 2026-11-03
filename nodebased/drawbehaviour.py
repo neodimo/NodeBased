@@ -43,6 +43,10 @@ document renders bit for bit as it did. A node created now gets the new reading 
   "no premultiplication is assumed"), Premultiply (on by default: the output is premultiplied) and Erode ("negative values dilate the
   matte and positive values erode the matte"). The older node read its input as premultiplied and wrote straight colour.
 
+* Roto (`legacy_roto_alpha`): the page's `replace` ("existing channels are cleared to black before drawing into them ... the incoming image
+  already has an alpha channel which you want to throw away") says that with replace off the shapes are drawn into the incoming alpha:
+  where they do not reach it stays, and where they do the matte goes over it. The older node wrote the matte over the plate's alpha.
+
 Pure NumPy, so the evaluator, the tile executor and the tests read one arithmetic.
 """
 from __future__ import annotations
@@ -69,7 +73,9 @@ NEW["Grain"] = {"legacy_grain": 0, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, 
 NEW["Defocus"] = {"legacy_defocus": 0, "scale": 1.0}
 NEW["ZDefocus"] = {"legacy_zdefocus": 0, "zdefocus_math": "depth", "size": 25.0}
 NEW["EdgeExtend"] = {"legacy_edge_extend": 0, "source_premultiplied": 0, "premultiply": 1, "erode": 0.0}
+NEW["Roto"] = {"legacy_roto_alpha": 0}
 LEGACY = {kind: {FLAG: 1} for kind in KINDS}
+LEGACY["Roto"] = {"legacy_roto_alpha": 1}
 LEGACY["Defocus"] = {"legacy_defocus": 1, "scale": 1.0}
 LEGACY["ZDefocus"] = {"legacy_zdefocus": 1, "zdefocus_math": "depth", "size": 25.0}
 LEGACY["EdgeExtend"] = {"legacy_edge_extend": 1, "source_premultiplied": 1, "premultiply": 0, "erode": 0.0}
@@ -81,7 +87,7 @@ LEGACY["Noise"] = {FLAG: 1, **NOISE_COLOUR}
 LEGACY["Dither"] = {"legacy_dither": 1, "monodither": 0, "static_seed": 0}
 LEGACY["Grain"] = {"legacy_grain": 1, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
                    "maskgrain": 0, "invert_mask": 0}
-LIMITS = {"legacy_defocus": (0, 1), "legacy_zdefocus": (0, 1), "legacy_edge_extend": (0, 1), "source_premultiplied": (0, 1), "premultiply": (0, 1),
+LIMITS = {"legacy_roto_alpha": (0, 1), "legacy_defocus": (0, 1), "legacy_zdefocus": (0, 1), "legacy_edge_extend": (0, 1), "source_premultiplied": (0, 1), "premultiply": (0, 1),
           "erode": (-100.0, 100.0), FLAG: (0, 1), "plinear": (0, 1), "legacy_dither": (0, 1), "monodither": (0, 1), "static_seed": (0, 1), "legacy_grain": (0, 1),
           "red_i": (0.0, 1.0), "green_i": (0.0, 1.0), "blue_i": (0.0, 1.0), "minimum_red": (-1000.0, 1000.0), "minimum_green": (-1000.0, 1000.0),
           "minimum_blue": (-1000.0, 1000.0), "maskgrain": (0, 1)}
@@ -95,6 +101,21 @@ def new_params(kind):
 def upgrade_params(kind):
     """What an older document's node of `kind` gets on load."""
     return dict(LEGACY.get(kind, {}))
+
+
+def roto_alpha(coverage, plate_alpha, p):
+    """The alpha channel of a Roto drawn over a wired background: the matte over the plate's own alpha (or, for an older node, the matte
+    alone). Shared by the evaluator and the tile path."""
+    if int(p.get("legacy_roto_alpha", 1)):
+        return coverage
+    return coverage + plate_alpha * (np.float32(1.0) - coverage)
+
+
+def roto_premultiply_alpha(alpha, coverage, p):
+    """premultiply rgba on a Roto: "premultiplies the alpha against itself (a*a)"; the older node multiplied the matte by the coverage."""
+    if int(p.get("legacy_roto_alpha", 1)):
+        return alpha * coverage
+    return alpha * alpha
 
 
 def is_legacy(p):
