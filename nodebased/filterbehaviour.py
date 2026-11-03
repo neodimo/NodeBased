@@ -81,6 +81,12 @@ def shifted_target(p, dx, dy):
     return p.get("target", "") if point is None else f"{point[0] - dx:g},{point[1] - dy:g}"
 
 
+def scaled_target(p, factor):
+    """DirBlur's Linear Target multiplied by `factor` (the target of the smaller picture the Quality scaling blurs)."""
+    point = parse_point(p.get("target", ""))
+    return p.get("target", "") if point is None else f"{point[0] * factor:g},{point[1] * factor:g}"
+
+
 def dirblur_target_direction(p):
     """DirBlur's linear direction (array columns, rows; a unit vector) from BlurCenter to the Linear Target when UseTarget is on, else None
     ("a vector is created between this and BlurCenter. This vector then determines the direction of linear blur")."""
@@ -98,6 +104,32 @@ def dirblur_sample_count(p, automatic):
     """Zoom and radial blur take `Samples` taps when it is set ("the number of samples"); 0 leaves the node's own count."""
     wanted = int(p.get("Samples", 0))
     return automatic if wanted <= 0 or int(p.get("legacy_dirblur_knobs", 1)) else max(1, wanted)
+
+
+DIRBLUR_QUALITY = {"high": 1, "normal": 2, "low": 4}
+
+
+def dirblur_quality_factor(p):
+    """The whole-number factor DirBlur's `Quality` scales the picture down by before blurring ("the scaling factor of the blur. The minimum value
+    is 1 and produces the highest quality"): high 1, normal 2, low 4. An older node blurred at full size whatever it said."""
+    if int(p.get("legacy_dirblur_knobs", 1)):
+        return 1
+    return DIRBLUR_QUALITY.get(str(p.get("Quality", "high")), 1)
+
+
+def dirblur_pixel_aspect(p):
+    """`PixelAspect`: a pixel is this much wider than tall, so the blur's lengths, which are in square units, cover 1 / aspect pixels across."""
+    return 1.0 if int(p.get("legacy_dirblur_knobs", 1)) else max(float(p.get("PixelAspect", 1.0)), 1e-6)
+
+
+def dirblur_holdout(p):
+    """True when the zoom blur holds out the pixels whose holdout channel (the picture's alpha) is not black."""
+    return str(p.get("holdout", "off")) == "on" and not int(p.get("legacy_dirblur_knobs", 1)) and str(p.get("blur_type", "linear")) == "zoom"
+
+
+def dirblur_needs_full_frame(p):
+    """Zoom and radial, the quality scaling (its blocks sit on the whole picture) and a non-square pixel read the whole frame."""
+    return (str(p.get("blur_type", "linear")) != "linear" or dirblur_quality_factor(p) > 1 or dirblur_pixel_aspect(p) != 1.0)
 
 
 def is_legacy(kind, p, name):

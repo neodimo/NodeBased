@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from nodebased import knobs
 from nodebased.core import SPECS, upgrade_document, validate
 from nodebased.imaging import Evaluator
+from nodebased.tileexec import TileExecutor
 from tests.test_2d_behaviour_filter_f import disc_over_bright, wrap_of
 from tests.test_2d_behaviour_filter_a import Graph, differs, evaluator_pixels, kern, texture, tile_pixels
 
@@ -138,6 +139,73 @@ class QualityKnobs(unittest.TestCase):
             for edge in (7, 16, 32):
                 with self.subTest(kind=kind, edge=edge):
                     np.testing.assert_allclose(tile_pixels(g.doc, "node", edge), whole, atol=1e-5)
+
+
+class DirBlurKnobs(unittest.TestCase):
+    """DirBlur's Quality, PixelAspect and Holdout Channel act on a node made now; a graph saved before keeps its pixels (legacy_dirblur_knobs)."""
+
+    def test_quality_scales_the_blur_down(self):
+        pixels = texture()
+        high = kern("DirBlur", pixels, blur_type="linear", length=11.0, angle=20.0, Quality="high")
+        normal = kern("DirBlur", pixels, blur_type="linear", length=11.0, angle=20.0, Quality="normal")
+        low = kern("DirBlur", pixels, blur_type="linear", length=11.0, angle=20.0, Quality="low")
+        self.assertTrue(differs(high, normal))
+        self.assertTrue(differs(normal, low))
+        # the scaled blur is the same blur, smoother: a flat picture stays flat and the mean holds
+        flat = np.full((16, 20, 4), 0.4, np.float32)
+        np.testing.assert_allclose(kern("DirBlur", flat, length=9.0, Quality="low"), flat, atol=1e-6)
+
+    def test_pixel_aspect_changes_the_blurs_reach_across(self):
+        pixels = texture()
+        square = kern("DirBlur", pixels, blur_type="linear", length=9.0, angle=0.0)
+        wide = kern("DirBlur", pixels, blur_type="linear", length=9.0, angle=0.0, PixelAspect=2.0)
+        self.assertTrue(differs(square, wide))
+        impulse = np.zeros((9, 41, 4), np.float32)
+        impulse[4, 20] = 1.0
+        spread = lambda a: int((kern("DirBlur", impulse, blur_type="linear", length=10.0, angle=0.0, PixelAspect=a)[4, :, 0] > 1e-6).sum())
+        self.assertLess(spread(2.0), spread(1.0))                 # a pixel twice as wide: half as many of them under the blur
+        radial = kern("DirBlur", pixels, blur_type="radial", angle=20.0, center_x=22.0, center_y=18.0)
+        self.assertTrue(differs(radial, kern("DirBlur", pixels, blur_type="radial", angle=20.0, center_x=22.0, center_y=18.0, PixelAspect=2.0)))
+
+    def test_holdout_keeps_the_held_out_pixels_out_of_the_zoom_average(self):
+        pixels = np.zeros((21, 21, 4), np.float32)
+        pixels[..., :3] = 0.2
+        pixels[..., 3] = 0.0
+        pixels[10, 14, :3] = 1.0
+        pixels[10, 14, 3] = 1.0                                  # a bright pixel with a non-black holdout channel
+        zoom = dict(blur_type="zoom", length=40.0, center_x=10.5, center_y=10.5)
+        smeared = kern("DirBlur", pixels, **zoom)
+        held = kern("DirBlur", pixels, holdout="on", **zoom)
+        self.assertTrue(differs(smeared, held))
+        self.assertGreater(float(smeared[10, 15, 0]), 0.21)       # without the holdout the bright pixel smears outward onto its neighbour
+        np.testing.assert_allclose(held[10, 15, 0], 0.2, atol=1e-6)   # with it the neighbour averages only the dark pixels
+        np.testing.assert_allclose(held[10, 14], pixels[10, 14], atol=1e-6)   # a held-out pixel keeps its own value
+        linear = dict(blur_type="linear", length=9.0)
+        np.testing.assert_array_equal(kern("DirBlur", pixels, holdout="on", **linear), kern("DirBlur", pixels, **linear))   # zoom only
+
+    def test_a_graph_saved_before_keeps_its_pixels(self):
+        pixels = texture()
+        for knob in (dict(Quality="low"), dict(PixelAspect=2.0), dict(holdout="on", blur_type="zoom", center_x=20.0, center_y=18.0, length=20.0)):
+            base = dict(blur_type="linear", length=9.0, legacy_dirblur_knobs=1)
+            plain = kern("DirBlur", pixels, **{**base, **{k: v for k, v in knob.items() if k not in ("Quality", "PixelAspect", "holdout")}})
+            np.testing.assert_array_equal(kern("DirBlur", pixels, **{**base, **knob}), plain)
+
+    def test_the_tile_path_equals_the_evaluator_and_the_scaled_blurs_read_the_whole_frame(self):
+        g = Graph()
+        g.add("a", "Checker", dict(width=45, height=37, size=5))
+        g.add("node", "DirBlur", dict(blur_type="linear", length=13.0), image="a")
+        whole = evaluator_pixels(g.doc, "node")
+        for edge in (7, 16, 32):
+            with self.subTest(edge=edge):
+                np.testing.assert_allclose(tile_pixels(g.doc, "node", edge), whole, atol=1e-5)
+        # Quality's blocks and a non-square pixel sit on the whole picture, as zoom and radial do: the node is not tiled (the frame path computes them)
+        executor = TileExecutor(evaluator=Evaluator(), tile_edge=16)
+        for params in (dict(Quality="low"), dict(PixelAspect=2.0), dict(blur_type="zoom")):
+            h = Graph()
+            h.add("a", "Checker", dict(width=45, height=37, size=5))
+            h.add("node", "DirBlur", dict(length=13.0, **params), image="a")
+            self.assertFalse(executor.supports_tiled(dict(h.doc, view="node"), "node"), params)
+            self.assertEqual(evaluator_pixels(h.doc, "node").shape[:2], (37, 45))
 
 
 if __name__ == "__main__":

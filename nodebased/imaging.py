@@ -8158,6 +8158,25 @@ class Evaluator:
                 + (image[y1, x0] * (1 - fx) + image[y1, x1] * fx) * fy)
 
     @staticmethod
+    def _dirblur_scaled(image, p, factor):
+        """DirBlur's Quality: "the scaling factor of the blur": the picture is averaged down by `factor`, blurred at the smaller size (lengths,
+        centre, target and pixel offset scaled with it) and scaled back up with linear interpolation, so the blur is smoother and less exact."""
+        height, width = image.shape[:2]
+        ph, pw = -height % factor, -width % factor
+        padded = np.pad(image.astype(np.float64), ((0, ph), (0, pw), (0, 0)), mode="edge")
+        small = padded.reshape(padded.shape[0] // factor, factor, padded.shape[1] // factor, factor, -1).mean(axis=(1, 3))
+        q = dict(p, Quality="high", length=float(p.get("length", 0.0)) / factor if p.get("blur_type", "linear") == "linear" else p.get("length", 0.0),
+                 center_x=float(p.get("center_x", 0.0)) / factor, center_y=float(p.get("center_y", 0.0)) / factor,
+                 pixeloffset=float(p.get("pixeloffset", 0.0)) / factor, target=_filterbehaviour.scaled_target(p, 1.0 / factor))
+        blurred = Evaluator._dirblur(small.astype(np.float32), q).astype(np.float64)
+        gy, gx = np.mgrid[0:height, 0:width]
+        up = Evaluator._bilinear_gather(blurred, (gx + 0.5) / factor, (gy + 0.5) / factor)
+        result = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            result[..., c] = up[..., c].astype(np.float32)
+        return result
+
+    @staticmethod
     def _dirblur(image, p):
         # Nuke's DirBlur. All three types average bilinear samples taken along a path through each
         # pixel; the weights sum to 1 so flat regions and total energy are preserved.
@@ -8169,8 +8188,12 @@ class Evaluator:
         #   zoom:   samples on the ray through the centre, scale 1 +/- length / 200.
         #   radial: samples on the circle about the centre, +/- angle / 2 degrees.
         # The centre is in this array's own pixel coordinates (see `_filtered_pixels`).
+        factor = _filterbehaviour.dirblur_quality_factor(p)
+        if factor > 1:
+            return Evaluator._dirblur_scaled(image, p, factor)
         kind = p.get("blur_type", "linear")
         height, width = image.shape[:2]
+        aspect = _filterbehaviour.dirblur_pixel_aspect(p)
         if kind == "linear":
             length = abs(float(p.get("length", 0.0)))
             if length <= 1.0:
@@ -8182,6 +8205,8 @@ class Evaluator:
             toward = _filterbehaviour.dirblur_target_direction(p)
             if toward is not None:
                 dx, dy = toward                  # UseTarget: the vector from BlurCenter to the target decides the direction
+            if aspect != 1.0:
+                dx /= aspect                     # the blur's lengths are in square units: a wide pixel covers fewer of them across
             pad = reach + 1
             padded = np.pad(image, ((pad, pad), (pad, pad), (0, 0)), mode="edge").astype(np.float64)
             acc = np.zeros(image.shape, dtype=np.float64)
@@ -8203,6 +8228,8 @@ class Evaluator:
             cx, cy = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
             gy, gx = np.mgrid[0:height, 0:width]
             rx, ry = gx + 0.5 - cx, gy + 0.5 - cy
+            if aspect != 1.0 and kind == "radial":
+                rx = rx * aspect                 # a circle about the centre is round in square units: widen the pixels' x before turning
             far = math.hypot(max(abs(0.0 - cx), abs(width - cx)), max(abs(0.0 - cy), abs(height - cy)))
             if kind == "zoom":
                 span = abs(float(p.get("length", 0.0))) / 100.0
@@ -8221,11 +8248,22 @@ class Evaluator:
                 positions = []
                 for a in (np.linspace(-sweep / 2.0, sweep / 2.0, count) if count > 1 else [0.0]):
                     c, s = math.cos(a), math.sin(a)
-                    positions.append((cx + rx * c - ry * s, cy + rx * s + ry * c))
+                    positions.append((cx + (rx * c - ry * s) / aspect, cy + rx * s + ry * c))
             acc = np.zeros(image.shape, dtype=np.float64)
-            for qx, qy in positions:
-                acc += Evaluator._bilinear_gather(image.astype(np.float64), qx, qy)
-            acc /= len(positions)
+            source = image.astype(np.float64)
+            if _filterbehaviour.dirblur_holdout(p):
+                # Holdout Channel: "pixels corresponding to non-black pixels in the holdout channel are NOT averaged into the final pixel value".
+                # The channel is the picture's alpha; a pixel with nothing left to average keeps its own value.
+                total = np.zeros(image.shape[:2] + (1,), dtype=np.float64)
+                for qx, qy in positions:
+                    keep = (Evaluator._bilinear_gather(source[..., 3:4], qx, qy) <= 0.0).astype(np.float64)
+                    acc += Evaluator._bilinear_gather(source, qx, qy) * keep
+                    total += keep
+                acc = np.where(total > 0.0, acc / np.maximum(total, 1.0), source)
+            else:
+                for qx, qy in positions:
+                    acc += Evaluator._bilinear_gather(source, qx, qy)
+                acc /= len(positions)
         else:
             raise ValueError(f"Unknown DirBlur blur_type {kind!r}")
         result = image.copy()

@@ -46,6 +46,7 @@ import numpy as np
 
 from . import cachetier
 from . import drawbehaviour as _drawbehaviour
+from . import filterbehaviour
 from . import groups
 from . import imaging
 from . import ops2d_chrome as _chrome
@@ -530,7 +531,7 @@ class TileExecutor:
             if _chrome.needs_full_frame(node["type"], node["params"]):
                 # A chrome knob that names a layer reads Raster.layers, which only the whole-image path has.
                 return False
-            if node["type"] == "DirBlur" and node["params"].get("blur_type", "linear") != "linear":
+            if node["type"] == "DirBlur" and filterbehaviour.dirblur_needs_full_frame(node["params"]):
                 # Zoom and radial are centred on a canvas point and read from anywhere in the
                 # frame, so they fall back to the full-frame evaluator like Transform does.
                 return False

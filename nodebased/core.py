@@ -404,7 +404,7 @@ SPECS = {
     "DirBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"blur_type": "linear", "angle": 0.0, "length": 20.0,
                            "center_x": 480.0, "center_y": 270.0, "BlurLayer": "rgba", "holdout": "off",
-                           "target": "480,240", "UseTarget": 0, "Samples": 0, "PixelAspect": 1.0, "Quality": "normal", "pixeloffset": 0.0,
+                           "target": "480,240", "UseTarget": 0, "Samples": 0, "PixelAspect": 1.0, "Quality": "high", "pixeloffset": 0.0,
                            "channels": "rgba", "mix": 1.0, **_filterbehaviour.new_params("DirBlur")}},
     # DropShadow (step 3b): the input's alpha, offset by `distance` along `angle` (degrees,
     # counter-clockwise from +x with y up; the default points down and to the right), blurred by
