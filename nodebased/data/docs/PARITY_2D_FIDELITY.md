@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 94.3 / 100** (167 nodes scored, rank-weighted; 96.7 counting only the nodes NodeBased has).
+**Overall fidelity: 94.4 / 100** (167 nodes scored, rank-weighted; 96.8 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.7 (96.1 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.8 (96.2 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -37,7 +37,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Time | 97.8 | 87.1 | 97.6 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 96.9 | 88.5 | 96.2 | 34 |
-| Filter | 94.9 | 84.7 | 93.9 | 32 |
+| Filter | 95.6 | 87.6 | 94.7 | 32 |
 | Keyer | 92.2 | 79.0 | 91.6 | 11 |
 | Merge | 99.5 | 98.7 | 99.5 | 12 |
 | Transform | 95.1 | 87.7 | 94.2 | 20 |
@@ -172,11 +172,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 10 | EdgeExtend | `EdgeExtend` | supported | 82.6 | 75.0 | 50 (3/6) | 100 (3/3) | 100 | 50 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
 | 12 | DegrainSimple | `DegrainSimple` | supported | 95.2 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 100 | - | no fixture |
-| 12 | Denoise | `Denoise` | supported | 75.5 | 69.0 | 45 (11/37) | - | 91 | 67 | - | 100 (3/3) | 100 | - | unmeasured |
-| 13 | MotionBlur | `MotionBlur` | supported | 41.7 | 30.6 | 33 (2/6) | - | 0 | 50 | - | - | 100 | - | no fixture |
+| 12 | Denoise | `Denoise` | supported | 99.6 | 99.6 | 100 (37/37) | - | 97 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
+| 13 | MotionBlur | `MotionBlur` | supported | 93.3 | 93.3 | 100 (6/6) | - | 60 | 100 | - | - | 100 | - | no fixture |
 | 13 | MotionBlur2D | `MotionBlur2D` | supported | 68.1 | 63.9 | 75 (3/4) | - | 33 | 50 | - | - | 100 | - | no fixture |
 | 13 | MotionBlur3D | `MotionBlur3D` | supported | 63.9 | 55.6 | 50 (3/6) | - | 33 | 100 | - | - | 100 | - | no fixture |
-| 13 | VectorBlur | `VectorBlur` | supported | 70.9 | 65.0 | 41 (6/15) | - | 73 | 100 | 100 | - | 100 | - | no fixture |
+| 13 | VectorBlur | `VectorBlur` | supported | 90.1 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 100 | - | no fixture |
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -318,8 +318,8 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 26 | VectorDistort (Transform #16) | `VectorDistort` | 1.34 | 57.1 | primary knobs missing: `holdFrame`, `frameDistance`; 2 secondary knobs missing: `outputMode`, `imageFilter`; node chrome missing: channels selector |
 | 27 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
 | 28 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
-| 29 | MotionBlur (Filter #13) | `MotionBlur` | 1.12 | 41.7 | primary knobs missing: `motionEstimation`, `vectorDetail`, `resampleType`, `matteChannel`; sockets missing: `BgVecs`, `Matte` |
-| 30 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
+| 29 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
+| 30 | IBKColor (Keyer #7) | `IBKColor` | 1.12 | 84.4 | sockets missing: `1` |
 
 ## Formula cases
 
