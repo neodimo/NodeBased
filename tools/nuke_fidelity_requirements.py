@@ -112,6 +112,8 @@ NOT_PROBED = {
     "RotoPaint": "strokes live in the node's payload and the default node holds none",
     # Lane 9 step H (11/3): the grids and curves live in the node's payload; a default node holds none, so every knob leaves the picture alone (tests/test_2d_behaviour_warp_h.py moves each on a warp).
     "GridWarp": "the grids live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)",
+    # Lane 9 step N (11/3): the tracking helpers need data the one-frame fixture lacks.
+    "VectorDistort": "the warp needs a SmartVector measured on a sequence, which a one-frame probe lacks; tests/test_2d_behaviour_transform_n.py moves each knob on a plate that moves three whole pixels",
     "SplineWarp": "the curve pairs live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)",
 }
 

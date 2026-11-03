@@ -3225,6 +3225,8 @@ class Evaluator:
                     layer_name = "smartvector.forward" if frame >= float(params["reference_frame"]) else "smartvector.backward"
                     vector_layer = None if vectors is None else (vectors.layers or {}).get(layer_name)
                     from . import vectorcornerpinknobs as _vcp
+                    from . import vectordistortknobs as _vd
+                    vd_hold = True
                     pins_node = kind == "VectorCornerPin" and not _vcp.is_legacy(params)     # lane 9 step G: pins without vectors stay put
                     if vector_layer is None and not (pins_node and vectors_key is None):
                         raise ValueError(f"{kind}: connect a SmartVector node to vectors")
@@ -3284,6 +3286,14 @@ class Evaluator:
                             warped = warp_by_homography_gpu(base.pixels, matrix)
                         else:
                             warped = warp_by_homography(base.pixels, matrix)
+                    elif kind == "VectorDistort" and not _vd.is_legacy(params):
+                        # Hold Frame, Output and Filter (lane 9 step N, nodebased/vectordistortknobs.py).
+                        current_source = values[source_key]
+                        from .flow_nodes import warp_by_flow as _blur_only
+                        blur_size = float(params["blur_size"])
+                        warped, vd_hold = _vd.warp(params, base.pixels, current_source.fit(base.data), field, self._resample,
+                                                   (lambda im: _blur_only(im, np.zeros(im.shape[:2] + (2,), np.float32), blur_size=blur_size))
+                                                   if blur_size > 0 else (lambda im: im))
                     else:
                         if gpu_warp:
                             from .opticalflow_gpu import warp_by_flow_gpu
@@ -3297,12 +3307,19 @@ class Evaluator:
                         else:
                             warped = warp_by_flow(base.pixels, field, blur_size=float(params["blur_size"]))
                     if kind == "VectorDistort":
-                        fade = int(params["fade_frames"])
-                        amount = 1.0 if fade <= 0 else max(0.0, 1.0 - abs(float(frame)-float(params["reference_frame"])) / fade)
-                        warped *= np.float32(amount)
-                        mask = values.get(node["inputs"].get("mask"))
-                        warped = self._apply_mask_mix(base.pixels, warped,
-                            None if mask is None else mask.fit(base.data), float(params["mix"]))
+                        vd_modern = not _vd.is_legacy(params)
+                        if vd_modern and str(params.get("output_mode", "warped src")) != "warped src":
+                            pass                                    # an st-map is a map, not a picture: no fade, mask or mix
+                        else:
+                            fade = int(params["fade_frames"])
+                            amount = 1.0 if fade <= 0 or not vd_hold else max(0.0, 1.0 - abs(float(frame)-float(params["reference_frame"])) / fade)
+                            warped *= np.float32(amount)
+                            if vd_modern:       # Channels: the warp reaches only the selected channels, the rest pass through from the source
+                                warped = _chrome.restrict(values[source_key].fit(base.data), warped, _chrome.parse_channels(params.get("channels", "all")))
+                            mask = values.get(node["inputs"].get("mask"))
+                            mix_base = base.pixels if vd_hold else values[source_key].fit(base.data)
+                            warped = self._apply_mask_mix(mix_base, warped,
+                                None if mask is None else mask.fit(base.data), float(params["mix"]))
                     elif not (pins_node and str(params.get("output_mode", "warped src")) != "warped src"):
                         mask = values.get(node["inputs"].get("mask"))
                         warped = self._apply_mask_mix(base.pixels, warped,

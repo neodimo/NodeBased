@@ -73,6 +73,8 @@ FILTER_CHROME = {
     # GridWarp (lane 9 step H) has `channels` (the guide's default is all) and the mask strip, around its own full-frame kernel. SplineWarp's table
     # lists `channels` only; its mask input is gated by the kernel itself.
     "GridWarp": ("all", True, False), "SplineWarp": ("all", False, False),
+    # VectorDistort (lane 9 step N): the guide lists `channels` and no mask strip; the older mask input and mix stay as NodeBased's own.
+    "VectorDistort": ("all", False, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.

@@ -1278,6 +1278,10 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("matte_channel",), label="Matte Channel", help="Where the foreground mask for the motion estimate comes from: the Source's alpha or the Matte input. None estimates on the whole frame."),
         KnobGroup("enum", ("matte_output",), label="Output", help="With a Matte Channel: pass the Background or the Foreground vectors on. The other side is absent (zero, with coverage 0).")),
     "VectorDistort": _groups(KnobGroup("int", ("reference_frame",)), KnobGroup("float", ("blur_size",)),
+        KnobGroup("bool", ("hold_frame",), label="Hold frame", help="Warp the reference frame (as a FrameHold after the source would). Off warps the current frame back to the reference frame instead."),
+        KnobGroup("enum", ("output_mode",), label="Output", help="The warped picture, or the st-map of the warp from the reference frame to this one (or the inverse)."),
+        KnobGroup("enum", ("image_filter",), label="Filter", help="How the warp samples the picture: Impulse keeps the original values, Cubic smooths, Keys, Simon and Rifman sharpen more and more."),
+        KnobGroup("bool", ("legacy_vectordistort",), label="Legacy distort", help="Warp with bilinear sampling and no output choice, as graphs saved before the VectorDistort page was followed do."),
         KnobGroup("int", ("fade_frames",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "VectorCornerPin": _groups(KnobGroup("int", ("reference_frame",)),
         *[KnobGroup("xy", (f"user{i}_x", f"user{i}_y"), label=f"User{i} xy", help="Where the pin sits at the reference frame; the vectors move it from there." if i == 1 else None) for i in range(1, 5)],
@@ -2468,6 +2472,7 @@ NUKE_LAYOUT_LANE9["Text"] = ("output", "premult", "cliptype", "replace", "invert
                              "enable_shadows", "shadow_inherit_input_color", "shadow_red", "shadow_opacity", "shadow_angle", "shadow_distance",
                              "shadow_softness", "shadow_expand")
 NUKE_LABELS["Text"] = {"premult": "Premult"}
+NUKE_LAYOUT_LANE9["VectorDistort"] = ("reference_frame", "hold_frame", "output_mode", "blur_size", "channels", "image_filter", "fade_frames", "legacy_vectordistort", "mix")
 NUKE_LABELS.setdefault("GridWarp", {})["bbox"] = "Set bbox to"
 NUKE_LABELS.setdefault("SplineWarp", {})["boundary_bbox"] = "Bbox boundary curve"
 

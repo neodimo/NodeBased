@@ -228,6 +228,7 @@ from . import motionblurknobs as _motionblurknobs
 from . import vectorblurknobs as _vectorblurknobs
 from . import warpknobs as _warpknobs
 from . import vectorcornerpinknobs as _vectorcornerpinknobs
+from . import vectordistortknobs as _vectordistortknobs
 from . import drawfxbehaviour as _drawfxbehaviour
 from . import transformbehaviour as _transformbehaviour
 from . import lensdistortion as _lensdistortion
@@ -829,7 +830,7 @@ SPECS = {
                      "vector_detail": 4, "smoothness": 1.0, "reanchor_interval": 5,
                      "flow_backend": "auto", "matte_channel": "None", "matte_output": "Background"}},
     "VectorDistort": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
-                       "params": {"reference_frame": 1, "blur_size": 0.0, "fade_frames": 20, "mix": 1.0}},
+                       "params": {"reference_frame": 1, "blur_size": 0.0, "fade_frames": 20, "mix": 1.0, **_vectordistortknobs.NEW}},
     "VectorCornerPin": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
                          "params": {"reference_frame": 1, "corner1_x": 0.0, "corner1_y": 0.0,
                                     "corner2_x": 100.0, "corner2_y": 0.0, "corner3_x": 100.0, "corner3_y": 100.0,
@@ -2372,6 +2373,8 @@ LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0)}
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
 CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric Creation: the two styles the guide describes plainly
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)
+CHOICES["image_filter"] = list(_transformbehaviour.CHOICES)        # VectorDistort Filter (lane 9 step N)
+LIMITS.update(_vectordistortknobs.LIMITS)
 LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_PARAMS})
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)
 CHOICES.update(_denoiseknobs.CHOICES)

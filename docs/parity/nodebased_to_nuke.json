@@ -3710,6 +3710,12 @@
    "knobs": [
     {"nodebased": ["reference_frame"], "nuke": ["referenceFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `referenceFrame`"},
     {"nodebased": ["blur_size"], "nuke": ["blurSize"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `blurSize`"},
+    {"nodebased": ["hold_frame"], "nuke": ["holdFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `holdFrame` (lane 9 step N)"},
+    {"nodebased": ["output_mode"], "nuke": ["outputMode"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `outputMode` (lane 9 step N)"},
+    {"nodebased": ["image_filter"], "nuke": ["imageFilter"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `imageFilter` (lane 9 step N)"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": [], "nuke": ["frameDistance"], "kind": "unsupported", "reason": "Nuke's SmartVector keeps several vector sets, for hops of 1 to 64 frames, and Frame Distance picks one; NodeBased's SmartVector keeps one accumulated set per frame (re-anchored every `reanchor_interval` frames), so there is no second set to pick (nodebased/vectordistortknobs.py)"},
+    {"nodebased": ["legacy_vectordistort"], "kind": "extra", "reason": "NodeBased-only: graphs saved before VectorDistort followed the guide's Hold Frame, Output and Filter keep their picture; lane 9 step N"},
     {"nodebased": ["fade_frames"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]

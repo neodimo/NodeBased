@@ -65,7 +65,9 @@ UPGRADE_EXTRA = {"Transform": {"black_outside": 0},
                  # outside or clamp, and had no value clamp.
                  "Reformat": {"box_fixed": 1, "clamp": 0, "black_outside": 1},
                  # A Tile saved before it had a filter scaled each tile with bilinear sampling.
-                 "Tile": {"filter": "bilinear"}}
+                 "Tile": {"filter": "bilinear"},
+                 # VectorDistort (lane 9 step N): held reference frame, bilinear sampling and no output choice, as before.
+                 "VectorDistort": {"legacy_vectordistort": 1, "hold_frame": 1, "output_mode": "warped src", "image_filter": "bilinear"}}
 
 
 def new_params(kind):
