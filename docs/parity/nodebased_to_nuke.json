@@ -1648,7 +1648,8 @@
    "knobs": [
     {"nodebased": ["path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'file', scripting name `file`"},
     {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
-    {"nodebased": ["file_interpolation"], "nuke": ["interpolation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'interpolation', scripting name `interpolation`"},
+    {"nodebased": ["file_interpolation"], "kind": "extra", "reason": "NodeBased-only for now: passed to OpenColorIO's FileTransform, which (2.5.2) gives the same pixels for nearest, linear, tetrahedral and best on .cube files, so the choice changes nothing; not paired with Nuke's `interpolation`"},
+    {"nodebased": [], "nuke": ["interpolation"], "kind": "unsupported", "reason": "OpenColorIO 2.5.2 ignores the interpolation set on a FileTransform for .cube LUTs (checked: nearest, linear, tetrahedral and best return the same values on a bent 3-point cube), and NodeBased has no interpolator of its own for it"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["config"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
