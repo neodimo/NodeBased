@@ -1,3 +1,9 @@
+## 2026-11-03 - Lane 9 (2D behaviour), step L finish: the rest of Denoise, MotionBlur and VectorBlur
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step L finish.** Commit `21a6d677`. Full notes in TASKLOG.md (same date, same title).
+- **Verified:** the targeted modules named in the TASKLOG entry, each run alone, all OK; `tools/audit_nuke_fidelity.py --check` clean; the bundled `PARITY_2D_FIDELITY.md` is byte-identical.
+- **Not done:** VectorBlur `mv_presets` and `normalize` (unsupported in the mapping, reasons there). No visual QA, no Windows run, full suite not run (the integrator runs it).
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:45 AM on 2026-11-03 PDT)
