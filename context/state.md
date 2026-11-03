@@ -1,5 +1,34 @@
 ## 2026-11-02 - Lane 9 (2D behaviour), hangfix-1102: queue panel close, GPU display surface, CornerPin case
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (9:45 PM on 2026-11-02 PDT)
+
+`main` moved `1e219846` -> `ad5da33b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `ad5da33b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-2135.log`, started 9:35 PM): **Ran 8306 tests in 576.777 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step D of 4: every colour, keyer and channel knob changes the picture, and their panels read like Nuke's.** Commits:
+  - `80c06a1c` Clamp's minimum and maximum split into r g b a like Nuke's AColor knobs, on the evaluator and the tile path; TASKLOG and state notes for step D; report regenerated
+  - `58af9664` The main tabs of Clamp, Exposure, ColorLookup, Keyer, Keylight, IBKGizmo, AddMix, ShuffleCopy, MatchGrade and the OCIO nodes follow Nuke's order and labels; the ColorLookup Set buttons are panel entries; layout tests
+  - `5169fb8b` Knobs the one-knob probe cannot reach are listed with their state and shown acting: NOT_PIXEL entries for 13 colour, keyer and channel nodes, OCIOFileTransform interpolation unpaired (OpenColorIO ignores it on .cube), 24 pixel tests
+  Diff: 11 files changed, 689 insertions(+), 188 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), fix: two background-thread hangs that keep stopping the full test suite.** Commits:
+  - `536146fa` TASKLOG and state: hangfix-1102 note
+  - `e4f877c8` GPU display: import QThread only where a caller brings no surface (importing it on the preview thread slowed the 3D playback stage)
+  - `15e7211c` GPU display: a worker never waits on the GUI thread for its offscreen surface; the conversion thread gets a surface made up front
+  - `bc0c7c2f` Queue panel: closing it ends the running loop instead of waiting forever; links of a chain cancelled before they were queued end cancelled instead of being skipped for ever
+  - `eea56ea0` CornerPin fidelity case: move a to-point so no pixel centre sits on the quad's edge (rounded differently on the CI runners)
+  Diff: 10 files changed, 232 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-behaviour` (not merged). See the TASKLOG note of the same date for causes, the fixes and the measured frame times. Status: the queue panel close waits no longer than 2 seconds for running work;
 a GPU display is never built off the GUI thread without a surface made on it; the skewed CornerPin fidelity case no longer has a pixel centre on a quad edge. Open: CI on the pushed branch.
 
