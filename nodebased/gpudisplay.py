@@ -16,7 +16,10 @@ two threads. `QOffscreenSurface` itself must be *created* on the GUI thread, so
 `app.py` creates one at startup and hands it to this module via `configure_surface()`
 before the worker thread's first display request. When no surface has been configured
 (benchmarks, tests, and any other single-threaded caller), a surface is created lazily
-on the calling thread instead, which is fine as long as that thread is the only caller.
+on the calling thread instead, which is fine as long as that thread is the GUI thread: from any
+other thread `QOffscreenSurface.create()` blocks until the GUI thread services it, so a worker
+that is called while the GUI thread waits on that worker (an agent-loop request, a blocking
+export) would hang the process. Such a call takes the CPU path instead (`GpuNeedsGuiThread`).
 
 Fallback: `NODEBASED_DISPLAY_GPU=0` forces the CPU path unconditionally. Any failure to
 create a context, compile a shader, or render -- no GPU, no display attached, an
@@ -116,6 +119,11 @@ class GpuUnavailable(Exception):
     """Raised internally when the GPU path cannot serve this call; always caught."""
 
 
+class GpuNeedsGuiThread(GpuUnavailable):
+    """A display was asked for off the GUI thread with no surface made up front. Not a failure of the card: the same call
+    on the GUI thread, or after `configure_surface`, still works, so it is never memoized in `_failed_reason`."""
+
+
 def _make_lut_texture(texture, is_3d):
     from PySide6.QtOpenGL import QOpenGLTexture
     values = np.asarray(texture.getValues(), dtype=np.float32)
@@ -201,6 +209,8 @@ _surface = None
 _instance = None
 _failed_reason = None
 _owner_prefix = None
+_convert_surface = None
+_gui_thread_noted = False
 # The playback conversion stage (playback.ConversionStage) converts finished frames on a thread of its
 # own so the preview worker can evaluate the next frame. That thread keeps its own context: a context
 # is thread-affine, and sharing the worker's would put the conversion back on the evaluator's thread.
@@ -220,17 +230,31 @@ def context_format():
     return fmt
 
 
-def configure_surface(surface, owner_thread_prefix=None):
+def configure_surface(surface, owner_thread_prefix=None, convert_surface=None):
     """Register a `QOffscreenSurface` created on the GUI thread. Call once at startup.
 
     `owner_thread_prefix` pins which thread may lazily build the GL context. Without it, the
     first caller wins: a synchronous GUI-thread ACES capture (e.g. `reference_context`) that
     ran before the first preview would own the context, and every preview-worker call after
     that would silently fall back to CPU for the rest of the session.
+
+    `convert_surface` is a second surface, also made on the GUI thread, for the playback conversion
+    thread (two threads must not hold one drawable current at once). Without it that thread gets no
+    GL display unless it is the GUI thread.
     """
-    global _surface, _owner_prefix
+    global _surface, _owner_prefix, _convert_surface
     _surface = surface
     _owner_prefix = owner_thread_prefix
+    _convert_surface = convert_surface
+
+
+def _note_gui_thread_once():
+    """Record (once per process) why a worker took the CPU path instead of building its own surface."""
+    global _gui_thread_noted
+    if not _gui_thread_noted:
+        _gui_thread_noted = True
+        import logging
+        logging.getLogger(__name__).info('GPU display not built off the GUI thread without a pre-made surface; using the CPU path')
 
 
 def gpu_enabled():
@@ -302,6 +326,9 @@ def get_display(force=False):
         try:
             _instance = GpuDisplay(_surface)
             _failed_reason = None
+        except GpuNeedsGuiThread:
+            _note_gui_thread_once()
+            return None
         except Exception as error:
             _failed_reason = str(error)
             return None
@@ -320,8 +347,11 @@ def _get_convert_display():
             _convert_instance = None
         if _convert_instance is None:
             try:
-                # Its own surface as well: two threads must not hold one drawable current at once.
-                _convert_instance = GpuDisplay(None)
+                # Its own surface as well (made on the GUI thread): two threads must not hold one drawable current at once.
+                _convert_instance = GpuDisplay(_convert_surface)
+            except GpuNeedsGuiThread:
+                _note_gui_thread_once()
+                return None
             except Exception:
                 # Only this thread loses the card; the worker's context and the CPU path are unaffected.
                 return None
@@ -371,10 +401,11 @@ def reset_for_testing():
     every texture the garbage collector happens to finalize later, on no particular
     thread and with no context current.
     """
-    global _failed_reason
+    global _failed_reason, _gui_thread_noted
     _release_instance()
     with _lock:
         _failed_reason = None
+        _gui_thread_noted = False
 
 
 class GpuDisplay:
@@ -384,7 +415,7 @@ class GpuDisplay:
     """
 
     def __init__(self, surface=None):
-        from PySide6.QtCore import QCoreApplication
+        from PySide6.QtCore import QCoreApplication, QThread
         from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
 
         # QOffscreenSurface (and the QOpenGLContext bound to it) needs a live
@@ -397,6 +428,9 @@ class GpuDisplay:
         self._owns_surface = surface is None
         fmt = context_format()
         if surface is None:
+            if QThread.currentThread() != QCoreApplication.instance().thread():
+                # QOffscreenSurface.create() off the GUI thread blocks until the GUI thread services it.
+                raise GpuNeedsGuiThread('an offscreen surface must be created on the GUI thread')
             surface = QOffscreenSurface()
             surface.setFormat(fmt)
             surface.create()
