@@ -1,5 +1,26 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:55 AM on 2026-11-03 PDT)
+
+`main` moved `120e8d02` -> `7cb91003` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7cb91003` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0445.log`, started 4:45 AM): **Ran 8822 tests in 581.385 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs.** Commits:
+  - `fbe8d41c` TASKLOG and state: lane 9 step L
+  - `f5e31d72` VectorBlur: Invert UV and Output (result or the uvs); MotionBlur: the FgVecs input streaks a plate over Shutter Time at Shutter Samples points; constant-vector and whole-pixel-motion tests; the audit report is rebuilt (2D behaviour, lane 9 step L)
+  - `e05c10b8` Denoise: Source, Noise model, Profile, Output, Lift blacks, Roll off, Smoothness, Luminance blend, Preserve edges and the Noise input; Output Noise is the source minus the result; graphs saved before keep their pictures (legacy_denoise); the audit report is rebuilt (2D behaviour, lane 9 step L)
+  Diff: 17 files changed, 797 insertions(+), 56 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** two code commits; targeted gate green (tests.test_2d_behaviour_filter_l 35 tests, filter_k, 2d_parity_step_5c, flow_node_accuracy, flow_nodes_v1, flow2_f1, flow2_f1_finish, cache_correctness, nuke_fidelity_audit, knowledge, tiles, bypass, knobs, tiers, core, desktop PropertiesLabelTests and FluidPropertiesPanelTests).
   - Denoise (new `nodebased/denoiseknobs.py`, flag `legacy_denoise`, saved nodes 1): Source, Noise model, Profile, Output, Lift blacks, Roll off, Smoothness, Luminance blend, Preserve edges and the `Noise` input. Output Noise is the source minus the result exactly. A higher amount lowers the residual variance of a plate with known noise. The evaluator and the tile path agree at tiles of 7, 16 and 32, with and without a mask; a node that measures a noise level (Automatic profile, or Noise wired) runs on the full frame. Saved graphs keep the bilateral of before bit for bit.
   - VectorBlur: Invert UV and Output (result or uvs) added; Scale, Offset, Method and UV alpha already acted and now each have a constant-vector test (streak = vector x scale).
