@@ -21,8 +21,10 @@ import math
 import numpy as np
 
 LEGACY = {"GodRays": {"legacy_godrays": 1}}
-VOLUME_UPGRADE = {"comp_me": 1, "luma_tol": 0.0, "chk_desat": 0, "CCorrect1_gamma": 1.0, "CCorrect1_gain": 1.0}
-NEW = {"VolumeRays": {**VOLUME_UPGRADE, "comp_me": 0}, "GodRays": {"legacy_godrays": 0, "rays_translate_x": 0.0, "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_scale": 1.0, "rays_skew": 0.0,
+# A saved VolumeRays keeps its picture: Add on Top on, no radial falloff (Nuke's default is on), no pre-blur, the luminance style.
+VOLUME_UPGRADE = {"comp_me": 1, "luma_tol": 0.0, "chk_desat": 0, "CCorrect1_gamma": 1.0, "CCorrect1_gain": 1.0,
+                  "style": "RGB Luminance", "pre_blur": 0.0, "chk_radial": 0, "radial_size": 500.0, "rad_softness": 1.0}
+NEW = {"VolumeRays": {**VOLUME_UPGRADE, "comp_me": 0, "chk_radial": 1}, "GodRays": {"legacy_godrays": 0, "rays_translate_x": 0.0, "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_scale": 1.0, "rays_skew": 0.0,
                    "rays_from_color": 1.0, "rays_to_color": 1.0, "rays_gamma": 1.0, "rays_max": 0}}
 # An older document's node: the legacy flag, and the old step count (a saved node has its own; this is for one saved without).
 UPGRADE = {"VolumeRays": dict(VOLUME_UPGRADE), "GodRays": {"legacy_godrays": 1, "rays_translate_x": 0.0, "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_scale": 1.0, "rays_skew": 0.0,

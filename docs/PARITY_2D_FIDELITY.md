@@ -37,7 +37,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Time | 96.1 | 78.9 | 96.1 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 95.6 | 84.8 | 94.6 | 34 |
-| Filter | 92.3 | 79.4 | 92.4 | 32 |
+| Filter | 92.3 | 79.7 | 92.5 | 32 |
 | Keyer | 91.6 | 77.2 | 90.7 | 11 |
 | Merge | 99.4 | 98.6 | 99.5 | 12 |
 | Transform | 92.2 | 76.2 | 91.5 | 20 |
@@ -46,7 +46,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 Behaviour checked: 74 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 4 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 325 of the 340 paired knobs probed change the output pixels; 15 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 330 of the 345 paired knobs probed change the output pixels; 15 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -187,7 +187,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 17 | Inpaint | `Inpaint` | supported | 98.7 | 98.8 | 100 (11/11) | - | 91 | 100 | 100 | - | 100 | - | no fixture |
 | 18 | GodRays | `GodRays` | supported | 98.9 | 98.8 | 100 (10/10) | 100 (10/10) | 88 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 18 | LevelSet | `LevelSet` | supported | 100.0 | 100.0 | 100 (8/8) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 18 | VolumeRays | `VolumeRays` | supported | 71.5 | 49.3 | 24 (6/24) | 100 (6/6) | 100 | 100 | - | - | 100 | - | unmeasured |
+| 18 | VolumeRays | `VolumeRays` | supported | 80.5 | 65.3 | 48 (11/24) | 100 (11/11) | 100 | 100 | - | - | 100 | - | unmeasured |
 | 19 | ZSlice | `ZSlice` | supported | 73.8 | 76.7 | 100 (3/3) | - | 50 | 100 | 17 | - | 50 | - | no fixture |
 | 20 | Bokeh | - | supported | 0.0 | 0.0 | 0 (0/42) | - | - | 0 | - | - | - | - | no fixture |
 

@@ -355,10 +355,45 @@ class VolumeRaysTests(unittest.TestCase):
         np.testing.assert_allclose(volume(image, comp_me=0, CCorrect1_gain=2.0)[..., :3], 2.0 * base, atol=1e-5)
         np.testing.assert_allclose(volume(image, comp_me=0, CCorrect1_gamma=2.0)[..., :3], np.power(base, 0.5), atol=1e-5)
 
+    def test_alpha_solid_makes_rays_from_the_alpha_where_luminance_sees_nothing(self):
+        image = np.zeros((12, 16, 4), np.float32)
+        image[6, 12, 3] = 1.0                                   # black colour, alpha one: only the alpha style can see it
+        np.testing.assert_array_equal(volume(image, comp_me=0)[..., :3], 0.0)
+        rays = volume(image, comp_me=0, style="Alpha Solid")
+        lit = np.argwhere(rays[..., 0] > 1e-6)
+        self.assertTrue(len(lit))
+        self.assertTrue((lit[:, 0] == 6).all())                 # on the line through the centre, as the luminance rays are
+        np.testing.assert_allclose(rays[..., 0], rays[..., 2], atol=1e-6)
+
+    def test_pre_ray_blur_softens_the_ray_source(self):
+        image = np.zeros((12, 16, 4), np.float32)
+        image[:, :, 3] = 1.0
+        image[6, 12, :3] = 1.0
+        sharp, soft = volume(image, comp_me=0, chk_radial=0), volume(image, comp_me=0, chk_radial=0, pre_blur=3.0)
+        self.assertTrue((sharp[..., 0] > 1e-6).sum() < (soft[..., 0] > 1e-6).sum())      # the blurred source lights more pixels
+        self.assertLess(float(soft[..., 0].max()), float(sharp[..., 0].max()))
+        self.assertTrue(np.ptp(np.argwhere(soft[..., 0] > 1e-6)[:, 0]) > 0)                # and off the single row the sharp rays use
+
+    def test_radial_falloff_fades_the_rays_away_from_the_centre_and_faster_when_higher(self):
+        image = np.ones((12, 16, 4), np.float32)
+        off = volume(image, comp_me=0, chk_radial=0)[..., 0]
+        soft = volume(image, comp_me=0, chk_radial=1, radial_size=10.0, rad_softness=1.0)[..., 0]
+        hard = volume(image, comp_me=0, chk_radial=1, radial_size=10.0, rad_softness=3.0)[..., 0]
+        near, far = (6, 9), (1, 0)                              # about 1 and 10 pixels from the centre at x 8, y 6
+        for a in (soft, hard):
+            self.assertLess(a[far] / off[far], a[near] / off[near])
+        self.assertLess(float(hard[far]), float(soft[far]))
+        self.assertAlmostEqual(float(soft[6, 8]), float(off[6, 8]), places=6)           # at the centre nothing has faded
+
+    def test_a_new_node_has_the_guides_defaults_and_a_saved_one_no_falloff(self):
+        p = SPECS["VolumeRays"]["params"]
+        self.assertEqual((p["style"], p["pre_blur"], p["chk_radial"], p["radial_size"], p["rad_softness"]), ("RGB Luminance", 0.0, 1, 500.0, 1.0))
+
     def test_every_paired_knob_changes_the_pixels(self):
         image = texture(12, 16)
         base = volume(image, comp_me=0)
-        for name, value in {"luma_tol": 0.6, "comp_me": 1, "chk_desat": 1, "CCorrect1_gamma": 2.0, "CCorrect1_gain": 3.0, "center_x": 3.0}.items():
+        for name, value in {"luma_tol": 0.6, "comp_me": 1, "chk_desat": 1, "CCorrect1_gamma": 2.0, "CCorrect1_gain": 3.0, "center_x": 3.0,
+                            "style": "Alpha Solid", "pre_blur": 2.0, "chk_radial": 0, "radial_size": 5.0, "rad_softness": 4.0}.items():
             with self.subTest(knob=name):
                 self.assertTrue(differs(volume(image, **{"comp_me": 0, name: value}), base), name)
 
@@ -368,11 +403,12 @@ class VolumeRaysTests(unittest.TestCase):
         g.add("matte", "Constant", dict(width=45, height=37, red=1, green=1, blue=1, alpha=0.7))
         g.add("node", "VolumeRays", dict(center_x=20.0, center_y=15.0, steps=8, decay=0.8, translate=0.9), image="plate", matte="matte")
         old = copy.deepcopy(g.doc)
-        for name in ("comp_me", "luma_tol", "chk_desat", "CCorrect1_gamma", "CCorrect1_gain"):
+        for name in ("comp_me", "luma_tol", "chk_desat", "CCorrect1_gamma", "CCorrect1_gain", "style", "pre_blur", "chk_radial", "radial_size", "rad_softness"):
             old["nodes"]["node"]["params"].pop(name, None)
         loaded = upgrade_document(old)
         validate(loaded)
         self.assertEqual(loaded["nodes"]["node"]["params"]["comp_me"], 1)
+        self.assertEqual((loaded["nodes"]["node"]["params"]["chk_radial"], loaded["nodes"]["node"]["params"]["style"]), (0, "RGB Luminance"))
         image = render(loaded, "plate")
         h, w = image.shape[:2]
         yy, xx = np.mgrid[:h, :w].astype(np.float32)
@@ -389,7 +425,8 @@ class VolumeRaysTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("VolumeRays")]
-        self.assertEqual(labels[:6], ["Luma Tolerance", "Volumetrics Center", "Add on Top", "Desaturate before Coloring", "Volume Gamma", "Volume Gain"])
+        self.assertEqual(labels[:11], ["Volumetric Creation", "Luma Tolerance", "Volumetrics Center", "Pre-Ray Blur", "Add on Top", "Desaturate before Coloring",
+                                       "Volume Gamma", "Volume Gain", "Enable Radial Falloff", "Radial Size", "Radial Falloff"])
 
 
 # -------------------------------------------------------------------------------------------------------------- BumpBoss

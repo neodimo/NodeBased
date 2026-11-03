@@ -7617,9 +7617,15 @@ class Evaluator:
         # VolumeRays' plain colour knobs (guide: Luma Tolerance, Desaturate before Coloring); an older node has none, and 0 / off change nothing.
         luma = 0.2126 * bright[..., 0:1] + 0.7152 * bright[..., 1:2] + 0.0722 * bright[..., 2:3]
         luma_tol = float(p.get("luma_tol", 0.0))
-        if luma_tol > 0.0: bright = np.where(luma > luma_tol, bright, 0.0)
-        if int(p.get("chk_desat", 0)): bright = np.repeat(np.where(luma > luma_tol, luma, 0.0) if luma_tol > 0.0 else luma, 3, axis=2)
+        if p.get("style", "RGB Luminance") == "Alpha Solid":
+            # Volumetric Creation, Alpha Solid: "creates rays based on the input image's entire alpha" (the RGB Options do not apply).
+            bright = np.repeat(np.maximum(image[..., 3:4], 0.0), 3, axis=2)
+        else:
+            if luma_tol > 0.0: bright = np.where(luma > luma_tol, bright, 0.0)
+            if int(p.get("chk_desat", 0)): bright = np.repeat(np.where(luma > luma_tol, luma, 0.0) if luma_tol > 0.0 else luma, 3, axis=2)
         if matte is not None: bright = bright * np.clip(matte[..., 3:4], 0, 1)
+        # Pre-Ray Blur: the ray source is blurred before the rays are cast, Nuke's blur size in pixels (a Gaussian, the Blur node's own).
+        bright = Evaluator._gaussian_2d(bright, float(p.get("pre_blur", 0.0)))
         out = image.copy(); acc = np.zeros_like(bright)
         translate = float(p.get("translate", 1.0))
         for i in range(1, steps+1):
@@ -7628,6 +7634,11 @@ class Evaluator:
             sy = np.clip(np.rint(yy + (yy-cy)*t).astype(int), 0, h-1)
             acc += bright[sy, sx] * (decay ** i)
         rays = acc / steps
+        if int(p.get("chk_radial", 0)):
+            # Radial Falloff: "the amount of falloff as rays move away from the vol_pos widget ... higher values cause the rays to fade more rapidly"
+            # (the guide gives no curve: an exponential in the distance over Radial Size, scaled by Radial Falloff).
+            dist = np.hypot(xx - cx, yy - cy)
+            rays = rays * np.exp(-max(float(p.get("rad_softness", 1.0)), 0.0) * dist / max(float(p.get("radial_size", 500.0)), 1e-6))[..., None]
         gain, gamma = float(p.get("CCorrect1_gain", 1.0)), float(p.get("CCorrect1_gamma", 1.0))
         if gain != 1.0: rays = rays * gain
         if gamma != 1.0: rays = np.power(rays, 1.0 / max(gamma, 1e-6))

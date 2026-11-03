@@ -4,6 +4,14 @@
   list in the dated `context/state.md` section. Full suite at `8d2a2633`: Ran 8497 tests in 602.893 s, OK (skipped=38), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
+## 2026-11-03 - lane 2 (2D behaviour), step G finish: VolumeRays style, pre-blur and radial falloff
+
+- **What was done (evidence):** re-read the Nuke 17.0 VolumeRays and BumpBoss pages and searched for the VolumeRays gizmo and BumpBoss formulas; neither exists in any source found, so BumpBoss's lighting model stays unbuilt. VolumeRays gained the knobs whose behaviour the guide states plainly: Volumetric Creation (RGB Luminance, Alpha Solid), Pre-Ray Blur (the Blur node's Gaussian on the ray source), Enable Radial Falloff, Radial Size and Radial Falloff (rays fade with distance from the centre, faster when higher; the curve `exp(-falloff * distance / size)` is ours, the guide gives none). Evaluator only: VolumeRays has no tile path (precedent: it stays outside tiles). Mapping: 5 knobs now paired; Edge Size and Edge Blur stay unsupported (Alpha Edges and Shadow Making styles not built).
+- **Kernel changed:** VolumeRays (legacy: a saved node gets `style` RGB Luminance, `pre_blur` 0, `chk_radial` 0 on load, so it renders as before; a new node has radial falloff on, as Nuke's default). No schema bump.
+- **Tests:** `tests/test_2d_behaviour_extra_filter.py` (4 new VolumeRays tests, 2 updated); the brief's targeted gate (208 tests) OK after the report was regenerated.
+- **Score:** VolumeRays 71.5 -> 80.5, BumpBoss unchanged at 44.4; Filter group 92.3 (unchanged: 79.4 -> 79.7 on the requirements column); overall 93.0, previous formula 92.6. Inert knobs on VolumeRays: 0 of 11 probed.
+- **Left (needs a source or a real Nuke render):** VolumeRays ray length, quality, flicker (4), initial and end volume colour, mask options (3), Alpha Edges and Shadow Making styles with Edge Size and Edge Blur; BumpBoss's lighting model (lightposition, bumpsize, height, intensity, minshadow, center).
+
 ## 2026-11-02 - lane 2 (2D behaviour), step G of 2: EdgeBlur, GodRays, VolumeRays and BumpBoss
 
 - **What was done (evidence):** (1) EdgeBlur: 9 scored cases and 2 not scored in `tools/nuke_fidelity_cases_extra.py` (pixels outside the edge band unchanged; inside it, the box blur of the same size on the interior; tint and brightness; size 0); the kernel now takes Nuke's `filter`, `quality`, `crop to format`, matte channel, `tint` and `brightness` and reuses Blur's kernels (`nodebased/blurknobs.py`). (2) GodRays: 3 scored cases (identity at the defaults; the streak of one white pixel at x 12, 10, 8 with max on; from and to colour at the two ends) and 5 not scored; new kernel `nodebased/raysbehaviour.py`. (3) VolumeRays: 5 plain knobs implemented on the existing kernel; 1 not scored case. (4) BumpBoss: 1 not scored case; the 6 guide knobs recorded unsupported.
