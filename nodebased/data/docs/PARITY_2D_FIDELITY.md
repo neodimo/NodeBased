@@ -2,7 +2,7 @@
 
 **Overall fidelity: 93.5 / 100** (167 nodes scored, rank-weighted; 95.9 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.2 (95.5 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.2 (95.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -231,7 +231,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Transform | `Transform` | supported | 100.0 | 100.0 | 100 (15/15) | 100 (10/10) | 100 | 100 | - | 100 (12/12) | 100 | 100 (1/1) | unmeasured |
 | 2 | Crop | `Crop` | supported | 97.6 | 97.1 | 100 (5/5) | 100 (2/2) | 75 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 3 | Tracker | `Tracker` | supported | 90.7 | 89.0 | 78 (41/54) | - | 79 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
+| 3 | Tracker | `Tracker` | supported | 91.1 | 89.3 | 78 (41/54) | - | 83 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
 | 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
 | 6 | CornerPin2D | `CornerPin` | supported | 99.4 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 95 | - | unmeasured |
@@ -311,7 +311,7 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 19 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 20 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
 | 21 | Denoise (Filter #12) | `Denoise` | 3.11 | 25.4 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise`; 1 label differs from Nuke's |
-| 22 | Tracker (Transform #3) | `Tracker` | 3.09 | 90.7 | 13 secondary knobs missing |
+| 22 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
 | 23 | SmartVector (Time #8) | `SmartVector` | 2.59 | 17.1 | primary knobs missing: `strengthReg`, `matteChannel`, `output`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue`; sockets missing: `Matte` |
 | 24 | Text (Draw #2) | `Text` | 2.29 | 95.4 | 1 secondary knob missing: `group_animation`; knob order differs from Nuke's (27 of 40 in order); 1 label differs from Nuke's |
 | 25 | AddTimeCode (Metadata #4) | `AddTimeCode` | 2.22 | 91.1 | knob order differs from Nuke's (4 of 5 in order); 1 label differs from Nuke's |
@@ -826,6 +826,8 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `tracker_match_move_follows_the_track` | guide | pass | within tolerance | - |
 | `tracker_stabilise_removes_the_track` | guide | pass | within tolerance | - |
 | `tracker_reference_frame_is_the_identity` | guide | pass | within tolerance | - |
+| `tracker_black_outside_on_is_black` | guide | pass | within tolerance | - |
+| `tracker_black_outside_off_holds_the_edge` | guide | pass | within tolerance | - |
 | `dropshadow_angle_180_casts_right` | convention | pass | within tolerance | - |
 | `dropshadow_angle_0_casts_left` | convention | pass | within tolerance | - |
 | `dropshadow_distance_moves_the_shadow` | convention | pass | within tolerance | - |
