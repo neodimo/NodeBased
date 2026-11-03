@@ -101,7 +101,8 @@ class LoopRun:
         else:
             with self._db() as db: db.execute("UPDATE loops SET state='cancelled' WHERE id=?",(loop_id,))
 
-    def run(self, loop_id):
+    def run(self, loop_id, stop=None):
+        """Run the loop to a terminal state; `stop` (an Event) ends the work in hand as cancelled and returns."""
         while True:
             with self._db() as db:
                 row=db.execute("SELECT * FROM loops WHERE id=?",(loop_id,)).fetchone()
@@ -143,7 +144,13 @@ class LoopRun:
                 # Existing matching completed queue work is reused by Queue.add_chain on reopen.
                 db.execute("UPDATE loops SET state='running' WHERE id=?",(loop_id,))
             self.queue.add_chain(f"Generate VerifyConditioning {loop_id} attempt {n}",links,chain_id=chain)
-            result=self.queue.run_until_idle()
+            result=self.queue.run_until_idle() if stop is None else self.queue.run_until_idle(stop=stop)
+            if stop is not None and stop.is_set() and any(x["state"]!="done" for x in result["links"] if x["chain_id"]==chain):
+                self.queue.cancel(chain)
+                with self._db() as db:
+                    db.execute("UPDATE attempts SET state='cancelled',error='queue closed' WHERE loop_id=? AND number=? AND state='running'",(loop_id,n))
+                    db.execute("UPDATE loops SET state='cancelled',error='queue closed' WHERE id=?",(loop_id,))
+                return self.snapshot(loop_id)
             qlinks={x["id"]:x for x in result["links"] if x["chain_id"]==chain}
             gen=qlinks.get(gen_id); ver=qlinks.get(ver_id)
             with self._db() as db:

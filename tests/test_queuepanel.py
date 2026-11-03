@@ -16,6 +16,13 @@ from nodebased.queuepanel import QueuePanel
 
 
 APP = QApplication.instance() or QApplication([])
+HOLD = threading.Event()
+
+
+def blocking_generate(options, input_ids, progress, cancelled):
+    """A generate operation that never looks at its cancel event and never returns until the test sets HOLD."""
+    HOLD.wait(60)
+    raise RuntimeError("released by the test")
 
 
 class QueuePanelTests(unittest.TestCase):
@@ -197,6 +204,52 @@ class QueuePanelTests(unittest.TestCase):
                 self.assertIn("Verdict: PASS (generative limits)", message.call_args.args[2])
             finally:
                 panel.close(); queue.close()
+
+    def test_closing_the_panel_ends_a_running_loop_whose_worker_never_returns(self):
+        """The full suite hung 40 minutes (10/7, 10/22, 11/2) in closeEvent waiting for a runner thread that was still inside
+        Queue.run_until_idle; closing must end the work in hand, and the interrupted attempt must not be left running."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); store = ArtifactStore(root / "artifacts")
+            queue = Queue(root / "queue.sqlite", store, max_workers=1)
+            panel = self._loop_panel(root, queue, store)
+            HOLD.clear()
+            try:
+                panel.loop_runs.generate_operation = "tests.test_queuepanel:blocking_generate"
+                panel.loop_start.click(); loop_id = panel.selected_loop
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline and not any(
+                        link["state"] == "running" for link in queue.snapshot()["links"]):
+                    time.sleep(.01)
+                self.assertTrue(any(link["state"] == "running" for link in queue.snapshot()["links"]), "the generate link never started")
+                started = time.monotonic()
+                panel.close()
+                self.assertLess(time.monotonic() - started, 8, "closing the panel waited on the blocked worker")
+                snap = panel.loop_runs.snapshot(loop_id)
+                self.assertEqual(snap["state"], "cancelled")
+                self.assertEqual([a["state"] for a in snap["attempts"]], ["cancelled"])
+                self.assertFalse(any(link["state"] == "running" for link in queue.snapshot()["links"]))
+            finally:
+                HOLD.set(); panel.close(); queue.close()
+
+    def test_cancelling_a_loop_before_its_chain_is_queued_does_not_hang_the_close(self):
+        """cancel() can land between the attempt row and Queue.add_chain; the links were then skipped forever by a run that never ended."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); store = ArtifactStore(root / "artifacts")
+            queue = Queue(root / "queue.sqlite", store, max_workers=1)
+            panel = self._loop_panel(root, queue, store)
+            try:
+                chain = "loop-early-1"
+                queue.cancel(chain)
+                queue.add_chain("late", [{"id": "early-gen", "name": "Generate", "operation": "tests.test_queuepanel:blocking_generate"}],
+                                chain_id=chain)
+                finished = threading.Event()
+                threading.Thread(target=lambda: (queue.run_until_idle(), finished.set()), daemon=True).start()
+                self.assertTrue(finished.wait(5), "run_until_idle polled forever for links of a cancelled chain")
+                self.assertEqual([link["state"] for link in queue.snapshot()["links"]], ["cancelled"])
+                started = time.monotonic(); panel.close()
+                self.assertLess(time.monotonic() - started, 5)
+            finally:
+                HOLD.set(); panel.close(); queue.close()
 
 
 if __name__ == "__main__": unittest.main()
