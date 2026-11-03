@@ -429,7 +429,8 @@ SPECS = {
                              "wrap_threshold": 0.0, "highlight_merge": "plus", "use_constant_highlight": 0,
                              "red": 1.0, "green": 1.0, "blue": 1.0, "onlywrap": 0, "disableluma": 0, "enableglow": 0,
                              "saturation": 1.0, "LumaTolerance": 0.0, "white": 1.0, "gray": 0.18, "contrast": 1.0,
-                             "gamma": 1.0, "gain": 1.0, "offset": 0.0, **{f"{band}_{name}": value for band in ("shadows", "midtones", "highlights") for name, value in (("gamma", 1.0), ("gain", 1.0), ("offset", 0.0))}, "mix": 1.0}},
+                             "gamma": 1.0, "gain": 1.0, "offset": 0.0, **{f"{band}_{name}": value for band in ("shadows", "midtones", "highlights") for name, value in (("gamma", 1.0), ("gain", 1.0), ("offset", 0.0))}, "mix": 1.0,
+                             **_drawbehaviour.new_params("LightWrap")}},
     # Dither (step 5a): quantises to `bits` per channel with position-hashed triangular noise of
     # +/- `dither_amount` least-significant bits; `seed` picks the noise pattern.
     "Dither": {"inputs": ["image"], "optional_inputs": ["mask"],

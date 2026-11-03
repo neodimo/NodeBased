@@ -779,6 +779,7 @@ def cases():
     _tracker_cases(Case, out)
     _dropshadow_cases(Case, out)
     _dirblur_cases(Case, out)
+    _lightwrap_cases(Case, out)
     return out
 
 
@@ -1571,3 +1572,35 @@ def _dirblur_cases(Case, out):
          unscored="the guide says BlurLength is 'in pixels' for every type and gives no path for zoom or radial (NodeBased reads the zoom length as a percent of "
                   "the distance to the centre and the radial length as degrees); what is stated (the centre pixel stays, rays stay on their line, "
                   "flat areas stay) is tested in tests/test_2d_behaviour_filter_f.py")
+
+
+LIGHTWRAP_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/draw_nodes/lightwrap.html"
+
+
+def _lightwrap_cases(Case, out):
+    """LightWrap: 'wrapping or spilling light from the background onto the foreground object ... a reflection of light around the edges of your foreground
+    object by blending in whatever is in the background'. Intensity 'adjusts the brightness of the reflections' (Nuke's default is 0, no reflection) and
+    'generate wrap only' makes 'the LightWrap effect only, without merging it with the foreground'. The guide gives no formula for the amount at an edge
+    pixel, so the amount itself is not scored; that the wrap sits at the foreground's edge, widens with Diffuse and scales with Intensity and the
+    background is tested in tests/test_2d_behaviour_filter_f.py."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored=""):
+        out.append(Case(id=id, nuke="LightWrap", nuke_class="LightWrap", nuke_knobs=nuke_knobs, nuke_inputs=("A", "B"), nb_kind="LightWrap",
+                        nb_params=nb_params, nb_inputs=("A", "B"), expected=expected, source=source, statement=statement, unscored=unscored))
+    case("lightwrap_intensity_zero_adds_nothing", (("Intensity", 0),), {"intensity": 0.0},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "convention",
+         f"LightWrap ({LIGHTWRAP_GUIDE}): Intensity 'adjusts the brightness of the reflections on the foreground element': at 0 there are none, and the "
+         "foreground comes through as it was")
+
+    def only_wrap_is_black(fx):
+        ref = np.zeros(fx["A"].shape, np.float64)
+        valid = np.zeros(ref.shape, bool)
+        valid[..., :3] = True
+        return ref, valid
+    case("lightwrap_generate_wrap_only_without_wrap_is_black", (("Intensity", 0), ("onlywrap", True)), {"intensity": 0.0, "onlywrap": 1},
+         only_wrap_is_black, "guide",
+         "LightWrap: 'generate wrap only: when enabled, generates the LightWrap effect only, without merging it with the foreground object': with no "
+         "reflection (Intensity 0) there is nothing to show, so the colour is black and the foreground is not in it")
+    case("lightwrap_wrap_amount_at_the_edge", (("Intensity", 1), ("size", 15)), {"intensity": 1.0},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "convention", "LightWrap: how much of the background is added at an edge pixel",
+         unscored="the guide describes the effect ('a reflection of light around the edges of your foreground object by blending in whatever is in the "
+                  "background') and gives neither the falloff nor the blur's filter, so the amount cannot be written down without guessing")

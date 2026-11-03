@@ -766,7 +766,8 @@
     {"nodebased": ["highlights_gain"], "nuke": ["highlights_gain"], "kind": "same"},
     {"nodebased": ["highlights_offset"], "nuke": ["highlights_offset"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["wrap_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["wrap_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["legacy_lightwrap_grade"], "kind": "extra", "reason": "NodeBased-only: graphs saved before LightWrap graded its wrap with the CCorrect tab keep the ungraded wrap; lane 9 step F"}
    ]
   },
   "Grain": {

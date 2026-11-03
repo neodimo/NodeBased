@@ -7409,6 +7409,18 @@ class Evaluator:
                    Evaluator._reach(p.get("bgblur", 4.0)))
 
     @staticmethod
+    def _light_wrap_grade(wrap, p):
+        """The CCorrect tab: "adjusts the saturation / contrast / gamma / gain / offset in the entire LightWrap effect" and the same gamma, gain and
+        offset "in the darkest parts / the middle range / the highlights" of it. That is ColorCorrect's master and zones, run on the wrapped light
+        (the zone contrast and saturation ColorCorrect also has stay at 1: LightWrap has neither)."""
+        names = ("saturation", "contrast", "gamma", "gain", "offset")
+        zones = tuple(f"{zone}_{name}" for zone in ("shadows", "midtones", "highlights") for name in ("gamma", "gain", "offset"))
+        from .core import SPECS
+        q = {**SPECS["ColorCorrect"]["params"], **{name: p[name] for name in names + zones if name in p}}
+        picture = np.concatenate([wrap, np.ones_like(wrap[..., :1])], axis=2).astype(np.float32)
+        return Evaluator._color_correct(picture, q)[..., :3].astype(np.float32)
+
+    @staticmethod
     def _light_wrap(fg, bg, p):
         # Nuke's LightWrap: light from the background spills around the foreground's edge. The
         # foreground alpha is softened by `fgblur`; its inverse is blurred by `wrap_diffuse` and
@@ -7433,6 +7445,8 @@ class Evaluator:
             light = np.clip(Evaluator._gaussian_2d(bg[..., :3], p.get("bgblur", 4.0))
                             - np.float32(p.get("wrap_threshold", 0.0)), 0.0, None)
         wrap = light * edge * np.float32(p.get("intensity", 1.0))
+        if not int(p.get("legacy_lightwrap_grade", 1)):
+            wrap = Evaluator._light_wrap_grade(wrap, p)
         base = np.zeros_like(fg[..., :3]) if p.get("onlywrap", 0) else fg[..., :3]
         operation = p.get("highlight_merge", "plus")
         if operation == "screen":
