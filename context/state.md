@@ -1,3 +1,8 @@
+## 2026-11-02 - Lane 9 (2D behaviour), hangfix-1102: queue panel close, GPU display surface, CornerPin case
+
+Branch `openclaw/nb-2d-behaviour` (not merged). See the TASKLOG note of the same date for causes, the fixes and the measured frame times. Status: the queue panel close waits no longer than 2 seconds for running work;
+a GPU display is never built off the GUI thread without a surface made on it; the skewed CornerPin fidelity case no longer has a pixel centre on a quad edge. Open: CI on the pushed branch.
+
 ## 2026-11-02 - Lane 2 (2D behaviour), step D of 4: the colour, keyer and channel knobs act, and their panels read like Nuke's
 
 Overall fidelity 87.6 -> 89.0 (previous formula 92.0). 30 inert lane-2 knobs: 29 listed `NOT_PIXEL` with the state they act in and a pixel test, 1 unpaired (OCIOFileTransform interpolation, ignored by OpenColorIO 2.5.2).
