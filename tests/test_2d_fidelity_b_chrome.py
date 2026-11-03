@@ -59,7 +59,7 @@ class DefaultsTests(unittest.TestCase):
         the old path for every node it covers, with a wired mask and a mix below one."""
         rng_image, rng_mask = image(), matte()
         for kind in chrome.FILTER_CHROME:
-            if kind in chrome.MIXLESS or kind in chrome.OWN_STRIP:
+            if kind in chrome.MIXLESS or kind in chrome.OWN_STRIP or kind in chrome.NOT_WINDOWED:
                 continue                                  # no mix to reproduce, and (Roto) no mask gating of its own; TVIScale runs its own strip
             spec = SPECS[kind]
             slots = list(spec["inputs"]) + list(spec.get("optional_inputs", []))

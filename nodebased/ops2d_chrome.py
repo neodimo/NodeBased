@@ -89,6 +89,10 @@ MIXLESS = frozenset({"Roto", "Premult", "Unpremult"})
 # Kinds in FILTER_CHROME whose own kernel applies the strip, on its own (changed-size) output, so the generic evaluator and
 # tile wrappers skip them: TVIScale enlarges by two, which the wrapper's source-sized arithmetic cannot follow.
 OWN_STRIP = frozenset({"TVIScale"})
+# Kinds the wrapper covers whose kernel is not on the windowed path: VectorDistort reads its vectors across frames
+# through its own evaluator route, so the windowed-path equivalence test skips it (its channels are tested in
+# tests/test_2d_behaviour_transform_n.py).
+NOT_WINDOWED = frozenset({"VectorDistort"})
 # Kinds whose own kernel does not read the mask input: the wrapper gates a wired mask for them, even with every chrome knob unchanged.
 WRAPPER_GATED = frozenset({"Roto"})
 # Merge-like nodes gate against input B (Nuke's background); everything else gates against its first input.
