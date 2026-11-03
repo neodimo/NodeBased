@@ -1,5 +1,25 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:45 AM on 2026-11-03 PDT)
+
+`main` moved `ee9fbbd1` -> `0a51e76b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `0a51e76b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0535.log`, started 5:35 AM): **Ran 8854 tests in 590.085 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step K of 2: IBKGizmo, MatchGrade and HueCorrect get Nuke's missing main knobs, and Nuke's layout on the time and metadata panels (finish 1).** Commits:
+  - `4ae3eba1` docs: MatchGrade step K finish in the 2D parity guide; regenerate the fidelity report
+  - `969bdda1` MatchGrade gets Nuke's reference frames, transform, CDL with saturation and locks, iterations, LUT and CDL export, Align Target to Source and Crop Target
+  Diff: 12 files changed, 905 insertions(+), 41 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:55 AM on 2026-11-03 PDT)
 
 `main` moved `120e8d02` -> `7cb91003` (lane commits cherry-picked onto main in lane order) and then to this

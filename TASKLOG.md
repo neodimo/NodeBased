@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step K of 2: IBKGizmo, MatchGrade and HueCorrect get Nuke's missing main knobs, and Nuke's layout on the time and metadata panels (finish 1) (integrator tick)
+
+- **What was done:** `main` `ee9fbbd1` -> `0a51e76b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `0a51e76b`: Ran 8854 tests in 590.085 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs (integrator tick)
 
 - **What was done:** `main` `120e8d02` -> `7cb91003` plus this docs commit. Evidence and per-lane commit
