@@ -1,5 +1,27 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step G: Bilateral, Sharpen and VectorCornerPin
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:05 AM on 2026-11-03 PDT)
+
+`main` moved `0b3564ac` -> `44bab365` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `44bab365` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0055.log`, started 12:55 AM): **Ran 8536 tests in 591.445 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step G of 2: Bilateral, Sharpen and VectorCornerPin get Nuke's missing knobs and inputs.** Commits:
+  - `d4c64c6a` docs: fidelity report rebuilt on main 0b3564ac (lane 2's VolumeRays finish in)
+  - `748235af` docs: fidelity report rebuilt after rebasing lane 9 step G onto main (lane 2's EdgeBlur and GodRays in)
+  - `ac86583f` VectorCornerPin: user, To and From pins, Output (warped src, st-map, st-map inverse) and Use baked pins; pins stay put with no SmartVector; graphs saved before keep their corner points (legacy_vectorcornerpin); the audit report is rebuilt, step notes (2D behaviour, lane 9 step G)
+  - `4063326a` Bilateral: guide input, Guide channels, Size as the window, Positional sigma and Filter (gaussian or median); Sharpen's quality acts above its size; graphs saved before keep their pictures (legacy_bilateral); the audit report is rebuilt (2D behaviour, lane 9 step G)
+  Diff: 19 files changed, 853 insertions(+), 78 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Bilateral: guide input, Guide channels, Size as the window, Positional sigma, Filter (gaussian or median); `legacy_bilateral` keeps the older picture. Sharpen: `quailty` implemented, listed in `NOT_PIXEL` (acts above the size). VectorCornerPin: user, To and From pins, Output (warped src, st-map, st-map inverse), `use_baked`; `legacy_vectorcornerpin` keeps the corner points and the SmartVector requirement. Tests: `tests/test_2d_behaviour_filter_g.py`. Report: `docs/PARITY_2D_FIDELITY.md` (overall 93.0).
 
 ## 2026-11-02 - Lane 2 (2D behaviour), step G: EdgeBlur, GodRays, VolumeRays, BumpBoss
