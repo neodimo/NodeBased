@@ -485,6 +485,17 @@ class TileExecutor:
         return TileRegion(data.x, data.y, data.width, data.height, full_x=data.x,
                           full_y=data.y, full_width=data.width, full_height=data.height)
 
+    @staticmethod
+    def _tracker_needs_full_frame(params):
+        """A Tracker blurs over other frames, or fills beyond its picture. Read the way the guide does (no `legacy_transform_edges`), black
+        outside on is the plain zero fill a tile handles, and only black outside off (the edge pixels carried over the format) or a value
+        clamp needs the whole frame; read the older way, either knob does."""
+        if params.get("motionblur"):
+            return True
+        if int(params.get("legacy_transform_edges", 1)):
+            return bool(params.get("clamp") or params.get("black_outside"))
+        return bool(params.get("clamp") or not params.get("black_outside", 1))
+
     def supports_tiled(self, document, target):
         """True only when every evaluated ancestor has a native tile implementation."""
         document, target = groups.flatten_groups(document, target)
@@ -496,7 +507,7 @@ class TileExecutor:
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
-            if node["type"] == "Tracker" and any(node["params"].get(name) for name in ("motionblur", "clamp", "black_outside")):
+            if node["type"] == "Tracker" and self._tracker_needs_full_frame(node["params"]):
                 # Shutter blur averages the node over other frames, and `clamp` and `black outside` fill the area beyond the picture,
                 # which the evaluator's data window limits and a tile has no notion of: they run on the full-frame evaluator.
                 return False

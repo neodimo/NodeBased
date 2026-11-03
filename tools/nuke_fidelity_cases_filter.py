@@ -1572,6 +1572,28 @@ def _tracker_cases(Case, out):
         nb_inputs=(), expected=moved_by(0.0, 0.0, np.ones((12, 16), bool)), source="guide",
         statement="Tracker: at the reference frame the track has not moved, so match-move leaves the plate as it is"))
 
+    shove = {1: (8.0, 6.0), 2: (11.0, 6.0)}
+
+    def shoved(hold):
+        def expected(fx):
+            base = _plate_array(plate)
+            ref = _shift_zero(base, 3, 0)
+            if hold:
+                ref[:, :3] = base[:, :1]
+            return ref, np.ones(ref.shape, bool)
+        return expected
+    for hold, knob, statement in (
+            (False, True, "black outside on (the default): 'renders as black pixels outside the image boundary', so the three columns a 3 pixel move "
+                          "uncovers are black"),
+            (True, False, "black outside off: the pixels outside the image take the outermost pixels, so the three columns a 3 pixel move uncovers hold "
+                          "the plate's first column")):
+        out.append(Case(
+            id=f"tracker_black_outside_{'off_holds_the_edge' if hold else 'on_is_black'}", nuke="Tracker", nuke_class="Tracker4",
+            nuke_knobs=(("black_outside", knob), ("transform", "match-move")), nuke_inputs=("bg",), nb_kind="Tracker",
+            nb_params={"_tracks": [shove], "_frame": 2, "_bg": plate, "mode": "match_move", "filter": "nearest", "black_outside": int(knob)},
+            nb_inputs=(), expected=shoved(hold), source="guide",
+            statement=f"Tracker Transform tab ({TRACKER_GUIDE}): {statement}; an Impulse filter carries the values over exactly"))
+
 
 DROPSHADOW_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/filter_nodes/dropshadow.html"
 

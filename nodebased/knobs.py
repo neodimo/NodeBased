@@ -1052,6 +1052,8 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("motionblur",), label="Motion blur"),
         KnobGroup("float", ("shutter",)), KnobGroup("enum", ("shutter_offset",)),
         KnobGroup("float", ("custom_offset",), label="Custom shutter offset"), KnobGroup("int", ("samples",)),
+        KnobGroup("bool", ("legacy_transform_edges",), label="Legacy edges",
+                  help="Read black outside and clamp the older way. Set on graphs saved before the Tracker followed Nuke."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "PlanarTracker": _groups(
         KnobGroup("int", ("reference_frame",), label="Reference frame"),

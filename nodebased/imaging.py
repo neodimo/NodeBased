@@ -5153,10 +5153,10 @@ class Evaluator:
     @staticmethod
     def _edge_window(kind, p, box, source):
         """Transform and CornerPin with black outside off: the outermost pixels are carried outwards over the whole format (the guide),
-        so the window reaches the format's rectangle as well as the moved picture. An older node (and Tracker, Stabilize) keeps the
+        so the window reaches the format's rectangle as well as the moved picture. An older node (and Stabilize) keeps the
         moved picture's own window."""
-        if (kind in ("Transform", "CornerPin") and not int(p.get("black_outside", 1))
-                and not _transformbehaviour.is_legacy(kind, p, "legacy_transform_edges")):
+        if (kind in ("Transform", "CornerPin", "Tracker") and not int(p.get("black_outside", 1))
+                and not int(p.get("legacy_transform_edges", 1))):
             return box.union(source.display) if not box.is_empty else box
         return box
 

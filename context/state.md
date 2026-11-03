@@ -1,3 +1,7 @@
+## 2026-11-03 - lane 9 (2D behaviour), step I: Roto's per-shape controls and the Tracker's Transform tab
+
+Roto draws the guide's blending modes (`shapes.BLEND_MODES`; `roto.BLEND_OPS` holds the formulas, A the shape and B what is below, mixed by the shape's coverage) and an open spline with a one-pixel soft edge (`stroke_soft`, set on a resolved shape by `shapes._resolve_shape` when `legacy_roto_shapes` is 0). A saved Roto gets `legacy_roto_shapes` 1 on load (`drawbehaviour.LEGACY`): minus resolves to `from` and the hard edge stays. The Tracker reads black outside and clamp through `legacy_transform_edges` (`trackerknobs.NEW` 0 with black outside 1; `OLD` 1); `TileExecutor._tracker_needs_full_frame` decides which Trackers tile. Tests: `tests/test_2d_behaviour_roto_shapes.py`, `tests/test_2d_behaviour_tracker.py`; cases in `tools/nuke_fidelity_cases_filter.py`.
+
 ## 2026-11-03 - lane 9 (2D behaviour), step H: GridWarp and SplineWarp
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:55 AM on 2026-11-03 PDT)

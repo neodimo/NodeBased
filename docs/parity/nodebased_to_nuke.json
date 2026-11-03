@@ -3205,6 +3205,7 @@
     {"nodebased": "track", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
+    {"nodebased": ["legacy_transform_edges"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Tracker read black outside and clamp as the guide does painted the outside opaque black (or left it transparent) and took clamp as an edge extension; lane 9 step I"},
     {"nodebased": ["smoothing"], "nuke": ["smoothT", "smoothR", "smoothS"], "kind": "components", "reason": "one smoothing frame count; Nuke smooths translate, rotate and scale separately"},
     {"nodebased": ["tracking_channels"], "nuke": ["channels"], "kind": "renamed", "reason": "the channels the tracker matches on"},
     {"nodebased": ["reference_frame"], "nuke": ["reference_frame"], "kind": "same"},

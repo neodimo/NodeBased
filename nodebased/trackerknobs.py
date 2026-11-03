@@ -54,12 +54,16 @@ SOLVE = {"jitter_period": 10, "livelink_transform": 1}
 # What an older document's Tracker did: no filter, the luminance-proof match, the score-under-0.5 rule, no clamp, the pattern
 # kept (or `adaptive_update`), the picture following the tracks, the paths coloured by error.
 OLD = {**TRANSFORM, **ANALYSIS, **SOLVE, "pretrack_filter": "none", "adjust_for_luminance_changes": 1, "max_error": 1.0,
-       "clamp_footage": 0, "grab_behavior": "on first frame", "show_error_on_track_links": 1, "shutter": 1.0, "shutter_offset": "centred"}
+       "clamp_footage": 0, "grab_behavior": "on first frame", "show_error_on_track_links": 1, "shutter": 1.0, "shutter_offset": "centred",
+       "legacy_transform_edges": 1}
 # What a new Tracker gets: Nuke's defaults where the guide states them, except `adjust_for_luminance_changes` (on: NodeBased's matching has
 # always been the luminance-proof one, and the plain squared difference is the weaker choice) and `show_error_on_track_links` (on: the
 # paths have always been coloured by error). A new Tracker's picture still follows its tracks
 # (`livelink_transform` on, `mode` match_move), which is what this node has always done and what its overlay draws.
-NEW = {**TRANSFORM, **ANALYSIS, **SOLVE}
+# Its Transform tab reads black outside and clamp as the guide does (the Transform node's `legacy_transform_edges`): black outside on by default,
+# off carrying the outermost pixels over the format, clamp limiting a sharpening filter to the plate's range. A Tracker saved before keeps the
+# older reading (black outside off, painting the outside transparent, and clamp as an edge extension).
+NEW = {**TRANSFORM, **ANALYSIS, **SOLVE, "legacy_transform_edges": 0, "black_outside": 1}
 KINDS = ("Tracker",)
 
 

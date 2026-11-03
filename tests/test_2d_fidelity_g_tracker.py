@@ -296,7 +296,7 @@ W, H = 64, 48
 def build(tracks, **params):
     g = Graph()
     g.add("plate", "Checker", dict(width=W, height=H, size=4))
-    g.add("node", "Tracker", {"filter": "nearest", **params}, image="plate")
+    g.add("node", "Tracker", {"filter": "nearest", "legacy_transform_edges": 1, "black_outside": 0, **params}, image="plate")
     g.d.execute({"op": "set_tracks", "id": "node", "tracks": tracks})
     return g
 
