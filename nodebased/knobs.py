@@ -1264,6 +1264,7 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("falloff",), soft_range=(0, 1))),
     "NoTimeBlur": _groups(KnobGroup("enum", ("rounding",)), KnobGroup("bool", ("single",), label="Use single frame")),
     "TimeWarp": _groups(KnobGroup("float", ("lookup",), label="Input frame"),
+        KnobGroup("float", ("length",), label="Input length", help="The length of time, in frames, averaged together for the output frame (the box filter's width). 1 is the default."),
         KnobGroup("enum", ("lookup_filter",), label="Filter")),
     "MotionBlur2D": _groups(KnobGroup("float", ("shutter",)), KnobGroup("enum", ("shutter_offset",)),
         KnobGroup("float", ("custom_offset",)), KnobGroup("int", ("samples",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),

@@ -438,7 +438,29 @@ def cases():
     case("timewarp_box_filter", "TimeWarp", (("filter", "box"), ("length", 1.0)), {"lookup_filter": "blend"}, {"frame": 3, "curves": straight}, mix((5, 0.5), (6, 0.5)),
          "convention", "TimeWarp filter box on a fractional lookup", unscored=(
              "the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights; "
-             "NodeBased's blend of the two nearest frames is a unit-wide box and nothing states that is Nuke's"))
+             "NodeBased's blend of the two nearest frames is a unit-wide box and nothing states that is Nuke's (the cases above score the whole-frame "
+             "averages of a wider window, which the guide's 'length of time to average together' fixes)"))
+
+    # Input length (lane 2 step N): "Sets the length of time to average together to produce the output frame". On a clip that ends at frame 20 (a
+    # FrameRange holds its last frame past the end), frame 20 with a box of 3 frames averages 19, 20 and 20 (the held frame): a window wider than one
+    # frame reaches the frames beside the lookup, which a straight stamp would hide (the mean of 9, 10 and 11 is 10).
+    length_note = (f"TimeWarp ({page}): 'length: Sets the length of time to average together to produce the output frame' and filter box: 'uses a "
+                   "weighted average of several frames together to cover the output range'. The window is `length` frames wide centred on the lookup and "
+                   "each frame counts by the share of the window it covers (frame n spans n - 0.5 to n + 0.5); the guide gives no weights, so this "
+                   "is the reading used. The clip ends at frame 20 and holds its last frame past it")
+    case("timewarp_length_3_averages_three_frames", "TimeWarp", (("filter", "box"), ("length", 3.0)), {"lookup_filter": "blend", "length": 3.0},
+         {"frame": 20, "chain": CLIP20}, mix((19, 1 / 3), (20, 2 / 3)), "guide",
+         "TimeWarp box of length 3 at frame 20 of a 1 to 20 clip averages frames 19, 20 and the held 20. " + length_note)
+    case("timewarp_length_2_covers_two_frames", "TimeWarp", (("filter", "box"), ("length", 2.0)), {"lookup_filter": "blend", "length": 2.0},
+         {"frame": 20, "chain": CLIP20}, mix((19, 0.25), (20, 0.75)), "convention",
+         "TimeWarp box of length 2 at frame 20 of a 1 to 20 clip: frame 19 by a quarter, frame 20 by a half and the held 20 by a quarter. " + length_note)
+    case("timewarp_length_1_is_the_blend", "TimeWarp", (("filter", "box"), ("length", 1.0)), {"lookup_filter": "blend", "length": 1.0},
+         {"frame": 20, "chain": CLIP20}, shows(20.0), "guide",
+         "TimeWarp box of length 1 on a whole lookup shows that frame alone. " + length_note)
+    case("timewarp_length_ignored_by_nearest", "TimeWarp", (("filter", "nearest"), ("length", 3.0)), {"lookup_filter": "nearest", "length": 3.0},
+         {"frame": 20, "chain": CLIP20}, shows(20.0), "guide",
+         f"TimeWarp filter nearest rounds the centre of the range to a whole frame and does not average, whatever the length ({page}: 'nearest - rounds the "
+         "center of the range to nearest integer frame')")
 
     # --------------------------------------------------------------------------------------------------------------- Kronos and OFlow
     # Kronos (NukeX) and OFlow retime with the same timing knobs: Input Range, Channels, Method, Timing, Output Speed, Input Speed, Frame. A source

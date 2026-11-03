@@ -1109,7 +1109,8 @@
    ],
    "knobs": [
     {"nodebased": ["lookup_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'filter', scripting name `filter`"},
-    {"nodebased": ["lookup"], "nuke": ["lookup"], "kind": "same"}
+    {"nodebased": ["lookup"], "nuke": ["lookup"], "kind": "same"},
+    {"nodebased": ["length"], "nuke": ["length"], "kind": "same"}
    ]
   },
   "TimeEcho": {

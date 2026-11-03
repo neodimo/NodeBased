@@ -1029,7 +1029,7 @@ SPECS = {
     # own fractional shutter samples) or "blend" (the two nearest integer frames are linearly
     # blended by the fractional part) -- a deliberate simplification of Nuke's three-way
     # none/nearest/box choice. No mask or mix, matching every other Time-menu node.
-    "TimeWarp": {"inputs": ["image"], "params": {"lookup": 1.0, "lookup_filter": "blend"}},
+    "TimeWarp": {"inputs": ["image"], "params": {"lookup": 1.0, "length": 1.0, "lookup_filter": "blend"}},
     # Premult / Unpremult (fidelity step C): Nuke's `channels` (the ones multiplied or divided; rgb), `alpha` ("by"; kept
     # as `premult_by` because `alpha` is a number elsewhere in the parameter table) and `invert`.
     "Premult": {"inputs": ["image"], "params": {"channels": "rgb", "premult_by": "rgba.alpha", "invert": 0}},
@@ -2378,7 +2378,7 @@ LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000)
 LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
 LIMITS.update(_behaviour2d.LIMITS)
 LIMITS.update(_drawfxbehaviour.LIMITS)
-LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
+LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "length": (0.0, 64.0)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES.update(_behaviour2d.CHOICES)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0), "detail_amount": (0.0, 1.0), "edge_mask": (0, 1), "legacy_defocus_disc": (0, 1)})

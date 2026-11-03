@@ -612,6 +612,21 @@ def _request_anchor(stack):
     return stack[0] if stack else 0
 
 
+def timewarp_box(centre, length):
+    """The whole frames a TimeWarp box filter averages and their weights: a window `length` frames wide centred on `centre`, frame n by the
+    share of the window it covers (frame n spans n - 0.5 to n + 0.5). A window narrower than a thousandth of a frame is the nearest frame."""
+    if length < 1e-3:
+        return [int(round(centre))], [1.0]
+    low, high = centre - length / 2.0, centre + length / 2.0
+    frames, weights = [], []
+    for n in range(int(math.floor(low + 0.5)), int(math.floor(high - 0.5)) + 2):
+        covered = min(high, n + 0.5) - max(low, n - 0.5)
+        if covered > 1e-9:
+            frames.append(n)
+            weights.append(covered / length)
+    return frames, weights
+
+
 def no_time_blur_frame(request, anchor, rounding, single):
     """The frame NoTimeBlur asks its input for. `none` passes the request through unchanged; otherwise `rounding`
     (rint rounds halves to even, as C's rint does) is applied to the request, or with `single` to the output frame."""
@@ -2757,7 +2772,7 @@ class Evaluator:
                     has_lookup_curve = bool(node_curves and "lookup" in node_curves)
                     target_frame = float(params["lookup"]) if has_lookup_curve else float(frame)
                     lookup_filter = params.get("lookup_filter", "blend")
-                    if lookup_filter == "none" or target_frame.is_integer():
+                    if lookup_filter == "none" or (target_frame.is_integer() and float(params.get("length", 1.0)) == 1.0):
                         # "none": the fractional frame is passed straight into the nested call,
                         # exactly like TimeBlur's own shutter subframes -- an animated upstream
                         # source is sampled at that exact fractional position.
@@ -2765,6 +2780,10 @@ class Evaluator:
                     elif lookup_filter == "nearest":
                         # "nearest": the lookup rounds to the nearest whole frame (a half to the even one, as Retime does).
                         sample_frames, weights = [int(round(target_frame))], [1.0]
+                    elif float(params.get("length", 1.0)) != 1.0:
+                        # "box": the frames inside a window `length` frames wide centred on the lookup, each by the share of the window it covers
+                        # (frame n covers n - 0.5 to n + 0.5); a window of 1 is the two-frame blend below.
+                        sample_frames, weights = timewarp_box(target_frame, float(params["length"]))
                     else:
                         lo = math.floor(target_frame)
                         frac = target_frame - lo
@@ -2774,7 +2793,7 @@ class Evaluator:
                                for sample_frame in sample_frames]
                     temporal_samples = samples
                     timewarp_weights = weights
-                    fingerprint = ["time-warp", target_frame, lookup_filter, *(d for _, d in samples)]
+                    fingerprint = ["time-warp", target_frame, lookup_filter, float(params.get("length", 1.0)), *(d for _, d in samples)]
                 elif kind in ("TimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
@@ -3398,7 +3417,7 @@ class Evaluator:
                 elif kind == "TimeWarp" and temporal_samples is not None:
                     sampled = [r for r, _ in temporal_samples]
                     reference = sampled[0]
-                    if len(sampled) > 1 and sampled[1].display != reference.display:
+                    if any(r.display != reference.display for r in sampled[1:]):
                         raise ValueError("TimeWarp: sampled frames must have matching display windows")
                     output_data = reference.data
                     for item in sampled[1:]:
@@ -3407,8 +3426,9 @@ class Evaluator:
                     if len(frames_fit) == 1:
                         pixels = frames_fit[0].copy()
                     else:
-                        w0, w1 = timewarp_weights
-                        pixels = frames_fit[0] * np.float32(w0) + frames_fit[1] * np.float32(w1)
+                        pixels = frames_fit[0] * np.float32(timewarp_weights[0])
+                        for frame_fit, weight in zip(frames_fit[1:], timewarp_weights[1:]):
+                            pixels = pixels + frame_fit * np.float32(weight)
                     raster = Raster(pixels.astype(np.float32), output_data, reference.display,
                                     reference.layers, reference.meta)
                 elif kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") or transform_blur:
