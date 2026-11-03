@@ -1,5 +1,27 @@
 ## 2026-11-02 - Lane 9 (2D behaviour), step F: Tracker, DropShadow, DirBlur and LightWrap behaviour and layout
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:45 PM on 2026-11-02 PDT)
+
+`main` moved `81cb348c` -> `c803c0db` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `c803c0db` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-2335.log`, started 11:35 PM): **Ran 8460 tests in 587.602 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step F of 2: Tracker, DropShadow, DirBlur and LightWrap compute what Nuke computes.** Commits:
+  - `b2665fc6` TASKLOG and state: lane 9 step F note
+  - `3acddbb6` DirBlur: UseTarget, Samples and Pixel offset act in new nodes; graphs saved before keep their pictures (legacy_dirblur_knobs); the audit report is rebuilt (2D behaviour, lane 9 step F)
+  - `e1ff7496` LightWrap: the CCorrect tab's saturation, contrast, gamma, gain and offset (and the three ranges) grade the wrap; older graphs keep the ungraded wrap; cases for intensity and wrap only; main tab in Nuke's order (2D behaviour, lane 9 step F)
+  - `a2d4a250` Tracker, DropShadow and DirBlur: behaviour cases (sub-pixel match-move and stabilise, shadow offset/opacity/colour, linear smear), DropShadow angle reads 0 left / 180 right (older graphs keep theirs), DirBlur UseTarget, Samples and pixel offset act, main tabs in Nuke's order (2D behaviour, lane 9 step F)
+  Diff: 16 files changed, 1104 insertions(+), 155 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 See the step F note at the top of TASKLOG.md. Flags added: `legacy_dropshadow_angle`, `legacy_lightwrap_grade`, `legacy_dirblur_knobs` (all 1 on a saved node, 0 in a new one). Tests: `tests.test_2d_behaviour_filter_f`.
 
 ## 2026-11-02 - Lane 9 (2D behaviour), step E: Roto and RotoPaint behaviour and layout
