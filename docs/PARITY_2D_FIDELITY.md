@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 93.7 / 100** (167 nodes scored, rank-weighted; 96.1 counting only the nodes NodeBased has).
+**Overall fidelity: 93.8 / 100** (167 nodes scored, rank-weighted; 96.1 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.3 (95.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.4 (95.8 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -40,11 +40,11 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Filter | 93.5 | 80.9 | 93.2 | 32 |
 | Keyer | 91.6 | 77.2 | 90.7 | 11 |
 | Merge | 99.4 | 98.6 | 99.5 | 12 |
-| Transform | 93.9 | 84.2 | 93.4 | 20 |
+| Transform | 94.8 | 87.0 | 94.2 | 20 |
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 93 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 94 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 351 of the 364 paired knobs probed change the output pixels; 13 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
@@ -250,7 +250,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 17 | PointsTo3D | `PointsTo3D` | supported | 46.7 | 48.3 | 60 (6/9) | - | 0 | 50 | - | - | 50 | - | no fixture |
 | 18 | Reconcile3D | `Reconcile3D` | supported | 41.3 | 36.7 | 13 (1/14) | - | 100 | 67 | - | - | - | - | no fixture |
 | 19 | TVIScale | `TVIScale` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
-| 20 | LensDistortion | `Undistort` | supported | 21.0 | 17.8 | 2 (1/58) | - | 0 | 100 | - | - | - | - | no fixture |
+| 20 | LensDistortion | `Undistort` | supported | 77.6 | 70.2 | 37 (20/58) | - | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 
 ### Metadata
 
@@ -301,25 +301,25 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 9 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
 | 10 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
 | 11 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 12 | LensDistortion (Transform #20) | `Undistort` | 3.95 | 21.0 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
-| 13 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 14 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
-| 15 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.14 | 46.7 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img`; knob order differs from Nuke's (3 of 6 in order) |
-| 16 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 17 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 18 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 19 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 20 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 21 | Denoise (Filter #12) | `Denoise` | 3.11 | 25.4 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise`; 1 label differs from Nuke's |
-| 22 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
-| 23 | SmartVector (Time #8) | `SmartVector` | 2.59 | 17.1 | primary knobs missing: `strengthReg`, `matteChannel`, `output`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue`; sockets missing: `Matte` |
-| 24 | Text (Draw #2) | `Text` | 2.29 | 95.4 | 1 secondary knob missing: `group_animation`; knob order differs from Nuke's (27 of 40 in order); 1 label differs from Nuke's |
-| 25 | AddTimeCode (Metadata #4) | `AddTimeCode` | 2.22 | 91.1 | knob order differs from Nuke's (4 of 5 in order); 1 label differs from Nuke's |
-| 26 | BurnIn (Other #7) | `BurnIn` | 2.20 | 84.6 | knob order differs from Nuke's (10 of 18 in order) |
-| 27 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
-| 28 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
-| 29 | MatchGrade (Color #16) | `MatchGrade` | 1.73 | 44.5 | primary knobs missing: `matchGradeTask`, `analysisType`, `mask`, `applyToMask`, `output`, `alignTargetToSource`, `autoCrop`; 23 secondary knobs missing |
-| 30 | IBKGizmo (Keyer #7) | `IBKGizmo` | 1.68 | 76.4 | primary knobs missing: `color`, `level`, `ll_enable`, `autolevels`, `yellow`, `cyan`, `magenta`, `ubcr` |
+| 12 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 13 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
+| 14 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.14 | 46.7 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img`; knob order differs from Nuke's (3 of 6 in order) |
+| 15 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 16 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 17 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 18 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 19 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 20 | Denoise (Filter #12) | `Denoise` | 3.11 | 25.4 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise`; 1 label differs from Nuke's |
+| 21 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
+| 22 | SmartVector (Time #8) | `SmartVector` | 2.59 | 17.1 | primary knobs missing: `strengthReg`, `matteChannel`, `output`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue`; sockets missing: `Matte` |
+| 23 | Text (Draw #2) | `Text` | 2.29 | 95.4 | 1 secondary knob missing: `group_animation`; knob order differs from Nuke's (27 of 40 in order); 1 label differs from Nuke's |
+| 24 | AddTimeCode (Metadata #4) | `AddTimeCode` | 2.22 | 91.1 | knob order differs from Nuke's (4 of 5 in order); 1 label differs from Nuke's |
+| 25 | BurnIn (Other #7) | `BurnIn` | 2.20 | 84.6 | knob order differs from Nuke's (10 of 18 in order) |
+| 26 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
+| 27 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
+| 28 | MatchGrade (Color #16) | `MatchGrade` | 1.73 | 44.5 | primary knobs missing: `matchGradeTask`, `analysisType`, `mask`, `applyToMask`, `output`, `alignTargetToSource`, `autoCrop`; 23 secondary knobs missing |
+| 29 | IBKGizmo (Keyer #7) | `IBKGizmo` | 1.68 | 76.4 | primary knobs missing: `color`, `level`, `ll_enable`, `autolevels`, `yellow`, `cyan`, `magenta`, `ubcr` |
+| 30 | GenerateLUT (Color #21) | `GenerateLUT` | 1.65 | 30.9 | primary knobs missing: `file_type`; 7 secondary knobs missing: `lut1d`, `style1d`, `bitdepth_id`, `output_bitdepth_id`, `clamp_output` ... |
 
 ## Formula cases
 
@@ -859,6 +859,14 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `gridwarp_background_over_the_source` | convention | not scored: the guide's page for this node is a video transcript with no formula for the background and its mix; the reading is NodeBased's | - | - |
 | `splinewarp_curve_moves_the_pixels_on_it` | convention | pass | within tolerance | - |
 | `splinewarp_mix_zero_is_the_input` | convention | pass | within tolerance | - |
+| `lensdistortion_classic_undistort` | guide | pass | within tolerance | - |
+| `lensdistortion_classic_two_terms` | guide | pass | within tolerance | - |
+| `lensdistortion_classic_redistort` | guide | pass | within tolerance | - |
+| `lensdistortion_centre_moves_the_fixed_point` | guide | pass | within tolerance | - |
+| `lensdistortion_anamorphic_squeeze_scales_x` | guide | pass | within tolerance | - |
+| `lensdistortion_spherical_ignores_the_squeeze` | guide | pass | within tolerance | - |
+| `lensdistortion_backward_model_is_used_directly` | guide | pass | within tolerance | - |
+| `lensdistortion_custom_numerator` | guide | not scored: the guide states only the denominator's equation; the numerator's form (1 + n0 r^2 + n1 r^4 over the denominator) is read from the Order and Exponent text | - | - |
 | `switch_which_0` | guide | pass | within tolerance | - |
 | `switch_which_1` | guide | pass | within tolerance | - |
 | `switch_which_past_last` | convention | not scored: the guide says only that which = N shows input N and does not say what a value past the last input shows; NodeBased shows the last connected input (tests/test_2d_behaviour_merge.py), and no Foundry source to cite for Nuke's own answer was found | - | - |
