@@ -16,7 +16,7 @@ from nodebased import knobs
 from nodebased.core import SPECS, upgrade_document, validate
 from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor
-from tests.test_2d_behaviour_filter_f import disc_over_bright, wrap_of
+from tests.test_2d_behaviour_filter_f import disc_over_bright, layout_order, wrap_of
 from tests.test_2d_behaviour_filter_a import Graph, differs, evaluator_pixels, kern, texture, tile_pixels
 
 
@@ -206,6 +206,36 @@ class DirBlurKnobs(unittest.TestCase):
             h.add("node", "DirBlur", dict(length=13.0, **params), image="a")
             self.assertFalse(executor.supports_tiled(dict(h.doc, view="node"), "node"), params)
             self.assertEqual(evaluator_pixels(h.doc, "node").shape[:2], (37, 45))
+
+
+class Layouts(unittest.TestCase):
+    """The main tab lists the paired knobs in the guide's order and reads the guide's labels (docs/PARITY_2D_FIDELITY.md, "Layout differences")."""
+    NODES = ("ZDefocus", "Denoise", "DegrainSimple", "MotionBlur", "VectorBlur", "ZSlice", "CornerPin2D", "STMap", "IDistort", "PointsTo3D", "Text")
+
+    def test_order_and_labels_follow_the_guide(self):
+        for key in self.NODES:
+            with self.subTest(node=key):
+                (kept, total), _, wrong = layout_order(key)
+                self.assertEqual(kept, total, key)
+                self.assertEqual(wrong, [], key)
+
+    def test_the_labels_the_report_named_read_as_the_guides(self):
+        def label(kind, param):
+            return next(g.label for g in knobs.knob_layout(kind) if param in g.params)
+        self.assertEqual(label("ZDefocus", "focal_plane"), "Focus plane (C)")
+        self.assertEqual(label("Denoise", "denoise_strength"), "Denoise amount")
+        self.assertEqual([label("DegrainSimple", n) for n in ("red_amount", "green_amount", "blue_amount")], ["R blur", "G blur", "B blur"])
+        self.assertEqual(label("ZSlice", "depth_layer"), "Z")
+        self.assertEqual(label("CornerPin", "direction"), "Invert")
+        self.assertEqual(label("VectorBlur", "uv_layer"), "UV channels")
+        self.assertEqual(label("Text", "premult"), "Premult")
+
+    def test_saved_param_names_are_unchanged(self):
+        for kind, names in (("ZDefocus", ("focal_plane",)), ("Denoise", ("denoise_strength",)), ("DegrainSimple", ("red_amount", "green_amount", "blue_amount")),
+                            ("ZSlice", ("depth_layer",)), ("CornerPin", ("direction",)), ("VectorBlur", ("uv_layer", "vector_alpha")),
+                            ("MotionBlur", ("samples", "shutter")), ("PointsTo3D", ("frame0", "frame1", "frame2")), ("Text", ("premult", "output"))):
+            for name in names:
+                self.assertIn(name, SPECS[kind]["params"], (kind, name))
 
 
 if __name__ == "__main__":
