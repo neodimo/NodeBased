@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 94.8 / 100** (167 nodes scored, rank-weighted; 97.1 counting only the nodes NodeBased has).
+**Overall fidelity: 94.8 / 100** (167 nodes scored, rank-weighted; 97.2 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 94.3 (96.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 94.3 (96.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -37,7 +37,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Time | 98.3 | 90.6 | 98.0 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 96.9 | 88.5 | 96.2 | 34 |
-| Filter | 95.6 | 87.6 | 94.7 | 32 |
+| Filter | 95.8 | 88.1 | 95.1 | 32 |
 | Keyer | 92.2 | 79.0 | 91.6 | 11 |
 | Merge | 99.5 | 98.7 | 99.5 | 12 |
 | Transform | 95.1 | 87.7 | 94.2 | 20 |
@@ -166,7 +166,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 6 | Soften | `Soften` | supported | 98.5 | 97.9 | 100 (7/7) | 100 (5/5) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 7 | DropShadow | `DropShadow` | supported | 96.8 | 96.1 | 100 (9/9) | 100 (8/8) | 67 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 8 | Defocus | `Defocus` | supported | 88.6 | 82.9 | 60 (3/5) | 100 (3/3) | 89 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 8 | ZDefocus | `ZDefocus` | supported | 74.8 | 69.2 | 31 (9/36) | - | 67 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 8 | ZDefocus | `ZDefocus` | supported | 91.2 | 89.4 | 78 (25/36) | - | 81 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | DirBlur | `DirBlur` | supported | 96.5 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (4/4) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 82.6 | 75.0 | 50 (3/6) | 100 (3/3) | 100 | 50 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -312,14 +312,14 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 20 | PointsTo3D (Transform #17) | `PointsTo3D` | 2.65 | 55.0 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img` |
 | 21 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
 | 22 | BurnIn (Other #7) | `BurnIn` | 1.67 | 88.3 | nothing missing that the guide lists |
-| 23 | ZDefocus (Filter #8) | `ZDefocus` | 1.57 | 74.8 | primary knobs missing: `output`, `show_image`, `fill_foreground`, `focal_point`, `blur_dof`, `autoLayerSpacing`, `nLayers`, `layerCurve`; 19 secondary knobs missing |
-| 24 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
-| 25 | VectorDistort (Transform #16) | `VectorDistort` | 1.34 | 57.1 | primary knobs missing: `holdFrame`, `frameDistance`; 2 secondary knobs missing: `outputMode`, `imageFilter`; node chrome missing: channels selector |
-| 26 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
-| 27 | SmartVector (Time #8) | `SmartVector` | 1.18 | 62.1 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
-| 28 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
-| 29 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
-| 30 | IBKColor (Keyer #7) | `IBKColor` | 1.12 | 84.4 | sockets missing: `1` |
+| 23 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
+| 24 | VectorDistort (Transform #16) | `VectorDistort` | 1.34 | 57.1 | primary knobs missing: `holdFrame`, `frameDistance`; 2 secondary knobs missing: `outputMode`, `imageFilter`; node chrome missing: channels selector |
+| 25 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 26 | SmartVector (Time #8) | `SmartVector` | 1.18 | 62.1 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
+| 27 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
+| 28 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
+| 29 | IBKColor (Keyer #7) | `IBKColor` | 1.12 | 84.4 | sockets missing: `1` |
+| 30 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
 
 ## Formula cases
 
@@ -774,6 +774,7 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `defocus_quality_and_method` | guide | not scored: NodeBased has no quality or method knob: its disc is always summed exactly, which is what fullprecision means; the page gives no interpolation to compare, so a quality below the default cannot be scored | - | - |
 | `zdefocus_direct_is_clamped_to_maximum` | guide | pass | within tolerance | - |
 | `zdefocus_direct_size_zero_is_no_blur` | guide | pass | within tolerance | - |
+| `zdefocus_depth_of_field_slice_is_entirely_in_focus` | guide | pass | within tolerance | - |
 | `zdefocus_blur_by_distance` | convention | not scored: the page gives the depth-to-distance conversions and says the blur is 'the size of the blur at infinite depth' and grows nearer the camera, but not the formula between a distance, the focus plane, the depth of field and the size, nor the layer spacing (automatic layer spacing, depth layers, layer curve), the blend between layers, fill foreground or the filter shapes (disc, bladed, image, with shape, roundness, inner size and the rest); the properties it does state are tested in tests/test_2d_behaviour_draw.py: direct blur grows with depth to the maximum, -direct reverses the order, a larger maximum allows more blur, the focus plane stays sharp, and the filter choices change the pixels | - | - |
 | `edgeextend_solid_matte_keeps_its_colour` | convention | pass | within tolerance | - |
 | `edgeextend_premultiply_multiplies_by_alpha` | guide | pass | within tolerance | - |
