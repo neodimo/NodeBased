@@ -1,3 +1,7 @@
+## 2026-11-02 - Lane 2 (2D behaviour), step F: Cryptomatte and Encryptomatte knobs, OCIO nodes against a stated config, Write
+
+Branch `openclaw/nb-2d-parity`. Cryptomatte: `manifest_source`, `sidecar_filepath`, `preview_enabled` (saved nodes keep Preview off). Encryptomatte: `matte_name_type`, `merge_operation`, `layer_name` as the Cryptomatte Layer (saved nodes keep manual names and `replace`). OCIO nodes: stated fixture config in `tools/nuke_fidelity_ocio_fixture.py`, 15 cases, the kernels transform the stored colour (`divide_by_alpha` 1 on saved nodes), OCIODisplay `src`. Write: the 29 counted missing knobs are QuickTime and MXF only and stay unsupported with the reason. No schema bump. Details in TASKLOG.md.
+
 ## 2026-11-02 - Lane 2 (2D behaviour), step E: Merge and Image groups
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:35 PM on 2026-11-02 PDT)
