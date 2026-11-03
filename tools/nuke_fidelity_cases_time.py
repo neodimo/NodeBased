@@ -448,16 +448,16 @@ def cases():
                    "weighted average of several frames together to cover the output range'. The window is `length` frames wide centred on the lookup and "
                    "each frame counts by the share of the window it covers (frame n spans n - 0.5 to n + 0.5); the guide gives no weights, so this "
                    "is the reading used. The clip ends at frame 20 and holds its last frame past it")
-    case("timewarp_length_3_averages_three_frames", "TimeWarp", (("filter", "box"), ("length", 3.0)), {"lookup_filter": "blend", "length": 3.0},
+    case("timewarp_length_3_averages_three_frames", "TimeWarp", (("filter", "box"), ("length", 3.0)), {"lookup_filter": "blend", "lookup_length": 3.0},
          {"frame": 20, "chain": CLIP20}, mix((19, 1 / 3), (20, 2 / 3)), "guide",
          "TimeWarp box of length 3 at frame 20 of a 1 to 20 clip averages frames 19, 20 and the held 20. " + length_note)
-    case("timewarp_length_2_covers_two_frames", "TimeWarp", (("filter", "box"), ("length", 2.0)), {"lookup_filter": "blend", "length": 2.0},
+    case("timewarp_length_2_covers_two_frames", "TimeWarp", (("filter", "box"), ("length", 2.0)), {"lookup_filter": "blend", "lookup_length": 2.0},
          {"frame": 20, "chain": CLIP20}, mix((19, 0.25), (20, 0.75)), "convention",
          "TimeWarp box of length 2 at frame 20 of a 1 to 20 clip: frame 19 by a quarter, frame 20 by a half and the held 20 by a quarter. " + length_note)
-    case("timewarp_length_1_is_the_blend", "TimeWarp", (("filter", "box"), ("length", 1.0)), {"lookup_filter": "blend", "length": 1.0},
+    case("timewarp_length_1_is_the_blend", "TimeWarp", (("filter", "box"), ("length", 1.0)), {"lookup_filter": "blend", "lookup_length": 1.0},
          {"frame": 20, "chain": CLIP20}, shows(20.0), "guide",
          "TimeWarp box of length 1 on a whole lookup shows that frame alone. " + length_note)
-    case("timewarp_length_ignored_by_nearest", "TimeWarp", (("filter", "nearest"), ("length", 3.0)), {"lookup_filter": "nearest", "length": 3.0},
+    case("timewarp_length_ignored_by_nearest", "TimeWarp", (("filter", "nearest"), ("length", 3.0)), {"lookup_filter": "nearest", "lookup_length": 3.0},
          {"frame": 20, "chain": CLIP20}, shows(20.0), "guide",
          f"TimeWarp filter nearest rounds the centre of the range to a whole frame and does not average, whatever the length ({page}: 'nearest - rounds the "
          "center of the range to nearest integer frame')")

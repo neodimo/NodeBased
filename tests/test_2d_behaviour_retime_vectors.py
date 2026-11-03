@@ -283,7 +283,7 @@ class KnobsActTests(unittest.TestCase):
         for kind in KINDS:
             base = dict(interpolation="motion", speed=0.5, output_start=1.0) if kind == "OFlow" else dict(interpolation="motion", speed=0.5)
             reference = moving_plate_picture(kind, base, 2)
-            moves = [("vector_detail", 1), ("smoothness", 20.0), ("shutter_time", 1.0)] if kind == "OFlow" else [("shutter_samples", 4)]
+            moves = [("vector_detail", 1), ("smoothness", 20.0), ("shutter_time", 1.0)] if kind == "OFlow" else [("shutter_time", 1.0), ("vector_detail", 1)]
             for name, value in moves:
                 params = dict(base, **{name: value})
                 if name == "shutter_time":
@@ -310,7 +310,7 @@ class LayoutTests(unittest.TestCase):
         names = [n for n, _ in self.labels("OFlow")]
         paired = [n for n in names if n != "output_start" and n != "flow_backend"]
         self.assertEqual(paired, ["input_start", "input_end", "retimed_channels", "interpolation", "timing", "speed", "input_speed", "frame",
-                                  "vector_detail", "smoothness", "shutter_samples", "shutter_time"])
+                                  "vector_detail", "smoothness", "shutter_samples", "shutter_time", "auto_shutter_time", "flicker_compensation"])
         labels = dict(self.labels("OFlow"))
         self.assertEqual((labels["interpolation"], labels["speed"], labels["frame"]), ("Method", "Output Speed", "Frame"))
 

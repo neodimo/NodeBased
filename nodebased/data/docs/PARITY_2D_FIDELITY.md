@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 95.7 / 100** (167 nodes scored, rank-weighted; 98.1 counting only the nodes NodeBased has).
+**Overall fidelity: 95.8 / 100** (167 nodes scored, rank-weighted; 98.2 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.3 (97.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -34,7 +34,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 98.2 | 97.8 | 98.1 | 6 |
 | Draw | 92.1 | 83.8 | 90.9 | 17 |
-| Time | 98.3 | 90.6 | 98.0 | 13 |
+| Time | 98.8 | 93.2 | 98.5 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 96.9 | 88.5 | 96.2 | 34 |
 | Filter | 96.6 | 91.4 | 96.0 | 32 |
@@ -98,9 +98,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 6 | AppendClip | `AppendClip` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
 | 7 | TimeBlur | `TimeBlur` | supported | 94.1 | 94.1 | 100 (4/4) | - | 50 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
 | 7 | TimeEcho | `TimeEcho` | supported | 92.2 | 92.2 | 100 (3/3) | - | 33 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
-| 7 | TimeWarp | `TimeWarp` | supported | 82.4 | 78.4 | 67 (2/3) | - | 50 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
-| 8 | Kronos | `Kronos` | supported | 65.8 | 59.1 | 42 (9/26) | - | 57 | 25 | - | 100 (30/30) | 100 | - | unmeasured |
-| 8 | OFlow | `OFlow` | supported | 82.4 | 78.4 | 67 (12/21) | - | 50 | 100 | - | 100 (30/30) | 100 | - | unmeasured |
+| 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
+| 8 | Kronos | `Kronos` | supported | 83.4 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 100 | - | unmeasured |
+| 8 | OFlow | `OFlow` | supported | 85.5 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 100 | - | unmeasured |
 | 8 | SmartVector | `SmartVector` | supported | 62.1 | 51.3 | 35 (3/11) | - | 67 | 100 | - | - | 100 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
@@ -314,12 +314,12 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 22 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
 | 23 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
 | 24 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
-| 25 | Kronos (Time #8) | `Kronos` | 1.07 | 65.8 | primary knobs missing: `resetInputRange`, `motionEstimation`, `vectorDetail`, `strength`, `smoothness`, `resampleType`; 11 secondary knobs missing: `shutterTime`, `autoShutterTime`, `output`, `matteChannel`, `flickerCompensation` ...; sockets missing: `FgVecs BgVecs`, `MoSrc`, `Matte` |
-| 26 | GridWarp (Transform #14) | `GridWarp` | 1.06 | 70.2 | 29 secondary knobs missing |
-| 27 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
-| 28 | ZSlice (Filter #19) | `ZSlice` | 1.00 | 81.0 | node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 29 | HSVTool (Color #12) | `HSVTool` | 0.97 | 88.4 | 11 secondary knobs missing: `huereset`, `HMask`, `invert_hue_mask`, `satreset`, `SMask` ... |
-| 30 | ContactSheet (Merge #10) | `ContactSheet` | 0.91 | 90.9 | nothing missing that the guide lists |
+| 25 | GridWarp (Transform #14) | `GridWarp` | 1.06 | 70.2 | 29 secondary knobs missing |
+| 26 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
+| 27 | ZSlice (Filter #19) | `ZSlice` | 1.00 | 81.0 | node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 28 | HSVTool (Color #12) | `HSVTool` | 0.97 | 88.4 | 11 secondary knobs missing: `huereset`, `HMask`, `invert_hue_mask`, `satreset`, `SMask` ... |
+| 29 | ContactSheet (Merge #10) | `ContactSheet` | 0.91 | 90.9 | nothing missing that the guide lists |
+| 30 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
 
 ## Formula cases
 
@@ -1127,7 +1127,11 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `timewarp_hold_curve_at_9` | guide | pass | within tolerance | - |
 | `timewarp_hold_curve_at_10` | guide | pass | within tolerance | - |
 | `timewarp_hold_curve_at_14` | guide | pass | within tolerance | - |
-| `timewarp_box_filter` | convention | not scored: the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights; NodeBased's blend of the two nearest frames is a unit-wide box and nothing states that is Nuke's | - | - |
+| `timewarp_box_filter` | convention | not scored: the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights; NodeBased's blend of the two nearest frames is a unit-wide box and nothing states that is Nuke's (the cases above score the whole-frame averages of a wider window, which the guide's 'length of time to average together' fixes) | - | - |
+| `timewarp_length_3_averages_three_frames` | guide | pass | within tolerance | - |
+| `timewarp_length_2_covers_two_frames` | convention | pass | within tolerance | - |
+| `timewarp_length_1_is_the_blend` | guide | pass | within tolerance | - |
+| `timewarp_length_ignored_by_nearest` | guide | pass | within tolerance | - |
 | `kronos_frame_method_speed_0.4_at_1` | guide | pass | within tolerance | - |
 | `kronos_frame_method_speed_0.4_at_2` | guide | pass | within tolerance | - |
 | `kronos_frame_method_speed_0.4_at_3` | guide | pass | within tolerance | - |

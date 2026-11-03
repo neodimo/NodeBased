@@ -1110,7 +1110,7 @@
    "knobs": [
     {"nodebased": ["lookup_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'filter', scripting name `filter`"},
     {"nodebased": ["lookup"], "nuke": ["lookup"], "kind": "same"},
-    {"nodebased": ["length"], "nuke": ["length"], "kind": "same"}
+    {"nodebased": ["lookup_length"], "nuke": ["length"], "kind": "renamed", "reason": "NodeBased names it after Lookup (the shared param name `length` is Flare's); the width in frames of the box filter's window"}
    ]
   },
   "TimeEcho": {
@@ -1128,7 +1128,11 @@
   "Kronos": {
    "nodebased": "Kronos",
    "inputs": [
-    {"nodebased": "image", "nuke": "Source", "kind": "mapped"}
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "matte", "nuke": "Matte", "kind": "mapped"},
+    {"nodebased": "mosrc", "nuke": "MoSrc", "kind": "mapped"},
+    {"nodebased": "fgvecs", "nuke": "FgVecs BgVecs", "kind": "mapped"},
+    {"nodebased": "bgvecs", "nuke": "FgVecs BgVecs", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["input_start"], "nuke": ["input.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Input Range', scripting name `input.first`"},
@@ -1141,7 +1145,25 @@
     {"nodebased": ["shutter_samples"], "nuke": ["shutterSamples"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterSamples`"},
     {"nodebased": ["interpolation"], "nuke": ["interpolation"], "kind": "same"},
     {"nodebased": ["legacy_retime"], "kind": "extra", "reason": "NodeBased-only: 1 keeps the retime a Kronos saved before 2026-11-03 did (frame times speed from zero, no input range, interpolation frame blends); see nodebased/retimeknobs.py"},
-    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["vector_detail"], "nuke": ["vectorDetail"], "kind": "renamed", "reason": "NodeBased's vector detail is the whole number of pyramid levels the estimator uses (1 to 6, default 4); Nuke's is a 0 to 1 density of the field (default 0.3), so the two scales differ and the case that checks it is not scored (the guide gives no number)"},
+    {"nodebased": ["smoothness"], "nuke": ["smoothness"], "kind": "renamed", "reason": "the estimator's smoothing; NodeBased's has one estimator, so this is the Local method's knob and Regularized's `strength` is not paired"},
+    {"nodebased": ["shutter_time"], "nuke": ["shutterTime"], "kind": "renamed", "reason": "the shutter's width in source frames (0.5 is a 180 degree shutter); a Kronos saved before it keeps the output-speed-wide shutter (`legacy_shutter`)"},
+    {"nodebased": ["auto_shutter_time"], "nuke": ["autoShutterTime"], "kind": "renamed", "reason": "on, the shutter is as wide as the speed's excess over the original speed, `max(0, |speed| - 1)`; the guide gives no formula, so this reading is not scored"},
+    {"nodebased": ["retime_output"], "nuke": ["output"], "kind": "renamed", "reason": "Result, Matte, Foreground or Background; the matte is the one Matte Channel names, the regions outside it black where the guide says they may show garbage"},
+    {"nodebased": ["motion_matte_channel"], "nuke": ["matteChannel"], "kind": "renamed", "reason": "where the foreground matte comes from (None, the Source's alpha or its inverse, the Matte input's luminance or alpha or their inverses); with one, foreground and background motion are estimated apart (the same choice MotionBlur has)"},
+    {"nodebased": ["flicker_compensation"], "nuke": ["flickerCompensation"], "kind": "renamed", "reason": "the pictures the motion is estimated on are scaled to the same mean brightness per channel; the retimed picture keeps its own"},
+    {"nodebased": ["legacy_shutter"], "kind": "extra", "reason": "NodeBased-only: 1 keeps the shutter a Kronos saved before 2026-11-03 had (the output speed wide, only with the motion method); see nodebased/retimeknobs.py"},
+    {"nodebased": [], "nuke": ["resetInputRange"], "kind": "unsupported", "reason": "a button that writes the source clip's frame range into Input Range; NodeBased limits the range to the project's frames, which the `time` edit sets, and has no button for it"},
+    {"nodebased": [], "nuke": ["motionEstimation"], "kind": "unsupported", "reason": "Local and Regularized are two of Foundry's estimators; NodeBased has one pyramid Lucas-Kanade estimator, so there is no choice to make (the case for it is not scored)"},
+    {"nodebased": [], "nuke": ["strength"], "kind": "unsupported", "reason": "the Regularized estimator's matching strength; NodeBased has no such estimator (Smoothness is the one knob its estimator has)"},
+    {"nodebased": [], "nuke": ["resampleType"], "kind": "unsupported", "reason": "Bilinear or Lanczos filters for the warp; NodeBased's warp is bilinear only and the guide gives no Lanczos weights to write a case from"},
+    {"nodebased": [], "nuke": ["legacymodeNuke9"], "kind": "unsupported", "reason": "reverts to Nuke 9's output speed calculation with Local estimation, which NodeBased never had; its own `legacy_retime` keeps the pre-2026-11-03 retime, a different thing"},
+    {"nodebased": [], "nuke": ["weightRed"], "kind": "unsupported", "reason": "weights of the luminance the motion is estimated on; NodeBased's estimator reads a fixed Rec. 709 luminance, and changing it to Nuke's 0.3, 0.6, 0.1 default would change every saved Kronos"},
+    {"nodebased": [], "nuke": ["weightGreen"], "kind": "unsupported", "reason": "as Weight Red"},
+    {"nodebased": [], "nuke": ["weightBlue"], "kind": "unsupported", "reason": "as Weight Red"},
+    {"nodebased": [], "nuke": ["vectorSpacing"], "kind": "unsupported", "reason": "the spacing of the vectors drawn in the viewer by Overlay Vectors; NodeBased draws no vector overlay (VectorGenerator writes the vectors as layers)"},
+    {"nodebased": [], "nuke": ["showVectors"], "kind": "unsupported", "reason": "draws the motion vectors in the viewer and into the output; NodeBased has no vector overlay (VectorGenerator writes the vectors as layers)"}
    ]
   },
   "OFlow": {
@@ -1163,7 +1185,16 @@
     {"nodebased": ["shutter_time"], "nuke": ["shutterTime"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterTime`"},
     {"nodebased": ["smoothness"], "nuke": ["smoothness"], "kind": "same"},
     {"nodebased": ["output_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["auto_shutter_time"], "nuke": ["autoShutterTime"], "kind": "renamed", "reason": "on, the shutter is as wide as the speed's excess over the original speed, `max(0, |speed| - 1)`; the guide gives no formula, so this reading is not scored"},
+    {"nodebased": ["flicker_compensation"], "nuke": ["flickerCompensation"], "kind": "renamed", "reason": "the pictures the motion is estimated on are scaled to the same mean brightness per channel; the retimed picture keeps its own"},
+    {"nodebased": [], "nuke": ["resetInputRange"], "kind": "unsupported", "reason": "a button that writes the source clip's frame range into Input Range; NodeBased limits the range to the project's frames, which the `time` edit sets, and has no button for it"},
+    {"nodebased": [], "nuke": ["resampleType"], "kind": "unsupported", "reason": "Bilinear or Lanczos filters for the warp; NodeBased's warp is bilinear only and the guide gives no Lanczos weights to write a case from"},
+    {"nodebased": [], "nuke": ["weightRed"], "kind": "unsupported", "reason": "weights of the luminance the motion is estimated on; NodeBased's estimator reads a fixed Rec. 709 luminance, and Nuke's 0.3, 0.6, 0.1 default would change every saved OFlow"},
+    {"nodebased": [], "nuke": ["weightGreen"], "kind": "unsupported", "reason": "as Weight Red"},
+    {"nodebased": [], "nuke": ["weightBlue"], "kind": "unsupported", "reason": "as Weight Red"},
+    {"nodebased": [], "nuke": ["vectorSpacing"], "kind": "unsupported", "reason": "the spacing of the vectors drawn in the viewer by Overlay Vectors; NodeBased draws no vector overlay"},
+    {"nodebased": [], "nuke": ["showVectors"], "kind": "unsupported", "reason": "draws the motion vectors in the viewer and into the output; NodeBased has no vector overlay"}
    ]
   },
   "SmartVector": {

@@ -35,14 +35,22 @@ TIMINGS = ("speed", "input_speed", "frame")
 METHODS = ("frame", "blend", "motion")
 FLAG = "legacy_retime"
 
+SHUTTER_FLAG = "legacy_shutter"
+OUTPUTS = ("result", "matte", "foreground", "background")
+# Step N (11/3): Kronos's shutter knobs, matte and output, and the automatic shutter of both nodes.
+_KRONOS_STEP_N = {"shutter_time": 0.0, "auto_shutter_time": 0, "vector_detail": 4, "smoothness": 1.0, "motion_matte_channel": "None",
+                  "retime_output": "result", "flicker_compensation": 0}
 NEW = {
-    "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 0, "timing": "speed"},
-    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion"},
+    "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 0, "timing": "speed",
+               SHUTTER_FLAG: 0, **_KRONOS_STEP_N},
+    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0},
 }
-# What a node saved before this step gets: Kronos's old rule, flagged. A missing flag reads as legacy.
+# What a node saved before this step gets: Kronos's old rule, flagged. A missing flag reads as legacy. A Kronos saved before step N keeps the
+# shutter it had (the output speed wide, `shutter_time` unread); `legacy_shutter` says so.
 OLD = {
-    "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 1, "timing": "speed", "frame": -1.0},
-    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion"},
+    "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 1, "timing": "speed", "frame": -1.0,
+               SHUTTER_FLAG: 1, **_KRONOS_STEP_N},
+    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0},
 }
 
 
@@ -118,3 +126,101 @@ def keep_unretimed(pixels, source, channels):
         if take:
             out[..., index] = pixels[..., index]
     return out
+
+
+def effective_speed(params):
+    """The source frames one output frame moves on by: the output speed, the input speed, or 0 for the Frame timing (the speed there is the knob's slope)."""
+    timing = params.get("timing", "speed")
+    return float(params["speed"]) if timing == "speed" else max(0.0, float(params["input_speed"])) if timing == "input_speed" else 0.0
+
+
+def shutter_width(kind, params):
+    """How many source frames the shutter spans. OFlow and a Kronos saved after step N read `shutter_time` ("the equivalent shutter time of the
+    retimed sequence": 0.5 is a 180 degree shutter, half a frame); a Kronos saved before it spans the output speed. With `auto_shutter_time` on
+    the width is the speed's excess over the original speed, `max(0, |speed| - 1)`: the guide says only that the automatic shutter "only produces
+    motion blur when the retimed speed is greater than the original speed" and gives no formula, so this is our reading."""
+    if kind == "Kronos" and int(params.get(SHUTTER_FLAG, 1)):
+        return abs(float(params["speed"]))
+    if int(params.get("auto_shutter_time", 0)):
+        return max(0.0, abs(effective_speed(params)) - 1.0)
+    return float(params.get("shutter_time", 0.0))
+
+
+def shutter_count(kind, params, method):
+    """How many in-between pictures are averaged over the shutter."""
+    count = int(params["shutter_samples"])
+    if kind == "Kronos" and int(params.get(SHUTTER_FLAG, 1)) and method != "motion":
+        return 1
+    return max(1, min(64, count))
+
+
+def estimation_gain(first, second):
+    """`second` scaled per channel so its mean matches `first`'s: Flicker Compensation's reading, "takes into account variations in luminance and
+    overall flickering", applied to the pictures the motion is estimated on (the retimed picture keeps its own brightness)."""
+    import numpy as np
+    a = np.asarray(first, np.float32)[..., :3].reshape(-1, 3).mean(axis=0)
+    b = np.asarray(second, np.float32)[..., :3].reshape(-1, 3).mean(axis=0)
+    gain = np.where(np.abs(b) > 1e-6, a / np.where(np.abs(b) > 1e-6, b, 1.0), 1.0).astype(np.float32)
+    out = np.asarray(second, np.float32).copy()
+    out[..., :3] *= gain
+    return out
+
+
+def retimed_picture(ap, bp, alpha, method, params, *, flow_backend, mosrc=None, given=None, mattes=None, output="result", sample_whole=False):
+    """The picture between frames `ap` and `bp`, `alpha` of the way, by `method`.
+
+    `mosrc`: the pair of pictures the motion is estimated on (an alternate Motion Source); `given`: a (forward, backward) pair of vector fields in
+    pixels per frame, either of which may be None (a missing one is the other one negated), so nothing is estimated; `mattes`: the (matte at a,
+    matte at b) planes, or None; `output`: result, matte, foreground or background. Foreground and background are the picture times the matte (or
+    one minus it), the regions outside the matte being black where the guide says they "may show garbage"."""
+    import numpy as np
+    from .flow_nodes import warp_by_flow
+    from .opticalflow import flow_pair
+    alpha = np.float32(alpha)
+
+    def estimate(first, second, backend):
+        if int(params.get("flicker_compensation", 0)):
+            second = estimation_gain(first, second)
+        return flow_pair(first, second, vector_detail=int(params.get("vector_detail", 4)), smoothness=float(params.get("smoothness", 1.0)), backend=backend)
+
+    def retime(xa, xb, flows):
+        if sample_whole:
+            return xa.copy()
+        if method in ("frame", "blend"):
+            return blend(xa, xb, alpha)
+        fw, bw, occ = flows
+        wa, wb = warp_by_flow(xa, fw * alpha), warp_by_flow(xb, bw * (1 - alpha))
+        out = wa * (1 - alpha) + wb * alpha
+        out[occ] = wb[occ]
+        return out
+
+    def flows_for(ea, eb, weight_a=None, weight_b=None):
+        if sample_whole or method != "motion":
+            return None
+        if given is not None and (given[0] is not None or given[1] is not None):
+            fw, bw = given
+            fw = -bw if fw is None else fw
+            bw = -fw if bw is None else bw
+            return fw, bw, np.zeros(fw.shape[:2], bool)
+        if weight_a is not None:
+            ea, eb = ea * weight_a[..., None], eb * weight_b[..., None]
+        return estimate(ea, eb, flow_backend)
+
+    ea, eb = (ap, bp) if mosrc is None else mosrc
+    ma, mb = (None, None) if mattes is None else mattes
+    if output == "result":
+        if ma is None or method != "motion" or sample_whole:
+            return retime(ap, bp, flows_for(ea, eb))
+        # A matte separates the two layers' motion: each is estimated on its own picture and the flows mix by the matte ("reducing the dragging
+        # of pixels that can occur between foreground and background objects").
+        fg, bg = flows_for(ea, eb, ma, mb), flows_for(ea, eb, 1 - ma, 1 - mb)
+        fw = fg[0] * ma[..., None] + bg[0] * (1 - ma[..., None])
+        bw = fg[1] * mb[..., None] + bg[1] * (1 - mb[..., None])
+        return retime(ap, bp, (fw, bw, np.where(ma > 0.5, fg[2], bg[2])))
+    if ma is None:
+        ma, mb = np.zeros(ap.shape[:2], np.float32), np.zeros(bp.shape[:2], np.float32)
+    plane = lambda m: np.repeat(m[..., None], 4, axis=2).astype(np.float32)          # noqa: E731
+    if output == "matte":
+        return retime(plane(ma), plane(mb), flows_for(ea, eb, ma, mb))
+    keep_a, keep_b = (ma, mb) if output == "foreground" else (1 - ma, 1 - mb)
+    return retime(ap * keep_a[..., None], bp * keep_b[..., None], flows_for(ea, eb, keep_a, keep_b))

@@ -2772,7 +2772,7 @@ class Evaluator:
                     has_lookup_curve = bool(node_curves and "lookup" in node_curves)
                     target_frame = float(params["lookup"]) if has_lookup_curve else float(frame)
                     lookup_filter = params.get("lookup_filter", "blend")
-                    if lookup_filter == "none" or (target_frame.is_integer() and float(params.get("length", 1.0)) == 1.0):
+                    if lookup_filter == "none" or (target_frame.is_integer() and float(params.get("lookup_length", 1.0)) == 1.0):
                         # "none": the fractional frame is passed straight into the nested call,
                         # exactly like TimeBlur's own shutter subframes -- an animated upstream
                         # source is sampled at that exact fractional position.
@@ -2780,10 +2780,10 @@ class Evaluator:
                     elif lookup_filter == "nearest":
                         # "nearest": the lookup rounds to the nearest whole frame (a half to the even one, as Retime does).
                         sample_frames, weights = [int(round(target_frame))], [1.0]
-                    elif float(params.get("length", 1.0)) != 1.0:
+                    elif float(params.get("lookup_length", 1.0)) != 1.0:
                         # "box": the frames inside a window `length` frames wide centred on the lookup, each by the share of the window it covers
                         # (frame n covers n - 0.5 to n + 0.5); a window of 1 is the two-frame blend below.
-                        sample_frames, weights = timewarp_box(target_frame, float(params["length"]))
+                        sample_frames, weights = timewarp_box(target_frame, float(params["lookup_length"]))
                     else:
                         lo = math.floor(target_frame)
                         frac = target_frame - lo
@@ -2793,7 +2793,7 @@ class Evaluator:
                                for sample_frame in sample_frames]
                     temporal_samples = samples
                     timewarp_weights = weights
-                    fingerprint = ["time-warp", target_frame, lookup_filter, float(params.get("length", 1.0)), *(d for _, d in samples)]
+                    fingerprint = ["time-warp", target_frame, lookup_filter, float(params.get("lookup_length", 1.0)), *(d for _, d in samples)]
                 elif kind in ("TimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
@@ -2868,31 +2868,36 @@ class Evaluator:
                 chosen = retimeknobs.plan(kind, params, frame, doc.get("time", {}).get("first", params.get("input_start", 1)),
                                           doc.get("time", {}).get("last", params.get("input_end", 100)))
                 target_frame, lo, hi, interpolation = chosen.target, chosen.lo, chosen.hi, chosen.method
-                if kind == "OFlow":
-                    count = max(1, min(64, int(params["shutter_samples"])))
-                    shutter_times = ([target_frame] if count == 1 or float(params["shutter_time"]) == 0 else
-                        np.linspace(target_frame - float(params["shutter_time"])/2,
-                                    target_frame + float(params["shutter_time"])/2, count).tolist())
-                else:
-                    count = int(params["shutter_samples"]) if interpolation == "motion" else 1
-                    shutter_times = [target_frame] if count == 1 else np.linspace(target_frame - abs(float(params["speed"])) / 2,
-                        target_frame + abs(float(params["speed"])) / 2, count).tolist()
+                from . import retimeknobs as _rk
+                count = _rk.shutter_count(kind, params, interpolation)
+                width = _rk.shutter_width(kind, params)
+                shutter_times = ([target_frame] if count == 1 or width == 0 else
+                    np.linspace(target_frame - width / 2, target_frame + width / 2, count).tolist())
                 if interpolation == "frame":
                     shutter_times = [target_frame]
+                # Kronos's own inputs: Matte, MoSrc (the motion is estimated on it), FgVecs and BgVecs (the motion is given). The vectors of the
+                # step from frame f0 to f1 are FgVecs at f0 and BgVecs at f1; the others are read at both frames.
+                extra_keys = {name: node["inputs"].get(name) for name in ("matte", "mosrc", "fgvecs", "bgvecs")} if kind == "Kronos" else {}
                 pairs = []
                 for sample_time in shutter_times:
                     q = min(float(hi), max(float(lo), float(sample_time)))
                     f0, f1 = int(math.floor(q)), int(math.ceil(q))
                     pair = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f, tier=tier,
                         typed=True, return_digest=True) for f in (f0, f1)]
-                    pairs.append((q, pair[0], pair[1]))
+                    extra = {name: [self.evaluate_raster(doc, key, cancel=cancel, frame=f, tier=tier, typed=True, return_digest=True)
+                                    for f in ({"fgvecs": (f0,), "bgvecs": (f1,)}.get(name) or (f0, f1))]
+                             for name, key in extra_keys.items() if key}
+                    pairs.append((q, pair[0], pair[1], extra))
                 unretimed = None
                 kept = str(params.get("retimed_channels", "all"))
                 if not retimeknobs.is_legacy(kind, params) and kept not in ("all", "rgba"):
                     unretimed = self.evaluate_raster(doc, source_key, cancel=cancel, frame=frame, tier=tier, typed=True, return_digest=True)
                 kronos_frames = (target_frame, pairs, interpolation, unretimed)
                 fingerprint = [kind.lower(), target_frame, interpolation, kept,
-                               *(d for _, a, b in pairs for d in (a[1], b[1])), *([unretimed[1]] if unretimed else [])]
+                               *(d for _, a, b, extra in pairs for d in (a[1], b[1], *(r[1] for rs in extra.values() for r in rs))),
+                               *([unretimed[1]] if unretimed else []), _rk.shutter_width(kind, params), params.get("retime_output", "result"),
+                               params.get("motion_matte_channel", "None"), params.get("flicker_compensation", 0), params.get("vector_detail", 4),
+                               params.get("smoothness", 1.0)]
             if kind == "MotionBlur" and not node["disabled"] and not (node["inputs"].get("fgvecs") or node["inputs"].get("bgvecs")):
                 shutter = float(params["shutter"])
                 if params["shutter_offset"] == "start": low, high = frame, frame + shutter
@@ -3228,24 +3233,35 @@ class Evaluator:
                     from .opticalflow import flow_pair
                     from . import retimeknobs
                     target_frame, pairs, method, unretimed = kronos_frames
+                    from . import motionblurknobs as _mbknobs
                     rendered = []
-                    for sample_time, (a, _), (b, _) in pairs:
+                    for sample_time, (a, _), (b, _), extra in pairs:
                         alpha = np.float32(sample_time - math.floor(sample_time))
                         if a.display != b.display:
                             raise ValueError("Kronos: sampled frames must have matching display windows")
                         output_data = a.data.union(b.data)
                         ap, bp = a.fit(output_data), b.fit(output_data)
-                        if sample_time == math.floor(sample_time): pixels = ap.copy()
-                        elif method in ("frame", "blend"): pixels = retimeknobs.blend(ap, bp, alpha)
+                        if kind == "OFlow":
+                            pixels = retimeknobs.retimed_picture(ap, bp, alpha, method, params, flow_backend=params.get("flow_backend", "auto"),
+                                                                 sample_whole=sample_time == math.floor(sample_time))
                         else:
-                            fw, bw, occ = flow_pair(ap, bp,
-                                vector_detail=int(params.get("vector_detail", 4)),
-                                smoothness=float(params.get("smoothness", 1.0)),
-                                backend=params.get("flow_backend", "auto"))
-                            wa = warp_by_flow(ap, fw * alpha)
-                            wb = warp_by_flow(bp, bw * (1-alpha))
-                            pixels = wa * (1-alpha) + wb * alpha
-                            pixels[occ] = wb[occ]
+                            fit = lambda rs, i: rs[i][0].fit(output_data)                                    # noqa: E731
+                            matte_channel = params.get("motion_matte_channel", "None")
+                            mattes = None
+                            if not retimeknobs.is_legacy(kind, params) and matte_channel != "None":
+                                wired = extra.get("matte")
+                                ma = _mbknobs.matte_from_channel(matte_channel, ap, None if wired is None else fit(wired, 0))
+                                mb = _mbknobs.matte_from_channel(matte_channel, bp, None if wired is None else fit(wired, 1))
+                                mattes = None if ma is None else (ma, mb)
+                            vectors = None
+                            if "fgvecs" in extra or "bgvecs" in extra:
+                                vectors = (fit(extra["fgvecs"], 0)[..., :2] if "fgvecs" in extra else None,
+                                           fit(extra["bgvecs"], 0)[..., :2] if "bgvecs" in extra else None)
+                            pixels = retimeknobs.retimed_picture(
+                                ap, bp, alpha, method, params, flow_backend=params.get("flow_backend", "auto"),
+                                mosrc=None if "mosrc" not in extra else (fit(extra["mosrc"], 0), fit(extra["mosrc"], 1)),
+                                given=vectors, mattes=mattes, output=params.get("retime_output", "result") if not retimeknobs.is_legacy(kind, params) else "result",
+                                sample_whole=sample_time == math.floor(sample_time))
                         rendered.append((pixels, output_data, a))
                     pixels0, output_data, a = rendered[0]
                     aligned = [pixels if data == output_data else Raster(pixels, data, a.display).fit(output_data)

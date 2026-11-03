@@ -820,7 +820,7 @@ SPECS = {
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
-    "Kronos": {"inputs": ["image"], "params": {"speed": 1.0, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
+    "Kronos": {"inputs": ["image"], "optional_inputs": ["matte", "mosrc", "fgvecs", "bgvecs"], "params": {"speed": 1.0, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
               **_retimeknobs.new_params("Kronos")}},
     "OFlow": {"inputs": ["image"], "params": {"input_start": 1.0, "input_end": 100.0,
               "output_start": 1.0, "timing": "speed", "speed": 1.0, "frame": 1.0,
@@ -1029,7 +1029,7 @@ SPECS = {
     # own fractional shutter samples) or "blend" (the two nearest integer frames are linearly
     # blended by the fractional part) -- a deliberate simplification of Nuke's three-way
     # none/nearest/box choice. No mask or mix, matching every other Time-menu node.
-    "TimeWarp": {"inputs": ["image"], "params": {"lookup": 1.0, "length": 1.0, "lookup_filter": "blend"}},
+    "TimeWarp": {"inputs": ["image"], "params": {"lookup": 1.0, "lookup_length": 1.0, "lookup_filter": "blend"}},
     # Premult / Unpremult (fidelity step C): Nuke's `channels` (the ones multiplied or divided; rgb), `alpha` ("by"; kept
     # as `premult_by` because `alpha` is a number elsewhere in the parameter table) and `invert`.
     "Premult": {"inputs": ["image"], "params": {"channels": "rgb", "premult_by": "rgba.alpha", "invert": 0}},
@@ -2378,8 +2378,10 @@ LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000)
 LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
 LIMITS.update(_behaviour2d.LIMITS)
 LIMITS.update(_drawfxbehaviour.LIMITS)
-LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "length": (0.0, 64.0)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
+LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_length": (0.0, 64.0),
+               "legacy_shutter": (0, 1), "auto_shutter_time": (0, 1), "flicker_compensation": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
+CHOICES["retime_output"] = list(_retimeknobs.OUTPUTS)
 CHOICES.update(_behaviour2d.CHOICES)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0), "detail_amount": (0.0, 1.0), "edge_mask": (0, 1), "legacy_defocus_disc": (0, 1)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
