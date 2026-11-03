@@ -212,6 +212,7 @@ class Case:
     statement: str                             # the stated behaviour, in our words
     inexpressible: str = ""                    # why nb_params is None
     unscored: str = ""                         # why the case is reported but not scored
+    tolerance: float = 0.0                     # a stated absolute tolerance for a case that cannot be exact (motion estimation); 0 uses the audit's
 
 
 def _all_valid(ref):
@@ -461,26 +462,43 @@ def _run_stamped_document(case):
     `_stamp` in the case's params holds `frame` (the frame shown, whole or fractional), `chain` (nodes between the plate and the node under
     test, as (kind, params) pairs), `clips` (AppendClip: one chain per input, each on its own plate, blue 0.2, 0.3, ... telling them apart),
     `curves` (animation on the node under test: {param: (interpolation, ((frame, value), ...))}) and `keys` (the stamp's first and last key).
-    The array returned is the node's picture at the fixture's size."""
+    A chain step may carry a third item, its own curves in the same form. `time` (first, last) sets the project's frame range, `green_scale`
+    keys the plate's green to the frame times that number (so a channel the node leaves alone tells the current frame from the retimed one; alpha is
+    left at 1 because the Constant premultiplies),
+    and `plate` ({"type", "params"}, size in `size`) replaces the stamped Constant with a generator that has real picture content, for the
+    cases that need motion. The array returned is the node's picture at the fixture's size (or at `size` when given)."""
     from nodebased.core import Dispatcher, empty_document
     from nodebased.imaging import Evaluator
     knobs = dict(case.nb_params)
     stamp = knobs.pop("_stamp")
     first_key, last_key = stamp.get("keys", (-90, 100))
+    width, height = stamp.get("size", (W, H))
     d = Dispatcher(empty_document())
+    if "time" in stamp:
+        d.execute({"op": "time", "first": stamp["time"][0], "last": stamp["time"][1], "current": stamp["time"][0]})
 
     def plate(name, blue):
-        d.execute({"op": "create", "id": name, "type": "Constant", "params": {"width": W, "height": H, "red": 0.0, "green": 0.25, "blue": blue,
-                                                                              "alpha": 1.0}})
+        if "plate" in stamp:
+            d.execute({"op": "create", "id": name, "type": stamp["plate"]["type"], "params": {"width": width, "height": height,
+                                                                                         **stamp["plate"].get("params", {})}})
+            return
+        d.execute({"op": "create", "id": name, "type": "Constant", "params": {"width": width, "height": height, "red": 0.0, "green": 0.25,
+                                                                              "blue": blue, "alpha": 1.0}})
         d.execute({"op": "set_curve", "id": name, "param": "red",
                    "curve": {"interpolation": "linear", "keys": [{"frame": f, "value": float(f)} for f in range(first_key, last_key + 1)]}})
+        if "green_scale" in stamp:
+            d.execute({"op": "set_curve", "id": name, "param": "green", "curve": {"interpolation": "linear", "keys": [
+                {"frame": f, "value": float(f) * stamp["green_scale"]} for f in range(first_key, last_key + 1)]}})
 
     def chain(prefix, blue, steps):
         plate(prefix, blue)
         last = prefix
-        for index, (kind, params) in enumerate(steps):
+        for index, (kind, params, *curves) in enumerate(steps):
             name = f"{prefix}_{index}"
             d.execute({"op": "create", "id": name, "type": kind, "params": params})
+            for param, (interpolation, keys) in (curves[0] if curves else {}).items():
+                d.execute({"op": "set_curve", "id": name, "param": param, "curve": {"interpolation": interpolation, "keys": [
+                    {"frame": int(f), "value": float(v)} for f, v in keys]}})
             d.execute({"op": "connect", "id": name, "input": "image", "source": last})
             last = name
         return last
@@ -494,7 +512,15 @@ def _run_stamped_document(case):
         d.execute({"op": "set_curve", "id": "n", "param": param,
                    "curve": {"interpolation": interpolation, "keys": [{"frame": int(f), "value": float(v)} for f, v in keys]}})
     frame = stamp.get("frame", 1)
-    return np.asarray(Evaluator().evaluate_raster(dict(d.document, view="n"), target="n", frame=frame).pixels, dtype=np.float64)
+    raster = Evaluator().evaluate_raster(dict(d.document, view="n"), target="n", frame=frame)
+    if raster.data == raster.display:
+        return np.asarray(raster.pixels, dtype=np.float64)
+    shown, data = raster.display, raster.data              # a moved or grown data window: the format's rectangle, zero where the data does not reach
+    canvas = np.zeros((shown.height, shown.width, raster.pixels.shape[2]), np.float64)
+    both = shown.intersect(data)
+    canvas[both.y - shown.y:both.bottom - shown.y, both.x - shown.x:both.right - shown.x] = \
+        raster.pixels[both.y - data.y:both.bottom - data.y, both.x - data.x:both.right - data.x]
+    return canvas
 
 
 def run_nodebased(case, fx=None):

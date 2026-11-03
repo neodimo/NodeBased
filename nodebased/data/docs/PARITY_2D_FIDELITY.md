@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 93.6 / 100** (167 nodes scored, rank-weighted; 96.0 counting only the nodes NodeBased has).
+**Overall fidelity: 93.7 / 100** (167 nodes scored, rank-weighted; 96.1 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.3 (95.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.3 (95.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -34,7 +34,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 86.7 | 90.6 | 86.0 | 6 |
 | Draw | 91.4 | 83.2 | 90.9 | 17 |
-| Time | 97.1 | 82.7 | 96.9 | 13 |
+| Time | 97.7 | 86.8 | 97.6 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 95.6 | 84.8 | 94.6 | 34 |
 | Filter | 93.5 | 80.9 | 93.2 | 32 |
@@ -44,7 +44,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 91 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 93 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 351 of the 364 paired knobs probed change the output pixels; 13 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
@@ -99,8 +99,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | TimeBlur | `TimeBlur` | supported | 92.6 | 94.1 | 100 (4/4) | - | 50 | 100 | - | 100 (8/8) | 88 | - | unmeasured |
 | 7 | TimeEcho | `TimeEcho` | supported | 92.2 | 92.2 | 100 (3/3) | - | 33 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 7 | TimeWarp | `TimeWarp` | supported | 82.4 | 78.4 | 67 (2/3) | - | 50 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
-| 8 | Kronos | `Kronos` | supported | 33.1 | 24.2 | 18 (4/26) | - | 50 | 25 | - | - | 71 | - | no fixture |
-| 8 | OFlow | `OFlow` | supported | 61.4 | 56.1 | 48 (9/21) | - | 43 | 100 | - | - | 80 | - | no fixture |
+| 8 | Kronos | `Kronos` | supported | 65.8 | 59.1 | 42 (9/26) | - | 57 | 25 | - | 100 (30/30) | 100 | - | unmeasured |
+| 8 | OFlow | `OFlow` | supported | 82.4 | 78.4 | 67 (12/21) | - | 50 | 100 | - | 100 (30/30) | 100 | - | unmeasured |
 | 8 | SmartVector | `SmartVector` | supported | 17.1 | 16.2 | 12 (1/11) | - | 0 | 50 | - | - | - | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
@@ -317,13 +317,13 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 25 | AddTimeCode (Metadata #4) | `AddTimeCode` | 2.22 | 91.1 | knob order differs from Nuke's (4 of 5 in order); 1 label differs from Nuke's |
 | 26 | BurnIn (Other #7) | `BurnIn` | 2.20 | 84.6 | knob order differs from Nuke's (10 of 18 in order) |
 | 27 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
-| 28 | Kronos (Time #8) | `Kronos` | 2.09 | 33.1 | primary knobs missing: `input.first`, `input.last`, `resetInputRange`, `retimedChannels`, `timing2`, `timingInputSpeed`, `motionEstimation`, `vectorDetail` and 3 more; 11 secondary knobs missing: `shutterTime`, `autoShutterTime`, `output`, `matteChannel`, `flickerCompensation` ...; sockets missing: `FgVecs BgVecs`, `MoSrc`, `Matte`; knob order differs from Nuke's (3 of 4 in order); 1 label differs from Nuke's |
-| 29 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
-| 30 | MatchGrade (Color #16) | `MatchGrade` | 1.73 | 44.5 | primary knobs missing: `matchGradeTask`, `analysisType`, `mask`, `applyToMask`, `output`, `alignTargetToSource`, `autoCrop`; 23 secondary knobs missing |
+| 28 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
+| 29 | MatchGrade (Color #16) | `MatchGrade` | 1.73 | 44.5 | primary knobs missing: `matchGradeTask`, `analysisType`, `mask`, `applyToMask`, `output`, `alignTargetToSource`, `autoCrop`; 23 secondary knobs missing |
+| 30 | IBKGizmo (Keyer #7) | `IBKGizmo` | 1.68 | 76.4 | primary knobs missing: `color`, `level`, `ll_enable`, `autolevels`, `yellow`, `cyan`, `magenta`, `ubcr` |
 
 ## Formula cases
 
-Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12, alpha from 0 to 1) through `Evaluator._kernel` and compares every pixel with the stated behaviour (absolute and relative tolerance 1e-05; a failing case shows its largest error rounded to four decimals and the first pixel in raster order that has it). `guide` means the guide's text states the behaviour; `convention` means it does not (see the ambiguities below). `inexpressible` means NodeBased has no knob that can set what Nuke's knob sets, so it cannot even attempt the case.
+Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12, alpha from 0 to 1) through `Evaluator._kernel` and compares every pixel with the stated behaviour (absolute and relative tolerance 1e-05, except the motion-estimated cases of Kronos and OFlow, which state an absolute tolerance of 0.01 in their statements because an estimated field is not exact; a failing case shows its largest error rounded to four decimals and the first pixel in raster order that has it). `guide` means the guide's text states the behaviour; `convention` means it does not (see the ambiguities below). `inexpressible` means NodeBased has no knob that can set what Nuke's knob sets, so it cannot even attempt the case.
 
 | Case | Source | Result | Max abs error | Worst pixel (y, x, channel) |
 |---|---|---|---|---|
@@ -1115,6 +1115,84 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `timewarp_hold_curve_at_10` | guide | pass | within tolerance | - |
 | `timewarp_hold_curve_at_14` | guide | pass | within tolerance | - |
 | `timewarp_box_filter` | convention | not scored: the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights; NodeBased's blend of the two nearest frames is a unit-wide box and nothing states that is Nuke's | - | - |
+| `kronos_frame_method_speed_0.4_at_1` | guide | pass | within tolerance | - |
+| `kronos_frame_method_speed_0.4_at_2` | guide | pass | within tolerance | - |
+| `kronos_frame_method_speed_0.4_at_3` | guide | pass | within tolerance | - |
+| `kronos_frame_method_speed_0.4_at_4` | guide | pass | within tolerance | - |
+| `kronos_frame_method_speed_0.4_at_5` | guide | pass | within tolerance | - |
+| `kronos_frame_method_tie` | convention | not scored: the guide says 'the nearest original frame' and does not break a tie; NodeBased takes the even frame as Retime's nearest does | - | - |
+| `kronos_blend_method_speed_0.4_at_2` | convention | pass | within tolerance | - |
+| `kronos_blend_method_speed_0.4_at_3` | convention | pass | within tolerance | - |
+| `kronos_blend_method_speed_0.4_at_5` | convention | pass | within tolerance | - |
+| `kronos_blend_method_half_way` | convention | pass | within tolerance | - |
+| `kronos_blend_method_whole_frame_is_the_frame` | guide | pass | within tolerance | - |
+| `kronos_output_speed_2_at_1` | convention | pass | within tolerance | - |
+| `kronos_output_speed_2_at_4` | convention | pass | within tolerance | - |
+| `kronos_output_speed_2_at_6` | convention | pass | within tolerance | - |
+| `kronos_input_speed_0.5_at_1` | convention | pass | within tolerance | - |
+| `kronos_input_speed_0.5_at_3` | convention | pass | within tolerance | - |
+| `kronos_input_speed_0.5_at_6` | convention | pass | within tolerance | - |
+| `kronos_output_speed_negative` | convention | not scored: the guide says Output Speed 'allow[s] you to use negative speed values' and does not say which source frame a backwards retime starts on, so no output frame can be written down | - | - |
+| `kronos_output_speed_keyed` | convention | not scored: the guide says 'Altering a keyframe alters the relative position of all later frames', which describes the speed as accumulating over the output frames, but gives no rule for the accumulation between keys; NodeBased reads the speed at the current frame only | - | - |
+| `kronos_timing_frame_7_at_2` | guide | pass | within tolerance | - |
+| `kronos_timing_frame_7_at_15` | guide | pass | within tolerance | - |
+| `kronos_timing_frame_12_at_9` | guide | pass | within tolerance | - |
+| `kronos_timing_frame_keyed_half_speed_at_1` | guide | pass | within tolerance | - |
+| `kronos_timing_frame_keyed_half_speed_at_100` | guide | pass | within tolerance | - |
+| `kronos_timing_frame_keyed_half_speed_at_34` | convention | pass | within tolerance | - |
+| `kronos_input_first_is_the_first_frame_used` | convention | pass | within tolerance | - |
+| `kronos_input_first_moves_the_start` | convention | pass | within tolerance | - |
+| `kronos_input_first_before_the_range` | convention | not scored: the guide says which frames are used, not what comes out when the time is before the first of them | - | - |
+| `kronos_input_last_is_the_last_frame_used` | guide | pass | within tolerance | - |
+| `kronos_input_last_after_the_range` | convention | not scored: the guide says which frames are used, not what comes out when the time is after the last of them | - | - |
+| `kronos_channels_all_retime_green_too` | convention | pass | within tolerance | - |
+| `kronos_channels_red_green_is_the_current_frame` | convention | pass | within tolerance | - |
+| `kronos_channels_green_red_is_the_current_frame` | convention | pass | within tolerance | - |
+| `kronos_motion_method_whole_frame_is_the_frame` | convention | pass | within tolerance | - |
+| `kronos_motion_method_half_translation` | convention | pass | within tolerance | - |
+| `kronos_not_scored_vector` | convention | not scored: the guide describes them as trade-offs (density of the vector field; detail against spurious vectors) and gives no number to check | - | - |
+| `kronos_not_scored_occlusions` | convention | not scored: the guide says nothing about what an interpolated frame shows where something is uncovered | - | - |
+| `kronos_not_scored_resampling` | convention | not scored: the guide names the filters (Bilinear, Lanczos4 and Lanczos6) and gives no weights | - | - |
+| `kronos_not_scored_shutter` | convention | not scored: the guide gives the exposure ('a shutter time of 0.5 is equivalent to a 180 degree mechanical shutter') and no weights for the in-between images; the blur of a moving plate is not written down | - | - |
+| `oflow_frame_method_speed_0.4_at_1` | guide | pass | within tolerance | - |
+| `oflow_frame_method_speed_0.4_at_2` | guide | pass | within tolerance | - |
+| `oflow_frame_method_speed_0.4_at_3` | guide | pass | within tolerance | - |
+| `oflow_frame_method_speed_0.4_at_4` | guide | pass | within tolerance | - |
+| `oflow_frame_method_speed_0.4_at_5` | guide | pass | within tolerance | - |
+| `oflow_frame_method_tie` | convention | not scored: the guide says 'the nearest original frame' and does not break a tie; NodeBased takes the even frame as Retime's nearest does | - | - |
+| `oflow_blend_method_speed_0.4_at_2` | convention | pass | within tolerance | - |
+| `oflow_blend_method_speed_0.4_at_3` | convention | pass | within tolerance | - |
+| `oflow_blend_method_speed_0.4_at_5` | convention | pass | within tolerance | - |
+| `oflow_blend_method_half_way` | convention | pass | within tolerance | - |
+| `oflow_blend_method_whole_frame_is_the_frame` | guide | pass | within tolerance | - |
+| `oflow_output_speed_2_at_1` | convention | pass | within tolerance | - |
+| `oflow_output_speed_2_at_4` | convention | pass | within tolerance | - |
+| `oflow_output_speed_2_at_6` | convention | pass | within tolerance | - |
+| `oflow_input_speed_0.5_at_1` | convention | pass | within tolerance | - |
+| `oflow_input_speed_0.5_at_3` | convention | pass | within tolerance | - |
+| `oflow_input_speed_0.5_at_6` | convention | pass | within tolerance | - |
+| `oflow_output_speed_negative` | convention | not scored: the guide says Output Speed 'allow[s] you to use negative speed values' and does not say which source frame a backwards retime starts on, so no output frame can be written down | - | - |
+| `oflow_output_speed_keyed` | convention | not scored: the guide says 'Altering a keyframe alters the relative position of all later frames', which describes the speed as accumulating over the output frames, but gives no rule for the accumulation between keys; NodeBased reads the speed at the current frame only | - | - |
+| `oflow_timing_frame_7_at_2` | guide | pass | within tolerance | - |
+| `oflow_timing_frame_7_at_15` | guide | pass | within tolerance | - |
+| `oflow_timing_frame_12_at_9` | guide | pass | within tolerance | - |
+| `oflow_timing_frame_keyed_half_speed_at_1` | guide | pass | within tolerance | - |
+| `oflow_timing_frame_keyed_half_speed_at_100` | guide | pass | within tolerance | - |
+| `oflow_timing_frame_keyed_half_speed_at_34` | convention | pass | within tolerance | - |
+| `oflow_input_first_is_the_first_frame_used` | convention | pass | within tolerance | - |
+| `oflow_input_first_moves_the_start` | convention | pass | within tolerance | - |
+| `oflow_input_first_before_the_range` | convention | not scored: the guide says which frames are used, not what comes out when the time is before the first of them | - | - |
+| `oflow_input_last_is_the_last_frame_used` | guide | pass | within tolerance | - |
+| `oflow_input_last_after_the_range` | convention | not scored: the guide says which frames are used, not what comes out when the time is after the last of them | - | - |
+| `oflow_channels_all_retime_green_too` | convention | pass | within tolerance | - |
+| `oflow_channels_red_green_is_the_current_frame` | convention | pass | within tolerance | - |
+| `oflow_channels_green_red_is_the_current_frame` | convention | pass | within tolerance | - |
+| `oflow_motion_method_whole_frame_is_the_frame` | convention | pass | within tolerance | - |
+| `oflow_motion_method_half_translation` | convention | pass | within tolerance | - |
+| `oflow_not_scored_vector` | convention | not scored: the guide describes them as trade-offs (density of the vector field; detail against spurious vectors) and gives no number to check | - | - |
+| `oflow_not_scored_occlusions` | convention | not scored: the guide says nothing about what an interpolated frame shows where something is uncovered | - | - |
+| `oflow_not_scored_resampling` | convention | not scored: the guide names the filters (Bilinear, Lanczos4 and Lanczos6) and gives no weights | - | - |
+| `oflow_not_scored_shutter` | convention | not scored: the guide gives the exposure ('a shutter time of 0.5 is equivalent to a 180 degree mechanical shutter') and no weights for the in-between images; the blur of a moving plate is not written down | - | - |
 
 ## Requirements of 2026-11-02, per node
 
@@ -1139,8 +1217,6 @@ Labels below are NodeBased's, then the guide's.
 - Text (`Text`): 27 of 40 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
 - AppendClip (`AppendClip`): 3 of 5 paired knobs in Nuke's order
 - TimeBlur (`TimeBlur`): 3 of 4 paired knobs in Nuke's order
-- Kronos (`Kronos`): 3 of 4 paired knobs in Nuke's order; `timingOutputSpeed` reads "Speed", Nuke "Output Speed"
-- OFlow (`OFlow`): `timingOutputSpeed` reads "Speed", Nuke "Output Speed"; `timingFrame2` reads "Speed", Nuke "Frame"
 - ZDefocus (`ZDefocus`): `center` reads "Focus plane", Nuke "focus plane (C)"
 - Denoise (`Denoise`): `amount` reads "Strength", Nuke "Denoise Amount"
 - DegrainSimple (`DegrainSimple`): `rVal` reads "Red", Nuke "R blur"; `gVal` reads "Green", Nuke "G blur"; `bVal` reads "Blue", Nuke "B blur"

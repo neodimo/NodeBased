@@ -228,6 +228,7 @@ from . import drawfxbehaviour as _drawfxbehaviour
 from . import transformbehaviour as _transformbehaviour
 from . import drawbehaviour as _drawbehaviour
 from . import timeknobs as _timeknobs
+from . import retimeknobs as _retimeknobs
 from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
 from . import trackerknobs as _trackerknobs
@@ -800,11 +801,12 @@ SPECS = {
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
-    "Kronos": {"inputs": ["image"], "params": {"speed": 1.0, "frame": -1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto"}},
+    "Kronos": {"inputs": ["image"], "params": {"speed": 1.0, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
+              **_retimeknobs.new_params("Kronos")}},
     "OFlow": {"inputs": ["image"], "params": {"input_start": 1.0, "input_end": 100.0,
               "output_start": 1.0, "timing": "speed", "speed": 1.0, "frame": 1.0,
               "vector_detail": 4, "smoothness": 1.0, "shutter_samples": 1, "shutter_time": 0.0,
-              "flow_backend": "auto"}},
+              "flow_backend": "auto", **_retimeknobs.new_params("OFlow")}},
     "VectorToMotion": {"inputs": ["image"], "params": {"forward_layer": "smartvector.forward",
               "backward_layer": "smartvector.backward"}},
     "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward"}},
@@ -2090,7 +2092,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "colorspace_in": ["sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1"],
            "colorspace_out": ["sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1"],
-           "interpolation": ["tetrahedral", "trilinear", "frame", "motion"], "timing": ["speed", "frame"],
+           "interpolation": ["tetrahedral", "trilinear", "frame", "blend", "motion"], "timing": ["speed", "input_speed", "frame"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"], "flow_on": ["luminance", "rgb"],
@@ -2321,6 +2323,8 @@ LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000)
 LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
 LIMITS.update(_behaviour2d.LIMITS)
 LIMITS.update(_drawfxbehaviour.LIMITS)
+LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
+CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES.update(_behaviour2d.CHOICES)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)

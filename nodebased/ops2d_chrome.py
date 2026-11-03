@@ -296,6 +296,8 @@ def upgrade_nodes(nodes):
         added.update(warpknobs.upgrade_params(node.get("type")))              # GridWarp and SplineWarp (lane 9 step H)
         from . import drawfxbehaviour
         added.update(drawfxbehaviour.upgrade_params(node.get("type")))         # Flare, Glint, Sparkles, ScannedGrain (lane 2 step H)
+        from . import retimeknobs
+        added.update(retimeknobs.upgrade_params(node.get("type")))             # Kronos and OFlow timing (lane 2 step J)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

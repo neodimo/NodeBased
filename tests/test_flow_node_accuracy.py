@@ -46,9 +46,9 @@ class FlowNodeAccuracyTests(unittest.TestCase):
         base = ev.evaluate_raster(d.document, "src", frame=1).pixels
         yy, xx = np.mgrid[:base.shape[0], :base.shape[1]].astype(np.float32)
         truth = _sample(base, xx-2.0, yy-1.0)
-        motion = ev.evaluate_raster(d.document, "k", frame=3).pixels
-        d.execute({"op": "set", "id": "k", "param": "interpolation", "value": "frame"})
-        blend = Evaluator().evaluate_raster(d.document, "k", frame=3).pixels
+        motion = ev.evaluate_raster(d.document, "k", frame=2).pixels      # input range starts at 1: output frame 2 at half speed is source frame 1.5
+        d.execute({"op": "set", "id": "k", "param": "interpolation", "value": "blend"})
+        blend = Evaluator().evaluate_raster(d.document, "k", frame=2).pixels
         region = np.s_[12:-12, 12:-12, :3]
         motion_error = float(np.mean(np.abs(motion[region] - truth[region])))
         blend_error = float(np.mean(np.abs(blend[region] - truth[region])))

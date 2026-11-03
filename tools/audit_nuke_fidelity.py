@@ -159,7 +159,7 @@ def run_case(case):
             out = run_nodebased(case, _FIXTURES)
             ref, valid = case.expected(_FIXTURES)
             err = np.where(valid, np.abs(out - ref), 0.0)
-            tol = ALLCLOSE["atol"] + ALLCLOSE["rtol"] * np.abs(ref)
+            tol = max(ALLCLOSE["atol"], float(getattr(case, "tolerance", 0.0))) + ALLCLOSE["rtol"] * np.abs(ref)
             ok = bool(np.all(np.where(valid, err <= tol, True)))
             # Rounded before the worst pixel is picked, so float noise between machines cannot reorder near-equal errors.
             rounded = np.round(err, 4)
@@ -540,7 +540,7 @@ def build_report(reference_dir=None):
     w("## Formula cases")
     w("")
     w("Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12, alpha from 0 to 1) through `Evaluator._kernel` and compares every pixel with the stated behaviour "
-      f"(absolute and relative tolerance {ALLCLOSE['atol']:g}; a failing case shows its largest error rounded to four decimals and the first pixel in raster order that has it). `guide` means the guide's text states the behaviour; `convention` means it does not (see the ambiguities below). "
+      f"(absolute and relative tolerance {ALLCLOSE['atol']:g}, except the motion-estimated cases of Kronos and OFlow, which state an absolute tolerance of 0.01 in their statements because an estimated field is not exact; a failing case shows its largest error rounded to four decimals and the first pixel in raster order that has it). `guide` means the guide's text states the behaviour; `convention` means it does not (see the ambiguities below). "
       "`inexpressible` means NodeBased has no knob that can set what Nuke's knob sets, so it cannot even attempt the case.")
     w("")
     w("| Case | Source | Result | Max abs error | Worst pixel (y, x, channel) |")

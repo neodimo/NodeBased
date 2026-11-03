@@ -1127,10 +1127,16 @@
     {"nodebased": "image", "nuke": "Source", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["input_start"], "nuke": ["input.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Input Range', scripting name `input.first`"},
+    {"nodebased": ["input_end"], "nuke": ["input.last"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Input Range', scripting name `input.last`"},
+    {"nodebased": ["retimed_channels"], "nuke": ["retimedChannels"], "kind": "renamed", "reason": "the channels the retime affects; the rest pass through from the source at the current frame"},
+    {"nodebased": ["timing"], "nuke": ["timing2"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `timing2`"},
+    {"nodebased": ["input_speed"], "nuke": ["timingInputSpeed"], "kind": "renamed", "reason": "input speed; a negative value reads as 0, as the guide says Input Speed takes none"},
     {"nodebased": ["speed"], "nuke": ["timingOutputSpeed"], "kind": "renamed", "reason": "output speed"},
     {"nodebased": ["frame"], "nuke": ["timingFrame2"], "kind": "renamed", "reason": "output frame"},
     {"nodebased": ["shutter_samples"], "nuke": ["shutterSamples"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterSamples`"},
     {"nodebased": ["interpolation"], "nuke": ["interpolation"], "kind": "same"},
+    {"nodebased": ["legacy_retime"], "kind": "extra", "reason": "NodeBased-only: 1 keeps the retime a Kronos saved before 2026-11-03 did (frame times speed from zero, no input range, interpolation frame blends); see nodebased/retimeknobs.py"},
     {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
   },
@@ -1142,8 +1148,11 @@
    "knobs": [
     {"nodebased": ["input_start"], "nuke": ["input.first"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Input Range', scripting name `input.first`"},
     {"nodebased": ["input_end"], "nuke": ["input.last"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Input Range', scripting name `input.last`"},
+    {"nodebased": ["retimed_channels"], "nuke": ["retimedChannels"], "kind": "renamed", "reason": "the channels the retime affects; the rest pass through from the source at the current frame"},
+    {"nodebased": ["interpolation"], "nuke": ["method"], "kind": "renamed", "reason": "NodeBased uses the name Kronos uses; Nuke's scripting name on OFlow is `method`"},
     {"nodebased": ["timing"], "nuke": ["timing2"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `timing2`"},
     {"nodebased": ["speed"], "nuke": ["timingOutputSpeed"], "kind": "renamed", "reason": "output speed"},
+    {"nodebased": ["input_speed"], "nuke": ["timingInputSpeed"], "kind": "renamed", "reason": "input speed; a negative value reads as 0, as the guide says Input Speed takes none"},
     {"nodebased": ["frame"], "nuke": ["timingFrame2"], "kind": "renamed", "reason": "output frame"},
     {"nodebased": ["vector_detail"], "nuke": ["vectorDetail"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `vectorDetail`"},
     {"nodebased": ["shutter_samples"], "nuke": ["shutterSamples"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterSamples`"},

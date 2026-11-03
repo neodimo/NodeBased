@@ -2816,27 +2816,21 @@ class Evaluator:
                 fingerprint = ["vector-pair", f0, f1, *(d for _, d in vectorgenerator_pair)]
             if kind in ("Kronos", "OFlow") and not node["disabled"]:
                 source_key = node["inputs"]["image"]
+                from . import retimeknobs
+                chosen = retimeknobs.plan(kind, params, frame, doc.get("time", {}).get("first", params.get("input_start", 1)),
+                                          doc.get("time", {}).get("last", params.get("input_end", 100)))
+                target_frame, lo, hi, interpolation = chosen.target, chosen.lo, chosen.hi, chosen.method
                 if kind == "OFlow":
-                    target_frame = (float(params["frame"]) if params["timing"] == "frame" else
-                                    float(params["input_start"]) + (float(frame) - float(params["output_start"])) * float(params["speed"]))
-                    lo = max(int(math.floor(float(params["input_start"]))), int(doc.get("time", {}).get("first", math.floor(target_frame))))
-                    hi = min(int(math.ceil(float(params["input_end"]))), int(doc.get("time", {}).get("last", math.ceil(target_frame))))
-                    if hi < lo:
-                        raise ValueError("OFlow: input_end must be at or after input_start")
-                    target_frame = min(float(hi), max(float(lo), target_frame))
                     count = max(1, min(64, int(params["shutter_samples"])))
                     shutter_times = ([target_frame] if count == 1 or float(params["shutter_time"]) == 0 else
                         np.linspace(target_frame - float(params["shutter_time"])/2,
                                     target_frame + float(params["shutter_time"])/2, count).tolist())
-                    interpolation = "motion"
                 else:
-                    target_frame = float(params["frame"]) if float(params["frame"]) >= 0 else float(frame) * float(params["speed"])
-                    lo, hi = int(doc.get("time", {}).get("first", math.floor(target_frame))), int(doc.get("time", {}).get("last", math.ceil(target_frame)))
-                    target_frame = min(float(hi), max(float(lo), target_frame))
-                    count = int(params["shutter_samples"]) if params["interpolation"] == "motion" else 1
+                    count = int(params["shutter_samples"]) if interpolation == "motion" else 1
                     shutter_times = [target_frame] if count == 1 else np.linspace(target_frame - abs(float(params["speed"])) / 2,
                         target_frame + abs(float(params["speed"])) / 2, count).tolist()
-                    interpolation = params["interpolation"]
+                if interpolation == "frame":
+                    shutter_times = [target_frame]
                 pairs = []
                 for sample_time in shutter_times:
                     q = min(float(hi), max(float(lo), float(sample_time)))
@@ -2844,9 +2838,13 @@ class Evaluator:
                     pair = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f, tier=tier,
                         typed=True, return_digest=True) for f in (f0, f1)]
                     pairs.append((q, pair[0], pair[1]))
-                kronos_frames = (target_frame, pairs)
-                fingerprint = [kind.lower(), target_frame, interpolation,
-                               *(d for _, a, b in pairs for d in (a[1], b[1]))]
+                unretimed = None
+                kept = str(params.get("retimed_channels", "all"))
+                if not retimeknobs.is_legacy(kind, params) and kept not in ("all", "rgba"):
+                    unretimed = self.evaluate_raster(doc, source_key, cancel=cancel, frame=frame, tier=tier, typed=True, return_digest=True)
+                kronos_frames = (target_frame, pairs, interpolation, unretimed)
+                fingerprint = [kind.lower(), target_frame, interpolation, kept,
+                               *(d for _, a, b in pairs for d in (a[1], b[1])), *([unretimed[1]] if unretimed else [])]
             if kind == "MotionBlur" and not node["disabled"]:
                 shutter = float(params["shutter"])
                 if params["shutter_offset"] == "start": low, high = frame, frame + shutter
@@ -3139,7 +3137,8 @@ class Evaluator:
                 elif kind in ("Kronos", "OFlow") and kronos_frames is not None:
                     from .flow_nodes import warp_by_flow
                     from .opticalflow import flow_pair
-                    target_frame, pairs = kronos_frames
+                    from . import retimeknobs
+                    target_frame, pairs, method, unretimed = kronos_frames
                     rendered = []
                     for sample_time, (a, _), (b, _) in pairs:
                         alpha = np.float32(sample_time - math.floor(sample_time))
@@ -3148,7 +3147,7 @@ class Evaluator:
                         output_data = a.data.union(b.data)
                         ap, bp = a.fit(output_data), b.fit(output_data)
                         if sample_time == math.floor(sample_time): pixels = ap.copy()
-                        elif (params["interpolation"] if kind == "Kronos" else "motion") == "frame": pixels = ap * (1-alpha) + bp * alpha
+                        elif method in ("frame", "blend"): pixels = retimeknobs.blend(ap, bp, alpha)
                         else:
                             fw, bw, occ = flow_pair(ap, bp,
                                 vector_detail=int(params.get("vector_detail", 4)),
@@ -3163,6 +3162,8 @@ class Evaluator:
                     aligned = [pixels if data == output_data else Raster(pixels, data, a.display).fit(output_data)
                                for pixels, data, _ in rendered]
                     pixels = aligned[0] if len(aligned) == 1 else np.mean(np.stack(aligned), axis=0, dtype=np.float32)
+                    if unretimed is not None:
+                        pixels = retimeknobs.keep_unretimed(pixels, unretimed[0].fit(output_data), params["retimed_channels"])
                     raster = Raster(pixels.astype(np.float32), output_data, a.display, a.layers, a.meta)
                 elif kind == "VectorToMotion":
                     source = values[node["inputs"]["image"]]

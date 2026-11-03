@@ -1,6 +1,6 @@
 """Behaviour cases for the Time group (2D behaviour lane 2, step I, November 2026).
 
-TimeOffset, FrameHold, Retime, FrameRange, TimeClip, AppendClip, TimeEcho, TimeBlur and TimeWarp act across frames, so the one-frame
+TimeOffset, FrameHold, Retime, FrameRange, TimeClip, AppendClip, TimeEcho, TimeBlur, TimeWarp, Kronos and OFlow act across frames, so the one-frame
 fixture cannot see them. Each case runs the node on a frame-stamped plate (`_stamp` in the case's params, built by
 `_run_stamped_document` in `tools/nuke_fidelity_cases.py`): a Constant whose red channel is the frame number, so the red value of the
 node's picture is, written as a number, the source frame the node picked (a fractional frame reads back as itself, the stamp being a
@@ -55,15 +55,44 @@ def mix(*pairs):
     return expected
 
 
+def green_shows(red, green, blue=BLUE):
+    """A reference that is the stamped plate with its red `red` and its green `green`, everywhere (the plate's green is the frame times 0.01)."""
+    def expected(fx):
+        out = stamped(red, blue)
+        out[..., 1] = green
+        return out, np.ones((H, W, 4), bool)
+    return expected
+
+
+MOTION_W, MOTION_H, MOTION_SHIFT = 96, 64, 4         # the motion plate: Noise, moving MOTION_SHIFT whole pixels to the right every frame
+MOTION_MARGIN = (8, 16)                             # rows and columns left out at each edge, where the moved picture has no neighbours to match
+
+
+def motion_plate_half(fx):
+    """The motion plate half way between source frames 1 and 2: frame 1's Noise moved MOTION_SHIFT / 2 pixels to the right. Only the interior is compared
+    and only red, green and blue (the guide does not say what alpha an interpolated frame has)."""
+    from nodebased.core import Dispatcher, empty_document
+    from nodebased.imaging import Evaluator
+    d = Dispatcher(empty_document())
+    d.execute({"op": "create", "id": "p", "type": "Noise", "params": {"width": MOTION_W, "height": MOTION_H, "size": 16, "octaves": 3}})
+    base = np.asarray(Evaluator().evaluate_raster(dict(d.document, view="p"), target="p", frame=1).pixels, dtype=np.float64)
+    ref = np.zeros_like(base)
+    ref[:, MOTION_SHIFT // 2:] = base[:, :-(MOTION_SHIFT // 2)]
+    valid = np.zeros(ref.shape, bool)
+    valid[MOTION_MARGIN[0]:-MOTION_MARGIN[0], MOTION_MARGIN[1]:-MOTION_MARGIN[1], :3] = True
+    return ref, valid
+
+
 def cases():
     from nuke_fidelity_cases import Case
 
     out = []
 
-    def case(id, nuke, nuke_knobs, nb_params, stamp, expected, source, statement, unscored="", nuke_class=None):
+    def case(id, nuke, nuke_knobs, nb_params, stamp, expected, source, statement, unscored="", nuke_class=None, tolerance=0.0):
         params = dict(nb_params, _stamp=dict(stamp))
         out.append(Case(id=id, nuke=nuke, nuke_class=nuke_class or nuke, nuke_knobs=tuple(nuke_knobs), nuke_inputs=("stamp",), nb_kind=nuke,
-                        nb_params=params, nb_inputs=(), expected=expected, source=source, statement=statement, unscored=unscored))
+                        nb_params=params, nb_inputs=(), expected=expected, source=source, statement=statement, unscored=unscored,
+                        tolerance=tolerance))
 
     # ----------------------------------------------------------------------------------------------------------------- TimeOffset
     page = GUIDE + "timeoffset.html"
@@ -410,4 +439,145 @@ def cases():
          "convention", "TimeWarp filter box on a fractional lookup", unscored=(
              "the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights; "
              "NodeBased's blend of the two nearest frames is a unit-wide box and nothing states that is Nuke's"))
+
+    # --------------------------------------------------------------------------------------------------------------- Kronos and OFlow
+    # Kronos (NukeX) and OFlow retime with the same timing knobs: Input Range, Channels, Method, Timing, Output Speed, Input Speed, Frame. A source
+    # frame is the red value of the stamped plate, so a whole frame reads as itself and a blend of two neighbours as the weighted frame number.
+    for node, method_knob in (("Kronos", "interpolation"), ("OFlow", "method")):
+        low = node.lower()
+        page = GUIDE + f"{low}.html"
+        project = (1, 20)                                           # the project's range, and so the usable one with input_end 20
+
+        def retime(id, knobs, nb, frame, expected, source, statement, unscored="", stamp=None, tolerance=0.0, node=node, low=low, project=project):
+            """One case of this node: Nuke knobs `knobs`, NodeBased params `nb` (a 1 to 20 input range unless `nb` says otherwise)."""
+            params = {"input_start": 1.0, "input_end": 20.0, **nb}
+            if node == "OFlow":
+                params.setdefault("output_start", params["input_start"])       # OFlow's own knob: the output frame that shows the first input frame
+            case(f"{low}_{id}", node, knobs, params, {"frame": frame, "time": project, **(stamp or {})}, expected, source, statement, unscored=unscored,
+                 tolerance=tolerance)
+        method_note = (f"{node} ({page}): 'Frame - the nearest original frame is displayed. Blend - a mix between two frames is used for the in-between "
+                       "frame. Motion - vector interpolation is used to calculate the in-between frame'")
+        speed_note = (f"{node} ({page}): 'Values below 1 slow down the clip and vice versa. For example, to slow down the clip by a factor of two (half speed), "
+                      "set this value to 0.5' and 'double speed halves the duration of the clip and half speed doubles the duration of the clip'. The guide "
+                      "fixes the rate, one output frame moving the source on by the speed; it does not say which output frame shows the first input frame, so "
+                      "the reading used is that the output starts where the input range starts")
+
+        # Method frame: the nearest original frame (speed 0.4 so that no frame is a tie: 1, 1.4, 1.8, 2.2, 2.6 for output frames 1 to 5).
+        for frame, wants, raw in ((1, 1, 1.0), (2, 1, 1.4), (3, 2, 1.8), (4, 2, 2.2), (5, 3, 2.6)):
+            retime(f"frame_method_speed_0.4_at_{frame}", ((method_knob, "Frame"), ("timingOutputSpeed", 0.4)),
+                   {"interpolation": "frame", "timing": "speed", "speed": 0.4}, frame, shows(float(wants)), "guide",
+                   f"{node} method Frame at speed 0.4 asks for source time {raw:g} at output frame {frame} and shows the nearest original frame, {wants}. "
+                   + method_note + ". " + speed_note)
+        retime("frame_method_tie", ((method_knob, "Frame"), ("timingOutputSpeed", 0.5)), {"interpolation": "frame", "timing": "speed", "speed": 0.5}, 2,
+               shows(2.0), "convention", f"{node} method Frame at speed 0.5, output frame 2: source time 1.5, exactly between frames 1 and 2",
+               unscored="the guide says 'the nearest original frame' and does not break a tie; NodeBased takes the even frame as Retime's nearest does")
+
+        # Method blend: a mix of the two neighbouring frames, weighted by how close each is (the cross-dissolve reading).
+        blend_note = (method_note + ". The two frames are the neighbours of the source time; the guide gives no weights, so the weights are the "
+                      "cross-dissolve's, each frame by how close it is")
+        for frame, raw in ((2, 1.4), (3, 1.8), (5, 2.6)):
+            retime(f"blend_method_speed_0.4_at_{frame}", ((method_knob, "Blend"), ("timingOutputSpeed", 0.4)),
+                   {"interpolation": "blend", "timing": "speed", "speed": 0.4}, frame, shows(raw), "convention",
+                   f"{node} method Blend at speed 0.4 mixes source frames {int(raw)} and {int(raw) + 1} for the time {raw:g} at output frame {frame}. "
+                   + blend_note + ". " + speed_note)
+        retime("blend_method_half_way", ((method_knob, "Blend"), ("timingOutputSpeed", 0.5)), {"interpolation": "blend", "timing": "speed", "speed": 0.5}, 2,
+               shows(1.5), "convention", f"{node} method Blend at speed 0.5, output frame 2: an equal mix of source frames 1 and 2. " + blend_note)
+        retime("blend_method_whole_frame_is_the_frame", ((method_knob, "Blend"), ("timingOutputSpeed", 0.5)),
+               {"interpolation": "blend", "timing": "speed", "speed": 0.5}, 3, shows(2.0), "guide",
+               f"{node} method Blend at speed 0.5, output frame 3: source time 2, a whole frame, shows that frame untouched. " + method_note)
+
+        # Output speed and input speed.
+        for frame, wants in ((1, 1.0), (4, 7.0), (6, 11.0)):
+            retime(f"output_speed_2_at_{frame}", ((method_knob, "Blend"), ("timingOutputSpeed", 2.0)), {"interpolation": "blend", "timing": "speed", "speed": 2.0},
+                   frame, shows(wants), "convention", f"{node} at output speed 2 shows source frame {wants:g} at output frame {frame} (1 + {frame - 1} x 2). " + speed_note)
+        for frame, wants in ((1, 1.0), (3, 2.0), (6, 3.5)):
+            retime(f"input_speed_0.5_at_{frame}", ((method_knob, "Blend"), ("timing2", "Input Speed"), ("timingInputSpeed", 0.5)),
+                   {"interpolation": "blend", "timing": "input_speed", "input_speed": 0.5}, frame, shows(wants), "convention",
+                   f"{node} at a constant input speed 0.5 shows source frame {wants:g} at output frame {frame}: for a constant speed Input Speed and "
+                   f"Output Speed give the same frames. {node} ({page}): 'Values below 1 slow down the clip and vice versa'. " + speed_note)
+        retime("output_speed_negative", ((method_knob, "Blend"), ("timingOutputSpeed", -1.0)), {"interpolation": "blend", "timing": "speed", "speed": -1.0}, 5,
+               shows(1.0), "convention", f"{node} at output speed -1 (the clip runs backwards)",
+               unscored=("the guide says Output Speed 'allow[s] you to use negative speed values' and does not say which source frame a backwards "
+                         "retime starts on, so no output frame can be written down"))
+        retime("output_speed_keyed", ((method_knob, "Blend"), ("timingOutputSpeed", 1.0)), {"interpolation": "blend", "timing": "speed", "speed": 1.0}, 8,
+               shows(1.0), "convention", f"{node} with output speed keyed (1 at frame 1, 2 at frame 5)",
+               unscored=("the guide says 'Altering a keyframe alters the relative position of all later frames', which describes the speed as accumulating "
+                         "over the output frames, but gives no rule for the accumulation between keys; NodeBased reads the speed at the current frame only"))
+
+        # Timing Frame: the source frame at the current frame in the timeline (the knob's value there).
+        frame_note = (f"{node} ({page}), Frame: 'Use this to specify the source frame at the current frame in the timeline. For example, to slow down a "
+                      "50 frame clip by half, key the Frame to 1 at frame 1 and the Frame to 50 at frame 100'")
+        for frame, value in ((2, 7.0), (15, 7.0), (9, 12.0)):
+            retime(f"timing_frame_{value:g}_at_{frame}", ((method_knob, "Blend"), ("timing2", "Frame"), ("timingFrame2", value)),
+                   {"interpolation": "blend", "timing": "frame", "frame": value}, frame, shows(value), "guide",
+                   f"{node} with Timing Frame and Frame {value:g} shows source frame {value:g} at output frame {frame}. " + frame_note)
+        halfspeed = {"frame": ("linear", ((1, 1), (100, 50)))}
+        for frame, value, source in ((1, 1.0, "guide"), (100, 50.0, "guide"), (34, 1 + 33 * 49 / 99, "convention")):
+            case(f"{low}_timing_frame_keyed_half_speed_at_{frame}", node, ((method_knob, "Blend"), ("timing2", "Frame"), ("timingFrame2", value)),
+                 {"interpolation": "blend", "timing": "frame", "input_start": 1.0, "input_end": 50.0},
+                 {"frame": frame, "time": (1, 100), "curves": halfspeed}, shows(value), source,
+                 f"{node} with Frame keyed 1 at frame 1 and 50 at frame 100 shows source frame {value:g} at output frame {frame}"
+                 + ("" if source == "guide" else " (between the keys the knob's curve is a straight line, NodeBased's default interpolation)")
+                 + ". " + frame_note)
+
+        # Input range.
+        range_note = (f"{node} ({page}): 'input.first: The first frame of input to use' and 'input.last: The last frame of input to use'. The output "
+                      "starts where the range starts; what is shown outside the range (hold) is NodeBased's reading, the guide does not say")
+        retime("input_first_is_the_first_frame_used", ((method_knob, "Blend"), ("input.first", 5.0), ("timingOutputSpeed", 0.4)),
+               {"interpolation": "blend", "timing": "speed", "speed": 0.4, "input_start": 5.0}, 5, shows(5.0), "convention",
+               f"{node} with the input range starting at 5 shows source frame 5 at output frame 5, the first frame of the range. " + range_note)
+        retime("input_first_moves_the_start", ((method_knob, "Blend"), ("input.first", 5.0), ("timingOutputSpeed", 0.4)),
+               {"interpolation": "blend", "timing": "speed", "speed": 0.4, "input_start": 5.0}, 10, shows(7.0), "convention",
+               f"{node} at speed 0.4 with the input range starting at 5 shows source frame 7 at output frame 10 (5 + 5 x 0.4). " + range_note)
+        retime("input_first_before_the_range", ((method_knob, "Blend"), ("input.first", 5.0), ("timingOutputSpeed", 0.4)),
+               {"interpolation": "blend", "timing": "speed", "speed": 0.4, "input_start": 5.0}, 2, shows(5.0), "convention",
+               f"{node} with the input range starting at 5, output frame 2 (source time 3.8, before the range)", unscored=(
+                   "the guide says which frames are used, not what comes out when the time is before the first of them"))
+        retime("input_last_is_the_last_frame_used", ((method_knob, "Blend"), ("input.last", 12.0), ("timing2", "Frame"), ("timingFrame2", 12.0)),
+               {"interpolation": "blend", "timing": "frame", "frame": 12.0, "input_end": 12.0}, 4, shows(12.0), "guide",
+               f"{node} with the input range ending at 12 and Frame 12 shows source frame 12, the last frame of the range. " + range_note)
+        retime("input_last_after_the_range", ((method_knob, "Blend"), ("input.last", 12.0), ("timing2", "Frame"), ("timingFrame2", 15.0)),
+               {"interpolation": "blend", "timing": "frame", "frame": 15.0, "input_end": 12.0}, 4, shows(12.0), "convention",
+               f"{node} with the input range ending at 12 and Frame 15 (after the range)", unscored=(
+                   "the guide says which frames are used, not what comes out when the time is after the last of them"))
+
+        # Channels: the channels the retime does not affect come from the source at the current frame (our reading of 'affected').
+        channel_note = (f"{node} ({page}): 'retimedChannels: Sets the channels affected by the retime'. The other channels are read as passing the source "
+                        "through as it is at the current frame; the guide does not say so")
+        plate = {"green_scale": 0.01}
+        retime("channels_all_retime_green_too", ((method_knob, "Blend"), ("retimedChannels", "all"), ("timingOutputSpeed", 0.4)),
+               {"interpolation": "blend", "speed": 0.4, "retimed_channels": "all"}, 3, green_shows(1.8, 0.018), "convention",
+               f"{node} with every channel retimed: at speed 0.4 and output frame 3, red and green both show source time 1.8 (green is the frame times "
+               "0.01). " + channel_note, stamp=plate)
+        retime("channels_red_green_is_the_current_frame", ((method_knob, "Blend"), ("retimedChannels", "red"), ("timingOutputSpeed", 0.4)),
+               {"interpolation": "blend", "speed": 0.4, "retimed_channels": "red"}, 3, green_shows(1.8, 0.03), "convention",
+               f"{node} retiming red only: red shows source time 1.8, green stays the source's at output frame 3. " + channel_note, stamp=plate)
+        retime("channels_green_red_is_the_current_frame", ((method_knob, "Blend"), ("retimedChannels", "green"), ("timingOutputSpeed", 0.4)),
+               {"interpolation": "blend", "speed": 0.4, "retimed_channels": "green"}, 3, green_shows(3.0, 0.018), "convention",
+               f"{node} retiming green only: green shows source time 1.8, red stays the source's at output frame 3. " + channel_note, stamp=plate)
+
+        # Method motion.
+        motion_note = (f"{node} ({page}): 'Motion - vector interpolation is used to calculate the in-between frame' and, in the node's description, 'generate "
+                       "an output image at any point in time ... by interpolating along the direction of the motion'. The picture is Noise moving 4 whole "
+                       "pixels to the right every frame; half way between two frames it has moved 2 pixels, which is what the interpolation must show")
+        retime("motion_method_whole_frame_is_the_frame", ((method_knob, "Motion"), ("timingOutputSpeed", 0.5)),
+               {"interpolation": "motion", "timing": "speed", "speed": 0.5}, 3, shows(2.0), "convention",
+               f"{node} method Motion at speed 0.5, output frame 3: source time 2, a whole frame, shows that frame untouched")
+        retime("motion_method_half_translation", ((method_knob, "Motion"), ("timingOutputSpeed", 0.5)),
+               {"interpolation": "motion", "timing": "speed", "speed": 0.5, "input_end": 8.0}, 2, motion_plate_half, "convention",
+               f"{node} method Motion at speed 0.5, output frame 2, on a plate moving 4 whole pixels per frame shows the plate moved 2 pixels (half the "
+               f"translation). Compared away from the edges (8 rows and 16 columns left out each side), on red, green and blue, with an absolute tolerance "
+               f"of 0.01 (the estimated field is not exact). " + motion_note,
+               stamp={"plate": {"type": "Noise", "params": {"size": 16, "octaves": 3}}, "size": (MOTION_W, MOTION_H), "time": (1, 8),
+                      "chain": [("Transform", {"filter": "nearest"}, {"translate_x": ("linear", tuple((f, float(MOTION_SHIFT * (f - 1)))
+                                                                                                    for f in range(-5, 30)))})]},
+               tolerance=0.01)
+        for what, reason in (("vector detail and smoothness", "the guide describes them as trade-offs (density of the vector field; detail against spurious "
+                              "vectors) and gives no number to check"),
+                             ("occlusions", "the guide says nothing about what an interpolated frame shows where something is uncovered"),
+                             ("resampling", "the guide names the filters (Bilinear, Lanczos4 and Lanczos6) and gives no weights"),
+                             ("shutter time and samples", "the guide gives the exposure ('a shutter time of 0.5 is equivalent to a 180 degree mechanical shutter') "
+                              "and no weights for the in-between images; the blur of a moving plate is not written down")):
+            retime("not_scored_" + what.split()[0], ((method_knob, "Motion"),), {"interpolation": "motion"}, 2, shows(1.0), "convention",
+                   f"{node}: {what}", unscored=reason)
     return out
