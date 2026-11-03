@@ -158,7 +158,7 @@ class TimeWarpSpecCoverageTests(unittest.TestCase):
 
     def test_limits_and_choices_cover_the_new_params(self):
         self.assertIn("lookup", LIMITS)
-        self.assertEqual(CHOICES["lookup_filter"], ["none", "blend"])
+        self.assertEqual(CHOICES["lookup_filter"], ["none", "blend", "nearest"])
 
 
 def _small_constant_graph(node_id="node", kind="TimeBlur", params=None, keys=((1, 0.1), (2, 0.5), (3, 0.9), (4, 0.2))):

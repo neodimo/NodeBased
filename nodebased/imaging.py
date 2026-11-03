@@ -658,8 +658,13 @@ def _time_clip_frame(kind, params, frame):
     """``(source_frame, black)`` for TimeClip and FrameRange. TimeClip first maps the timeline
     frame by ``frame - time_offset`` (TimeOffset's sign) and, unless ``frame_range_type`` is
     "all", applies ``[first, last]`` with ``before``/``after``. FrameRange applies
-    ``[first_frame, last_frame]`` to the frame directly."""
-    frame = int(frame)
+    ``[first_frame, last_frame]`` to the frame directly, and lets a fractional frame inside the range through as it is (a node below it
+    that passes fractional times on, Retime or TimeWarp with filter none, gets them); an older FrameRange (``legacy_fractional_frames``)
+    cuts every frame down to a whole one."""
+    if kind == "TimeClip" or timeknobs.is_legacy(params, "legacy_fractional_frames"):
+        frame = int(frame)
+    elif float(frame).is_integer():
+        frame = int(frame)
     if kind == "TimeClip":
         mapped = frame - int(params.get("time_offset", 0))
         if params.get("frame_range_type", "custom") == "all":
@@ -2728,6 +2733,9 @@ class Evaluator:
                         # exactly like TimeBlur's own shutter subframes -- an animated upstream
                         # source is sampled at that exact fractional position.
                         sample_frames, weights = [target_frame], [1.0]
+                    elif lookup_filter == "nearest":
+                        # "nearest": the lookup rounds to the nearest whole frame (a half to the even one, as Retime does).
+                        sample_frames, weights = [int(round(target_frame))], [1.0]
                     else:
                         lo = math.floor(target_frame)
                         frac = target_frame - lo
@@ -2742,7 +2750,11 @@ class Evaluator:
                     count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
                     offset = params["shutter_offset"]
-                    if kind in ("Transform", "CornerPin"):
+                    if kind == "TimeBlur":
+                        # The guide's window (nodebased/timeknobs.py); a node saved before it keeps the older one.
+                        low, high = _transformbehaviour.shutter_window(
+                            frame, shutter, offset, params.get("custom_offset", 0.0), timeknobs.is_legacy(params, "legacy_shutter_window"))
+                    elif kind in ("Transform", "CornerPin"):
                         # The guide's shutter (nodebased/transformbehaviour.py); a node saved before it keeps the older window.
                         low, high = _transformbehaviour.shutter_window(
                             frame, shutter, offset, params.get("custom_offset", 0.0), _transformbehaviour.is_legacy(kind, params, "legacy_shutter_window"))
@@ -3300,7 +3312,9 @@ class Evaluator:
                     else:
                         falloff = min(1.0, max(0.0, float(params["falloff"])))
                         weights = np.asarray([falloff ** i for i in range(len(frames))], dtype=np.float32)
-                        weighted = [item * weights[i] for i, item in enumerate(frames)]
+                        # Nuke's `framesfade` (nodebased/timeknobs.py): the oldest frames fade up. `frames` runs newest first.
+                        fade = np.asarray(timeknobs.echo_weights(len(frames), params.get("frames_fade", 1.0))[::-1], dtype=np.float32)
+                        weighted = [item * (weights[i] * fade[i]) for i, item in enumerate(frames)]
                         if params["method"] == "max":
                             pixels = np.maximum.reduce(weighted)
                         elif params["method"] == "plus":

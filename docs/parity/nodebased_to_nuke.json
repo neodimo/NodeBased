@@ -1053,7 +1053,8 @@
     {"nodebased": ["first_frame"], "nuke": ["first_frame"], "kind": "same"},
     {"nodebased": ["last_frame"], "nuke": ["last_frame"], "kind": "same"},
     {"nodebased": ["before"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["after"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["after"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["legacy_fractional_frames"], "kind": "extra", "reason": "NodeBased-only: graphs saved before a fractional frame passed through a FrameRange keep cutting it down to a whole one; lane 2 step I"}
    ]
   },
   "AppendClip": {
@@ -1094,7 +1095,8 @@
     {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
     {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
-    {"nodebased": ["divisions"], "nuke": ["divisions"], "kind": "same"}
+    {"nodebased": ["divisions"], "nuke": ["divisions"], "kind": "same"},
+    {"nodebased": ["legacy_shutter_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the shutter followed the guide keep start and end the other way round; lane 2 step I"}
    ]
   },
   "TimeWarp": {
@@ -1115,6 +1117,7 @@
    "knobs": [
     {"nodebased": ["frames"], "nuke": ["framesbehind"], "kind": "renamed", "reason": "frames to look at"},
     {"nodebased": ["method"], "nuke": ["mode"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'TimeEcho Method', scripting name `mode`"},
+    {"nodebased": ["frames_fade"], "nuke": ["framesfade"], "kind": "renamed", "reason": "Frames to fade out; Nuke's scripting name is `framesfade`"},
     {"nodebased": ["falloff"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
   },

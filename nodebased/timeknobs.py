@@ -17,6 +17,14 @@ Frame arithmetic, in Nuke's order:
   which keeps the line going) say what the input frame becomes outside the input range. `filter`: none passes the
   fractional frame on, nearest rounds it (ties to the even frame, as Retime always did), box averages the input frames under
   a box of width `|speed| * shutter` centred on `x`, each weighted by how much of its unit cell the box covers.
+* FrameRange (`legacy_fractional_frames`): a fractional frame asked of a FrameRange inside its range reaches the input as itself, so a Retime
+  with filter none or a TimeWarp with filter none below it passes its fractional time on, as the guide says; an older FrameRange cut every
+  frame it was asked for down to a whole one.
+* TimeBlur (`legacy_shutter_window`): the guide opens the shutter at the current frame plus the offset: `start` from the frame to the frame plus
+  the shutter, `end` from the frame less the shutter to the frame, `custom` from the frame plus the offset. Older nodes had start and end
+  the other way round and custom centred on the offset (the Transform nodes' reading, nodebased/transformbehaviour.py).
+* TimeEcho (`frames_fade`, Nuke's `framesfade`): the oldest `frames_fade` of the frames looked at fade up, k / frames_fade of the way for the
+  k-th oldest and the rest at full; 1 (the default) fades nothing, which is what every older node did.
 * TimeClip: the `frame` knob (`frame_mode`: expression, start at, offset; the same as Read's), then the legacy
   `time_offset`, then the clip range `[first, last]` cut to the original range `[origfirst, origlast]`, with `before` /
   `after`; `reverse` plays the range backwards; `fade_in` and `fade_out` dim the clip's first and last frames by
@@ -46,6 +54,9 @@ NEW = {
                "retime_filter": "box", "shutter": 1.0},
     "TimeClip": {"fade_in": 5.0, "fade_out": 5.0, "frame_mode": "expression", "frame_expr": "", "origfirst": 0,
                  "origlast": 0, "reverse": 0},
+    "FrameRange": {"legacy_fractional_frames": 0},
+    "TimeBlur": {"legacy_shutter_window": 0},
+    "TimeEcho": {"frames_fade": 1.0},
 }
 OLD = {
     "TimeOffset": {"rounding_mode": "Whole frames", "reverse_input": 0, **PATH_MASK},
@@ -55,7 +66,22 @@ OLD = {
                "retime_filter": "nearest", "shutter": 1.0},
     "TimeClip": {"fade_in": 0.0, "fade_out": 0.0, "frame_mode": "expression", "frame_expr": "", "origfirst": 0,
                  "origlast": 0, "reverse": 0},
+    "FrameRange": {"legacy_fractional_frames": 1},
+    "TimeBlur": {"legacy_shutter_window": 1},
+    "TimeEcho": {"frames_fade": 1.0},
 }
+
+
+def is_legacy(params, name):
+    """True when `params` reads as an older document's node for the flag `name` (a missing flag is an older node)."""
+    return bool(int(params.get(name, 1)))
+
+
+def echo_weights(count, fade):
+    """TimeEcho's weight on each of `count` frames, oldest first: the guide fades the first `fade` frames used up, k / fade of the way for the
+    k-th, and leaves the rest at maximum (fade 5: 20%, 40%, 60%, 80%, 100%). A fade of 1 or less fades nothing."""
+    fade = max(1.0, float(fade))
+    return [min(1.0, (index + 1) / fade) for index in range(count)]
 
 
 def new_params(kind):

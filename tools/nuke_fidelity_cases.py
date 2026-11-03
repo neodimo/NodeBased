@@ -363,7 +363,8 @@ def _cases():
 
 CASES = _cases()
 # Behaviour cases from the 2D behaviour lanes (lanes 2 and 9), each in its own module.
-for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter", "nuke_fidelity_cases_merge", "nuke_fidelity_cases_extra"):
+for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter", "nuke_fidelity_cases_merge", "nuke_fidelity_cases_extra",
+             "nuke_fidelity_cases_time"):
     try:
         CASES += __import__(_mod).cases()
     except ModuleNotFoundError as _exc:
@@ -453,6 +454,49 @@ def _run_plate_document(case):
     return canvas
 
 
+def _run_stamped_document(case):
+    """Run a Time-group case: the picture is a Constant whose red channel is the frame number (a linear curve with a key on every whole
+    frame, so a fractional frame reads back as itself), green is 0.25 and blue 0.5, and the answer is what the node shows at one frame.
+
+    `_stamp` in the case's params holds `frame` (the frame shown, whole or fractional), `chain` (nodes between the plate and the node under
+    test, as (kind, params) pairs), `clips` (AppendClip: one chain per input, each on its own plate, blue 0.2, 0.3, ... telling them apart),
+    `curves` (animation on the node under test: {param: (interpolation, ((frame, value), ...))}) and `keys` (the stamp's first and last key).
+    The array returned is the node's picture at the fixture's size."""
+    from nodebased.core import Dispatcher, empty_document
+    from nodebased.imaging import Evaluator
+    knobs = dict(case.nb_params)
+    stamp = knobs.pop("_stamp")
+    first_key, last_key = stamp.get("keys", (-90, 100))
+    d = Dispatcher(empty_document())
+
+    def plate(name, blue):
+        d.execute({"op": "create", "id": name, "type": "Constant", "params": {"width": W, "height": H, "red": 0.0, "green": 0.25, "blue": blue,
+                                                                              "alpha": 1.0}})
+        d.execute({"op": "set_curve", "id": name, "param": "red",
+                   "curve": {"interpolation": "linear", "keys": [{"frame": f, "value": float(f)} for f in range(first_key, last_key + 1)]}})
+
+    def chain(prefix, blue, steps):
+        plate(prefix, blue)
+        last = prefix
+        for index, (kind, params) in enumerate(steps):
+            name = f"{prefix}_{index}"
+            d.execute({"op": "create", "id": name, "type": kind, "params": params})
+            d.execute({"op": "connect", "id": name, "input": "image", "source": last})
+            last = name
+        return last
+    d.execute({"op": "create", "id": "n", "type": case.nb_kind, "params": knobs})
+    if "clips" in stamp:
+        for index, steps in enumerate(stamp["clips"]):
+            d.execute({"op": "connect", "id": "n", "input": f"clip{index}", "source": chain(f"p{index}", round(0.2 + 0.1 * index, 6), steps)})
+    else:
+        d.execute({"op": "connect", "id": "n", "input": "image", "source": chain("p", 0.5, stamp.get("chain", ()))})
+    for param, (interpolation, keys) in stamp.get("curves", {}).items():
+        d.execute({"op": "set_curve", "id": "n", "param": param,
+                   "curve": {"interpolation": interpolation, "keys": [{"frame": int(f), "value": float(v)} for f, v in keys]}})
+    frame = stamp.get("frame", 1)
+    return np.asarray(Evaluator().evaluate_raster(dict(d.document, view="n"), target="n", frame=frame).pixels, dtype=np.float64)
+
+
 def run_nodebased(case, fx=None):
     """Run a case on NodeBased's evaluator kernel; returns the output array, or None when NodeBased cannot express the case.
 
@@ -468,6 +512,8 @@ def run_nodebased(case, fx=None):
         return _run_tracker_document(case)
     if "_plate" in case.nb_params:
         return _run_plate_document(case)
+    if "_stamp" in case.nb_params:
+        return _run_stamped_document(case)
     from nodebased import core
     from nodebased.imaging import Evaluator
     fx = fx or make_fixtures()

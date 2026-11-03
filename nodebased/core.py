@@ -787,8 +787,8 @@ SPECS = {
     "TimeDissolve": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                      "params": {"in": 1, "out": 10, "ease": "linear", "which": 0.0, "mix": 1.0}},
     "TimeBlur": {"inputs": ["image"], "params": {"shutter": 1.0, "divisions": 10,
-                  "shutter_offset": "centred", "custom_offset": 0.0}},
-    "TimeEcho": {"inputs": ["image"], "params": {"frames": 3, "method": "average", "falloff": 1.0}},
+                  "shutter_offset": "centred", "custom_offset": 0.0, **_timeknobs.new_params("TimeBlur")}},
+    "TimeEcho": {"inputs": ["image"], "params": {"frames": 3, "method": "average", "falloff": 1.0, **_timeknobs.new_params("TimeEcho")}},
     # NoTimeBlur (fidelity step N): Nuke's own node for cutting a time blur short. Every frame request that reaches it
     # from below is rounded (`rounding`: rint, floor, ceil, or `none` to pass the fractional frame straight through) and
     # its one input is evaluated at that whole frame, so a TimeBlur or motion blur downstream averages whole-frame
@@ -989,7 +989,8 @@ SPECS = {
                  "params": {"first": 1, "last": 100, "frame_range_type": "custom",
                             "before": "hold", "after": "hold", "time_offset": 0, **_timeknobs.new_params("TimeClip")}},
     "FrameRange": {"inputs": ["image"],
-                   "params": {"first_frame": 1, "last_frame": 100, "before": "hold", "after": "hold"}},
+                   "params": {"first_frame": 1, "last_frame": 100, "before": "hold", "after": "hold",
+                              **_timeknobs.new_params("FrameRange")}},
     "AppendClip": {"inputs": [], "optional_inputs": [f"clip{i}" for i in range(8)],
                    "params": {"first_frame": 1, "dissolve": 0, **{f"length{i}": 100 for i in range(8)},
                               **_metaknobs.new_params("AppendClip")}},
@@ -1790,7 +1791,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # FrameHold default); "reverse" is a plain 0/1 flag like "invert".
           "time_offset": (-1000000, 1000000), "reverse": (0, 1),
           "first_frame": (-1000000, 1000000), "increment": (0, 1000000),
-          "lookup": (-1000000.0, 1000000.0), "fade_in": (0.0, 1000000.0), "fade_out": (0.0, 1000000.0),
+          "lookup": (-1000000.0, 1000000.0), "frames_fade": (1.0, 256.0), "legacy_fractional_frames": (0, 1), "fade_in": (0.0, 1000000.0), "fade_out": (0.0, 1000000.0),
           "reverse_input": (0, 1), "chroma_gain": (0.0, 10.0), "white_point": (0.0, 10.0), "black_point": (0.0, 10.0),
           "output_enabled": (0, 1), "override_despill_bias": (0, 1), "replace_alpha_diff": (0, 1),
           "replace_red": (0.0, 10.0), "replace_green": (0.0, 10.0), "replace_blue": (0.0, 10.0), "replace_amount": (0.0, 10.0), "input_range_start_lock": (0, 1), "input_range_end_lock": (0, 1),
@@ -2093,7 +2094,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"], "flow_on": ["luminance", "rgb"],
-           "lookup_filter": ["none", "blend"], "rounding": ["rint", "floor", "ceil", "none"],
+           "lookup_filter": ["none", "blend", "nearest"], "rounding": ["rint", "floor", "ceil", "none"],
            "premultiply_mode": ["none", "rgb", "rgba"],
            "output_alpha": ["preserve", "combined_weight", "hue_weight", "saturation_weight",
                             "brightness_weight", "hue", "saturation", "value"],
