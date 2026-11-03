@@ -179,7 +179,7 @@ def stroke_polyline(points):
     return vertices, offsets
 
 
-def stroke_coverage(vertices, offsets, width, height, stroke_width, feather, falloff, origin, caps, first_segment_hint=None):
+def stroke_coverage(vertices, offsets, width, height, stroke_width, feather, falloff, origin, caps, first_segment_hint=None, soft=False):
     """Alpha of an open polyline stroke: ``vertices`` (n x 2) and per-vertex feather ``offsets`` (n x 2).
 
     The old drawer measured every segment against the whole patch; here a segment is measured on its own
@@ -198,7 +198,7 @@ def stroke_coverage(vertices, offsets, width, height, stroke_width, feather, fal
     best = np.full((h, w), np.inf, dtype=np.float32)
     local_feather = np.zeros((h, w), dtype=np.float32)
     if live.size == 0:
-        return _stroke_alpha(best, local_feather, half, feather, falloff)
+        return _stroke_alpha(best, local_feather, half, feather, falloff, soft)
     # Largest extent any pixel can take: the stroke feather plus the feather projected on a normal.
     norm_off = np.hypot(offsets[:, 0], offsets[:, 1])
     reach = half + abs(float(feather)) + float(norm_off.max()) + 1.0
@@ -251,16 +251,19 @@ def stroke_coverage(vertices, offsets, width, height, stroke_width, feather, fal
                 best[beyond] = np.inf
             else:
                 best[beyond] = np.where(np.abs(reach_map[beyond]) <= half, across[beyond], np.inf)
-    return _stroke_alpha(best, local_feather, half, feather, falloff)
+    return _stroke_alpha(best, local_feather, half, feather, falloff, soft)
 
 
-def _stroke_alpha(best, local_feather, half, feather, falloff):
+def _stroke_alpha(best, local_feather, half, feather, falloff, soft=False):
     extent = float(feather) + local_feather
     with np.errstate(invalid="ignore"):
-        alpha = np.where(extent >= 0,
-                         np.where(best <= half, 1.0,
-                                  np.clip((half + extent + .5 - best) / np.maximum(extent, 1e-6), 0.0, 1.0)),
-                         np.clip(half + extent + .5 - best, 0.0, 1.0)).astype(np.float32)
+        if soft:
+            alpha = np.clip((half + extent + .5 - best) / np.maximum(extent, 1.0), 0.0, 1.0).astype(np.float32)
+        else:
+            alpha = np.where(extent >= 0,
+                             np.where(best <= half, 1.0,
+                                      np.clip((half + extent + .5 - best) / np.maximum(extent, 1e-6), 0.0, 1.0)),
+                             np.clip(half + extent + .5 - best, 0.0, 1.0)).astype(np.float32)
     if falloff == "smooth":
         alpha = alpha * alpha * (3.0 - 2.0 * alpha)
     elif falloff == "gaussian":

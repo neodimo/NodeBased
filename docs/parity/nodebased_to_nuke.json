@@ -344,6 +344,7 @@
     {"nodebased": ["width", "height"], "nuke": ["format"], "kind": "components", "reason": "NodeBased sizes a generator with width/height; Nuke sets the format knob"},
     {"nodebased": ["premultiply_mode"], "nuke": ["premultiply"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'premultiply', scripting name `premultiply`"},
     {"nodebased": ["invert"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["legacy_roto_shapes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Roto followed the guide drew a minus blend as what is below minus the shape (the guide's from) and gave an open spline a hard edge half a pixel past its width; lane 9 step I"},
     {"nodebased": ["legacy_roto_alpha"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Roto followed the guide's Replace wrote the matte over a wired background's alpha; lane 9 step E"},
     {"nodebased": [], "nuke": ["opacity"], "kind": "panel", "reason": "shape opacity, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},
     {"nodebased": [], "nuke": ["feather"], "kind": "panel", "reason": "shape feather in pixels, per-shape field in the node's payload (docs/ROTO_TRACKING.md), not a node param"},

@@ -53,6 +53,7 @@ TRANSFORM_DEFAULTS = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                      "scale_x": 1.0, "scale_y": 1.0, "center_x": 0.0, "center_y": 0.0,
                      "skew_x": 0.0, "skew_y": 0.0}
 SKEW_ORDERS = ("XY", "YX")
+BLEND_MODES = ("over", "plus", "minus", "multiply", "from", "difference", "exclusion", "max", "min", "screen")
 # Roto's per-shape and global motion blur (Nuke's Motion Blur tab), lifetime and open-spline end caps.
 OFFSET_TYPES = ("centred", "start", "end", "custom")
 LIFETIME_TYPES = ("all", "single", "start_to", "to_end", "range")
@@ -179,7 +180,7 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.extra_matrix must be 16 finite numbers (a 4 x 4 matrix, row by row)")
     if shape.get("feather_falloff", "linear") not in ("linear", "smooth", "gaussian"):
         raise ValueError(f"{where}.feather_falloff is unsupported")
-    if shape.get("blend_mode", "over") not in ("over", "plus", "minus", "multiply"):
+    if shape.get("blend_mode", "over") not in BLEND_MODES:
         raise ValueError(f"{where}.blend_mode is unsupported")
     link = shape.get("track_link")
     if link is not None and (not isinstance(link, dict) or set(link) != {"tracker_id", "track_name"}
@@ -531,6 +532,11 @@ def _resolve_shape(shape, frame, params, blur):
             resolved[field] = shape[field]
     if shape.get("extra_matrix") is not None:
         resolved["extra_matrix"] = [float(v) for v in shape["extra_matrix"]]
+    if int((params or {}).get("legacy_roto_shapes", 1)):
+        if resolved["blend_mode"] == "minus":
+            resolved["blend_mode"] = "from"      # graphs saved before the guide's A - B took B - A for minus
+    elif not resolved["closed"]:
+        resolved["stroke_soft"] = True           # an open spline's edge is a one-pixel ramp, so its width is the width stated
     if not in_lifetime(shape.get("lifetime"), frame):
         resolved["visible"] = False
     plan = motion_blur_plan(shape, params) if blur else None

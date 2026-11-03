@@ -206,7 +206,7 @@ def coverage_legacy(points, width, height, origin=(0, 0), *, flattened_cache=Non
     return (matte / SUBSAMPLES).astype(np.float32)
 
 
-def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0), caps=("rounded", "rounded")):
+def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0), caps=("rounded", "rounded"), soft=False):
     """Rasterise an open cubic as stroke coverage, round-joined, with the start and end caps `caps` (rounded, square or butt)."""
     h, w = int(height), int(width)
     if drawer() != "legacy":
@@ -214,7 +214,7 @@ def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="l
         if len(vertices) < 2:
             return np.zeros((h, w), dtype=np.float32)
         if np.isfinite(vertices).all() and np.isfinite(offsets).all() and np.isfinite(float(feather)):
-            return rotofast.stroke_coverage(vertices, offsets, w, h, stroke_width, feather, falloff, origin, caps)
+            return rotofast.stroke_coverage(vertices, offsets, w, h, stroke_width, feather, falloff, origin, caps, soft=soft)
     vertices = []
     offsets = []
     for index in range(len(points) - 1):
@@ -281,10 +281,13 @@ def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="l
                 # square: the stroke runs on for half its width past the end, with straight sides
                 best[beyond] = np.where(np.abs(reach[beyond]) <= half, across[beyond], np.inf)
     extent = float(feather) + local_feather
-    alpha = np.where(extent >= 0,
-                     np.where(best <= half, 1.0,
-                              np.clip((half + extent + .5 - best) / np.maximum(extent, 1e-6), 0.0, 1.0)),
-                     np.clip(half + extent + .5 - best, 0.0, 1.0)).astype(np.float32)
+    if soft:
+        alpha = np.clip((half + extent + .5 - best) / np.maximum(extent, 1.0), 0.0, 1.0).astype(np.float32)
+    else:
+        alpha = np.where(extent >= 0,
+                         np.where(best <= half, 1.0,
+                                  np.clip((half + extent + .5 - best) / np.maximum(extent, 1e-6), 0.0, 1.0)),
+                         np.clip(half + extent + .5 - best, 0.0, 1.0)).astype(np.float32)
     if falloff == "smooth":
         alpha = alpha*alpha*(3.0-2.0*alpha)
     elif falloff == "gaussian":
@@ -427,6 +430,19 @@ def _shape_bounds(shape):
     return shape["_raster_bounds"]
 
 
+# Roto's blending modes whose formulas the Nuke 17.0 guide states (A is the shape, B what is below it); plus and multiply are
+# drawn in rasterise itself.
+BLEND_OPS = {
+    "minus": lambda a, b: a - b,
+    "from": lambda a, b: b - a,
+    "difference": lambda a, b: np.abs(a - b),
+    "exclusion": lambda a, b: a + b - 2.0 * a * b,
+    "max": np.maximum,
+    "min": np.minimum,
+    "screen": lambda a, b: a + b - a * b,
+}
+
+
 def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, flattened_cache=None,
               shape_cache=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
@@ -500,7 +516,8 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
                 layers = [shape["points"], *samples] if not only_samples else list(samples)
                 caps = (shape.get("cap_start", "rounded"), shape.get("cap_end", "rounded"))
                 covers = [stroke_coverage(points, sw, sh, shape.get("stroke_width", 1.0),
-                                          shape["feather"], falloff, origin=(sx0, sy0), caps=caps)
+                                          shape["feather"], falloff, origin=(sx0, sy0), caps=caps,
+                                          soft=bool(shape.get("stroke_soft")))
                           for points in layers]
                 result = sum(covers) / len(covers)
             elif shape.get("feather_model", "box") == "edge":
@@ -562,9 +579,14 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
         if blend == "plus":
             rgb_patch[:] = np.clip(rgb_patch + source, 0.0, 1.0)
             matte_patch[:] = np.clip(matte_patch + alpha, 0.0, 1.0)
-        elif blend == "minus":
-            rgb_patch[:] = np.clip(rgb_patch - source, 0.0, 1.0)
-            matte_patch[:] = np.clip(matte_patch - alpha, 0.0, 1.0)
+        elif blend in BLEND_OPS:
+            # The guide's formulas with A the shape (colour, and 1 for the matte) and B what is below: where the shape covers a pixel
+            # fully the result is op(A, B); where it covers part, the two are mixed by the coverage. `from` (B - A) is what
+            # `minus` meant in graphs saved before the guide's A - B was followed (legacy_roto_shapes).
+            op = BLEND_OPS[blend]
+            cov = alpha[..., None]
+            rgb_patch[:] = np.clip(rgb_patch * (1.0 - cov) + cov * op(color[:3], rgb_patch), 0.0, 1.0)
+            matte_patch[:] = np.clip(matte_patch * (1.0 - alpha) + alpha * op(np.float32(1.0), matte_patch), 0.0, 1.0)
         elif blend == "multiply":
             rgb_patch *= 1.0 - alpha[..., None] + color[:3] * alpha[..., None]
             matte_patch[:] = alpha + matte_patch * (1.0 - alpha)

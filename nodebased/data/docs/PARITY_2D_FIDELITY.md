@@ -68,7 +68,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 89.6 | 86.8 | 67 (49/75) | - | 100 | 100 | 100 | 100 (18/18) | 100 | - | unmeasured |
+| 1 | Roto | `Roto` | supported | 89.6 | 86.8 | 67 (49/75) | - | 100 | 100 | 100 | 100 (36/36) | 100 | - | unmeasured |
 | 2 | Text | `Text` | supported | 95.4 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 80 | - | no fixture |
 | 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
@@ -790,9 +790,27 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `roto_shape_invert_complements` | guide | pass | within tolerance | - |
 | `roto_overlap_blends_over` | convention | pass | within tolerance | - |
 | `roto_overlap_blends_plus` | convention | pass | within tolerance | - |
-| `roto_overlap_blends_minus` | convention | not scored: the guide names the mode but not its direction (the shape taken from what is below, or what is below taken from the shape: Merge's minus and from are opposites), so no pixel is scored; NodeBased subtracts the shape from what is below | - | - |
+| `roto_overlap_blends_minus` | guide | pass | within tolerance | - |
+| `roto_overlap_blends_from` | guide | pass | within tolerance | - |
+| `roto_overlap_blends_difference` | guide | pass | within tolerance | - |
+| `roto_overlap_blends_exclusion` | guide | pass | within tolerance | - |
+| `roto_overlap_blends_max` | guide | pass | within tolerance | - |
+| `roto_overlap_blends_min` | guide | pass | within tolerance | - |
+| `roto_overlap_blends_screen` | guide | pass | within tolerance | - |
+| `roto_overlap_blends_multiply` | guide | not scored: the guide's formula is AB; read with the shape's matte as A = 1 it leaves the matte below unchanged, while NodeBased composites a multiply shape over what is below (alpha = a + b (1 - a)) and keeps its colour channels multiplied; the colour channels are not scored by these matte cases | - | - |
 | `roto_transform_translate_moves_the_shape` | guide | pass | within tolerance | - |
 | `roto_visible_off_draws_nothing` | guide | pass | within tolerance | - |
+| `roto_transform_rotate_quarter_turn_swaps_width_and_height` | guide | pass | within tolerance | - |
+| `roto_transform_rotate_half_turn_about_a_pivot` | guide | pass | within tolerance | - |
+| `roto_transform_scale_resizes_about_the_centre` | guide | pass | within tolerance | - |
+| `roto_transform_center_alone_does_not_move_the_shape` | guide | pass | within tolerance | - |
+| `roto_transform_skew_x_shears_the_shape` | convention | pass | within tolerance | - |
+| `roto_transform_skew_order_xy` | guide | pass | within tolerance | - |
+| `roto_transform_skew_order_yx` | guide | pass | within tolerance | - |
+| `roto_open_spline_width_is_the_stroke_width` | guide | pass | within tolerance | - |
+| `roto_open_spline_odd_width_covers_the_stated_width` | guide | pass | within tolerance | - |
+| `roto_open_spline_square_ends_extend_by_half_the_width` | guide | pass | within tolerance | - |
+| `roto_open_spline_rounded_ends_stop_at_the_end_points` | guide | pass | within tolerance | - |
 | `roto_output_alpha_keeps_the_colour` | guide | pass | within tolerance | - |
 | `roto_output_rgb_keeps_the_alpha` | guide | pass | within tolerance | - |
 | `roto_existing_alpha_kept_outside_the_shapes` | guide | pass | within tolerance | - |

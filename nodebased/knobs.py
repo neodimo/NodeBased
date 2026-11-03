@@ -917,7 +917,9 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("global_motionblur_shutter_offset_type",), label="Global shutter offset"),
         KnobGroup("float", ("global_motionblur_shutter_offset",), label="Global custom offset"),
         KnobGroup("bool", ("legacy_roto_alpha",), label="Legacy alpha",
-                  help="Write the matte over a wired background's alpha, as graphs saved before Roto followed the guide's Replace do.")),
+                  help="Write the matte over a wired background's alpha, as graphs saved before Roto followed the guide's Replace do."),
+        KnobGroup("bool", ("legacy_roto_shapes",), label="Legacy shapes",
+                  help="Draw shapes as graphs saved before the guide were followed do: a minus blend takes the shape from what is below, and an open spline is a pixel wider with a hard edge.")),
     "Precomp": _groups(
         KnobGroup("string", ("file",), label="File"), KnobGroup("string", ("output_node",), label="Output node"),
         KnobGroup("bool", ("use_output",), label="Use output node"), KnobGroup("int", ("frame_offset",), label="Frame offset"),

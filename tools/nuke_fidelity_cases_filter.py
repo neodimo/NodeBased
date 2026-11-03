@@ -1255,10 +1255,28 @@ def _roto_cases(Case, out):
     case("roto_overlap_blends_plus", (("blending_mode", "plus"),),
          {"_shapes": [roto_box(*sq, opacity=0.5), roto_box(*other, opacity=0.5, name="second", blend_mode="plus")]}, alpha_of(plus), "convention",
          "Roto blending mode plus: the second shape's matte is added to what is below, clamped at 1 (Merge plus: A + B)")
-    case("roto_overlap_blends_minus", (("blending_mode", "minus"),),
-         {"_shapes": [roto_box(*sq), roto_box(*other, name="second", blend_mode="minus")]}, alpha_of(np.zeros((12, 16)), valid=np.zeros((12, 16), bool)),
-         "convention", "Roto blending mode minus", unscored="the guide names the mode but not its direction (the shape taken from what is below, or what "
-         "is below taken from the shape: Merge's minus and from are opposites), so no pixel is scored; NodeBased subtracts the shape from what is below")
+    # The blending modes whose formulas the guide's list states (A the shape, B what is below). The second shape covers its pixels fully
+    # (opacity 1), so there its matte is op(1, B); outside it the matte below is left alone. B is the first shape at half opacity.
+    below = 0.5 * inside_box(*sq)
+    on_top = inside_box(*other)
+    for mode, statement, op in (
+            ("minus", "minus (A-B): subtracts B from A", lambda b: 1.0 - b),
+            ("from", "from (B-A): subtracts A from B", lambda b: np.maximum(b - 1.0, 0.0)),
+            ("difference", "difference (abs(A-B))", lambda b: np.abs(1.0 - b)),
+            ("exclusion", "exclusion (A+B-2AB)", lambda b: 1.0 - b),
+            ("max", "max (max(A,B))", lambda b: np.ones_like(b)),
+            ("min", "min (min(A,B))", lambda b: b),
+            ("screen", "screen (A+B-AB)", lambda b: np.ones_like(b))):
+        case(f"roto_overlap_blends_{mode}", (("blending_mode", mode),),
+             {"_shapes": [roto_box(*sq, opacity=0.5), roto_box(*other, name="second", blend_mode=mode)]},
+             alpha_of(below * (1.0 - on_top) + on_top * op(below)), "guide",
+             f"Roto blending mode {statement} ({ROTO_GUIDE}), A the shape and B what is below: where the second shape covers a pixel fully its matte "
+             f"is the formula with A = 1 and B = the half-opaque first shape (0.5 where they overlap, 0 elsewhere); where it covers nothing the matte below is unchanged")
+    case("roto_overlap_blends_multiply", (("blending_mode", "multiply"),),
+         {"_shapes": [roto_box(*sq, opacity=0.5), roto_box(*other, name="second", blend_mode="multiply")]},
+         alpha_of(np.zeros((12, 16)), valid=np.zeros((12, 16), bool)), "guide", "Roto blending mode multiply (AB)",
+         unscored="the guide's formula is AB; read with the shape's matte as A = 1 it leaves the matte below unchanged, while NodeBased composites a multiply "
+         "shape over what is below (alpha = a + b (1 - a)) and keeps its colour channels multiplied; the colour channels are not scored by these matte cases")
 
     shifted = inside_box(sq[0] + 2, sq[1] + 1, sq[2] + 2, sq[3] + 1)
     case("roto_transform_translate_moves_the_shape", (("translate", [2, 1]),),
@@ -1266,6 +1284,106 @@ def _roto_cases(Case, out):
          f"Roto Transform tab ({ROTO_GUIDE}): translate 'moves the selected shape on the x and y axes': 2 right and 1 down")
     case("roto_visible_off_draws_nothing", (("visible", False),), {"_shapes": [roto_box(*sq, visible=False)]}, alpha_of(np.zeros((12, 16))), "guide",
          "Roto shape list: 'whether the shape is visible and rendered or not': a shape that is not visible draws nothing")
+
+    def convex_cover(polygon):
+        """Exact-ish coverage of a convex polygon (clockwise or not) by 32 x 32 sub-pixel samples, and the mask of pixels at least one pixel away from every pixel an
+        edge cuts through (those are not scored)."""
+        n = 32
+        sub_y, sub_x = np.mgrid[0:12 * n, 0:16 * n]
+        px, py = (sub_x + 0.5) / n, (sub_y + 0.5) / n
+        sign = None
+        inside = np.ones(px.shape, bool)
+        for (x0, y0), (x1, y1) in zip(polygon, polygon[1:] + polygon[:1]):
+            cross = (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0)
+            if sign is None:
+                sign = 1.0 if ((x1 - x0) * (polygon[2][1] - y0) - (y1 - y0) * (polygon[2][0] - x0)) > 0 else -1.0
+            inside &= cross * sign >= 0
+        cover = inside.reshape(12, n, 16, n).mean(axis=(1, 3))
+        partial = ((cover > 0.0) & (cover < 1.0)).astype(np.uint8)
+        near = np.zeros_like(partial)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                near |= np.roll(np.roll(partial, dy, axis=0), dx, axis=1)
+        return cover, near == 0
+
+    def moved(points, matrix, centre, translate=(0.0, 0.0)):
+        cx0, cy0 = centre
+        return [(cx0 + matrix[0][0] * (x - cx0) + matrix[0][1] * (y - cy0) + translate[0],
+                 cy0 + matrix[1][0] * (x - cx0) + matrix[1][1] * (y - cy0) + translate[1]) for x, y in points]
+
+    def tan_deg(deg):
+        return float(np.tan(np.radians(deg)))
+    wide = (4, 4, 12, 8)                           # 8 wide, 4 tall, centre (8, 6)
+    case("roto_transform_rotate_quarter_turn_swaps_width_and_height", (("rotate", 90),),
+         {"_shapes": [roto_box(*wide, transform={"rotate": 90.0, "center_x": 8.0, "center_y": 6.0})]}, alpha_of(inside_box(6, 2, 10, 10)), "guide",
+         f"Roto Transform tab ({ROTO_GUIDE}): rotate 'spins the selected shape or group around a pivot point' (center x,y): a quarter turn about the "
+         "box's centre turns the 8 wide, 4 tall box into a 4 wide, 8 tall one (the guide does not say which way a positive angle turns, which a "
+         "quarter turn of a box about its own centre does not depend on)")
+    case("roto_transform_rotate_half_turn_about_a_pivot", (("rotate", 180), ("center", [6, 4])),
+         {"_shapes": [roto_box(5, 3, 9, 6, transform={"rotate": 180.0, "center_x": 6.0, "center_y": 4.0})]}, alpha_of(inside_box(3, 2, 7, 5)), "guide",
+         "Roto Transform tab: rotate spins the shape about the pivot set by center x,y; a half turn maps each point p to 2c - p whichever way "
+         "the angle turns, so the box (5,3)-(9,6) about (6,4) lands on (3,2)-(7,5)")
+    case("roto_transform_scale_resizes_about_the_centre", (("scale", 2.0),),
+         {"_shapes": [roto_box(6, 4, 10, 8, transform={"scale_x": 2.0, "scale_y": 2.0, "center_x": 8.0, "center_y": 6.0})]},
+         alpha_of(inside_box(4, 2, 12, 10)), "guide",
+         "Roto Transform tab: scale 'resizes the selected shape or group'; about its centre (8, 6) a scale of 2 doubles the 4 x 4 box to 8 x 8")
+    case("roto_transform_center_alone_does_not_move_the_shape", (("center", [12, 9]),),
+         {"_shapes": [roto_box(*sq, transform={"center_x": 12.0, "center_y": 9.0})]}, alpha_of(inside_box(*sq)), "guide",
+         "Roto Transform tab: center x,y 'adjusts the center of rotation and skew ... this control does not translate roto shapes'")
+    box_points = [(5.0, 3.0), (9.0, 3.0), (9.0, 8.0), (5.0, 8.0)]
+    centre = (7.0, 5.5)
+    kx = [[1.0, tan_deg(45)], [0.0, 1.0]]            # skew X shears x by the height above the centre
+    ky = [[1.0, 0.0], [tan_deg(30), 1.0]]
+    def mul(a, b):
+        return [[sum(a[i][k] * b[k][j] for k in range(2)) for j in range(2)] for i in range(2)]
+    skew_cover, skew_valid = convex_cover(moved(box_points, kx, centre))
+    case("roto_transform_skew_x_shears_the_shape", (("skewX", 45),),
+         {"_shapes": [roto_box(5, 3, 9, 8, transform={"skew_x": 45.0, "center_x": 7.0, "center_y": 5.5})]}, alpha_of(skew_cover, skew_valid), "convention",
+         "Roto Transform tab: skew X (degrees) shears the shape about its centre; the x of each point moves by tan(skew X) times its distance from "
+         "the centre's y, the usual 2D shear (the guide gives no formula); only the pixels wholly inside or outside the sheared quadrilateral are scored")
+    for order, matrix in (("XY", mul(ky, kx)), ("YX", mul(kx, ky))):
+        cover, valid = convex_cover(moved(box_points, matrix, centre))
+        case(f"roto_transform_skew_order_{order.lower()}", (("skewX", 45), ("skewY", 30), ("skew_order", order)),
+             {"_shapes": [roto_box(5, 3, 9, 8, transform={"skew_x": 45.0, "skew_y": 30.0, "skew_order": order, "center_x": 7.0, "center_y": 5.5})]},
+             alpha_of(cover, valid), "guide",
+             f"Roto Transform tab: skew order {order} ('{'Skew X is applied before skew Y' if order == 'XY' else 'Skew Y is applied before skew X'}'): "
+             "the two shears are composed in that order about the centre; only the pixels wholly inside or outside the sheared quadrilateral are scored")
+
+    # Open splines: a stroke of the stated overall width, rounded or square at each end.
+    line = [roto_point(3, 6), roto_point(13, 6)]
+    def stroke(**extra):
+        return {"name": "line", "mode": "union", "opacity": 1.0, "feather": 0.0, "feather_model": "edge", "closed": False, "stroke_width": 4.0,
+                "points": line, **extra}
+    bar = inside_box(5, 4, 11, 8)                    # rows 4..7, columns 5..10: inside the stroke whatever the ends
+    band_valid = np.zeros((12, 16), bool)
+    band_valid[:, 5:11] = True                       # every row of these columns
+    band_valid[(yy < 4) | (yy >= 8)] = True          # and, outside the band, every column (a rounded end reaches only to row 4 and row 8)
+    case("roto_open_spline_width_is_the_stroke_width", (("openspline_width", 4),),
+         {"_shapes": [stroke()]}, alpha_of(bar, band_valid), "guide",
+         f"Roto Shape tab ({ROTO_GUIDE}): overall width 'sets the overall spline width': a horizontal open spline of width 4 covers four rows "
+         "(rows 4 to 7 about the line y = 6) between its ends and none above or below them")
+    odd = np.zeros((12, 16))
+    odd[4, :] = 0.5
+    odd[5:7, :] = 1.0
+    odd[7, :] = 0.5
+    case("roto_open_spline_odd_width_covers_the_stated_width", (("openspline_width", 3),),
+         {"_shapes": [stroke(stroke_width=3.0)]}, alpha_of(odd, band_valid), "guide",
+         "Roto Shape tab: overall width 'sets the overall spline width': a width of 3 about the line y = 6 spans y = 4.5 to 7.5, so the rows above "
+         "and below the two full ones are half covered (three rows' worth in all, not four)")
+    square_all = inside_box(1, 4, 15, 8)
+    case("roto_open_spline_square_ends_extend_by_half_the_width", (("openspline_start_end_type", "square"), ("openspline_last_end_type", "square")),
+         {"_shapes": [stroke(cap_start="square", cap_end="square")]}, alpha_of(square_all), "guide",
+         "Roto Shape tab: start type and end type 'square - the starting (finishing) point of the spline has a square end': the stroke is a "
+         "rectangle that reaches half the width (2 pixels) past each end point, columns 1 to 14")
+    rounded_all = np.zeros((12, 16))
+    rounded_valid = np.ones((12, 16), bool)
+    rounded_valid[(xx < 2) | (xx >= 14)] = False     # the rounded ends' curved edges
+    rounded_valid[:, :] &= ~(((xx >= 1) & (xx < 3) | (xx >= 13) & (xx < 15)) & (yy >= 4) & (yy < 8))
+    rounded_all[:] = inside_box(3, 4, 13, 8)
+    case("roto_open_spline_rounded_ends_stop_at_the_end_points", (("openspline_start_end_type", "rounded"), ("openspline_last_end_type", "rounded")),
+         {"_shapes": [stroke(cap_start="rounded", cap_end="rounded")]}, alpha_of(rounded_all, rounded_valid), "guide",
+         "Roto Shape tab: 'rounded - the starting (finishing) point of the spline has a rounded end': the stroke ends in a half disc of radius "
+         "half the width centred on each end point, so columns 3 to 12 are full over the four rows and the ends' curved edges (columns 1, 2, 13 and 14) are not scored")
 
     # Output channels, premultiply and replace act on a wired background.
     plate_a = (0.2, 0.4, 0.6, 0.8)

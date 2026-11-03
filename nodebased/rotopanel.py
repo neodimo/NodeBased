@@ -335,7 +335,7 @@ def build_panel(window, key):
                     save(entries, i)
         matrix_edit.editingFinished.connect(set_matrix)
         layout.addWidget(QLabel("Extra matrix")); layout.addWidget(matrix_edit)
-        for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",("over","plus","minus","multiply"))):
+        for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",shape_model.BLEND_MODES)):
             combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
             for val in values: combo.addItem(val.title(),val)
             combo.setCurrentIndex(combo.findData(shape.get(field,"linear" if field=="feather_falloff" else "over")))
