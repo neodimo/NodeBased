@@ -39,11 +39,18 @@ NOT_PIXEL = {
     "DirBlur": {"BlurCenter": "the origin of a zoom or radial blur (a linear blur uses it only with UseTarget on); the default type is linear (tests/test_2d_behaviour_filter_f.py)",
                 "Samples": "the number of taps of a zoom or radial blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)",
                 "pixeloffset": "offsets the samples of a zoom blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)"},
+    # Lane 9 step K (11/3): a quality knob that scales the picture down once the filter is wider than it acts only at a size past it, and Laplacian's crop
+    # to format acts on the bounding box only; Dither's static seed acts across frames.
+    "Laplacian": {"quailty": "caps the filter's size and so acts only once the size passes it; the default size never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)",
+                  "crop": "crop to format acts on the bounding box only"},
+    "EdgeDetect": {"blurquality": "caps the pre-blur's size and so acts only once the blur size passes it; the default blur size 0 never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)"},
+    "Dither": {"static_seed": "holds the seed across frames, so a one-frame probe cannot see it (tests/test_2d_behaviour_draw.py compares two frames)"},
     "LightWrap": {"shadows_gain": "grades only the darkest part of the wrap; the fixture's wrap has none (tests/test_2d_behaviour_filter_f.py moves it on a dark wrap)"},
     "Blur": {"crop": "crop to format acts on the bounding box only"},
     "Sharpen": {"crop": "crop to format acts on the bounding box only",
                 "quailty": "caps the filter's size and so acts only once the size passes it; the default size 1 never does (tests/test_2d_behaviour_filter_g.py moves it at size 40)"},
-    "Soften": {"crop": "crop to format acts on the bounding box only"},
+    "Soften": {"crop": "crop to format acts on the bounding box only",
+               "quailty": "caps the filter's size and so acts only once the size passes it; the default size never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)"},
     "Glow": {"crop": "crop to format acts on the bounding box only"},
     # Lane 9 step G (11/3): the To pins are the baked pins, read only while Use baked pins is on (tests/test_2d_behaviour_filter_g.py).
     "VectorCornerPin": {f"to{i}": "the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py"

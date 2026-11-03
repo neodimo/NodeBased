@@ -545,10 +545,10 @@ class LightWrapTests(unittest.TestCase):
         self.assertEqual(kept, total)
         self.assertEqual(labels("LightWrap")[:5], ["Diffuse", "Intensity", "Generate wrap only", "Disable luminance based wrap", "Enable glow"])
 
-    def test_the_knobs_that_do_not_act_yet_are_still_in_the_audits_list(self):
+    def test_the_knobs_step_k_made_act_are_out_of_the_audits_inert_list(self):
         for name in ("disableluma", "enableglow", "LumaTolerance", "white", "gray"):
             self.assertIn(name, SPECS["LightWrap"]["params"])
-            self.assertIn(name, audit_inert("LightWrap"), name)
+            self.assertNotIn(name, audit_inert("LightWrap"), name)
 
 
 def audit_inert(nuke_key):

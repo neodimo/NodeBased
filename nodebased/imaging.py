@@ -7482,8 +7482,27 @@ class Evaluator:
         zones = tuple(f"{zone}_{name}" for zone in ("shadows", "midtones", "highlights") for name in ("gamma", "gain", "offset"))
         from .core import SPECS
         q = {**SPECS["ColorCorrect"]["params"], **{name: p[name] for name in names + zones if name in p}}
-        picture = np.concatenate([wrap, np.ones_like(wrap[..., :1])], axis=2).astype(np.float32)
-        return Evaluator._color_correct(picture, q)[..., :3].astype(np.float32)
+        white, gray = float(p.get("white", 1.0)), float(p.get("gray", 0.18))
+        if int(p.get("legacy_lightwrap_luma", 1)) or (white == 1.0 and gray == 0.18) or white <= 0.0 or gray <= 0.0:
+            picture = np.concatenate([wrap, np.ones_like(wrap[..., :1])], axis=2).astype(np.float32)
+            return Evaluator._color_correct(picture, q)[..., :3].astype(np.float32)
+        # `gray` ("midtone bias ... the center of midtones, remaining unchanged when you adjust contrast") is the pivot of the master contrast and
+        # `white` ("this color remains unchanged when you adjust gamma") the value the gamma curve holds fixed. ColorCorrect pivots at 0.18 and holds
+        # 1, and a power curve commutes with a scale, so each is that run on the wrap scaled by 0.18 / gray (contrast) or 1 / white (gamma). The
+        # stages run in ColorCorrect's order: saturation, contrast, gamma (master and zones), then gain and offset.
+        defaults = SPECS["ColorCorrect"]["params"]
+        keep = lambda keys: {k: q[k] for k in keys}
+        gamma_keys = ["gamma"] + [f"{zone}_gamma" for zone in ("shadows", "midtones", "highlights")]
+        rest_keys = [k for k in names + zones if k not in gamma_keys + ["saturation", "contrast"]]
+
+        def stage(x, params, scale=1.0):
+            picture = np.concatenate([x * np.float32(scale), np.ones_like(x[..., :1])], axis=2).astype(np.float32)
+            return Evaluator._color_correct(picture, {**defaults, **params})[..., :3].astype(np.float32) / np.float32(scale)
+
+        x = stage(wrap, keep(["saturation"]))
+        x = stage(x, keep(["contrast"]), 0.18 / gray)
+        x = stage(x, keep(gamma_keys), 1.0 / white)
+        return stage(x, keep(rest_keys))
 
     @staticmethod
     def _light_wrap(fg, bg, p):
@@ -7499,16 +7518,30 @@ class Evaluator:
         # the foreground's, unchanged.
         alpha = fg[..., 3:4]
         soft_alpha = Evaluator._gaussian_2d(alpha, p.get("fgblur", 1.0))
+        new_luma = not int(p.get("legacy_lightwrap_luma", 1))
         if Evaluator._reach(p.get("wrap_diffuse", 10.0)) == 0:
             edge = np.zeros_like(alpha)
         else:
-            edge = alpha * np.clip(2.0 * Evaluator._gaussian_2d(1.0 - soft_alpha, p.get("wrap_diffuse", 10.0)), 0.0, 1.0)
+            edge = np.clip(2.0 * Evaluator._gaussian_2d(1.0 - soft_alpha, p.get("wrap_diffuse", 10.0)), 0.0, 1.0)
+            # Enable Glow: "extends the effect outside the foreground object's alpha"; otherwise the wrap stays inside the matte.
+            if not (new_luma and int(p.get("enableglow", 0))):
+                edge = alpha * edge
         if p.get("use_constant_highlight", 0):
             light = np.broadcast_to(np.array([p.get("red", 1.0), p.get("green", 1.0), p.get("blue", 1.0)],
                                              dtype=np.float32), fg[..., :3].shape)
         else:
             light = np.clip(Evaluator._gaussian_2d(bg[..., :3], p.get("bgblur", 4.0))
                             - np.float32(p.get("wrap_threshold", 0.0)), 0.0, None)
+            if new_luma:
+                luma = (0.2125 * light[..., 0:1] + 0.7154 * light[..., 1:2] + 0.0721 * light[..., 2:3]).astype(np.float32)
+                if int(p.get("disableluma", 0)):
+                    # "Disable luminance based wrap ... a uniform effect around the edges of the foreground, rather than have the effect adjust itself
+                    # according to the background": the background's colour at one brightness, wherever it is bright or dark.
+                    light = light / np.maximum(luma, np.float32(1e-3))
+                elif float(p.get("LumaTolerance", 0.0)) > 0.0:
+                    # LumaTolerance "adjusts the luminance values of the LightWrap effect": the luminance based wrap fades in from black up to
+                    # the tolerance, so background darker than it spills little or nothing.
+                    light = light * np.clip(luma / np.float32(p["LumaTolerance"]), 0.0, 1.0)
         wrap = light * edge * np.float32(p.get("intensity", 1.0))
         if not int(p.get("legacy_lightwrap_grade", 1)):
             wrap = Evaluator._light_wrap_grade(wrap, p)
