@@ -1,5 +1,26 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step O: Emboss, BumpBoss, EdgeExtend, Defocus and the motion blurs
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (8:25 AM on 2026-11-03 PDT)
+
+`main` moved `16feae1a` -> `b121495d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `b121495d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0815.log`, started 8:15 AM): **Ran 9064 tests in 580.346 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step O of 2: BumpBoss, Emboss, the motion blurs, EdgeExtend and Defocus get Nuke's missing knobs and defaults.** Commits:
+  - `2f815ee9` docs: lane 9 step O notes (TASKLOG, state)
+  - `d1e6a06e` EdgeExtend gets Matte, Detail Amount and Edge Mask; Defocus gets Quality and Method; MotionBlur2D and MotionBlur3D start at the guide's shutter and offset (older documents keep their pictures)
+  - `8650476b` Emboss and BumpBoss get Nuke's knobs: Emboss Type and Edge Detector; BumpBoss light position, bump size, light height, intensity, minimum shadow and image center (older documents keep their pictures)
+  Diff: 23 files changed, 794 insertions(+), 82 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch openclaw/nb-2d-behaviour: two code commits on main 16feae1a. No schema bump. New modules: nodebased/lightingbehaviour.py (Emboss type and detector, BumpBoss lighting), nodebased/edgedefocusknobs.py (EdgeExtend matte, detail amount, edge mask; Defocus soft disc). Legacy flags: legacy_bumpboss, legacy_defocus_disc; saved Emboss and EdgeExtend nodes get explicit emboss_type=effect / matte=Source Alpha on load. Audit 95.6 -> 95.7. Details in TASKLOG.md.
 
 ## 2026-11-03 - Lane 9 (2D behaviour), step N: VectorDistort, PointsTo3D and Reconcile3D get Nuke's inputs and main knobs

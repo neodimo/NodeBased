@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step O of 2: BumpBoss, Emboss, the motion blurs, EdgeExtend and Defocus get Nuke's missing knobs and defaults (integrator tick)
+
+- **What was done:** `main` `16feae1a` -> `b121495d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `b121495d`: Ran 9064 tests in 580.346 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step O: Emboss, BumpBoss, EdgeExtend and Defocus get Nuke's missing knobs; the motion blurs get Nuke's defaults
 
 - **What was done (evidence):** two code commits; new modules tests.test_2d_behaviour_lighting_o (23 tests) and tests.test_2d_behaviour_edge_defocus_o (20 tests); older modules whose expectations named the old defaults updated (test_2d_behaviour_filter_a, _extra_filter, _draw, _filter_layout, test_2d_parity_group_3b, test_tiers). Targeted gate green: those plus tests.test_nuke_fidelity_audit, test_knowledge, test_tiles, test_tiers, test_bypass, test_knobs, test_core, test_cache_correctness, test_node_rail, test_flow2_f1_finish, test_2d_parity_e1/step_5a/time_e1, the whole of test_desktop (210 tests, PropertiesLabelTests and FluidPropertiesPanelTests included).
