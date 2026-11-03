@@ -1,5 +1,25 @@
 ## 2026-11-02 - Lane 9 (2D behaviour), step D: filter size splits and step A layouts
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:15 PM on 2026-11-02 PDT)
+
+`main` moved `b98a80d9` -> `1b98bf85` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `1b98bf85` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-2155.log`, started 9:55 PM): **Ran 8324 tests in 606.409 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step D of 4: Nuke's layout and width/height splits for the step A filter nodes.** Commits:
+  - `28ed69de` TASKLOG and state: lane 9 step D note
+  - `9a1c9c35` Filter nodes: Blur, Sharpen, Soften, Glow and Erode (filter) split their size into a width and a height; main tabs follow Nuke's order (2D behaviour, lane 9 step D)
+  Diff: 14 files changed, 448 insertions(+), 106 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Blur `radius`, Sharpen `sharpen_size`, Soften `soften_size`, Glow `glow_size` and Erode (filter) `filter_size` are splittable (`wh`); read through `blurknobs.size_value`. Main tabs of Blur, Sharpen, Soften, Glow, EdgeDetect, Laplacian, Erode (filter) and EdgeExtend follow the guide. Overall fidelity 89.0 -> 89.7. Branch `openclaw/nb-2d-behaviour`.
 
 ## 2026-11-02 - Lane 9 (2D behaviour), hangfix-1102: queue panel close, GPU display surface, CornerPin case
