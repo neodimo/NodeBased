@@ -27,6 +27,18 @@ The page says what each control does but gives no formula for the blur, so the n
   white, centred, at the maximum size). With show image on, a setup is half the picture plus half the colours; off, the colours alone.
   The page's red, green and blue outputs say nothing of what they show and are not offered.
 
+* Filter shape (`shape`) "dissolves the filter shape between Gaussian at 0 and disc at 1": the weight of a sample inside the filter is
+  shape * 1 + (1 - shape) * a Gaussian of sigma = size / 2, cut at the filter's edge. Filter aspect (`aspect`): "values less than 1 squeeze the
+  filter on the x axis, and values larger than 1 squeeze it on the y axis" (the disc and the bladed filter). Catadioptric (`catadioptric`,
+  `catadioptric_size`): the middle of the filter, out to that fraction of its size, is empty ("donut-shaped bokeh").
+* Bloom (`bloom`, `bloom_threshold`, `bloom_gain`) and gamma correction (`bloom_gamma`): "highlights above the bloom threshold are multiplied by
+  the bloom gain", "a gamma curve of 2.2 is applied before blurring and then reversed for the final output"; the picture is gamma-encoded first,
+  then boosted, blurred, and decoded.
+  The default of `shape` is 1 (a disc), the value Nuke's own node starts with and the video guide calls "a sharp disc"; the page's table lists 0.
+  Not built, each listed in PARITY_2D_FIDELITY.md: roundness, inner size, inner feather, inner brightness (the page gives no shape for them),
+  legacy resize mode, filter channel, use input channels, filter bounds, image filter, clamp image filter (the wired kernel is read as a mask
+  resampled to the filter size; the page's resize and resampling options are not offered).
+
 A node saved before this page was followed keeps its picture (`legacy_zdefocus_focus`).
 """
 from __future__ import annotations
@@ -40,11 +52,13 @@ MAX_LAYERS = 256
 OUTPUTS = ("result", "focal plane setup", "layer setup", "filter shape setup")
 POINT_DEFAULT = (200.0, 200.0)
 NEW = {"legacy_zdefocus_focus": 0, "zdefocus_output": "result", "show_image": 1, "fill_foreground": 1, "focal_x": POINT_DEFAULT[0],
-       "focal_y": POINT_DEFAULT[1], "blur_dof": 1, "autoLayerSpacing": 1, "nLayers": 20, "layerCurve": 1.0}
+       "focal_y": POINT_DEFAULT[1], "blur_dof": 1, "autoLayerSpacing": 1, "nLayers": 20, "layerCurve": 1.0,
+       "shape": 1.0, "aspect": 1.0, "catadioptric": 0, "catadioptric_size": 0.3, "bloom": 0, "bloom_threshold": 0.8, "bloom_gain": 2.0, "bloom_gamma": 0}
 UPGRADE = {**NEW, "legacy_zdefocus_focus": 1}
 LIMITS = {"legacy_zdefocus_focus": (0, 1), "show_image": (0, 1), "fill_foreground": (0, 1), "focal_x": (-100000.0, 100000.0),
           "focal_y": (-100000.0, 100000.0), "blur_dof": (0, 1), "autoLayerSpacing": (0, 1), "nLayers": (1, MAX_LAYERS),
-          "layerCurve": (-5.0, 5.0)}
+          "layerCurve": (-5.0, 5.0), "shape": (0.0, 1.0), "catadioptric": (0, 1), "catadioptric_size": (0.0, 1.0), "bloom": (0, 1),
+          "bloom_threshold": (-1000.0, 1000.0), "bloom_gain": (0.0, 1000.0), "bloom_gamma": (0, 1)}
 CHOICES = {"zdefocus_output": list(OUTPUTS)}
 
 
@@ -135,3 +149,49 @@ def filter_shape_view(image, mask, p):
             if 0 <= top + y < h and 0 <= left + x < w and mask[y, x]:
                 out[top + y, left + x, :3] = 1.0
     return out
+
+
+GAMMA = 2.2
+
+
+def encode(image, p):
+    """Gamma correction, then the bloom boost, on the picture before it is blurred."""
+    out = image.astype(np.float32)
+    if int(p.get("bloom_gamma", 0)):
+        out[..., :3] = np.power(np.maximum(out[..., :3], 0.0), 1.0 / GAMMA)
+    if int(p.get("bloom", 0)):
+        rgb = out[..., :3]
+        out[..., :3] = np.where(rgb > float(p.get("bloom_threshold", 0.8)), rgb * float(p.get("bloom_gain", 2.0)), rgb)
+    return out
+
+
+def decode(image, p):
+    """The gamma curve reversed on the blurred picture."""
+    if not int(p.get("bloom_gamma", 0)):
+        return image
+    out = image.copy()
+    out[..., :3] = np.power(np.maximum(out[..., :3], 0.0), GAMMA)
+    return out
+
+
+def shape_weights(disk, yy, xx, r, p):
+    """Weights of the samples inside a disc of size r: shape dissolves a Gaussian (0) into the flat disc (1)."""
+    mix = float(p.get("shape", 1.0))
+    if mix >= 1.0 or r <= 0:
+        return None
+    sigma = max(r / 2.0, 1e-6)
+    return disk * (mix + (1.0 - mix) * np.exp(-(xx * xx + yy * yy) / (2.0 * sigma * sigma)))
+
+
+def aspect_axes(p):
+    """Divisors of (x, y) that squeeze the filter: aspect < 1 narrows x, aspect > 1 narrows y."""
+    aspect = max(0.1, float(p.get("aspect", 1.0)))
+    return min(1.0, aspect), min(1.0, 1.0 / aspect)
+
+
+def hollow(disk, yy, xx, r, p):
+    """Catadioptric: the middle of the filter, out to `catadioptric_size` of its size, is empty."""
+    if not int(p.get("catadioptric", 0)) or r <= 0:
+        return disk
+    inner = float(p.get("catadioptric_size", 0.3)) * r
+    return disk & (xx * xx + yy * yy >= inner * inner)

@@ -7502,12 +7502,22 @@ class Evaluator:
                 kx = np.minimum(kw - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kw - 1)).astype(int)))
                 grid = source_kernel[np.ix_(ky, kx)]
                 return grid > 0, grid
+            if modern:
+                ax, ay = zdefocusknobs.aspect_axes(p)
+                sx, sy = xx / ax, yy / ay                            # the filter squeezed on one axis (aspect ratio)
+            else:
+                sx, sy = xx, yy
             if p.get("bokeh_shape") == "blades" and r > 0:
-                theta = np.arctan2(yy, xx) - math.radians(float(p.get("blade_rotation", 0.0)))
+                theta = np.arctan2(sy, sx) - math.radians(float(p.get("blade_rotation", 0.0)))
                 sector = (theta + math.pi / int(p.get("blade_count", 6))) % (2 * math.pi / int(p.get("blade_count", 6))) - math.pi / int(p.get("blade_count", 6))
                 boundary = r * math.cos(math.pi / int(p.get("blade_count", 6))) / np.maximum(np.cos(sector), 1e-6)
-                return xx * xx + yy * yy <= boundary * boundary, None
-            return xx * xx + yy * yy <= r * r, None
+                disk = sx * sx + sy * sy <= boundary * boundary
+            else:
+                disk = sx * sx + sy * sy <= r * r
+            if modern:
+                disk = zdefocusknobs.hollow(disk, sy, sx, r, p)
+                return disk, (zdefocusknobs.shape_weights(disk, sy, sx, r, p) if p.get("bokeh_shape") != "blades" else None)
+            return disk, None
 
         if modern and p.get("zdefocus_output", "result") == "filter shape setup":
             reach = int(math.ceil(abs(float(p.get("max_size", 20.0)))))
@@ -7515,7 +7525,7 @@ class Evaluator:
             return zdefocusknobs.filter_shape_view(image, shape(abs(float(p.get("max_size", 20.0))), yy, xx, reach)[0], p)
         radius = int(math.ceil(float(np.max(radii)))) if radii.size else 0
         if radius <= 0: return image.copy()
-        pad_img = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
+        pad_img = np.pad(zdefocusknobs.encode(image, p) if modern else image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
         pad_z = np.pad(z, radius, mode="edge")
         out = np.empty_like(image)
         yy, xx = np.ogrid[-radius:radius + 1, -radius:radius + 1]
@@ -7532,12 +7542,15 @@ class Evaluator:
                 if p.get("bokeh_shape") == "image" and kernel is not None:
                     weights = kernel_grid * visible
                     out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
+                elif kernel_grid is not None:
+                    weights = kernel_grid * visible              # filter shape: a Gaussian dissolved into the disc
+                    out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
                 elif not fill and sides[y, x] < 0:
                     # Fill foreground off: what a foreground pixel cannot see behind it counts as empty, so its edge fades.
                     out[y, x] = samples[visible].sum(axis=0) / max(1, int(disk.sum()))
                 else:
                     out[y, x] = samples[visible].mean(axis=0)
-        return out
+        return zdefocusknobs.decode(out, p) if modern else out
 
     @staticmethod
     def _shadow_offset(p):

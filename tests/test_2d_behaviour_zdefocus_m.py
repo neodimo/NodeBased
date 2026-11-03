@@ -256,9 +256,74 @@ class OutputTests(unittest.TestCase):
         self.assertTrue(differs(zd(*plate, **knob, fill_foreground=1), zd(*plate, **knob, fill_foreground=0)))
 
 
+class FilterTests(unittest.TestCase):
+    """The disc and bladed filters' own knobs, the catadioptric hole and the bloom and gamma controls."""
+    FLAT = np.full((41, 41), 6.0)
+    KNOB = {**BASE, "focal_plane": 2.0, "blur_dof": 0, "max_size": 8.0, "size": 8.0, "depth_of_field": 1.0}
+
+    def blur(self, picture=None, **knobs_):
+        return zd(impulse(41) if picture is None else picture, self.FLAT, **{**self.KNOB, **knobs_})
+
+    def test_shape_dissolves_a_gaussian_into_the_disc(self):
+        disc, soft, gauss = (self.blur(shape=v)[..., 0] for v in (1.0, 0.5, 0.0))
+        self.assertEqual(extent(disc), extent(gauss))
+        self.assertGreater(disc[20, 20 + 3], 0.0)
+        self.assertTrue(differs(disc, soft) and differs(soft, gauss))
+        # the middle of a Gaussian filter weighs more than its edge; the flat disc weighs them alike
+        self.assertAlmostEqual(float(disc[20, 20 + 2] / disc[20, 20]), 1.0, places=6)
+        self.assertGreater(float(gauss[20, 20] / gauss[20, 20 + 3]), 1.5)
+
+    def test_aspect_squeezes_x_below_one_and_y_above_one(self):
+        wide, narrow = self.blur(aspect=0.5)[..., 0], self.blur(aspect=2.0)[..., 0]
+        square = extent(self.blur()[..., 0])
+        self.assertEqual(extent(wide)[1], square[1])
+        self.assertLess(extent(wide)[0], square[0])
+        self.assertEqual(extent(narrow)[0], square[0])
+        self.assertLess(extent(narrow)[1], square[1])
+
+    def test_a_catadioptric_filter_is_hollow(self):
+        flat, ring = self.blur(catadioptric=0)[..., 0], self.blur(catadioptric=1, catadioptric_size=0.5)[..., 0]
+        self.assertGreater(float(flat[20, 20]), 0.0)
+        self.assertEqual(float(ring[20, 20]), 0.0)                                  # the impulse's own pixel lies in the hole
+        self.assertTrue(differs(ring, self.blur(catadioptric=1, catadioptric_size=0.2)[..., 0]))
+        np.testing.assert_array_equal(self.blur(catadioptric_size=0.9), self.blur())   # the size acts only while catadioptric is on
+
+    def test_bloom_boosts_highlights_over_the_threshold_before_the_blur(self):
+        picture = impulse(41) * 0.9
+        plain, boosted = self.blur(picture), self.blur(picture, bloom=1, bloom_threshold=0.8, bloom_gain=2.0)
+        np.testing.assert_allclose(boosted[..., :3], plain[..., :3] * 2.0, rtol=1e-5, atol=1e-7)     # colour only: alpha is not a highlight
+        np.testing.assert_array_equal(boosted[..., 3], plain[..., 3])
+        below = self.blur(picture, bloom=1, bloom_threshold=0.95, bloom_gain=2.0)
+        np.testing.assert_allclose(below, plain, atol=1e-7)
+        self.assertTrue(differs(boosted, self.blur(picture, bloom=1, bloom_threshold=0.8, bloom_gain=3.0)))
+
+    def test_gamma_correction_blurs_in_a_2_2_encoding(self):
+        picture = np.zeros((41, 41, 4), np.float32)
+        picture[:, 20:, :3] = 1.0
+        picture[..., 3] = 1.0
+        plain, gamma = self.blur(picture), self.blur(picture, bloom_gamma=1)
+        # the edge pixel is half bright blurred as it is; blurred in the gamma encoding it is 0.5 ^ 2.2 darker
+        self.assertTrue(differs(plain, gamma))
+        self.assertLess(float(gamma[20, 19, 0]), float(plain[20, 19, 0]))
+        np.testing.assert_allclose(self.blur(picture * 0 + 1.0, bloom_gamma=1), 1.0, atol=1e-5)
+
+    def test_the_filter_knobs_leave_a_saved_node_alone(self):
+        picture = impulse(41)
+        reference = zd(picture, self.FLAT, **{**self.KNOB, "legacy_zdefocus_focus": 1})
+        for name, value in (("shape", 0.0), ("aspect", 2.0), ("catadioptric", 1), ("bloom", 1), ("bloom_gamma", 1)):
+            np.testing.assert_array_equal(zd(picture, self.FLAT, **{**self.KNOB, "legacy_zdefocus_focus": 1, name: value}), reference)
+
+    def test_tiles_equal_the_full_frame_with_the_filter_knobs(self):
+        extra = dict(shape=0.3, aspect=0.5, catadioptric=1, bloom=1, bloom_gamma=1)
+        full = evaluator_pixels(TileAndLayoutTests().doc(False, **extra), "node")
+        for edge in (7, 16, 32):
+            np.testing.assert_allclose(tile_pixels(TileAndLayoutTests().doc(False, **extra), "node", edge), full, atol=1e-6)
+
+
 class OlderDocumentTests(unittest.TestCase):
     NEW = ("legacy_zdefocus_focus", "zdefocus_output", "show_image", "fill_foreground", "focal_x", "focal_y", "blur_dof", "autoLayerSpacing",
-           "nLayers", "layerCurve")
+           "nLayers", "layerCurve",
+           "shape", "aspect", "catadioptric", "catadioptric_size", "bloom", "bloom_threshold", "bloom_gain", "bloom_gamma")
 
     def test_a_saved_node_keeps_the_step_c_picture(self):
         old = old_document("ZDefocus", dict(focal_plane=1.0, depth_of_field=1.0, max_size=6.0, legacy_zdefocus=0, zdefocus_math="depth", size=25.0),
@@ -320,9 +385,10 @@ class TileAndLayoutTests(unittest.TestCase):
             self.assertEqual(params.count(name), 1, name)
         for name in self.NEW_PARAMS:
             self.assertIn(name, SPECS["ZDefocus"]["params"])
-            self.assertIn(name, core.LIMITS if name not in ("zdefocus_output",) else core.CHOICES)
+            self.assertTrue(name in core.LIMITS or name in core.CHOICES, name)
 
-    NEW_PARAMS = ("zdefocus_output", "show_image", "fill_foreground", "focal_x", "focal_y", "blur_dof", "autoLayerSpacing", "nLayers", "layerCurve")
+    NEW_PARAMS = ("zdefocus_output", "show_image", "fill_foreground", "focal_x", "focal_y", "blur_dof", "autoLayerSpacing", "nLayers", "layerCurve",
+                  "shape", "aspect", "catadioptric", "catadioptric_size", "bloom", "bloom_threshold", "bloom_gain", "bloom_gamma")
 
 
 if __name__ == "__main__":

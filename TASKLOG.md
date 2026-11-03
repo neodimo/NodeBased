@@ -1,3 +1,12 @@
+## 2026-11-03 - Lane 9 (2D behaviour), step M: ZDefocus gets Nuke's main tab
+
+- **What was done (evidence):** one code commit plus one for the filter knobs; targeted gate green: tests.test_2d_behaviour_zdefocus_m (35, new), _draw, _filter_k, test_2d_parity_step_f2, test_tile_layers, test_tiers, test_nuke_fidelity_audit, test_knowledge, test_tiles, test_bypass, test_knobs, test_core, test_desktop.PropertiesLabelTests and FluidPropertiesPanelTests, test_nodecatalog, test_cache_correctness (test_directviewer_hit_order, 245 s, green on the first commit).
+- **ZDefocus (`nodebased/zdefocusknobs.py`, flag `legacy_zdefocus_focus`, saved nodes 1):** output (result, focal plane setup, layer setup, filter shape setup), show image, fill foreground, focal point (`focal_x`, `focal_y`), blur inside, automatic layer spacing, depth layers, layer curve; and the secondary knobs shape, aspect, catadioptric and its size, bloom, threshold, gain, gamma correction. Blur follows size * |d - edge of the depth-of-field slice| / d, clipped at maximum; the layers are the blur sizes between 0 and maximum.
+- **Kernels changed:** `Evaluator._zdefocus` (evaluator and tile path share it); a focal point or the filter shape view needs the whole frame (`zdefocusknobs.needs_full_frame`, checked in `TileExecutor.supports_tiled`). Graphs saved before keep their picture (tested).
+- **Not built, listed in the report:** output red / green / blue (the guide does not say what they show), roundness, inner size, inner feather, inner brightness, legacy resize mode, filter channel, use input channels, filter bounds, image filter, clamp image filter, GPU options, `aspect#2` (one `aspect` serves the disc and the bladed filter).
+- **Report:** ZDefocus 74.8 -> 91.2 (knobs 9/36 -> 25/36); Filter group 94.9 -> 95.8; overall 94.4 -> 94.4; Knobs that change no pixels 0 -> 0.
+- **Next owner:** Gonzo: decide on the bladed filter's roundness / inner polygon (no shape in the guide) and the image-filter resize knobs.
+
 ## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step L of 2: Write's secondary knobs, the project settings' main knobs, and SmartVector's outputs (integrator tick)
 
 - **What was done:** `main` `3334d42c` -> `dc48cb50` plus this docs commit. Evidence and per-lane commit
