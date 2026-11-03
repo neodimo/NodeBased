@@ -384,6 +384,27 @@ class DirBlurTests(unittest.TestCase):
         self.assertTrue(differs(plain, dir_blur(picture, **base, pixeloffset=2.0)))
         np.testing.assert_allclose(dir_blur(picture, **base, pixeloffset=2.0)[16, 16], plain[16, 16], atol=1e-5)   # no direction at the centre itself
 
+    def test_a_node_saved_before_these_knobs_acted_keeps_its_pictures(self):
+        picture = texture(33, 33)
+        spec = SPECS["DirBlur"]["params"]
+        self.assertEqual(spec["legacy_dirblur_knobs"], 0)
+        saved = {k: v for k, v in spec.items() if k != "legacy_dirblur_knobs"}
+        for kind, moved in (("linear", dict(UseTarget=1, target="16,30")), ("zoom", dict(Samples=2, pixeloffset=3.0)),
+                            ("radial", dict(Samples=2))):
+            with self.subTest(kind=kind):
+                base = {**saved, "blur_type": kind, "length": 12.0, "angle": 30.0, "center_x": 16.5, "center_y": 16.5}
+                older = np.asarray(Evaluator._kernel("DirBlur", {**base, **moved}, [picture, None]), np.float64)
+                np.testing.assert_array_equal(older, np.asarray(Evaluator._kernel("DirBlur", base, [picture, None]), np.float64))
+                self.assertTrue(differs(older, np.asarray(Evaluator._kernel("DirBlur", {**base, **moved, "legacy_dirblur_knobs": 0}, [picture, None]), np.float64)))
+        g = Graph()
+        g.add("a", "Checker", dict(width=45, height=37, size=5))
+        g.add("n", "DirBlur", dict(blur_type="zoom", Samples=3), image="a")
+        old = copy.deepcopy(g.doc)
+        old["nodes"]["n"]["params"].pop("legacy_dirblur_knobs")
+        loaded = upgrade_document(old)
+        validate(loaded)
+        self.assertEqual(loaded["nodes"]["n"]["params"]["legacy_dirblur_knobs"], 1)
+
     def test_the_tile_path_equals_the_evaluator_for_linear_with_a_target(self):
         for masked in (False, True):
             g = Graph()

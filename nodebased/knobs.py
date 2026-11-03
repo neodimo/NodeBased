@@ -356,7 +356,9 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("target",), label="Target"), KnobGroup("bool", ("UseTarget",), label="UseTarget"),
         KnobGroup("int", ("Samples",), label="Samples"), KnobGroup("float", ("PixelAspect",), label="PixelAspect"),
         KnobGroup("enum", ("Quality",), label="Quality"), KnobGroup("float", ("pixeloffset",), label="Pixel offset"),
-        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
+        KnobGroup("bool", ("legacy_dirblur_knobs",), label="Legacy knobs",
+                  help="Leave UseTarget, Samples and Pixel offset without effect, as graphs saved before DirBlur read them do.")),
     "DropShadow": _groups(
         KnobGroup("bool", ("enable_dropshadow_effect",), label="Enable drop shadow"),
         KnobGroup("bool", ("inherit_input_color",), label="Inherit input color"),

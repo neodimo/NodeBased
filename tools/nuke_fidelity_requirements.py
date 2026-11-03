@@ -39,6 +39,7 @@ NOT_PIXEL = {
     "DirBlur": {"BlurCenter": "the origin of a zoom or radial blur (a linear blur uses it only with UseTarget on); the default type is linear (tests/test_2d_behaviour_filter_f.py)",
                 "Samples": "the number of taps of a zoom or radial blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)",
                 "pixeloffset": "offsets the samples of a zoom blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)"},
+    "LightWrap": {"shadows_gain": "grades only the darkest part of the wrap; the fixture's wrap has none (tests/test_2d_behaviour_filter_f.py moves it on a dark wrap)"},
     "Blur": {"crop": "crop to format acts on the bounding box only"},
     "Sharpen": {"crop": "crop to format acts on the bounding box only"},
     "Soften": {"crop": "crop to format acts on the bounding box only"},

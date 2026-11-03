@@ -8075,7 +8075,7 @@ class Evaluator:
                 count = _filterbehaviour.dirblur_sample_count(p, int(min(96, max(2, math.ceil(far * span) + 1))))
                 steps = [1.0 + s for s in (np.linspace(-span / 2.0, span / 2.0, count) if count > 1 else [0.0])]
                 reach_r = np.maximum(np.hypot(rx, ry), 1e-9)
-                push = float(p.get("pixeloffset", 0.0))        # lets you offset pixels along the direction of the blur
+                push = 0.0 if int(p.get("legacy_dirblur_knobs", 1)) else float(p.get("pixeloffset", 0.0))      # offsets the pixels along the blur
                 positions = [(cx + rx * s + push * rx / reach_r, cy + ry * s + push * ry / reach_r) for s in steps]
             else:
                 sweep = math.radians(abs(float(p.get("angle", 0.0))))

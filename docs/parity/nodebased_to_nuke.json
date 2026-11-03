@@ -2177,7 +2177,8 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["legacy_dirblur_knobs"], "kind": "extra", "reason": "NodeBased-only: graphs saved before DirBlur read UseTarget, Samples and Pixel offset keep their pictures; lane 9 step F"}
    ],
    "skip_default": ["BlurCenter"]
   },

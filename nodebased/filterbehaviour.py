@@ -33,6 +33,7 @@ LEGACY = {
     "Laplacian": {"legacy_laplacian": 1},
     "Convolve": {"legacy_convolve": 1},
     "DropShadow": {"legacy_dropshadow_angle": 1},
+    "DirBlur": {"legacy_dirblur_knobs": 1},
 }
 NEW = {
     "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
@@ -41,6 +42,7 @@ NEW = {
     "Matrix": {"legacy_matrix_unclipped": 0},
     "Laplacian": {"legacy_laplacian": 0},
     "DropShadow": {"legacy_dropshadow_angle": 0},
+    "DirBlur": {"legacy_dirblur_knobs": 0},
     "Convolve": {"legacy_convolve": 0, "normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"},
 }
 # What an older document's node of the kind gets on load besides the legacy flags: the new knobs, at the value that leaves it as it was.
@@ -79,7 +81,7 @@ def shifted_target(p, dx, dy):
 def dirblur_target_direction(p):
     """DirBlur's linear direction (array columns, rows; a unit vector) from BlurCenter to the Linear Target when UseTarget is on, else None
     ("a vector is created between this and BlurCenter. This vector then determines the direction of linear blur")."""
-    if not int(p.get("UseTarget", 0)):
+    if not int(p.get("UseTarget", 0)) or int(p.get("legacy_dirblur_knobs", 1)):
         return None
     point = parse_point(p.get("target", ""))
     if point is None:
@@ -92,7 +94,7 @@ def dirblur_target_direction(p):
 def dirblur_sample_count(p, automatic):
     """Zoom and radial blur take `Samples` taps when it is set ("the number of samples"); 0 leaves the node's own count."""
     wanted = int(p.get("Samples", 0))
-    return automatic if wanted <= 0 else max(1, wanted)
+    return automatic if wanted <= 0 or int(p.get("legacy_dirblur_knobs", 1)) else max(1, wanted)
 
 
 def is_legacy(kind, p, name):
