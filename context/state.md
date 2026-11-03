@@ -1,5 +1,26 @@
 ## 2026-11-02 - Lane 2 (2D behaviour), step G: EdgeBlur, GodRays, VolumeRays, BumpBoss
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:15 AM on 2026-11-03 PDT)
+
+`main` moved `5ff5eb05` -> `8d2a2633` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `8d2a2633` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-2355.log`, started 11:55 PM): **Ran 8497 tests in 602.893 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step G of 2: EdgeBlur, GodRays, VolumeRays and BumpBoss compute what Nuke computes.** Commits:
+  - `a27b2a4c` VolumeRays gains Nuke's plain colour knobs; BumpBoss's missing lighting model is recorded with reasons
+  - `c6251a91` GodRays averages samples along translate, rotate, scale and skew about the centre like Nuke
+  - `a1ea84f3` EdgeBlur blurs the matte's edge band like Nuke: filter, quality, crop, matte channel, tint and brightness, with behaviour cases
+  Diff: 20 files changed, 1066 insertions(+), 75 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-parity`. New `nodebased/effectbehaviour.py` (EdgeBlur) and `nodebased/raysbehaviour.py` (GodRays and VolumeRays' plain knobs); cases in `tools/nuke_fidelity_cases_extra.py` (registered in the tuple in `tools/nuke_fidelity_cases.py`, which also gained fixtures E, a hard matte on a textured plate, and P, one white pixel); tests in `tests/test_2d_behaviour_extra_filter.py`. EdgeBlur: Nuke's filter, quality, crop, matte channel, tint and brightness, defaults size 3 and edge mult 2 for a new node (saved nodes keep 4 and 1 and the Gaussian). GodRays: Nuke's transform average (translate, rotate, scale, skew, colours, gamma, max, 5 steps) and the channels and mask strip; a saved node keeps the older smear (`legacy_godrays` 1). VolumeRays: Luma Tolerance, Add on Top (off for a new node, on for a saved one), Desaturate before Coloring, Volume Gamma and Gain; its other 18 secondary knobs are listed unsupported with reasons. BumpBoss: no lighting formula in the guide; the six guide knobs are listed unsupported, nothing invented. No schema bump (old nodes get their values through `ops2d_chrome.upgrade_nodes`).
 
 ## 2026-11-02 - Lane 9 (2D behaviour), step F: Tracker, DropShadow, DirBlur and LightWrap behaviour and layout

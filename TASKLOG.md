@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step G of 2: EdgeBlur, GodRays, VolumeRays and BumpBoss compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `5ff5eb05` -> `8d2a2633` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `8d2a2633`: Ran 8497 tests in 602.893 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02 - lane 2 (2D behaviour), step G of 2: EdgeBlur, GodRays, VolumeRays and BumpBoss
 
 - **What was done (evidence):** (1) EdgeBlur: 9 scored cases and 2 not scored in `tools/nuke_fidelity_cases_extra.py` (pixels outside the edge band unchanged; inside it, the box blur of the same size on the interior; tint and brightness; size 0); the kernel now takes Nuke's `filter`, `quality`, `crop to format`, matte channel, `tint` and `brightness` and reuses Blur's kernels (`nodebased/blurknobs.py`). (2) GodRays: 3 scored cases (identity at the defaults; the streak of one white pixel at x 12, 10, 8 with max on; from and to colour at the two ends) and 5 not scored; new kernel `nodebased/raysbehaviour.py`. (3) VolumeRays: 5 plain knobs implemented on the existing kernel; 1 not scored case. (4) BumpBoss: 1 not scored case; the 6 guide knobs recorded unsupported.
