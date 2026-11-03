@@ -2699,6 +2699,7 @@ class Evaluator:
             smartvector_first = None
             smartvector_last = None
             smartvector_range_key = None
+            smartvector_masks = None
             vectorgenerator_pair = None
             kronos_frames = None
             motion3d_camera_data = None
@@ -2868,9 +2869,23 @@ class Evaluator:
                             for f in range(first, last + 1)]
                 smartvector_sequence = sequence
                 smartvector_first, smartvector_last = first, last
+                matte_digests = []
+                channel = params.get("matte_channel", "None")
+                if channel != "None":
+                    from . import smartvectormatte as _svmatte
+                    matte_key = node["inputs"].get("matte")
+                    matte_frames = [None] * len(sequence)
+                    if _svmatte.needs_matte_input(channel):
+                        if matte_key is None:
+                            raise ValueError(f"SmartVector: connect the Matte input to use {channel}")
+                        matte_frames = [self.evaluate_raster(doc, matte_key, cancel=cancel, frame=f, tier=tier,
+                                                             typed=True, return_digest=True) for f in range(first, last + 1)]
+                        matte_digests = [digest for _, digest in matte_frames]
+                    smartvector_masks = [_svmatte.foreground_mask(channel, src.pixels, None if mat is None else mat[0].pixels)
+                                         for (src, _), mat in zip(sequence, matte_frames)]
                 smartvector_range_key = hashlib.sha256(json.dumps(
                     ["smartvector-range", key, params, first, last, tier,
-                     *(digest for _, digest in sequence)], sort_keys=True).encode()).hexdigest()
+                     *(digest for _, digest in sequence), *matte_digests], sort_keys=True).encode()).hexdigest()
                 fingerprint = ["smartvector", first, last, int(params["reference_frame"]),
                                round(float(frame), 6), *(digest for _, digest in sequence)]
             if kind in ("VectorDistort", "VectorCornerPin") and not node["disabled"]:
@@ -3096,6 +3111,9 @@ class Evaluator:
                         from .opticalflow import _sample
                         seq = [r.pixels for r, _ in smartvector_sequence]
                         ref_ix = int(params["reference_frame"]) - smartvector_first
+                        if smartvector_masks is not None:
+                            from . import smartvectormatte as _svmatte
+                            seq = _svmatte.apply(seq, smartvector_masks, params.get("matte_output", "Background"))
                         fw, bw = accumulated_vectors(seq, ref_ix, vector_detail=int(params["vector_detail"]),
                             smoothness=float(params["smoothness"]), reanchor_interval=int(params["reanchor_interval"]),
                             backend=params.get("flow_backend", "auto"))
@@ -3109,6 +3127,9 @@ class Evaluator:
                             for direction, field in (("forward", forward), ("backward", backward)):
                                 rgba = np.zeros((hh, ww, 4), np.float32)
                                 rgba[..., :2] = field * np.float32(tier); rgba[..., 2] = occluded; rgba[..., 3] = 1
+                                if smartvector_masks is not None:       # the other side's vectors are absent
+                                    side = _svmatte.kept(smartvector_masks[ref_ix], params.get("matte_output", "Background"))
+                                    rgba[..., :2] *= side[..., None]; rgba[..., 3] = side
                                 range_layers[f"frame.{frame_index}.{direction}"] = Raster.of(
                                     rgba, smartvector_sequence[ref_ix][0].display)
                         reference = smartvector_sequence[ref_ix][0]

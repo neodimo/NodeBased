@@ -1,3 +1,13 @@
+## 2026-11-03 - lane 2 (2D behaviour), step L of 2: Write's last knobs, the project settings on Root, and SmartVector's matte
+
+- **What was done (evidence):** two code commits plus a docs commit; targeted gate green (the new Root and SmartVector modules, audit, knowledge, tiles, bypass, knobs, tiers, core, the properties-panel tests, test_smartvector, the Write and Read modules, the sequence-range offer tests, cache correctness).
+- **Write:** the 29 knobs the report called missing are all the Metadata Export tab (MOV codec colour tags and MXF container knobs). Write makes EXR, PNG, TIFF, JPEG and DPX, so `tools/build_nuke_reference.py` files the tab with the other per-format tabs and `docs/parity/nuke_nodes.json` is patched to match (counted false). Every other Write knob was already paired and tested (`tests/test_2d_fidelity_c_write.py`). Write 70.9 -> 90.3, knobs 27/56 -> 27/27.
+- **Root:** `settings.project` (`nodebased/projectsettings.py`), optional like `formats`: `name`, `label` (window title), `project_directory` (resolves a Read's relative path on create and on set), `lock_connections` (a `connect` is refused), `lock_range` (`offer_sequence_range` leaves the range). Root 30.0 -> 40.0, knobs 7/43 -> 12/43. Unsupported with reasons: Script_directory, format, proxy_type, proxy_format, proxySetting, is_live, render_mode and the colour, views and font knobs listed before.
+- **SmartVector:** Matte input, `matte_channel`, `matte_output` (`nodebased/smartvectormatte.py`, evaluator in `imaging.py`): flow is estimated on frames with the other side blacked out; the side not output has zero vectors and coverage 0. SmartVector 17.1 -> 62.1, knobs 1/11 -> 3/11, sockets 50 -> 100. Listed unsupported with a reason: strengthReg, inpainting, matteDilation, export_write, flickerCompensation, weightRed/Green/Blue.
+- **Legacy and schema:** no schema bump (the project group is optional; the SmartVector params and `matte` slot are filled on load). A SmartVector saved before keeps Matte Channel None and the same vectors (test).
+- **Report:** overall 93.8 -> 94.7; "Knobs that change no pixels" stays 0 on the 361 probed knobs (the 13 of main at 69aa0d36 were closed by earlier steps); under the previous formula 94.2.
+- **Not done:** Project Settings dialog fields for the Root group (the `settings` op and the agent reach them); the matte estimate is a stated reading of the guide (hard cut at 0.5), no Nuke render compared; inpainting not built.
+
 ## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs (finish 1) (integrator tick)
 
 - **What was done:** `main` `3d05b2d2` -> `5474baa4` plus this docs commit. Evidence and per-lane commit

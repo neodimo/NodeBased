@@ -1166,10 +1166,21 @@
   "SmartVector": {
    "nodebased": "SmartVector",
    "inputs": [
-    {"nodebased": "image", "nuke": "Source", "kind": "mapped"}
+    {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "matte", "nuke": "Matte", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["vector_detail"], "nuke": ["vectorDetailReg"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `vectorDetailReg`"},
+    {"nodebased": ["matte_channel"], "nuke": ["matteChannel"], "kind": "renamed", "reason": "NodeBased uses snake case; Nuke's scripting name is `matteChannel`: where the foreground mask comes from (the Source's alpha or the Matte input)"},
+    {"nodebased": ["matte_output"], "nuke": ["output"], "kind": "renamed", "reason": "NodeBased names it for what it chooses; Nuke's scripting name is `output`: with a matte, the Background or Foreground vectors are passed on"},
+    {"nodebased": [], "nuke": ["strengthReg"], "kind": "unsupported", "reason": "the optical-flow solver has no match-strength weight; its detail and smoothness knobs are the controls it has"},
+    {"nodebased": [], "nuke": ["inpainting"], "kind": "unsupported", "reason": "the infill of absent vectors from the nearest present ones is not built; the absent side keeps zero vectors with coverage 0"},
+    {"nodebased": [], "nuke": ["matteDilation"], "kind": "unsupported", "reason": "it dilates the matte before the inpaint, so it waits for Inpaint Matte Region"},
+    {"nodebased": [], "nuke": ["export_write"], "kind": "unsupported", "reason": "the button adds a Write node with EXR settings; the SmartVector layers are written through a Write by hand"},
+    {"nodebased": [], "nuke": ["flickerCompensation"], "kind": "unsupported", "reason": "the flow solver does not model luminance change between frames"},
+    {"nodebased": [], "nuke": ["weightRed"], "kind": "unsupported", "reason": "the flow solver reads luminance with fixed Rec. 709 weights (0.2126, 0.7152, 0.0722); the three weights are not exposed"},
+    {"nodebased": [], "nuke": ["weightGreen"], "kind": "unsupported", "reason": "as weightRed: fixed Rec. 709 luminance weights"},
+    {"nodebased": [], "nuke": ["weightBlue"], "kind": "unsupported", "reason": "as weightRed: fixed Rec. 709 luminance weights"},
     {"nodebased": ["reference_frame"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},

@@ -824,9 +824,9 @@ SPECS = {
     "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask", "fgvecs", "bgvecs", "matte"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward", **_motionblurknobs.NEW}},
     # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
-    "SmartVector": {"inputs": ["image"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
+    "SmartVector": {"inputs": ["image"], "optional_inputs": ["matte"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
                      "vector_detail": 4, "smoothness": 1.0, "reanchor_interval": 5,
-                     "flow_backend": "auto"}},
+                     "flow_backend": "auto", "matte_channel": "None", "matte_output": "Background"}},
     "VectorDistort": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
                        "params": {"reference_frame": 1, "blur_size": 0.0, "fade_frames": 20, "mix": 1.0}},
     "VectorCornerPin": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
@@ -2221,6 +2221,9 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "resize_type": ["none", "width", "height", "fit", "fill", "distort"],
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
+from .smartvectormatte import CHANNELS as _SV_CHANNELS, OUTPUTS as _SV_OUTPUTS
+CHOICES["matte_channel"] = list(_SV_CHANNELS)
+CHOICES["matte_output"] = list(_SV_OUTPUTS)
 CHOICES["volumes"] = ["on", "off"]
 CHOICES["material"] = ["standard", "pbr", "liquid"]
 CHOICES["particle_material"] = ["standard", "pbr"]
@@ -2513,6 +2516,8 @@ def _add_roto_bg_slot(nodes):
             node["inputs"].setdefault("mask", None)       # Nuke's Roto mask input (fidelity step C)
         if node.get("type") == "Shuffle" and isinstance(node.get("inputs"), dict):
             node["inputs"].setdefault("A", None)      # the second input of Nuke's two-input Shuffle
+        if node.get("type") == "SmartVector" and isinstance(node.get("inputs"), dict):
+            node["inputs"].setdefault("matte", None)  # the optional foreground matte
         graph = node.get("graph")
         if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
             _add_roto_bg_slot(graph["nodes"])
@@ -3028,7 +3033,8 @@ def upgrade_document(document):
                 # Step 5c: Shuffle's layer (empty = the input's own channels) and Write's bundle
                 # (off = no manifest) default to what every old node already did.
                 for kind, key, default in (("Shuffle", "layer", ""), ("Write", "bundle", 0), ("Shuffle", "fromInput1", "B"),
-                                           ("Shuffle", "in2", "none"), ("Shuffle", "fromInput2", "A")):
+                                           ("Shuffle", "in2", "none"), ("Shuffle", "fromInput2", "A"),
+                                           ("SmartVector", "matte_channel", "None"), ("SmartVector", "matte_output", "Background")):
                     if isinstance(node, dict) and node.get("type") == kind:
                         params = node.get("params")
                         if isinstance(params, dict):

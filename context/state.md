@@ -1,3 +1,9 @@
+## 2026-11-03 - lane 2 (2D behaviour), step L of 2: Write, Root and SmartVector
+
+- Code: `nodebased/projectsettings.py` (`settings.project`), `nodebased/smartvectormatte.py`, SmartVector evaluator block in `imaging.py`, core.py (settings op, validate, Read path, connect lock, SmartVector spec/choices/migration), app.py (title, `offer_sequence_range`).
+- Tests: `tests/test_2d_behaviour_root_l.py`, `tests/test_2d_behaviour_smartvector_l.py`, `RootPairingTests` (12 knobs), `SequenceRangeOfferTests` (locked range).
+- Report: overall 93.8 -> 94.7; Write 70.9 -> 90.3; Root 30.0 -> 40.0; SmartVector 17.1 -> 62.1. Schema unchanged (29).
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step L finish: the rest of Denoise, MotionBlur and VectorBlur
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (6:15 AM on 2026-11-03 PDT)
