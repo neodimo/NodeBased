@@ -12931,34 +12931,17 @@ class Window(QMainWindow):
                             label.setPixmap(plot)
                             label.setToolTip(f"{n} line samples · first RGB " + ", ".join(f"{v:.4f}" for v in values[0, :3]) + " · last RGB " + ", ".join(f"{v:.4f}" for v in values[-1, :3]))
                         else:
-                            if not inputs.get("reference"):
-                                label.setText("Connect the target image first.")
-                                return
-                            dst = self.evaluator.evaluate_raster(doc, target=inputs["reference"], frame=frame).fit(src.data)[..., :3]
-                            mask_id = inputs.get("mask")
-                            weights = (self.evaluator.evaluate_raster(doc, target=mask_id, frame=frame).fit(src.data)[..., 3]
-                                       if mask_id else None)
-                            updates = []
-                            for c, channel in enumerate("rgb"):
-                                if weights is None:
-                                    sm, tm = float(px[..., c].mean()), float(dst[..., c].mean())
-                                    ss, ts = float(px[..., c].std()), float(dst[..., c].std())
-                                else:
-                                    total = max(float(weights.sum()), 1e-12)
-                                    sm, tm = float((px[..., c] * weights).sum() / total), float((dst[..., c] * weights).sum() / total)
-                                    ss = float(np.sqrt(((px[..., c] - sm) ** 2 * weights).sum() / total))
-                                    ts = float(np.sqrt(((dst[..., c] - tm) ** 2 * weights).sum() / total))
-                                gain = ts / ss if ss > 1e-12 else 1.0
-                                updates.extend(({"op": "set", "id": k, "param": f"grade_gain_{channel}", "value": gain}, {"op": "set", "id": k, "param": f"grade_offset_{channel}", "value": tm - sm * gain}))
-                            updates.append({"op": "set", "id": k, "param": "match_analyzed", "value": 1})
-                            label.setText("Per-channel gain and offset measured from the current frames.")
+                            message, updates = self.match_grade_fit(k, "analyze")
+                            label.setText(message)
                             self.command({"op": "batch", "commands": updates})
                     except Exception as exc:
                         label.setText(f"Analysis failed: {exc}")
 
-                button = QPushButton("Analyze / refresh")
+                button = QPushButton("Analyze Reference Frames" if node["type"] == "MatchGrade" else "Analyze / refresh")
                 button.clicked.connect(run_analysis)
                 form.addRow(button)
+                if node["type"] == "MatchGrade":
+                    self.add_match_grade_buttons(form, key, readout)
             if node["type"] in MATRIX_READOUT_TYPES:
                 from . import scene3d
                 local, world = scene3d.local_and_world_matrix(resolved_document, key)
@@ -17259,6 +17242,116 @@ class Window(QMainWindow):
             display = self.evaluator.evaluate_raster(document, target=source, frame=int(document["time"]["current"])).display
             updates = cornerpinknobs.from_input_corners(display.x, display.y, display.width, display.height)
         self.command({"op": "batch", "commands": cornerpinknobs.button_commands(key, updates)})
+
+    def match_grade_fit(self, key, what):
+        """MatchGrade's Analyze Reference Frames (what="analyze") and Recalculate CDL (what="cdl"): the readout text and the `set` commands.
+
+        The pictures are those of the frames listed under the Source and Target reference frames (the current frame when a list is empty), pooled."""
+        from . import matchgradeknobs as mg
+        document = self.graph_document()
+        node = document["nodes"][key]
+        params, inputs = node["params"], node["inputs"]
+        if not inputs.get("image"):
+            return "Connect an image input first.", []
+        if not inputs.get("reference"):
+            return "Connect the target image first.", []
+        current = int(document["time"]["current"])
+        source_frames = mg.parse_frames(params.get("match_source_frames"), current)
+        target_frames = mg.parse_frames(params.get("match_target_frames"), current)
+        window = None
+        source, target, weights = [], [], []
+        for index, frame in enumerate(source_frames):
+            raster = self.evaluator.evaluate_raster(document, target=inputs["image"], frame=frame)
+            window = window or raster.data
+            source.append(raster.fit(window)[..., :3].reshape(-1, 3))
+            if inputs.get("mask"):
+                weights.append(self.evaluator.evaluate_raster(document, target=inputs["mask"], frame=frame).fit(window)[..., 3].ravel())
+        for frame in target_frames:
+            target.append(self.evaluator.evaluate_raster(document, target=inputs["reference"], frame=frame).fit(window)[..., :3].reshape(-1, 3))
+        source, target = np.concatenate(source), np.concatenate(target)
+        weights = np.concatenate(weights) if weights else None
+        where = "frames " + ", ".join(map(str, source_frames))
+        if what == "analyze":
+            updates = mg.stat_bake(source, target, weights)
+            updates["match_analyzed"] = 1
+            text = f"Per-channel gain and offset measured from {where}."
+        else:
+            aligned = len(source_frames) == len(target_frames) and params.get("match_task") == "Match Graded Source"
+            fit = mg.fit_cdl(source, target, params, weights, aligned)
+            updates = mg.cdl_updates(fit, params)
+            text = f"CDL fitted to {where}: error {fit['error']:.5f}."
+        return text, [{"op": "set", "id": key, "param": name, "value": value} for name, value in updates.items()]
+
+    def add_match_grade_buttons(self, form, key, readout):
+        """The buttons of MatchGrade's Ref Frames, Analysis and Export tabs that are not parameters."""
+        from . import matchgradeknobs as mg
+
+        def run(action):
+            try:
+                action()
+            except (OSError, ValueError, RuntimeError) as error:
+                readout.setText(str(error))
+
+        def frames(param, change):
+            document = self.graph_document()
+            current = int(document["time"]["current"])
+            text = change(document["nodes"][key]["params"].get(param, ""), current)
+            self.command({"op": "set", "id": key, "param": param, "value": text})
+
+        for which in ("source", "target"):
+            for verb, change in (("Add", mg.add_frame), ("Delete", mg.delete_frame)):
+                button = QPushButton(f"{verb} current frame to {which} reference frames" if verb == "Add" else f"Delete current frame from {which} reference frames")
+                button.setObjectName(f"matchgrade-{verb.lower()}-{which}")
+                button.clicked.connect(lambda _checked=False, w=which, c=change: run(lambda: frames(f"match_{w}_frames", c)))
+                form.addRow(button)
+
+        def recalculate():
+            message, updates = self.match_grade_fit(key, "cdl")
+            readout.setText(message)
+            self.command({"op": "batch", "commands": updates})
+
+        def align():
+            document = self.graph_document()
+            source = document["nodes"][key]["inputs"].get("image")
+            if not source:
+                raise ValueError("Connect an image input first.")
+            frame = int(document["time"]["current"])
+            display = self.evaluator.evaluate_raster(document, target=source, frame=frame).display
+            shown = self.evaluator.evaluate_raster(document, target=document["nodes"][key]["inputs"].get("reference"), frame=frame).display \
+                if document["nodes"][key]["inputs"].get("reference") else None
+            commands, _ident = mg.align_commands(key, document["nodes"], display.width, display.height,
+                                                 None if shown is None else (shown.width, shown.height))
+            self.command({"op": "batch", "commands": commands})
+            readout.setText(f"The Target now goes through a Reformat to {display.width} x {display.height}.")
+
+        def write():
+            params = self.graph_document()["nodes"][key]["params"]
+            readout.setText(f"Wrote {mg.write_lut(params, params.get('match_lut_file', ''))}")
+
+        def create_cdl():
+            params = self.graph_document()["nodes"][key]["params"]
+            lut = str(params.get("match_lut_file", "")).strip()
+            readout.setText(f"Wrote {mg.write_cdl(params, lut.rsplit('.', 1)[0] + '.cc' if lut else 'match_grade.cc')}")
+
+        def create_file_transform():
+            document = self.graph_document()
+            node = document["nodes"][key]
+            path = mg.write_lut(node["params"], node["params"].get("match_lut_file", ""))
+            ident = f"{key}-lut"
+            pos = list(node.get("pos") or [0, 0])
+            self.command({"op": "batch", "commands": [
+                {"op": "create", "id": ident, "type": "OCIOFileTransform", "name": f"{node['name']} LUT", "params": {"path": path},
+                 "pos": [pos[0], pos[1] + 100]},
+                {"op": "connect", "id": ident, "input": "image", "source": node["inputs"].get("image")}]})
+            readout.setText(f"Added an OCIOFileTransform that reads {path}")
+
+        for text, name, action in (("Recalculate CDL", "recalculate-cdl", recalculate), ("Align Target to Source", "align", align),
+                                   ("Write LUT", "write-lut", write), ("Create File Transform", "create-file-transform", create_file_transform),
+                                   ("Create CDL File", "create-cdl-file", create_cdl)):
+            button = QPushButton(text)
+            button.setObjectName(f"matchgrade-{name}")
+            button.clicked.connect(lambda _checked=False, a=action: run(a))
+            form.addRow(button)
 
     def colorlookup_set(self, key, channels):
         """Nuke's Set RGB, Set RGBA and Set A: add a point mapping source to target on the chosen channel curves, in one undo step."""

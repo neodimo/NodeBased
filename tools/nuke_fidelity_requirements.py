@@ -79,7 +79,14 @@ NOT_PIXEL = {
     "GenerateLUT": {name: "shapes the file the Generate button writes and not the picture, which GenerateLUT passes through (tests/test_2d_behaviour_knobs_k.py writes each and reads it back)"
                     for name in ("file_type", "lut1d", "style1d", "bitdepth_id", "output_bitdepth_id", "clamp_output")},
     "MatchGrade": {"analysisType": "acts across frames (reference frames or every frame); NodeBased's live match measures the frame it shows either way, and Analyze bakes reference frames (tests/test_2d_behaviour_knobs_k.py)",
-                   "applyToMask": "acts only with a mask other than none, which is another knob moved (tests/test_2d_behaviour_knobs_k.py)"},
+                   "applyToMask": "acts only with a mask other than none, which is another knob moved (tests/test_2d_behaviour_knobs_k.py)",
+                   # Step K finish (11/3): the reference frames, the fit and the export act in the buttons, not in the kernel the probe calls.
+                   **{name: "names the frames Analyze Reference Frames and Recalculate CDL read; the kernel shows the frame it is given (tests/test_2d_behaviour_matchgrade_k2.py bakes a match from several frames)"
+                      for name in ("sourceRefFrames", "targetRefFrames")},
+                   **{name: "shapes the LUT file Write exports and not the picture (tests/test_2d_behaviour_matchgrade_k2.py writes each and reads it back)"
+                      for name in ("prelut", "lutres", "colorspace", "outfile")},
+                   **{name: "steers Recalculate CDL, whose result lands in slope, offset, power and saturation (tests/test_2d_behaviour_matchgrade_k2.py)"
+                      for name in ("iterations", "lockSlope", "lockOffset", "lockPower", "lockSaturation", "cdlError")}},
     "HueCorrect": {"mix_luminance": "restores the luminance the hue curves changed, so it acts only once a curve has changed it; the default curves are flat (tests/test_2d_behaviour_knobs_k.py moves it on a lum curve)"},
     "IBKGizmo": {"ublu": "acts only with a background wired and luminance matching on",
                  "luma": "acts only with luminance matching and the luminance level's enable box on, which is two other knobs moved (tests/test_2d_behaviour_knobs_k.py)",

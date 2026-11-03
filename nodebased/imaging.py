@@ -4164,7 +4164,7 @@ class Evaluator:
         if kind == "MatchGrade":
             source, target = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
-            baked = bool(p.get("match_analyzed", 0))
+            baked = bool(p.get("match_analyzed", 0)) or p.get("match_transform", "3D LUT") == "CDL"
             if target is None and not baked:
                 raise ValueError("MatchGrade needs a connected reference, or Analyze once to bake gain and offset")
             out = source.data
@@ -8906,7 +8906,8 @@ class Evaluator:
         # `apply_to_mask` on the grade is applied only where the mask is; off, the statistics come from the masked region and the grade
         # is applied to the whole picture.
         out = source.copy()
-        baked = bool(p.get("match_analyzed", 0))
+        # The CDL transform applies the CDL the node holds (the baked values) and reads no target; the 3D LUT transform is the live match.
+        baked = bool(p.get("match_analyzed", 0)) or p.get("match_transform", "3D LUT") == "CDL"
         mask_mode = p.get("grade_mask", "None")
         weights = target_weights = None
         if mask_mode != "None":
@@ -8937,9 +8938,14 @@ class Evaluator:
             gamma = max(1e-6, float(p.get(f"grade_gamma_{channel}", 1.0)))
             if gamma != 1.0:
                 result = np.sign(result) * np.power(np.abs(result), 1.0 / gamma)
-            if weights is not None and p.get("apply_to_mask", 1):
-                result = s + weights * (result - s)
             out[..., c] = result
+        # The CDL's saturation comes last, on Rec.709 luma (matchgradeknobs.saturate); 1 leaves the grade as it was.
+        saturation = float(p.get("match_saturation", 1.0))
+        if saturation != 1.0:
+            from .matchgradeknobs import saturate
+            out[..., :3] = saturate(out[..., :3], saturation)
+        if weights is not None and p.get("apply_to_mask", 1):
+            out[..., :3] = source[..., :3] + weights[..., None] * (out[..., :3] - source[..., :3])
         return out
 
     @staticmethod

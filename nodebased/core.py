@@ -379,7 +379,11 @@ SPECS = {
     # reference is optional so a baked (match_analyzed=1) node keeps working once Analyze has
     # measured and written grade_gain_*/grade_offset_*, exactly as Nuke's baked-knob workflow does.
     "MatchGrade": {"inputs": ["image"], "optional_inputs": ["reference", "mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "match_task": "Match Graded Source", "match_analysis": "Analyze Reference Frames",
-                                           "grade_mask": "None", "apply_to_mask": 1, "match_output": "Matched", "mix": 1.0}},
+                                           "grade_mask": "None", "apply_to_mask": 1, "match_output": "Matched",
+                                           # Ref frames, transform, CDL, locks and export (step K finish); the defaults leave an older document as it was.
+                                           "match_crop_target": 0, "match_source_frames": "", "match_target_frames": "", "match_transform": "3D LUT", "match_prelut": "Auto Detect",
+                                           "match_lut_res": 32, "match_colorspace": "RGB", "match_iterations": 6, "match_saturation": 1.0, "match_lock_slope": 0, "match_lock_offset": 0,
+                                           "match_lock_power": 0, "match_lock_saturation": 0, "match_cdl_error": 0.0, "match_lut_file": "", "mix": 1.0}},
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -1775,6 +1779,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "patch_black": (0, 1), "red_weight": (0.0, 1.0), "blue_green_weight": (0.0, 1.0),
           "luminance_match": (0, 1), "luminance_level": (0.0, 1.0), "use_bg_luminance": (0, 1),
           "screen_subtraction": (0, 1), "screen_range": (0.0, 4.0), "color_r": (0.0, 1000.0), "color_g": (0.0, 1000.0), "color_b": (0.0, 1000.0),
+          "match_crop_target": (0, 1), "match_lut_res": (2, 129), "match_iterations": (0, 100), "match_saturation": (0.0, 4.0), "match_lock_slope": (0, 1), "match_lock_offset": (0, 1),
+          "match_lock_power": (0, 1), "match_lock_saturation": (0, 1), "match_cdl_error": (0.0, 1000000.0),
           "luminance_level_enable": (0, 1), "apply_to_mask": (0, 1), "prelut_size": (2, 65536), "yellow": (0, 1), "cyan": (0, 1), "magenta": (0, 1), "use_bg_chroma": (0, 1),
           # ScreenKeyer (step K2).
           "screen_red": (0.0, 1000.0), "screen_green": (0.0, 1000.0), "screen_blue": (0.0, 1000.0),
@@ -2186,6 +2192,8 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            # IBKColor and IBKGizmo (step K1).
            "screen_type": ["green", "blue", "pick"],
            # MatchGrade (step K2): Nuke's Task, Analysis, Mask and Output menus.
+           "match_transform": ["3D LUT", "CDL"], "match_prelut": ["Auto Detect", "Linear", "Logarithmic"],
+           "match_colorspace": ["RGB", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1"],
            "match_task": ["Match Graded Source", "Match Different Clip"], "match_analysis": ["Analyze Reference Frames", "Auto-analyze Per Frame"],
            "grade_mask": ["None", "Alpha", "Inverted Alpha"], "match_output": ["Matched", "Source", "Target"],
            # GenerateLUT (step K2): the file type and the files' bit depths and preLUT.
