@@ -900,7 +900,8 @@ class ZDefocusTests(unittest.TestCase):
 
     def test_the_main_tab_lays_its_knobs_out_in_nuke_order(self):
         shown = [label for label in labels("ZDefocus") if not label.startswith("Legacy")]
-        self.assertEqual(shown[:9], ["Channels", "Depth channel", "Math", "Focus plane (C)", "Depth of field", "Size", "Maximum", "Filter type", "Blades"])
+        self.assertEqual(shown[:17], ["Channels", "Depth channel", "Math", "Output", "Show image", "Fill foreground", "Focus plane (C)", "Focal point xy", "Depth of field",
+                                      "Blur inside", "Size", "Maximum", "Automatic layer spacing", "Depth layers", "Layer curve", "Filter type", "Blades"])
         self.assertEqual(core.CHOICES["zdefocus_math"], ["direct", "depth", "far = 0", "-direct", "-depth", "far = -0"])
 
     def test_an_older_node_keeps_the_older_depth_reading(self):

@@ -7456,7 +7456,12 @@ class Evaluator:
         if depth.ndim == 3: depth = depth[..., 0]
         if depth.shape != image.shape[:2]:
             raise ValueError("ZDefocus depth must match the image dimensions")
+        from . import zdefocusknobs
         focal = float(p.get("focal_plane", 1.0)); dof = max(1e-6, float(p.get("depth_of_field", 1.0)))
+        # The page's controls (focal point, blur inside, layers, outputs, fill foreground): nodebased/zdefocusknobs.py. A node saved before
+        # them keeps the picture it had (legacy_zdefocus_focus, set on load).
+        modern = not int(p.get("legacy_zdefocus", 1)) and not int(p.get("legacy_zdefocus_focus", 1))
+        sides = None
         if int(p.get("legacy_zdefocus", 1)):
             z = np.maximum(depth, 1e-6)
             if p.get("depth_math") == "1/depth": z = 1.0 / z
@@ -7471,33 +7476,54 @@ class Evaluator:
             else:
                 z = np.maximum(drawbehaviour.zdefocus_distance(depth, mode), 1e-6)
                 radii = np.minimum(float(p.get("max_size", 20.0)), np.abs(z - focal) / dof * float(p.get("max_size", 20.0)))
+            if modern:
+                centre, half = zdefocusknobs.focus(z, p)
+                if mode not in ("direct", "-direct"):
+                    radii = zdefocusknobs.blur_sizes(z, centre, half, p)
+                sides = zdefocusknobs.side(z, centre, half)
+                radii, layer = zdefocusknobs.snap_to_layers(radii, p)
+                output = p.get("zdefocus_output", "result")
+                if output == "focal plane setup":
+                    return zdefocusknobs.setup_view(image, zdefocusknobs.setup_colours(sides), p)
+                if output == "layer setup":
+                    level = layer / max(1, len(zdefocusknobs.layer_sizes(p)) - 1)
+                    return zdefocusknobs.setup_view(image, zdefocusknobs.setup_colours(sides, level), p)
+        h, w = depth.shape
+
+        def shape(r, yy, xx, radius):
+            """The filter at size r on the (yy, xx) grid: the disc, the bladed polygon or the wired kernel image."""
+            if p.get("bokeh_shape") == "image":
+                if kernel is None:
+                    raise ValueError("ZDefocus image bokeh requires a wired kernel input")
+                source_kernel = np.asarray(kernel, dtype=np.float32)
+                if source_kernel.ndim == 3: source_kernel = source_kernel[..., 3] if source_kernel.shape[2] > 3 else source_kernel[..., 0]
+                kh, kw = source_kernel.shape[:2]
+                ky = np.minimum(kh - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kh - 1)).astype(int)))
+                kx = np.minimum(kw - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kw - 1)).astype(int)))
+                grid = source_kernel[np.ix_(ky, kx)]
+                return grid > 0, grid
+            if p.get("bokeh_shape") == "blades" and r > 0:
+                theta = np.arctan2(yy, xx) - math.radians(float(p.get("blade_rotation", 0.0)))
+                sector = (theta + math.pi / int(p.get("blade_count", 6))) % (2 * math.pi / int(p.get("blade_count", 6))) - math.pi / int(p.get("blade_count", 6))
+                boundary = r * math.cos(math.pi / int(p.get("blade_count", 6))) / np.maximum(np.cos(sector), 1e-6)
+                return xx * xx + yy * yy <= boundary * boundary, None
+            return xx * xx + yy * yy <= r * r, None
+
+        if modern and p.get("zdefocus_output", "result") == "filter shape setup":
+            reach = int(math.ceil(abs(float(p.get("max_size", 20.0)))))
+            yy, xx = np.ogrid[-reach:reach + 1, -reach:reach + 1]
+            return zdefocusknobs.filter_shape_view(image, shape(abs(float(p.get("max_size", 20.0))), yy, xx, reach)[0], p)
         radius = int(math.ceil(float(np.max(radii)))) if radii.size else 0
         if radius <= 0: return image.copy()
-        h, w = depth.shape
         pad_img = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
         pad_z = np.pad(z, radius, mode="edge")
         out = np.empty_like(image)
         yy, xx = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+        fill = not modern or bool(int(p.get("fill_foreground", 1)))
         for y in range(h):
             for x in range(w):
                 r = float(radii[y, x])
-                if p.get("bokeh_shape") == "image":
-                    if kernel is None:
-                        raise ValueError("ZDefocus image bokeh requires a wired kernel input")
-                    source_kernel = np.asarray(kernel, dtype=np.float32)
-                    if source_kernel.ndim == 3: source_kernel = source_kernel[..., 3] if source_kernel.shape[2] > 3 else source_kernel[..., 0]
-                    kh, kw = source_kernel.shape[:2]
-                    ky = np.minimum(kh - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kh - 1)).astype(int)))
-                    kx = np.minimum(kw - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kw - 1)).astype(int)))
-                    kernel_grid = source_kernel[np.ix_(ky, kx)]
-                    disk = kernel_grid > 0
-                elif p.get("bokeh_shape") == "blades" and r > 0:
-                    theta = np.arctan2(yy, xx) - math.radians(float(p.get("blade_rotation", 0.0)))
-                    sector = (theta + math.pi / int(p.get("blade_count", 6))) % (2 * math.pi / int(p.get("blade_count", 6))) - math.pi / int(p.get("blade_count", 6))
-                    boundary = r * math.cos(math.pi / int(p.get("blade_count", 6))) / np.maximum(np.cos(sector), 1e-6)
-                    disk = xx * xx + yy * yy <= boundary * boundary
-                else:
-                    disk = xx * xx + yy * yy <= r * r
+                disk, kernel_grid = shape(r, yy, xx, radius)
                 samples_z = pad_z[y:y + 2 * radius + 1, x:x + 2 * radius + 1]
                 # Near objects remain in front; reject farther samples around a foreground pixel.
                 visible = disk & (samples_z <= z[y, x] + 1e-6)
@@ -7506,6 +7532,9 @@ class Evaluator:
                 if p.get("bokeh_shape") == "image" and kernel is not None:
                     weights = kernel_grid * visible
                     out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
+                elif not fill and sides[y, x] < 0:
+                    # Fill foreground off: what a foreground pixel cannot see behind it counts as empty, so its edge fades.
+                    out[y, x] = samples[visible].sum(axis=0) / max(1, int(disk.sum()))
                 else:
                     out[y, x] = samples[visible].mean(axis=0)
         return out

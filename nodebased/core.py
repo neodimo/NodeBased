@@ -232,6 +232,7 @@ from . import drawfxbehaviour as _drawfxbehaviour
 from . import transformbehaviour as _transformbehaviour
 from . import lensdistortion as _lensdistortion
 from . import drawbehaviour as _drawbehaviour
+from . import zdefocusknobs as _zdefocusknobs
 from . import timeknobs as _timeknobs
 from . import retimeknobs as _retimeknobs
 from . import cornerpinknobs as _cornerpinknobs
@@ -2348,6 +2349,7 @@ CHOICES["type"] = ["fBm", "turbulence"]
 CHOICES["ramp"] = ["none", "linear", "smooth0", "smooth1", "smooth"]
 CHOICES["ramp_type"] = list(_drawbehaviour.RAMP_TYPES)
 CHOICES["zdefocus_math"] = list(_drawbehaviour.ZDEFOCUS_MATH)
+CHOICES.update(_zdefocusknobs.CHOICES)
 LIMITS.update(_drawbehaviour.LIMITS)
 CHOICES.update({"Quality": ["low", "normal", "high"], "fillRegion": ["Matte Alpha", "Source Alpha"],
                 "detailSource": ["Source", "Detail"]})

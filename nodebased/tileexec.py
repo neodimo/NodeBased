@@ -508,6 +508,10 @@ class TileExecutor:
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
+            if node["type"] == "ZDefocus":
+                from . import zdefocusknobs
+                if zdefocusknobs.needs_full_frame(node["params"]):
+                    return False
             if node["type"] == "Denoise":
                 from . import denoiseknobs
                 # A noise level is measured on a whole picture (Automatic profile, or a Noise input wired): full frame.

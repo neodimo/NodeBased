@@ -1103,6 +1103,11 @@ def _defocus_cases(Case, out):
          f"case it will be clamped to maximum)' ({page}): a maximum of 0 allows no blur whatever the depth", nb_inputs=depth)
     case("zdefocus_direct_size_zero_is_no_blur", "ZDefocus", (("math", "direct"), ("size", 0.0)), {**direct, "size": 0.0, "max_size": 50.0}, same_as_input,
          "guide", "ZDefocus: with math direct the blur size is the depth times the size control, so a size of 0 blurs nothing", nb_inputs=depth)
+    case("zdefocus_depth_of_field_slice_is_entirely_in_focus", "ZDefocus", (("math", "depth"), ("center", 1.0), ("dof", 1000.0), ("blur_dof", False)),
+         {"zdefocus_math": "depth", "legacy_zdefocus": 0, "legacy_zdefocus_focus": 0, "focal_plane": 1.0, "depth_of_field": 1000.0, "blur_dof": 0,
+          "max_size": 50.0, "size": 25.0}, same_as_input, "guide",
+         f"ZDefocus: depth of field 'sets a depth slice around the focus plane that is entirely in focus' ({page}): a slice thicker than the depth "
+         "in the picture, with blur inside off, leaves every pixel sharp", nb_inputs=depth)
     case("zdefocus_blur_by_distance", "ZDefocus", (("math", "depth"), ("center", 1.0), ("dof", 0.0)),
          {"zdefocus_math": "depth", "legacy_zdefocus": 0, "focal_plane": 1.0, "depth_of_field": 1.0}, same_as_input, "convention",
          "ZDefocus: the blur at a given distance from the focus plane, depth of field and size", nb_inputs=depth,

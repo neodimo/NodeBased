@@ -56,6 +56,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from . import zdefocusknobs as _zdefocusknobs
+
 FLAG = "legacy_draw_axes"
 KINDS = ("Rectangle", "Radial", "Ramp", "Noise", "Grid")
 NOISE_COLOUR = {"red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0}
@@ -74,7 +76,7 @@ NEW["Dither"] = {"legacy_dither": 0, "monodither": 0, "static_seed": 0, "bits": 
 NEW["Grain"] = {"legacy_grain": 0, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
                 "maskgrain": 1, "invert_mask": 0, "red_intensity": 0.416, "green_intensity": 0.46, "blue_intensity": 0.85}
 NEW["Defocus"] = {"legacy_defocus": 0, "scale": 1.0}
-NEW["ZDefocus"] = {"legacy_zdefocus": 0, "zdefocus_math": "depth", "size": 25.0}
+NEW["ZDefocus"] = {"legacy_zdefocus": 0, "zdefocus_math": "depth", "size": 25.0, **_zdefocusknobs.NEW}
 NEW["EdgeExtend"] = {"legacy_edge_extend": 0, "source_premultiplied": 0, "premultiply": 1, "erode": 0.0}
 NEW["Roto"] = {"legacy_roto_alpha": 0, "legacy_roto_shapes": 0}
 NEW["LightWrap"] = {"legacy_lightwrap_grade": 0, "legacy_lightwrap_luma": 0}
@@ -84,7 +86,7 @@ LEGACY["Roto"] = {"legacy_roto_alpha": 1, "legacy_roto_shapes": 1}
 LEGACY["LightWrap"] = {"legacy_lightwrap_grade": 1, "legacy_lightwrap_luma": 1}
 LEGACY["RotoPaint"] = {"legacy_paint_replace": 1}
 LEGACY["Defocus"] = {"legacy_defocus": 1, "scale": 1.0}
-LEGACY["ZDefocus"] = {"legacy_zdefocus": 1, "zdefocus_math": "depth", "size": 25.0}
+LEGACY["ZDefocus"] = {"legacy_zdefocus": 1, "zdefocus_math": "depth", "size": 25.0, **_zdefocusknobs.UPGRADE}
 LEGACY["EdgeExtend"] = {"legacy_edge_extend": 1, "source_premultiplied": 1, "premultiply": 0, "erode": 0.0}
 ZDEFOCUS_MATH = ("direct", "depth", "far = 0", "-direct", "-depth", "far = -0")
 LEGACY["Ramp"] = {FLAG: 1, "ramp_type": "linear"}
@@ -97,7 +99,7 @@ LEGACY["Grain"] = {"legacy_grain": 1, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.
 LIMITS = {"legacy_roto_alpha": (0, 1), "legacy_roto_shapes": (0, 1), "legacy_lightwrap_grade": (0, 1), "legacy_lightwrap_luma": (0, 1), "legacy_paint_replace": (0, 1), "legacy_defocus": (0, 1), "legacy_zdefocus": (0, 1), "legacy_edge_extend": (0, 1), "source_premultiplied": (0, 1), "premultiply": (0, 1),
           "erode": (-100.0, 100.0), FLAG: (0, 1), "plinear": (0, 1), "legacy_dither": (0, 1), "monodither": (0, 1), "static_seed": (0, 1), "legacy_grain": (0, 1),
           "red_i": (0.0, 1.0), "green_i": (0.0, 1.0), "blue_i": (0.0, 1.0), "minimum_red": (-1000.0, 1000.0), "minimum_green": (-1000.0, 1000.0),
-          "minimum_blue": (-1000.0, 1000.0), "maskgrain": (0, 1)}
+          "minimum_blue": (-1000.0, 1000.0), "maskgrain": (0, 1), **_zdefocusknobs.LIMITS}
 GRAIN_SCALE = 0.12
 
 
