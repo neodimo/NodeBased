@@ -1,5 +1,32 @@
 ## 2026-11-02 - Lane 9 (2D behaviour), step E: Roto and RotoPaint behaviour and layout
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:15 PM on 2026-11-02 PDT)
+
+`main` moved `4c40f139` -> `08eb6601` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `08eb6601` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-2305.log`, started 11:05 PM): **Ran 8419 tests in 578.733 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step F of 2: Cryptomatte's missing knobs, the OCIO nodes checked against a stated config, and Write's main knobs.** Commits:
+  - `99613d8e` TASKLOG and state: lane 2 step F note
+  - `90f2b939` OCIO nodes: checked against a stated fixture config, convert the stored colour like Nuke (older graphs keep divide-by-alpha), OCIODisplay input colorspace; Write's QuickTime and MXF knobs documented as unpaired
+  - `1eda7a8c` Cryptomatte gains Manifest Source, sidecar and Preview; Encryptomatte gains Matte Name, Merge Operation and Cryptomatte Layer, with tests against a real two-ID EXR
+  Diff: 21 files changed, 1218 insertions(+), 281 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step E of 2: Roto and RotoPaint compute what Nuke computes, and their panels read like Nuke's.** Commits:
+  - `9fcb4f34` tests: the O-shortcut Roto test reads Nuke's replace-off alpha (shape over the plate's alpha) and checks coverage with Replace on (lane 9 step E follow-up)
+  - `fc5e2a05` RotoPaint: stroke, opacity, clone and reveal cases; Replace clears the image the strokes are drawn on (older documents ignore it); main tab in the guide's order; Roto and RotoPaint spline key paired (2D behaviour, lane 9 step E)
+  - `9e898147` Roto: pixel cases for shapes, feather, opacity, invert, blends, output, premultiply and replace; the matte goes over a wired plate's alpha unless replace is on (older documents keep the old reading); main tab in the guide's order (2D behaviour, lane 9 step E)
+  Diff: 16 files changed, 809 insertions(+), 71 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 State: Roto and RotoPaint have pixel cases (`tools/nuke_fidelity_cases_filter.py`, payload shapes through `nuke_fidelity_cases._run_payload_document`), main tabs in the guide's order, and
 two kernel changes behind legacy flags (`legacy_roto_alpha`: the matte goes over a wired plate's alpha unless replace is on, premultiply rgba squares the alpha; `legacy_paint_replace`:
 RotoPaint's replace clears the image the strokes are drawn on). Both flags default 0 on new nodes, 1 on saved ones (`drawbehaviour.py`). Fidelity: Roto 89.6, RotoPaint 95.2, overall 90.7.
