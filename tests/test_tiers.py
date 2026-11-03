@@ -322,7 +322,10 @@ class ProxyTierTests(unittest.TestCase):
                        # CornerPin (group 2c5): eight pixel-position point pairs.
                        "from1_x", "from1_y", "from2_x", "from2_y", "from3_x", "from3_y",
                        "from4_x", "from4_y", "to1_x", "to1_y", "to2_x", "to2_y",
-                       "to3_x", "to3_y", "to4_x", "to4_y"}
+                       "to3_x", "to3_y", "to4_x", "to4_y",
+                       # Lane 2 step H: Flare's three radii and chroma shift, and Sparkles's position, size and thickness, are pixel lengths.
+                       "flare_radius_inner", "flare_radius_middle", "flare_radius_outer", "flare_chroma_shift",
+                       "spark_x", "spark_y", "spark_size", "spark_thick"}
         for kind, spec in SPECS.items():
             present = pixel_names & set(spec["params"])
             # The fluid `max_size` knob caps simulated cells. Its meaning must stay fixed when

@@ -46,7 +46,7 @@ FILTER_CHROME = {
     "Blur": ("all", True, False), "Sharpen": (None, True, False), "ErodeFilter": ("all", True, False),
     "Median": (None, True, False), "Glow": (None, True, False), "Soften": (None, True, False),
     "Defocus": (None, True, False), "ZDefocus": (None, True, False), "DirBlur": (None, True, False),
-    "EdgeBlur": (None, True, False), "Erode": (None, True, False), "DegrainSimple": ("all", True, False),
+    "EdgeBlur": (None, True, False), "Glint": ("all", True, False), "Erode": (None, True, False), "DegrainSimple": ("all", True, False),
     "Bilateral": ("all", True, False), "Matrix": ("all", True, False), "Emboss": ("all", True, False),
     "BumpBoss": ("all", True, False), "Laplacian": (None, True, False), "Convolve": ("all", True, False),
     "VectorBlur": ("all", True, False), "EdgeExtend": ("rgb", False, False), "EdgeDetect": ("all", False, False),
@@ -294,6 +294,8 @@ def upgrade_nodes(nodes):
         added.update(raysbehaviour.upgrade_params(node.get("type")))
         from . import warpknobs
         added.update(warpknobs.upgrade_params(node.get("type")))              # GridWarp and SplineWarp (lane 9 step H)
+        from . import drawfxbehaviour
+        added.update(drawfxbehaviour.upgrade_params(node.get("type")))         # Flare, Glint, Sparkles, ScannedGrain (lane 2 step H)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

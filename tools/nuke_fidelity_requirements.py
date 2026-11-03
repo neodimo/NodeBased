@@ -110,6 +110,10 @@ def _inputs_for(kind, fx, size):
 # the defaults the `defaults` component compares; only the probe's starting point moves.
 PROBE_BASE = {
     "CopyRectangle": {"area_x": 3.0, "area_y": 2.0, "area_r": 11.0, "area_t": 9.0},     # Nuke's 512 389 1536 1167 lies off a 16 x 12 picture
+    # Lane 2 step H (11/3): Flare's centre and radii, Glint's 50 pixel rays and Sparkles's 300 pixel rays all lie off a 16 x 12 picture.
+    "Flare": {"position_x": 8.0, "position_y": 6.0, "flare_radius_inner": 2.0, "flare_radius_middle": 4.0, "flare_radius_outer": 7.0},
+    "Glint": {"length": 6.0, "glint_steps": 3, "tolerance": 0.3},
+    "Sparkles": {"spark_x": 8.0, "spark_y": 6.0, "spark_size": 7.0, "spark_ray_nb": 6},
 }
 
 

@@ -7559,6 +7559,9 @@ class Evaluator:
 
     @staticmethod
     def _flare(image, p, origin=(0, 0), frame_size=None):
+        from . import drawfxbehaviour
+        if not drawfxbehaviour.is_legacy("Flare", p):
+            return drawfxbehaviour.flare(image, p, origin)       # Nuke's donut (lane 2 step H); a saved node (legacy_flare) runs the glow below
         h, w = image.shape[:2]
         yy, xx = np.mgrid[:h, :w].astype(np.float32)
         x, y = xx + origin[0], yy + origin[1]
@@ -7601,6 +7604,9 @@ class Evaluator:
 
     @staticmethod
     def _glint(image, p):
+        from . import drawfxbehaviour
+        if not drawfxbehaviour.is_legacy("Glint", p):
+            return drawfxbehaviour.glint(image, p)               # Nuke's star of copies (lane 2 step H); a saved node (legacy_glint) runs the line kernel below
         # A line-kernel convolution of only the values above tolerance. Every chosen orientation
         # contributes two symmetric arms, so `rays` is the count of distinct star axes.
         bright = np.maximum(image[..., :3] - float(p.get("tolerance", 1)), 0.0)
@@ -7627,6 +7633,9 @@ class Evaluator:
 
     @staticmethod
     def _sparkles(image, p, frame=None, origin=(0, 0)):
+        from . import drawfxbehaviour
+        if not drawfxbehaviour.is_legacy("Sparkles", p):
+            return drawfxbehaviour.sparkles(image, p, origin)    # Nuke's rays from a position (lane 2 step H); a saved node (legacy_sparkles) runs the glints below
         h, w = image.shape[:2]
         yy, xx = np.mgrid[:h, :w]
         # Hash per pixel, seed and frame; deterministic across tile boundaries.
@@ -7696,6 +7705,9 @@ class Evaluator:
     @staticmethod
     def _scanned_grain(image, plate, p, frame=None):
         if plate is None: raise ValueError("ScannedGrain: connect a grain plate")
+        from . import drawfxbehaviour
+        if not drawfxbehaviour.is_legacy("ScannedGrain", p):
+            return drawfxbehaviour.scanned_grain(image, plate, p, frame)   # plate minus offset, times the amounts (lane 2 step H); a saved node runs the kernel below
         h, w = image.shape[:2]; ph, pw = plate.shape[:2]
         # Match each plate channel's scanned mean and variance, wrapping a translated plate per frame.
         seed, frame = int(p.get("seed", 1)), int(frame or 0)

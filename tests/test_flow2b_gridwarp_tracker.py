@@ -253,7 +253,7 @@ class GridWarpTrackerTests(unittest.TestCase):
         plate = rng.normal(0, .1, (64, 64, 4)).astype(np.float32)
         image = np.zeros_like(plate)
         image[..., 3] = 0
-        base = dict(SPECS["ScannedGrain"]["params"], amount=1, response=1)
+        base = dict(SPECS["ScannedGrain"]["params"], legacy_scannedgrain=1, amount=1, response=1)
         gated = Evaluator._scanned_grain(image, plate, dict(base, apply_through_alpha=1), frame=3)
         np.testing.assert_array_equal(gated, image)
         image[..., :3] = .5

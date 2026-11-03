@@ -15,7 +15,7 @@ class OpticalEffectsTests(unittest.TestCase):
         self.image[16, 16, :3] = 4
 
     def test_flare_has_centre_and_ghosts_on_centre_axis(self):
-        p = dict(SPECS["Flare"]["params"], position_x=10, position_y=14,
+        p = dict(SPECS["Flare"]["params"], legacy_flare=1, position_x=10, position_y=14,
                  size=1, streaks=0, ghosts=2, spread=.5, brightness=1)
         out = Evaluator._flare(np.zeros_like(self.image), p)
         # The optical axis is the line from (10, 14) through the frame centre (16, 16).
@@ -23,7 +23,7 @@ class OpticalEffectsTests(unittest.TestCase):
         self.assertGreater(float(out[13, 7, 0]), float(out[11, 10, 0]))
 
     def test_glint_respects_highlight_tolerance_and_ray_count(self):
-        p = dict(SPECS["Glint"]["params"], tolerance=1, rays=4, length=12)
+        p = dict(SPECS["Glint"]["params"], legacy_glint=1, tolerance=1, rays=4, length=12)
         low = np.zeros_like(self.image)
         low[..., 3] = 1
         self.assertTrue(np.array_equal(Evaluator._glint(low, p), low))
@@ -36,7 +36,7 @@ class OpticalEffectsTests(unittest.TestCase):
         self.assertEqual(float(two_axes[18, 18, 0]), float(high[18, 18, 0]))
 
     def test_sparkles_are_seeded_and_frame_animated(self):
-        p = dict(SPECS["Sparkles"]["params"], tolerance=0, density=.2, size=2, seed=23)
+        p = dict(SPECS["Sparkles"]["params"], legacy_sparkles=1, tolerance=0, density=.2, size=2, seed=23)
         plate = self.image.copy(); plate[..., :3] = 4
         a = Evaluator._sparkles(plate, p, frame=3)
         b = Evaluator._sparkles(plate, p, frame=3)
@@ -58,7 +58,7 @@ class OpticalEffectsTests(unittest.TestCase):
         rng = np.random.default_rng(7)
         plate = rng.normal(0, [0.04, 0.06, 0.08, 0], (64, 64, 4)).astype(np.float32)
         image = np.ones_like(plate); image[..., 3] = 1
-        p = dict(SPECS["ScannedGrain"]["params"], amount=1, response=1, seed=2)
+        p = dict(SPECS["ScannedGrain"]["params"], legacy_scannedgrain=1, amount=1, response=1, seed=2)
         out = Evaluator._scanned_grain(image, plate, p, frame=5)
         for c in range(3):
             ratio = float(out[..., c].var() / plate[..., c].var())
@@ -105,7 +105,7 @@ class OpticalEffectsTests(unittest.TestCase):
                      {"frame": 1, "value": 10}, {"frame": 2, "value": 12}]}}}
         d.execute({"op": "set_tracks", "id": "tracker", "tracks": [track]})
         d.execute({"op": "create", "id": "flare", "type": "Flare", "params": {
-            "position_x": 8.0, "position_y": 8.0, "tracker_id": "tracker", "track_index": 0,
+            "legacy_flare": 1, "position_x": 8.0, "position_y": 8.0, "tracker_id": "tracker", "track_index": 0,
             "brightness": 1.0, "streaks": 0, "length": 0.0, "rotation": 0.0, "ghosts": 0,
             "spread": 0.0, "size": 1.0, "red": 1.0, "green": 1.0, "blue": 1.0,
             "chromatic_shift": 0.0, "mix": 1.0}})
@@ -124,7 +124,7 @@ class OpticalEffectsTests(unittest.TestCase):
         region = Region(0, 0, 256, 256)
         image = Raster(image_pixels, region, region)
         plate = Raster(plate_pixels, region, region)
-        p = dict(SPECS["ScannedGrain"]["params"], amount=1.0, response=1.0, seed=91)
+        p = dict(SPECS["ScannedGrain"]["params"], legacy_scannedgrain=1, amount=1.0, response=1.0, seed=91)
         first = Evaluator._windowed_kernel("ScannedGrain", p, [image, plate], frame=1)
         second = Evaluator._windowed_kernel("ScannedGrain", p, [image, plate], frame=2)
         for channel in range(3):

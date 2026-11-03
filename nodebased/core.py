@@ -224,6 +224,7 @@ from . import raysbehaviour as _raysbehaviour
 from . import bilateralknobs as _bilateralknobs
 from . import warpknobs as _warpknobs
 from . import vectorcornerpinknobs as _vectorcornerpinknobs
+from . import drawfxbehaviour as _drawfxbehaviour
 from . import transformbehaviour as _transformbehaviour
 from . import drawbehaviour as _drawbehaviour
 from . import timeknobs as _timeknobs
@@ -453,9 +454,12 @@ SPECS = {
                          "luminance_weighted": 0, "black": 0.0, "mix": 1.0, **_drawbehaviour.new_params("Grain")}},
     # Optical effects (step V3). Coordinates are canvas pixels; stochastic effects hash absolute
     # pixel coordinates and frame so evaluator and tile renders are reproducible.
-    "Flare": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"position_x": 480.0, "position_y": 270.0, "tracker_id": "", "track_index": -1, "brightness": 1.0, "streaks": 6, "length": 180.0, "rotation": 0.0, "ghosts": 5, "spread": 0.65, "size": 18.0, "red": 0.7, "green": 0.85, "blue": 1.0, "chromatic_shift": 2.0, "mix": 1.0}},
-    "Glint": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "rays": 4, "length": 12.0, "rotation": 0.0, "falloff": 0.8, "mix": 1.0}},
-    "Sparkles": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "size": 3.0, "density": 0.02, "seed": 1, "mix": 1.0}},
+    "Flare": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"position_x": 480.0, "position_y": 270.0, "tracker_id": "", "track_index": -1, "brightness": 1.0, "streaks": 6, "length": 180.0, "rotation": 0.0, "ghosts": 5, "spread": 0.65, "size": 18.0, "red": 0.7, "green": 0.85, "blue": 1.0, "chromatic_shift": 2.0, "mix": 1.0,
+                                                                              **_drawfxbehaviour.new_params("Flare")}},
+    "Glint": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 0.5, "rays": 2, "length": 50.0, "rotation": 0.0, "falloff": 0.8, "mix": 1.0,
+                                                                         **_drawfxbehaviour.new_params("Glint")}},
+    "Sparkles": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "size": 3.0, "density": 0.02, "seed": 23, "mix": 1.0,
+                                                                            **_drawfxbehaviour.new_params("Sparkles")}},
     # GodRays (step G, lane 2): Nuke's transform-average (translate, rotate, scale, skew about the centre; from and to colour; gamma; max) for a new node,
     # with steps 5; `decay` and `translate` belong to the older additive smear a saved node keeps (`legacy_godrays` 1, steps as saved).
     "GodRays": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 5, "decay": 0.9, "translate": 1.0, "mix": 1.0,
@@ -463,7 +467,8 @@ SPECS = {
     # VolumeRays (step G, lane 2): the guide's plain colour knobs; Add on Top is off in Nuke, so a new node passes the rays alone and a saved one keeps its picture.
     "VolumeRays": {"inputs": ["image", "matte"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0,
                                                                                          **_raysbehaviour.new_params("VolumeRays")}},
-    "ScannedGrain": {"inputs": ["image", "plate"], "optional_inputs": ["mask"], "params": {"amount": 1.0, "response": 1.0, "seed": 1, "preset": "neutral", "irregularity": 0.0, "minimum": 0.0, "apply_through_alpha": 0, "mix": 1.0}},
+    "ScannedGrain": {"inputs": ["image", "plate"], "optional_inputs": ["mask"], "params": {"amount": 1.0, "response": 1.0, "seed": 1, "preset": "neutral", "irregularity": 0.0, "minimum": 0.0, "apply_through_alpha": 0, "mix": 1.0,
+                                                                                                                       **_drawfxbehaviour.new_params("ScannedGrain")}},
     # Posterize (step 5b): `colors` levels per channel in the selected channels.
     "Posterize": {"inputs": ["image"], "optional_inputs": ["mask"],
                   "params": {"colors": 16, "channels": "rgb", "mix": 1.0}},
@@ -2314,6 +2319,7 @@ LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000)
 # Grade's Nuke knobs (fidelity step E). `black` and `white` are shared names (Log2Lin, Histogram), so Grade's wider ranges are its own.
 LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
 LIMITS.update(_behaviour2d.LIMITS)
+LIMITS.update(_drawfxbehaviour.LIMITS)
 CHOICES.update(_behaviour2d.CHOICES)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
@@ -2327,6 +2333,8 @@ CHOICES["guide_channels"] = list(_bilateralknobs.GUIDE_CHANNELS)
 CHOICES["merge_bbox"] = list(_mergeknobs.BBOX_CHOICES)
 NODE_LIMITS["Sharpen"] = NODE_LIMITS["Soften"] = {"minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0)}
 NODE_LIMITS["Grade"] = {"black": (-1000.0, 1000.0), "white": (-1000.0, 1000.0), "blackpoint": (-1000.0, 1000.0)}
+# Glint's and Sparkles's threshold is a picture value (a highlight can be many times white, and Nuke's tolerance can be 0); the shared name is a solver tolerance elsewhere.
+NODE_LIMITS["Glint"] = NODE_LIMITS["Sparkles"] = {"tolerance": (0.0, 1000.0)}
 
 
 def _downstream_of(nodes, key):
