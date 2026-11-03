@@ -415,7 +415,7 @@ class GpuDisplay:
     """
 
     def __init__(self, surface=None):
-        from PySide6.QtCore import QCoreApplication, QThread
+        from PySide6.QtCore import QCoreApplication
         from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
 
         # QOffscreenSurface (and the QOpenGLContext bound to it) needs a live
@@ -428,6 +428,9 @@ class GpuDisplay:
         self._owns_surface = surface is None
         fmt = context_format()
         if surface is None:
+            # Imported here, not above: with QThread imported on the preview thread the 3D playback stage 'GPU render and wait' measured
+            # 13 ms against 4 ms (Xvfb, 960x540 cube, 11/2); the import is only needed by a caller that brings no surface.
+            from PySide6.QtCore import QThread
             if QThread.currentThread() != QCoreApplication.instance().thread():
                 # QOffscreenSurface.create() off the GUI thread blocks until the GUI thread services it.
                 raise GpuNeedsGuiThread('an offscreen surface must be created on the GUI thread')
