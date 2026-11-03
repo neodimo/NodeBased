@@ -1,3 +1,7 @@
+## 2026-11-02 - Lane 9 (2D behaviour), step F: Tracker, DropShadow, DirBlur and LightWrap behaviour and layout
+
+See the step F note at the top of TASKLOG.md. Flags added: `legacy_dropshadow_angle`, `legacy_lightwrap_grade`, `legacy_dirblur_knobs` (all 1 on a saved node, 0 in a new one). Tests: `tests.test_2d_behaviour_filter_f`.
+
 ## 2026-11-02 - Lane 9 (2D behaviour), step E: Roto and RotoPaint behaviour and layout
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:15 PM on 2026-11-02 PDT)
