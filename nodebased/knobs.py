@@ -2290,6 +2290,21 @@ NUKE_LABELS.update({
 
 # Lane 2 step F (11/2): Cryptomatte, Encryptomatte and OCIOLogConvert in the guide's order; NodeBased's own knobs follow. Kept apart from NUKE_LAYOUT,
 # which tests/test_split_knobs.py pins to lane 2's step A to C nodes.
+# Lane 2 step K (11/3): the time and metadata nodes in the guide's order; knobs NodeBased added keep their place after these.
+NUKE_LAYOUT_LANE2K = {
+    "AddTimeCode": ("timecode", "fps", "metafps", "start_frame", "use_frame"),
+    "BurnIn": ("red", "opacity", "margin", "y_padding", "font", "font_style", "text_scale", "top_left", "top_middle", "top_right",
+               "bottom_left", "bottom_middle", "bottom_right", "bar", "bar_red", "bar_opacity", "bar_x_border", "bar_y_border"),
+    "CurveTool": ("curve_type", "autocrop_color_r", "autocrop_tolerance", "avg_frames", "channels", "box_x", "crop_x",
+                  "average_r", "average_g", "average_b", "average_a", "max_x", "max_value", "min_x", "min_value"),
+    "AppendClip": ("fade_in", "fade_out", "dissolve", "first_frame", "meta_from_first"),
+    "TimeBlur": ("divisions", "shutter", "shutter_offset", "custom_offset"),
+    "ContactSheet": ("width", "height", "rows", "columns", "gap", "center", "roworder", "colorder", "splitinputs", "startframe", "endframe"),
+    "Precomp": ("file", "reload", "reading", "missing_frames", "reload_write", "output_node", "use_output"),
+}
+NUKE_LABELS.setdefault("AddTimeCode", {})["timecode"] = "Startcode"
+
+
 NUKE_LAYOUT_LANE2F = ({
     "Cryptomatte": ("crypto_layer", "manifest_source", "sidecar_filepath", "preview_enabled", "matte_list"),
     "Encryptomatte": ("matte_name_type", "id0", "merge_operation", "layer_name"),
@@ -2361,7 +2376,7 @@ NUKE_LABELS.setdefault("SplineWarp", {})["boundary_bbox"] = "Bbox boundary curve
 
 
 def _nuke_layouts():
-    for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9, **NUKE_LAYOUT_LANE2F}.items():
+    for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9, **NUKE_LAYOUT_LANE2F, **NUKE_LAYOUT_LANE2K}.items():
         groups = [group for group in KNOB_LAYOUT[kind] if group.kind != "legacy"]
         legacy = [group for group in KNOB_LAYOUT[kind] if group.kind == "legacy"]
         by_first = {group.params[0]: group for group in groups}

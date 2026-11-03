@@ -401,5 +401,47 @@ class GenerateLutFileTests(unittest.TestCase):
         self.assertEqual(SPECS["GenerateLUT"]["params"]["lut_file_type"], "cube")
 
 
+# ================================================================================================================ layout of the time and metadata nodes
+class TimeAndMetadataLayoutTests(unittest.TestCase):
+    """The main tab of each node lists the knobs the guide pairs with them in the guide's order; NodeBased's own knobs follow."""
+
+    EXPECTED = {
+        "AddTimeCode": ["Startcode", "FPS", "Get FPS from metadata", "Start Frame", "Use start frame", "Drop frame"],
+        "BurnIn": ["Color", "Opacity", "X padding", "Y padding", "Font", "Font style", "Text scale", "Top Left", "Top middle", "Top Right", "Bottom Left",
+                   "Bottom middle", "Bottom Right", "Background bar", "Bar colour", "Bar opacity", "Bar X border", "Bar Y border"],
+        "CurveTool": ["Curve type", "AutoCrop color", "AutoCrop tolerance", "Frames for base average", "Channels", "Box X", "Crop X", "Average R", "Average G",
+                      "Average B", "Average A", "Max X", "Maximum luminance pixel value", "Min X", "Minimum luminance pixel value"],
+        "AppendClip": ["Fade in", "Fade out", "Dissolve", "First Frame", "Take metadata from first clip"],
+        "TimeBlur": ["Divisions", "Shutter", "Shutter Offset", "Custom Offset"],
+        "ContactSheet": ["Width", "Height", "Rows", "Columns", "Gap", "Center", "Row Order", "Column Order", "Split Inputs", "Start Frame", "End Frame"],
+        "Precomp": ["File", "Reload count", "Read file for output", "Missing frames", "Reload file count", "Output node", "Use output node"],
+    }
+
+    def test_each_node_opens_with_the_guides_knobs_in_the_guides_order(self):
+        from nodebased import knobs
+        for kind, labels in self.EXPECTED.items():
+            with self.subTest(kind=kind):
+                shown = [g.label for g in knobs.knob_layout(kind) if g.kind != "legacy"]
+                self.assertEqual(shown[:len(labels)], labels)
+
+    def test_the_audit_finds_no_order_or_label_difference_left(self):
+        import json
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+        import audit_nuke_fidelity as audit
+        import nuke_fidelity_requirements as requirements
+        mapping = json.loads(audit.MAP_JSON.read_text(encoding="utf-8"))
+        nuke = json.loads(audit.NUKE_JSON.read_text(encoding="utf-8"))["nodes"]
+        for key in self.EXPECTED:
+            with self.subTest(node=key):
+                pair = mapping["pairs"][key]
+                frac, detail = requirements.layout_component(pair["nodebased"], pair["knobs"], nuke[key]["knobs"])
+                if frac is None:
+                    continue
+                kept, total = detail["layout_order"]
+                self.assertEqual(kept, total, f"{key}: only {kept} of {total} paired knobs in Nuke's order")
+                self.assertEqual(detail["label_mismatches"], [], f"{key}: labels differ")
+
+
 if __name__ == "__main__":
     unittest.main()
