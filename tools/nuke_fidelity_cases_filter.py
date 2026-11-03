@@ -783,6 +783,7 @@ def cases():
     _bilateral_cases(Case, out)
     _vectorcornerpin_cases(Case, out)
     _warp_cases(Case, out)
+    _lens_cases(Case, out)
     return out
 
 
@@ -1899,3 +1900,100 @@ def _warp_cases(Case, out):
     case("splinewarp_curve_moves_the_pixels_on_it", "SplineWarp", {**spline, "_warp": pairs}, on_curve,
          "a source curve paired with a destination curve 3 pixels right carries the pixels on the curve 3 pixels right (the pixels at the curve's samples are scored)")
     case("splinewarp_mix_zero_is_the_input", "SplineWarp", {**spline, "mix": 0.0, "_warp": pairs}, whole, "mix 0 gives the input back")
+
+
+# ------------------------------------------------------------------------------------------------ LensDistortion (step J)
+LENS_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/lensdistortion.html"
+
+
+def _bilinear_at(plate, sx, sy):
+    """`plate` read at fractional pixel indices (pixel i's centre is index i), zero outside; the plain bilinear form, in float64."""
+    h, w = plate.shape[:2]
+    x0, y0 = np.floor(sx).astype(int), np.floor(sy).astype(int)
+    fx, fy = (sx - x0)[..., None], (sy - y0)[..., None]
+
+    def at(yy, xx):
+        ok = ((xx >= 0) & (xx < w) & (yy >= 0) & (yy < h))[..., None]
+        return np.where(ok, plate[np.clip(yy, 0, h - 1), np.clip(xx, 0, w - 1)], 0.0)
+    return (at(y0, x0) * (1 - fx) * (1 - fy) + at(y0, x0 + 1) * fx * (1 - fy)
+            + at(y0 + 1, x0) * (1 - fx) * fy + at(y0 + 1, x0 + 1) * fx * fy)
+
+
+def lens_reference(plate, den=(0.0, 0.0), num=(0.0, 0.0), forward=True, mode="Undistort", centre=(0.0, 0.0), squeeze=1.0):
+    """The guide's rational radial model applied to a plate, written out from its equation (xu = xd / (1 + k0 rd^2 + k1 rd^4), and its
+    numerator form), with r in units of half the longer side of the format, y up, the centre in pixels from the middle of the format and
+    the squeeze dividing x before the model and multiplying it after. The inverse is a bisection on the radius, so it shares no step with
+    NodeBased's Newton solver. Returns (picture, valid): valid keeps the pixels that read the plate wholly inside it."""
+    plate = plate.astype(np.float64)
+    h, w = plate.shape[:2]
+    half = max(w, h) / 2.0
+    rows, cols = np.mgrid[0:h, 0:w]
+    cx, cy = centre[0] / half, centre[1] / half
+    x = (cols + 0.5 - w / 2.0) / half
+    y = (h / 2.0 - (rows + 0.5)) / half
+
+    def scale(r):
+        return (1 + num[0] * r ** 2 + num[1] * r ** 4) / (1 + den[0] * r ** 2 + den[1] * r ** 4)
+
+    def invert(tx, ty):
+        target = np.hypot(tx, ty)
+        lo, hi = np.zeros_like(target), np.full_like(target, 4.0)
+        for _ in range(80):
+            mid = (lo + hi) / 2.0
+            below = mid * scale(mid) < target
+            lo, hi = np.where(below, mid, lo), np.where(below, hi, mid)
+        r = (lo + hi) / 2.0
+        k = np.divide(r, target, out=np.ones_like(r), where=target > 0)
+        return tx * k, ty * k
+
+    dx, dy = x / squeeze - cx, y - cy
+    take_model_directly = (mode == "Undistort") != forward        # Undistort of a Backward model, Redistort of a Forward one
+    if take_model_directly:
+        k = scale(np.hypot(dx, dy))
+        mx, my = dx * k, dy * k
+    else:
+        mx, my = invert(dx, dy)
+    mx, my = (mx + cx) * squeeze, my + cy
+    sx, sy = mx * half + w / 2.0 - 0.5, h / 2.0 - my * half - 0.5
+    valid = (sx >= 0) & (sx <= w - 1) & (sy >= 0) & (sy <= h - 1)
+    return _bilinear_at(plate, sx, sy), np.broadcast_to(valid[..., None], plate.shape)
+
+
+def _lens_cases(Case, out):
+    """LensDistortion: Model Preset, Lens Type, squeeze, coefficients, centre, Mode and Direction. Each case writes a distortion in the
+    knobs and compares the picture with the stated equation applied to the fixture (lens_reference). Pixels whose source position falls
+    outside the plate are not scored: the guide states nothing about the edge."""
+    note = f"LensDistortion ({LENS_GUIDE}): "
+
+    def case(id, nuke_knobs, nb_params, args, statement, unscored="", source="guide"):
+        out.append(Case(
+            id=id, nuke="LensDistortion", nuke_class="LensDistortion", nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind="Undistort",
+            nb_params={"filter": "bilinear", **nb_params}, nb_inputs=("A",), expected=lambda fx, args=args: lens_reference(fx["A"], **args),
+            source=source, statement=note + statement, unscored=unscored))
+
+    case("lensdistortion_classic_undistort", (("distortionDenominator0", 0.05),), {"distortionDenominator0": 0.05}, {"den": (0.05, 0.0)},
+         "NukeX Classic, xu = xd / (1 + k0 rd^2 + k1 rd^4) with k0 the first Denominator s: Undistort reads the plate where the equation says the ideal point came from (the model inverted)")
+    case("lensdistortion_classic_two_terms", (("distortionDenominator0", 0.03), ("distortionDenominator1", 0.02)),
+         {"distortionDenominator0": 0.03, "distortionDenominator1": 0.02}, {"den": (0.03, 0.02)},
+         "the rd^4 term is the second Denominator s")
+    case("lensdistortion_classic_redistort", (("output", "Redistort"), ("distortionDenominator0", 0.05)),
+         {"lens_output": "Redistort", "distortionDenominator0": 0.05}, {"den": (0.05, 0.0), "mode": "Redistort"},
+         "Redistort of a Forward model applies the equation directly: each distorted pixel reads the ideal image at xu = xd / (1 + k0 rd^2)")
+    case("lensdistortion_centre_moves_the_fixed_point", (("distortionDenominator0", 0.05), ("centre", "3 -2")),
+         {"distortionDenominator0": 0.05, "centre_x": 3.0, "centre_y": -2.0}, {"den": (0.05, 0.0), "centre": (3.0, -2.0)},
+         "the distortion is centred on Centre (pixels from the middle of the format, y up; the unit is this reading of 'the position of the distortion center')")
+    case("lensdistortion_anamorphic_squeeze_scales_x", (("lens", "Anamorphic"), ("anamorphicSqueeze", 2.0), ("distortionDenominator0", 0.05)),
+         {"lens_type": "Anamorphic", "anamorphic_squeeze": 2.0, "distortionDenominator0": 0.05}, {"den": (0.05, 0.0), "squeeze": 2.0},
+         "Squeeze rescales the x coefficients: x is divided by the squeeze before the model runs and multiplied after it")
+    case("lensdistortion_spherical_ignores_the_squeeze", (("anamorphicSqueeze", 2.0), ("distortionDenominator0", 0.05)),
+         {"anamorphic_squeeze": 2.0, "distortionDenominator0": 0.05}, {"den": (0.05, 0.0)},
+         "the anamorphic controls belong to an Anamorphic lens; a Spherical one runs as if the squeeze were 1")
+    case("lensdistortion_backward_model_is_used_directly", (("distortionModelPreset", "Custom"), ("distortionModelDirection", "Backward"), ("distortionDenominator0", 0.05)),
+         {"distortionModelPreset": "Custom", "distortionModelDirection": "Backward", "distortionDenominator0": 0.05},
+         {"den": (0.05, 0.0), "forward": False},
+         "a Backward model 'can be used directly for image rendering': Undistort evaluates it as it stands (xd = xu / (1 + k0 ru^2)), no inversion")
+    case("lensdistortion_custom_numerator", (("distortionModelPreset", "Custom"), ("distortionNumerator0", 0.04), ("distortionDenominator0", 0.02)),
+         {"distortionModelPreset": "Custom", "distortionNumerator0": 0.04, "distortionDenominator0": 0.02},
+         {"num": (0.04, 0.0), "den": (0.02, 0.0)},
+         "Order and Exponent describe 'the radial distortion's rational polynomial function', numerator first",
+         unscored="the guide states only the denominator's equation; the numerator's form (1 + n0 r^2 + n1 r^4 over the denominator) is read from the Order and Exponent text")

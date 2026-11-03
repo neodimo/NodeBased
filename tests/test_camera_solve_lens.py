@@ -403,7 +403,7 @@ class DemoPlateTests(unittest.TestCase):
         dispatcher = Dispatcher()
         dispatcher.execute({"op": "batch", "commands": [
             {"op": "create", "id": "ramp", "type": "Checker", "params": {"width": 96, "height": 54, "size": 6}},
-            {"op": "create", "id": "bend", "type": "Redistort", "params": {"lens_k1": -0.03}},
+            {"op": "create", "id": "bend", "type": "Redistort", "params": {"lens_k1": -0.03, "distortionModelPreset": "Brown-Conrady (NodeBased)"}},
             {"op": "connect", "id": "bend", "input": "image", "source": "ramp"}]})
         evaluator = Evaluator()
         ideal = np.array(evaluator.evaluate_raster(dispatcher.document, "ramp", frame=1).to_display(), np.float32)

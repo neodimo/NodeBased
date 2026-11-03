@@ -3663,8 +3663,26 @@
     {"nodebased": ["lens_p2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["lens_cx"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["lens_cy"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["anamorphic_squeeze"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["lens_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["lens_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["distortionModelPreset"], "nuke": ["distortionModelPreset"], "kind": "same", "reason": "NukeX Classic, Custom and NodeBased's older Brown-Conrady lens (the lens_ knobs above, which graphs saved before keep); the guide's CaraVR Radial and 3DEqualizer models are named without equations and are not offered"},
+    {"nodebased": ["lens_type"], "nuke": ["lens"], "kind": "renamed", "reason": "same control (Spherical or Anamorphic) under another name"},
+    {"nodebased": ["anamorphic_squeeze"], "nuke": ["anamorphicSqueeze"], "kind": "renamed", "reason": "same control under another name; read only for an Anamorphic lens"},
+    {"nodebased": ["distortionDenominator0"], "nuke": ["distortionDenominator0"], "kind": "same"},
+    {"nodebased": ["distortionDenominator1"], "nuke": ["distortionDenominator1"], "kind": "same"},
+    {"nodebased": ["distortionNumerator0"], "nuke": ["distortionNumerator0"], "kind": "same"},
+    {"nodebased": ["distortionNumerator1"], "nuke": ["distortionNumerator1"], "kind": "same"},
+    {"nodebased": ["centre_x", "centre_y"], "nuke": ["centre"], "kind": "components", "reason": "NodeBased stores the centre as x and y; Nuke's knob is one pair"},
+    {"nodebased": [], "nuke": ["distortionDenominator0Link"], "kind": "panel", "reason": "linked to the LensDistortion tab's knob of the same name (the guide), the Advanced tab's copy of distortionDenominator0"},
+    {"nodebased": [], "nuke": ["distortionDenominator1Link"], "kind": "panel", "reason": "linked to the LensDistortion tab's knob of the same name (the guide), the Advanced tab's copy of distortionDenominator1"},
+    {"nodebased": [], "nuke": ["centreLink"], "kind": "panel", "reason": "linked to the LensDistortion tab's centre (the guide), the Advanced tab's copy"},
+    {"nodebased": ["lens_output"], "nuke": ["output"], "kind": "renamed", "reason": "same control (Undistort, Redistort or STMap) under another name; the name `output` belongs to other nodes' params with other choices. The Redistort node is this node with the mode fixed"},
+    {"nodebased": ["distortionModelDirection"], "nuke": ["distortionModelDirection"], "kind": "same", "reason": "read by the Custom preset; NukeX Classic is a Forward model"},
+    {"nodebased": ["bboxType"], "nuke": ["bboxType"], "kind": "same"},
+    {"nodebased": ["bbox_x", "bbox_y", "bbox_r", "bbox_t"], "nuke": ["outputBBox"], "kind": "components", "reason": "NodeBased stores the manual box as x, y, r and t; Nuke's knob is one box"},
+    {"nodebased": ["outputFormatType"], "nuke": ["outputFormatType"], "kind": "same"},
+    {"nodebased": ["lens_format"], "nuke": ["format"], "kind": "renamed", "reason": "same control (a named format) under another name; the name `format` belongs to Reformat and Read with other meanings"},
+    {"nodebased": ["distortionScalingType"], "nuke": ["distortionScalingType"], "kind": "same"},
+    {"nodebased": ["lens_scaling_format"], "nuke": ["outputFormat"], "kind": "renamed", "reason": "same control (the format the distortion is scaled to) under another name"}
    ]
   },
   "ViewMetaData": {

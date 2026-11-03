@@ -4580,32 +4580,45 @@ class Evaluator:
         with the display window), so nothing is cropped and the overscan is the data window beyond the format.
         Redistort's output is the plate again, in the input's display window. A lens that bends nothing
         passes the image through. Mask and mix do not exist here, as on Nuke's LensDistortion."""
-        from . import lensmodel, scene3d
+        from . import lensdistortion, lensmodel, scene3d
+        from .tiers import Region
         source = inputs[0]
         camera = inputs[1] if len(inputs) > 1 else None
         if source is None:
             raise ValueError(f"{kind}: connect an image")
+        frame = None
         if isinstance(camera, scene3d.Camera):
             lens = lensmodel.from_camera(camera)
-        elif p.get("lens_preset", "custom") == "custom":
-            lens = lensmodel.from_params(p, p.get("anamorphic_squeeze", 1.0))
         else:
-            lens = lensmodel.Lens(**{name[5:]: value for name, value in lensmodel.PRESETS[p["lens_preset"]].items()},
-                                  squeeze=float(p.get("anamorphic_squeeze", 1.0)) or 1.0)
-        if lens.is_identity:
+            lens, frame = lensdistortion.build_lens(p, source.display, lensmodel)
+        mode = lensdistortion.mode_of(kind, p)
+        geometry_default = (p.get("bboxType", "Auto") == "Auto" and p.get("outputFormatType", "Input") == "Input"
+                            and p.get("distortionScalingType", "Scale to Input Format") == "Scale to Input Format")
+        if lens.is_identity and geometry_default and mode != "STMap":
             return source
         display = source.display
-        if kind == "Undistort":
-            x, y, w, h = lensmodel.undistorted_window(lens, source.data, display)
+        out_display = lensdistortion.output_display(p, display, source.data)
+        bbox_type = p.get("bboxType", "Auto")
+        if bbox_type == "Input":
+            out = source.data
+        elif bbox_type == "Manual":
+            out = lensdistortion.manual_box(p, out_display)
+        elif mode == "Undistort":
+            x, y, w, h = lensmodel.undistorted_window(lens, source.data, out_display, frame)
             out = Region(x, y, w, h)
         else:
-            out = display
-        direction = "undistort" if kind == "Undistort" else "redistort"
-        pixels = Evaluator._lens_warp_gpu(kind, p, lens, source, out, display, direction)
+            out = out_display
+        if p.get("outputFormatType", "Input") == "BBox":
+            out_display = out
+        if mode == "STMap":
+            layers = lensdistortion.stmap_layers(lens, out, display, source.data, frame, lensmodel, Raster)
+            return Raster(source.fit(out), out, out_display, {**(source.layers or {}), **layers}, source.meta)
+        direction = "undistort" if mode == "Undistort" else "redistort"
+        pixels = Evaluator._lens_warp_gpu(kind, p, lens, source, out, display, direction, frame)
         if pixels is None:
-            sx, sy = lensmodel.sample_coordinates(lens, out, display, source.data, direction)
+            sx, sy = lensmodel.sample_coordinates(lens, out, display, source.data, direction, frame)
             pixels = Evaluator._resample(source.pixels, sx, sy, p["filter"]).astype(np.float32)
-        return Raster(pixels, out, display, source.layers, source.meta)
+        return Raster(pixels, out, out_display, source.layers, source.meta)
 
     @staticmethod
     def _bend_render(frame, rgba, backend):
@@ -4624,7 +4637,7 @@ class Evaluator:
             raise
 
     @staticmethod
-    def _lens_warp_gpu(kind, p, lens, source, out, display, direction):
+    def _lens_warp_gpu(kind, p, lens, source, out, display, direction, frame=None):
         """The wgpu twin of the lens warp (nodebased/gpulens.py), or None to run the CPU reference.
 
         `lens_backend` auto uses the card when there is one and the output is big enough to repay the
@@ -4632,7 +4645,12 @@ class Evaluator:
         backend = p.get("lens_backend", "auto")
         if backend == "cpu":
             return None
-        from . import gpulens
+        from . import gpulens, lensmodel
+        if isinstance(lens, lensmodel.RationalLens) or frame is not None:
+            # The card kernel runs the Brown-Conrady lens about the input format; the rational model and a Distortion Scaling format run on the CPU.
+            if backend == "gpu":
+                raise ValueError(f"GPU {kind} unavailable: the card kernel runs the Brown-Conrady lens about the input format only")
+            return None
         if backend == "auto" and out.width * out.height < gpulens.AUTO_MIN_PIXELS:
             return None
         try:

@@ -63,6 +63,69 @@ class Lens:
                 "principal_point": [self.cx, self.cy], "anamorphic_squeeze": self.squeeze}
 
 
+@dataclass(frozen=True)
+class RationalLens:
+    """Nuke's radial rational model of LensDistortion (`distortionModelPreset` NukeX Classic and Custom).
+
+    With r the distance from the distortion centre in units of half the longer side of the format (`ratio` converts this
+    module's film-back units, half the height, into those), the model scales a point about the centre by
+        P(r^2) = (1 + n0 r^2 + n1 r^4) / (1 + d0 r^2 + d1 r^4).
+    The guide's NukeX Classic equation is xu = xd / (1 + k0 rd^2 + k1 rd^4), a `forward` model (it takes a distorted point to the
+    undistorted one, r there being the distorted radius): n0 = n1 = 0, the k-values being the denominator coefficients. A `backward`
+    model is the same function taken the other way (xd = P(ru^2) xu). The squeeze, the centre and the Newton inverse are the
+    Brown-Conrady lens's, so the two share `sample_coordinates`, `undistorted_window` and the unit conversions below.
+    `distort` still means ideal point to plate point, whichever way the model was written."""
+    n0: float = 0.0
+    n1: float = 0.0
+    d0: float = 0.0
+    d1: float = 0.0
+    forward: bool = True
+    cx: float = 0.0
+    cy: float = 0.0
+    squeeze: float = 1.0
+    ratio: float = 1.0
+
+    @property
+    def is_identity(self):
+        return not (self.n0 or self.n1 or self.d0 or self.d1)
+
+    def _scale(self, r2):
+        r2 = r2 * (self.ratio * self.ratio)          # film-back units squared -> model units squared
+        return (1.0 + r2 * (self.n0 + r2 * self.n1)) / (1.0 + r2 * (self.d0 + r2 * self.d1))
+
+    def _centred(self, x, y):
+        return np.asarray(x, np.float64) / self.squeeze - self.cx, np.asarray(y, np.float64) - self.cy
+
+    def _apply(self, dx, dy):
+        k = self._scale(dx * dx + dy * dy)
+        return dx * k, dy * k
+
+    def _invert(self, tx, ty):
+        """Point whose `_apply` is (tx, ty): the radius found by Newton's method, the direction kept."""
+        radius_t = np.hypot(tx, ty)
+        r = radius_t.copy()
+        for _ in range(_NEWTON_STEPS):
+            f = r * self._scale(r * r) - radius_t
+            h = 1e-6 * np.maximum(1.0, r)
+            slope = ((r + h) * self._scale((r + h) ** 2) - (r - h) * self._scale((r - h) ** 2)) / (2.0 * h)
+            slope = np.where(np.abs(slope) < 1e-12, np.nan, slope)
+            r = r - f / slope
+        k = np.divide(r, radius_t, out=np.ones_like(r), where=radius_t > 0)
+        ex, ey = self._apply(tx * k, ty * k)
+        bad = ~(np.hypot(ex - tx, ey - ty) < 1e-6) | ~np.isfinite(k)
+        return np.where(bad, np.nan, tx * k), np.where(bad, np.nan, ty * k)
+
+    def distort(self, x, y):
+        dx, dy = self._centred(x, y)
+        xd, yd = self._invert(dx, dy) if self.forward else self._apply(dx, dy)
+        return (xd + self.cx) * self.squeeze, yd + self.cy
+
+    def undistort(self, xd, yd):
+        dx, dy = self._centred(xd, yd)
+        xu, yu = self._apply(dx, dy) if self.forward else self._invert(dx, dy)
+        return (xu + self.cx) * self.squeeze, yu + self.cy
+
+
 def from_camera(camera):
     """The lens carried by a `scene3d.Camera`."""
     return Lens(camera.lens_k1, camera.lens_k2, camera.lens_k3, camera.lens_p1, camera.lens_p2,
@@ -80,6 +143,8 @@ def active(camera):
 
 def distort(lens, x, y):
     """Ideal film-back coordinates to the distorted ones (arrays of any shape)."""
+    if isinstance(lens, RationalLens):
+        return lens.distort(x, y)
     x, y = np.asarray(x, np.float64), np.asarray(y, np.float64)
     s = lens.squeeze
     dx, dy = x / s - lens.cx, y - lens.cy
@@ -104,6 +169,8 @@ def _jacobian(lens, dx, dy):
 def undistort(lens, xd, yd):
     """Distorted film-back coordinates to the ideal ones. Points the model cannot invert (far outside any
     sensible lens) come back as NaN."""
+    if isinstance(lens, RationalLens):
+        return lens.undistort(xd, yd)
     xd, yd = np.asarray(xd, np.float64), np.asarray(yd, np.float64)
     s = lens.squeeze
     tx, ty = xd / s - lens.cx, yd - lens.cy        # target in centred, desqueezed units
@@ -156,12 +223,19 @@ def undistort_pixels(lens, px, py, width, height):
 MAX_GROWTH = 2.0
 
 
-def undistorted_window(lens, data, display):
+def _frame_of(display, frame):
+    """(width, height, left, top) of the frame whose centre is the lens's origin and whose size sets the units: the display window,
+    or `frame` (the node's distortion scaling format, centred on the same point)."""
+    return frame if frame is not None else (display.width, display.height, display.x, display.y)
+
+
+def undistorted_window(lens, data, display, frame=None):
     """Rectangle (x, y, w, h) that holds `data` after undistortion, joined with the display window.
 
     The edge of the data window is sampled densely and mapped through the inverse model; rounding outward
     keeps every pixel the resampler can write inside the window."""
-    dw, dh = display.width, display.height
+    dw, dh, fx0, fy0 = _frame_of(display, frame)
+    dw, dh = dw, dh
     n = 64
     top = np.linspace(0.0, 1.0, n)
     xs = np.concatenate((data.x + top * data.width, data.x + top * data.width,
@@ -169,12 +243,12 @@ def undistorted_window(lens, data, display):
     ys = np.concatenate((np.full(n, data.y), np.full(n, data.bottom),
                          data.y + top * data.height, data.y + top * data.height))
     # The window is in pixel coordinates of the display; its origin is the display's own.
-    ux, uy = undistort_pixels(lens, xs - display.x, ys - display.y, dw, dh)
+    ux, uy = undistort_pixels(lens, xs - fx0, ys - fy0, dw, dh)
     ok = np.isfinite(ux) & np.isfinite(uy)
     left, top_, right, bottom = display.x, display.y, display.right, display.bottom
     if ok.any():
-        left, right = min(left, np.floor(ux[ok].min()) + display.x), max(right, np.ceil(ux[ok].max()) + display.x)
-        top_, bottom = min(top_, np.floor(uy[ok].min()) + display.y), max(bottom, np.ceil(uy[ok].max()) + display.y)
+        left, right = min(left, np.floor(ux[ok].min()) + fx0), max(right, np.ceil(ux[ok].max()) + fx0)
+        top_, bottom = min(top_, np.floor(uy[ok].min()) + fy0), max(bottom, np.ceil(uy[ok].max()) + fy0)
     left = max(left, display.x - MAX_GROWTH * dw)
     right = min(right, display.right + MAX_GROWTH * dw)
     top_ = max(top_, display.y - MAX_GROWTH * dh)
@@ -182,23 +256,23 @@ def undistorted_window(lens, data, display):
     return int(left), int(top_), int(right - left), int(bottom - top_)
 
 
-def sample_coordinates(lens, out, display, source_data, direction):
+def sample_coordinates(lens, out, display, source_data, direction, frame=None):
     """Source pixel coordinates (relative to `source_data`'s corner) for every pixel centre of `out`.
 
     `direction` "undistort": the output is the ideal image, so each output pixel reads the plate where the
     lens put that point (the forward model). "redistort": the output is the plate, so each output pixel reads
     the ideal image where the inverse model says it came from. Coordinates are in display-window pixels
     with the display centre as the origin of the model."""
-    dw, dh = display.width, display.height
-    gx = np.arange(out.width, dtype=np.float64)[None, :] + out.x - display.x + 0.5
-    gy = np.arange(out.height, dtype=np.float64)[:, None] + out.y - display.y + 0.5
+    dw, dh, fx0, fy0 = _frame_of(display, frame)
+    gx = np.arange(out.width, dtype=np.float64)[None, :] + out.x - fx0 + 0.5
+    gy = np.arange(out.height, dtype=np.float64)[:, None] + out.y - fy0 + 0.5
     gx, gy = np.broadcast_to(gx, (out.height, out.width)), np.broadcast_to(gy, (out.height, out.width))
     if direction == "undistort":
         sx, sy = distort_pixels(lens, gx, gy, dw, dh)
     else:
         sx, sy = undistort_pixels(lens, gx, gy, dw, dh)
-    sx = sx + display.x - source_data.x - 0.5
-    sy = sy + display.y - source_data.y - 0.5
+    sx = sx + fx0 - source_data.x - 0.5
+    sy = sy + fy0 - source_data.y - 0.5
     # NaN (not invertible) reads as far outside the source, which the resampler turns into black.
     sx, sy = np.nan_to_num(sx, nan=-1e6), np.nan_to_num(sy, nan=-1e6)
     return sx.astype(np.float32), sy.astype(np.float32)

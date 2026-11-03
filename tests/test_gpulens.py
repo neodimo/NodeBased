@@ -146,7 +146,7 @@ class SoftwareAdapterAgreement(AgreementBase, unittest.TestCase):
 def lens_graph(backend, filter_name="bilinear", width=192, height=108, **lens):
     d = Dispatcher()
     d.execute(dict(op="create", id="plate", type="Checker", params=dict(width=width, height=height, size=24)))
-    knobs = dict(lens_preset="custom", lens_k1=-0.04, lens_k2=0.004, filter=filter_name, lens_backend=backend, **lens)
+    knobs = dict(lens_preset="custom", lens_k1=-0.04, lens_k2=0.004, filter=filter_name, lens_backend=backend, distortionModelPreset="Brown-Conrady (NodeBased)", **lens)
     d.execute(dict(op="create", id="undistort", type="Undistort", params=knobs))
     d.execute(dict(op="connect", id="undistort", input="image", source="plate"))
     d.execute(dict(op="create", id="redistort", type="Redistort", params=knobs))

@@ -226,6 +226,7 @@ from . import warpknobs as _warpknobs
 from . import vectorcornerpinknobs as _vectorcornerpinknobs
 from . import drawfxbehaviour as _drawfxbehaviour
 from . import transformbehaviour as _transformbehaviour
+from . import lensdistortion as _lensdistortion
 from . import drawbehaviour as _drawbehaviour
 from . import timeknobs as _timeknobs
 from . import retimeknobs as _retimeknobs
@@ -569,11 +570,11 @@ SPECS = {
     # supplies the lens; unwired, `lens_preset` picks a named lens ("custom" reads the node's own knobs).
     # Undistort grows the data window to hold the straightened plate; Redistort returns to the format.
     "Undistort": {"inputs": ["image"], "optional_inputs": ["camera"],
-                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear",
-                             "lens_backend": "auto"}},
+                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "cubic",
+                             "lens_backend": "auto", **_lensdistortion.new_params("Undistort")}},
     "Redistort": {"inputs": ["image"], "optional_inputs": ["camera"],
-                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "bilinear",
-                             "lens_backend": "auto"}},
+                  "params": {"lens_preset": "custom", **_LENS, "anamorphic_squeeze": 1.0, "filter": "cubic",
+                             "lens_backend": "auto", **_lensdistortion.new_params("Redistort")}},
     # STMap / IDistort / VectorBlur (step 5c): the 2D side of the control loop. Each takes the image,
     # an optional `uv` image (a map or a vector field) and an optional mask. `uv_layer` names a
     # layer of the `uv` input when it is wired, otherwise of the image input itself, so a
@@ -2000,6 +2001,11 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "motion_blur": (0, 1), "motion_samples": (1, 64),
                "fstop": (0.0, 128.0), "focus_distance": (0.001, 1000000.0), "aperture_blades": (0, 16),
                "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0),
+               "distortionNumerator0": (-10.0, 10.0), "distortionNumerator1": (-10.0, 10.0),
+               "distortionDenominator0": (-10.0, 10.0), "distortionDenominator1": (-10.0, 10.0),
+               "centre_x": (-100000.0, 100000.0), "centre_y": (-100000.0, 100000.0),
+               "bbox_x": (-100000.0, 100000.0), "bbox_y": (-100000.0, 100000.0),
+               "bbox_r": (-100000.0, 100000.0), "bbox_t": (-100000.0, 100000.0),
                "lens_k1": (-10.0, 10.0), "lens_k2": (-10.0, 10.0), "lens_k3": (-10.0, 10.0),
                "lens_p1": (-1.0, 1.0), "lens_p2": (-1.0, 1.0), "lens_cx": (-2.0, 2.0), "lens_cy": (-2.0, 2.0),
                "denoiser_strength": (0.0, 1.0), "denoise_color_sensitivity": (0.0, 10.0),
@@ -2210,6 +2216,11 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
 CHOICES.update({"rigid_shape": ["box", "sphere", "convex", "compound"], "floor": ["on", "off"]})
 CHOICES.update({"solve_focal": ["known", "estimate"], "solve_distortion": ["none", "k1", "k1 k2"]})
 CHOICES["lens_preset"] = ["custom", "none", "mild barrel", "strong barrel", "pincushion", "wide angle", "fisheye"]
+CHOICES.update({"distortionModelPreset": list(_lensdistortion.PRESETS), "lens_type": list(_lensdistortion.LENS_TYPES),
+                "lens_output": list(_lensdistortion.OUTPUTS), "distortionModelDirection": list(_lensdistortion.DIRECTIONS),
+                "bboxType": list(_lensdistortion.BBOX_TYPES), "outputFormatType": list(_lensdistortion.FORMAT_TYPES),
+                "distortionScalingType": list(_lensdistortion.SCALING_TYPES),
+                "lens_format": list(REFORMAT_FORMATS), "lens_scaling_format": list(REFORMAT_FORMATS)})
 CHOICES["upres_factor"] = ["1", "2", "4"]
 CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
 CHOICES["whitewater_backend"] = ["auto", "cpu", "gpu"]

@@ -292,6 +292,8 @@ def upgrade_nodes(nodes):
         added.update(effectbehaviour.upgrade_params(node.get("type")))         # EdgeBlur, GodRays, BumpBoss (lane 2 step G)
         from . import raysbehaviour
         added.update(raysbehaviour.upgrade_params(node.get("type")))
+        from . import lensdistortion
+        added.update(lensdistortion.upgrade_params(node.get("type")))         # Undistort and Redistort (lane 9 step J)
         from . import warpknobs
         added.update(warpknobs.upgrade_params(node.get("type")))              # GridWarp and SplineWarp (lane 9 step H)
         from . import drawfxbehaviour

@@ -302,7 +302,7 @@ class WarpTests(unittest.TestCase):
     def test_a_preset_chosen_in_the_node_stands_in_for_a_camera(self):
         d = Dispatcher()
         d.execute(dict(op="create", id="plate", type="Checker", params=dict(width=192, height=108, size=16)))
-        d.execute(dict(op="create", id="u", type="Undistort", params=dict(lens_preset="mild barrel")))
+        d.execute(dict(op="create", id="u", type="Undistort", params=dict(lens_preset="mild barrel", distortionModelPreset="Brown-Conrady (NodeBased)")))
         d.execute(dict(op="connect", id="u", input="image", source="plate"))
         d.execute(dict(op="create", id="cam", type="Camera3D", params=dict(lens_k1=-0.02)))
         d.execute(dict(op="create", id="uc", type="Undistort", params={}))
