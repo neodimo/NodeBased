@@ -1,3 +1,13 @@
+## 2026-11-03 - Lane 9 (2D behaviour), step K of 2: the thirteen knobs that change nothing, and Nuke's labels and order
+
+- **What was done (evidence):** three code commits plus a report commit; targeted gate green (tests.test_2d_behaviour_filter_k 17 tests, filter_f, draw, transform, lens_j, filter_layout, retime_vectors, group_3b, step_5a, tiers, audit, knowledge, tiles, bypass, knobs, core, the properties-label and fluid-panel desktop tests).
+  - LightWrap (new flag `legacy_lightwrap_luma`, saved nodes 1): Disable luminance based wrap divides the background light by its luminance (one brightness whatever the background); Enable Glow drops the matte factor so the wrap extends outside the alpha; LumaTolerance fades background darker than it out of the wrap; midtone bias (`gray`) is the contrast pivot and `white` the gamma fixed point of the CCorrect tab (run in ColorCorrect's order). Guide-silent details are stated in the code comments.
+  - DirBlur (existing `legacy_dirblur_knobs`): Quality high/normal/low scales the picture down by 1/2/4, blurs and scales back up (new nodes default to high, Nuke's 1); PixelAspect widens the pixel (linear direction, radial circle); Holdout on keeps pixels whose alpha is not black out of a zoom blur's average. Quality scaling and a non-square pixel read the whole frame like zoom and radial (not tiled).
+  - Dither `static_seed`, Soften and Laplacian `quailty`, EdgeDetect `blurquality`, Laplacian `crop`, DirBlur `holdout`: listed in NOT_PIXEL with reasons and tests (static seed across frames; quality caps the size only past it; crop to format is the box).
+  - Labels and order: ZDefocus, Denoise, DegrainSimple, MotionBlur, VectorBlur, ZSlice, CornerPin, STMap, IDistort, PointsTo3D, Text now read the guide's labels and order (saved param names unchanged; Text puts the Draw chrome first, per the guide table; PointsTo3D shows each point's ref time next to the point).
+- **Report:** overall 93.8 -> 94.0; Knobs that change no pixels 13 -> 0; Draw 91.4 -> 92.1, Filter 93.5 -> 94.4, Transform 94.8 -> 95.1. No schema bump.
+- **Not done:** CurveTool, AppendClip, TimeBlur, ContactSheet, ZMerge, AddTimeCode, BurnIn and Precomp still show layout differences (not in this step's list); Holdout channel is the alpha only (a choosable channel needs a per-node holdout choice list, since `holdout` is a shared on/off key).
+
 ## 2026-11-03 - lane 9 (2D behaviour), step J: LensDistortion's lens models
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:35 AM on 2026-11-03 PDT)
