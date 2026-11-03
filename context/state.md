@@ -1,5 +1,26 @@
 ## 2026-11-03 - lane 2 (2D behaviour), step I of 2: the retime and frame nodes pick the frames Nuke picks
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (2:45 AM on 2026-11-03 PDT)
+
+`main` moved `9b8dfa7e` -> `47890484` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `47890484` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0225.log`, started 2:25 AM): **Ran 8681 tests in 692.901 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step I of 2: the retime and frame nodes pick the frames Nuke picks.** Commits:
+  - `50331f37` Tidy the step I note
+  - `fab14ddd` Write up 2D behaviour step I (Time group frame nodes) in TASKLOG and the state file
+  - `6fbf737c` Time group: retime and frame nodes pick the frames the guide says, shown on a frame-stamped plate
+  Diff: 15 files changed, 1240 insertions(+), 52 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** (1) `tools/nuke_fidelity_cases_time.py` holds 165 cases for TimeOffset, FrameHold, Retime, FrameRange, TimeClip, AppendClip, TimeEcho, TimeBlur and TimeWarp; 146 are scored and 19 not scored with the reason. They run through a new `_run_stamped_document` in `tools/nuke_fidelity_cases.py`: a Constant whose red channel is the frame number (a linear curve keyed on every frame from -90 to 100), so the red value of the picture is the source frame the node picked, and a fractional frame reads back as itself. The module is registered in the case hook. `source` is `guide` where a sentence or example of the node's page states the frame (the statement quotes it) and `convention` where only the form is long-established. (2) Three kernels disagreed with the guide and were fixed on the evaluator (TimeBlur and TimeEcho have no kernel of their own on the tile path: `_temporal_tile` asks the evaluator, so tiles of 7, 16 and 32 equal the full frame, tested): TimeBlur's shutter window, TimeEcho's missing fade, FrameRange cutting fractional frames. TimeWarp gained the `nearest` filter. (3) `tests/test_2d_behaviour_time.py` (24 tests): case statuses, the guide's worked examples, older documents bit for bit, every paired knob moving the frame picked, tiles, registration.
 - **Kernels changed (legacy flag):** TimeBlur `legacy_shutter_window` (start was the frame less the shutter to the frame, end the frame to the frame plus the shutter, custom centred on the offset; the guide opens at the frame plus the offset: start frame to frame + shutter, end frame - shutter to frame, custom frame + offset onward; same helper as Transform). TimeEcho `frames_fade` (Nuke's `framesfade`; the oldest n frames fade k/n, the rest at full; older nodes load 1, which fades nothing). FrameRange `legacy_fractional_frames` (an older FrameRange cuts every frame to a whole one). All three set by `upgrade_nodes` through `timeknobs.OLD`; no schema bump (the migration uses setdefault, as lanes 9 and 2 did before). TimeWarp's `lookup_filter` choices are now none, blend, nearest. The TimeEcho panel follows Nuke's order and labels (TimeEcho Method, Frames to look at, Frames to fade out).
 - **Audit before and after (per node: fidelity, math cases passing/total):** TimeOffset 100.0 (- ) -> 100.0 (14/14); FrameHold 100.0 -> 100.0 (8/8); Retime 98.3 -> 98.8 (47/47); FrameRange 100.0 -> 100.0 (3/3); TimeClip 100.0 -> 100.0 (33/33); AppendClip 96.7 -> 97.6 (12/12); TimeEcho 54.2 -> 92.2 (9/9); TimeBlur 89.6 -> 92.6 (8/8); TimeWarp 75.0 -> 82.4 (12/12). Time group 96.1 -> 97.1 rank-weighted (plain mean 78.9 -> 82.7). Nodes with behaviour checked 82 -> 91 of 167. Overall 93.5 -> 93.6 (previous formula 93.2 -> 93.3).

@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step I of 2: the retime and frame nodes pick the frames Nuke picks (integrator tick)
+
+- **What was done:** `main` `9b8dfa7e` -> `47890484` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `47890484`: Ran 8681 tests in 692.901 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - lane 2 (2D behaviour), step I of 2: the retime and frame nodes pick the frames Nuke picks
 
 - **What was done (evidence):** (1) `tools/nuke_fidelity_cases_time.py` holds 165 cases for TimeOffset, FrameHold, Retime, FrameRange, TimeClip, AppendClip, TimeEcho, TimeBlur and TimeWarp; 146 are scored and 19 not scored with the reason. They run through a new `_run_stamped_document` in `tools/nuke_fidelity_cases.py`: a Constant whose red channel is the frame number (a linear curve keyed on every frame from -90 to 100), so the red value of the picture is the source frame the node picked, and a fractional frame reads back as itself. The module is registered in the case hook. `source` is `guide` where a sentence or example of the node's page states the frame (the statement quotes it) and `convention` where only the form is long-established. (2) Three kernels disagreed with the guide and were fixed on the evaluator (TimeBlur and TimeEcho have no kernel of their own on the tile path: `_temporal_tile` asks the evaluator, so tiles of 7, 16 and 32 equal the full frame, tested): TimeBlur's shutter window, TimeEcho's missing fade, FrameRange cutting fractional frames. TimeWarp gained the `nearest` filter. (3) `tests/test_2d_behaviour_time.py` (24 tests): case statuses, the guide's worked examples, older documents bit for bit, every paired knob moving the frame picked, tiles, registration.
