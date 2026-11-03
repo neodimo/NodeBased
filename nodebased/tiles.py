@@ -484,7 +484,8 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         return (1, 1)
     if kind == "ErodeFilter":
         import math
-        size = abs(float(params.get("filter_size", 0.0)))
+        from .blurknobs import size_value, _largest
+        size = _largest(size_value(params, "filter_size", 0.0))
         support = 0 if size < 0.5 else int(math.ceil(size))
         if params.get("filter_type", "box") == "gaussian" and support:
             support += int(math.ceil(max(1.0, size * 0.5)))

@@ -65,9 +65,26 @@ def _get(kind, p, name):
     return p.get(name, OLD[kind][name])
 
 
+def size_value(p, name, default=0.0):
+    """The size param `name` of `p` as the blur kernels take it: a number, or for a split size (Nuke's WH knob, `core.SPLITTABLE`) a
+    (width, height) pair, or the one number when both entries are equal (so an unsplit-looking split renders as the unsplit node)."""
+    raw = p.get(name, default)
+    if not isinstance(raw, (list, tuple)):
+        return float(raw)
+    from .core import split_values
+    both = split_values(p, name, 2)
+    return float(raw[0]) if both[0] == both[1] else (float(raw[0]), float(raw[1]))
+
+
+def _largest(size):
+    """The largest size of a number or a (width, height) pair, as a magnitude."""
+    return max(abs(float(v)) for v in size) if isinstance(size, (tuple, list)) else abs(float(size))
+
+
 def reach(kind, p):
-    """How many pixels each way the filter reads: 0 below half a pixel (the filter is the identity there), else `ceil(size)`."""
-    size = abs(float(p.get(SIZE_PARAM[kind], 0.0)))
+    """How many pixels each way the filter reads: 0 below half a pixel (the filter is the identity there), else `ceil(size)`
+    (of the larger entry, for a size split into a width and a height)."""
+    size = _largest(size_value(p, SIZE_PARAM[kind]))
     return 0 if size < 0.5 else int(math.ceil(size))
 
 
@@ -85,7 +102,11 @@ def halo(kind, p):
     f = scale_factor(kind, p)
     if r == 0 or f == 1:
         return r
-    return f * (int(math.ceil(abs(float(p.get(SIZE_PARAM[kind], 0.0))) / f)) + 2)
+    size = size_value(p, SIZE_PARAM[kind])
+    if isinstance(size, tuple):
+        # One scale factor serves both axes (the larger size decides it); a tile holds the larger of the two axes' needs.
+        return max(f * (int(math.ceil(abs(v) / f)) + 2) if abs(v) >= 0.5 else 0 for v in size)
+    return f * (int(math.ceil(abs(size) / f)) + 2)
 
 
 def needs_full_frame(kind, p):
@@ -132,6 +153,25 @@ def _weighted_axis(frame, w, axis):
     return out.astype(np.float32)
 
 
+def _pass(image, size, shape, axis):
+    """One separable pass of the blur along `axis` (1 across, 0 down); a size under half a pixel leaves the picture as it is."""
+    from .imaging import Evaluator
+    if size < 0.5:
+        return image
+    if shape == "box":
+        return Evaluator._box_blur_axis(image, size, axis=axis)
+    r = int(math.ceil(size))
+    if shape == "gaussian":
+        return Evaluator._gaussian_axis(image, r, size / 3.0, axis=axis)
+    return _weighted_axis(image, weights(shape, size), axis=axis)
+
+
+def _filtered_direct_wh(image, width, height, shape):
+    """The blur with its own size across (`width`) and down (`height`), no quality scaling."""
+    out = _pass(_pass(image, width, shape, 1), height, shape, 0)
+    return image.copy() if out is image else out
+
+
 def _filtered_direct(image, size, shape):
     """The blur at `size` with no quality scaling."""
     from .imaging import Evaluator
@@ -166,6 +206,26 @@ def filtered(image, size, shape="box", quality=NO_QUALITY_LIMIT, origin=(0, 0)):
     `quality` the picture is averaged down by a whole factor, filtered at the smaller size and scaled back up with linear
     interpolation (the guide's description of `quality`). `origin` is the picture's top-left pixel on the canvas: the blocks of
     the scaling start on multiples of the factor from canvas pixel 0, so a tile and the whole picture agree."""
+    if isinstance(size, (tuple, list)):
+        wh = (abs(float(size[0])), abs(float(size[1])))
+        if wh[0] == wh[1]:
+            size = wh[0]
+        else:
+            # A size split into a width and a height: the larger entry decides the quality scaling for both axes.
+            top = max(wh)
+            if top < 0.5:
+                return image.copy()
+            r, quality = int(math.ceil(top)), float(quality)
+            if r > quality:
+                factor = int(math.ceil(r / quality))
+                height, width = image.shape[:2]
+                lead_y, lead_x = int(origin[1]) % factor, int(origin[0]) % factor
+                pad_y, pad_x = (-(lead_y + height)) % factor, (-(lead_x + width)) % factor
+                padded = np.pad(image, ((lead_y, pad_y), (lead_x, pad_x), (0, 0)), mode="edge") if (lead_y or lead_x or pad_y or pad_x) else image
+                h2, w2 = padded.shape[0] // factor, padded.shape[1] // factor
+                small = padded.reshape(h2, factor, w2, factor, image.shape[2]).mean(axis=(1, 3), dtype=np.float64).astype(np.float32)
+                return _upsample(_filtered_direct_wh(small, wh[0] / factor, wh[1] / factor, shape), factor, height, width, lead_y, lead_x)
+            return _filtered_direct_wh(image, wh[0], wh[1], shape)
     size = abs(float(size))
     if size < 0.5:
         return image.copy()
@@ -187,7 +247,7 @@ def filtered(image, size, shape="box", quality=NO_QUALITY_LIMIT, origin=(0, 0)):
 # ---------------------------------------------------------------------------------------------------------- the nodes
 def blur(image, p, origin=(0, 0)):
     """Blur's kernel; `origin` is the picture's top-left canvas pixel."""
-    return filtered(image, p["radius"], _get("Blur", p, "kernel_filter"), _get("Blur", p, "quality"), origin)
+    return filtered(image, size_value(p, "radius"), _get("Blur", p, "kernel_filter"), _get("Blur", p, "quality"), origin)
 
 
 def _confined(image, result, channel, lo, hi):
@@ -201,7 +261,7 @@ def _confined(image, result, channel, lo, hi):
 def sharpen(image, p, channel_sets, origin=(0, 0)):
     """Sharpen's kernel (the unsharp mask): `channel_sets` maps the channels knob to the channel indices it names."""
     amount = p.get("sharpen_amount", 0.5)
-    blurred = filtered(image, p.get("sharpen_size", 1.0), _get("Sharpen", p, "kernel_filter"), _get("Sharpen", p, "quality"), origin)
+    blurred = filtered(image, size_value(p, "sharpen_size", 1.0), _get("Sharpen", p, "kernel_filter"), _get("Sharpen", p, "quality"), origin)
     detail = image - blurred
     lo, hi = float(_get("Sharpen", p, "minimum")), float(_get("Sharpen", p, "maximum"))
     out = image.copy()
@@ -212,8 +272,8 @@ def sharpen(image, p, channel_sets, origin=(0, 0)):
 
 def soften(image, p, channel_sets, origin=(0, 0)):
     """Soften's kernel: the blur, `amount` of the way from the picture to it."""
-    size = abs(float(p.get("soften_size", 4.0)))
-    if size < 0.5:
+    size = size_value(p, "soften_size", 4.0)
+    if _largest(size) < 0.5:
         return image.copy()
     soft = filtered(image, size, _get("Soften", p, "kernel_filter"), _get("Soften", p, "quality"), origin)
     amount = float(_get("Soften", p, "amount"))

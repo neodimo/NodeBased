@@ -94,6 +94,9 @@ SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: spli
     "Multiply": {"multiply": "rgba"}, "Add": {"offset": "rgba"}, "Gamma": {"gamma": "rgba"},
     "ColorLookup": {"source": "rgba", "target": "rgba"},
     "Clamp": {"minimum": "rgba", "maximum": "rgba"},      # Nuke's minimum and maximum are r g b a knobs
+    # Nuke's size on the Filter nodes is a WH knob (lane 9 step D): a width and a height, so a blur can be wider than it is tall.
+    "Blur": {"radius": "wh"}, "Sharpen": {"sharpen_size": "wh"}, "Soften": {"soften_size": "wh"}, "Glow": {"glow_size": "wh"},
+    "ErodeFilter": {"filter_size": "wh"},
 }
 
 

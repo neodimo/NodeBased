@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 89.0 / 100** (167 nodes scored, rank-weighted; 91.2 counting only the nodes NodeBased has).
+**Overall fidelity: 89.7 / 100** (167 nodes scored, rank-weighted; 91.9 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 92.0 (94.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -37,7 +37,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Time | 96.1 | 78.9 | 96.1 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 95.1 | 80.7 | 94.4 | 34 |
-| Filter | 83.0 | 71.4 | 91.2 | 32 |
+| Filter | 89.1 | 73.1 | 91.2 | 32 |
 | Keyer | 89.3 | 67.9 | 88.3 | 11 |
 | Merge | 91.7 | 83.8 | 99.4 | 12 |
 | Transform | 89.2 | 74.7 | 91.2 | 20 |
@@ -46,7 +46,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 Behaviour checked: 54 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 26 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 281 of the 323 paired knobs probed change the output pixels; 42 change nothing on the fixture (listed per node below). Splits: 9 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 281 of the 323 paired knobs probed change the output pixels; 42 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -158,12 +158,12 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Blur | `Blur` | supported | 90.2 | 99.0 | 100 (4/4) | 100 (3/3) | 90 | 100 | 100 | 100 (4/4) | 88 | 0 (0/1) | unmeasured |
-| 2 | Sharpen | `Sharpen` | supported | 83.7 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 86 | 0 (0/1) | unmeasured |
-| 3 | Erode (filter) | `ErodeFilter` | supported | 90.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | - | 100 | 0 (0/1) | unmeasured |
+| 1 | Blur | `Blur` | supported | 99.2 | 99.0 | 100 (4/4) | 100 (3/3) | 90 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
+| 2 | Sharpen | `Sharpen` | supported | 95.1 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
+| 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 4 | Median | `Median` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 5 | Glow | `Glow` | supported | 89.9 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 85 | 0 (0/1) | unmeasured |
-| 6 | Soften | `Soften` | supported | 83.7 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 86 | 0 (0/1) | unmeasured |
+| 5 | Glow | `Glow` | supported | 99.1 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
+| 6 | Soften | `Soften` | supported | 95.1 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 7 | DropShadow | `DropShadow` | supported | 66.5 | 92.6 | 100 (9/9) | 89 (8/9) | 56 | 100 | - | 0 unchecked | 65 | - | no fixture |
 | 8 | Defocus | `Defocus` | supported | 88.6 | 82.9 | 60 (3/5) | 100 (3/3) | 89 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
 | 8 | ZDefocus | `ZDefocus` | supported | 74.1 | 69.2 | 31 (9/36) | - | 67 | 100 | 100 | 100 (2/2) | 93 | - | unmeasured |
@@ -181,7 +181,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 16 | BumpBoss | `BumpBoss` | supported | 31.4 | 42.2 | 0 (0/6) | - | 100 | 67 | 100 | 0 unchecked | - | - | no fixture |
-| 16 | EdgeDetect | `EdgeDetect` | supported | 80.8 | 80.6 | 64 (5/7) | 86 (4/5) | 100 | 100 | 100 | - | 65 | - | unmeasured |
+| 16 | EdgeDetect | `EdgeDetect` | supported | 84.7 | 80.6 | 64 (5/7) | 86 (4/5) | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 16 | Emboss | `Emboss` | supported | 71.1 | 54.5 | 18 (2/13) | 100 (2/2) | 86 | 100 | 100 | - | 100 | - | unmeasured |
 | 16 | Laplacian | `Laplacian` | supported | 91.3 | 100.0 | 100 (4/4) | 50 (2/4) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 17 | Inpaint | `Inpaint` | supported | 98.7 | 98.8 | 100 (11/11) | - | 91 | 100 | 100 | - | 100 | - | no fixture |
@@ -295,31 +295,31 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 3 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
 | 4 | Write (Image #2) | `Write` | 16.54 | 66.9 | 29 secondary knobs missing; knob order differs from Nuke's (19 of 26 in order); 3 labels differ from Nuke's |
 | 5 | Tracker (Transform #3) | `Tracker` | 12.96 | 61.1 | 13 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (24 of 35 in order) |
-| 6 | Blur (Filter #1) | `Blur` | 9.80 | 90.2 | 1 label differs from Nuke's; not splittable like Nuke: `size` |
-| 7 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 8 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 9 | Sharpen (Filter #2) | `Sharpen` | 8.15 | 83.7 | knobs that change no pixels: `quailty`; knob order differs from Nuke's (5 of 7 in order); not splittable like Nuke: `size` |
-| 10 | Constant (Image #4) | `Constant` | 7.14 | 71.4 | behaviour unchecked (no pixel case); knob order differs from Nuke's (3 of 4 in order) |
-| 11 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 12 | Switch (Merge #4) | `Switch` | 6.58 | 73.7 | behaviour unchecked (no pixel case) |
-| 13 | Root (Other #11) | `time and settings` | 6.36 | 30.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
-| 14 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 15 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 16 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 17 | DropShadow (Filter #7) | `DropShadow` | 4.78 | 66.5 | behaviour unchecked (no pixel case); knobs that change no pixels: `operation`; knob order differs from Nuke's (5 of 9 in order); 2 labels differ from Nuke's |
-| 18 | Dissolve (Merge #5) | `Dissolve` | 4.76 | 76.2 | behaviour unchecked (no pixel case) |
-| 19 | RotoPaint (Draw #7) | `RotoPaint` | 4.75 | 66.8 | 15 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (8 of 12 in order) |
-| 20 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.70 | 15.4 | primary knobs missing: `fullGrain`; behaviour unchecked (no pixel case) |
-| 21 | DirBlur (Filter #9) | `DirBlur` | 4.41 | 60.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `holdout`, `BlurCenter`, `UseTarget`, `Samples`, `PixelAspect`, `Quality` and 1 more; knob order differs from Nuke's (9 of 12 in order); 3 labels differ from Nuke's |
-| 22 | LightWrap (Draw #8) | `LightWrap` | 4.24 | 66.1 | behaviour unchecked (no pixel case); knobs that change no pixels: `disableluma`, `enableglow`, `saturation`, `LumaTolerance`, `white`, `gray` and 13 more; knob order differs from Nuke's (21 of 27 in order) |
-| 23 | TimeDissolve (Merge #11) | `TimeDissolve` | 4.04 | 55.6 | behaviour unchecked (no pixel case); knobs that change no pixels: `in`, `out`, `lut`; 1 label differs from Nuke's |
-| 24 | LensDistortion (Transform #20) | `Undistort` | 3.95 | 21.0 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
-| 25 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.52 | 43.8 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
-| 26 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.35 | 46.4 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
-| 27 | Erode (filter) (Filter #3) | `ErodeFilter` | 3.33 | 90.0 | not splittable like Nuke: `size` |
-| 28 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 29 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
-| 30 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.14 | 46.7 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img`; knob order differs from Nuke's (3 of 6 in order) |
+| 6 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 7 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 8 | Constant (Image #4) | `Constant` | 7.14 | 71.4 | behaviour unchecked (no pixel case); knob order differs from Nuke's (3 of 4 in order) |
+| 9 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 10 | Switch (Merge #4) | `Switch` | 6.58 | 73.7 | behaviour unchecked (no pixel case) |
+| 11 | Root (Other #11) | `time and settings` | 6.36 | 30.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
+| 12 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 13 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 14 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 15 | DropShadow (Filter #7) | `DropShadow` | 4.78 | 66.5 | behaviour unchecked (no pixel case); knobs that change no pixels: `operation`; knob order differs from Nuke's (5 of 9 in order); 2 labels differ from Nuke's |
+| 16 | Dissolve (Merge #5) | `Dissolve` | 4.76 | 76.2 | behaviour unchecked (no pixel case) |
+| 17 | RotoPaint (Draw #7) | `RotoPaint` | 4.75 | 66.8 | 15 secondary knobs missing; behaviour unchecked (no pixel case); knob order differs from Nuke's (8 of 12 in order) |
+| 18 | ScannedGrain (Draw #9) | `ScannedGrain` | 4.70 | 15.4 | primary knobs missing: `fullGrain`; behaviour unchecked (no pixel case) |
+| 19 | DirBlur (Filter #9) | `DirBlur` | 4.41 | 60.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `holdout`, `BlurCenter`, `UseTarget`, `Samples`, `PixelAspect`, `Quality` and 1 more; knob order differs from Nuke's (9 of 12 in order); 3 labels differ from Nuke's |
+| 20 | LightWrap (Draw #8) | `LightWrap` | 4.24 | 66.1 | behaviour unchecked (no pixel case); knobs that change no pixels: `disableluma`, `enableglow`, `saturation`, `LumaTolerance`, `white`, `gray` and 13 more; knob order differs from Nuke's (21 of 27 in order) |
+| 21 | TimeDissolve (Merge #11) | `TimeDissolve` | 4.04 | 55.6 | behaviour unchecked (no pixel case); knobs that change no pixels: `in`, `out`, `lut`; 1 label differs from Nuke's |
+| 22 | LensDistortion (Transform #20) | `Undistort` | 3.95 | 21.0 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
+| 23 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.52 | 43.8 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
+| 24 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.35 | 46.4 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
+| 25 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 26 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
+| 27 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.14 | 46.7 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img`; knob order differs from Nuke's (3 of 6 in order) |
+| 28 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 29 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 30 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 
 ## Formula cases
 
@@ -803,10 +803,6 @@ Labels below are NodeBased's, then the guide's.
 - TimeEcho (`TimeEcho`): 1 of 2 paired knobs in Nuke's order; `mode` reads "Method", Nuke "TimeEcho Method"; `framesbehind` reads "Frames", Nuke "Frames to look at"
 - Kronos (`Kronos`): 3 of 4 paired knobs in Nuke's order; `timingOutputSpeed` reads "Speed", Nuke "Output Speed"
 - OFlow (`OFlow`): `timingOutputSpeed` reads "Speed", Nuke "Output Speed"; `timingFrame2` reads "Speed", Nuke "Frame"
-- Blur (`Blur`): `size` reads "Radius", Nuke "size"
-- Sharpen (`Sharpen`): 5 of 7 paired knobs in Nuke's order
-- Glow (`Glow`): 9 of 11 paired knobs in Nuke's order; `tolerance` reads "Threshold", Nuke "tolerance"
-- Soften (`Soften`): 5 of 7 paired knobs in Nuke's order
 - DropShadow (`DropShadow`): 5 of 9 paired knobs in Nuke's order; `softness` reads "Size", Nuke "softness"; `operation` reads "Operation (over bg)", Nuke "input"
 - ZDefocus (`ZDefocus`): `center` reads "Focus plane", Nuke "focus plane (C)"
 - DirBlur (`DirBlur`): 9 of 12 paired knobs in Nuke's order; `BlurType` reads "Type", Nuke "BlurType"; `BlurLength` reads "Length", Nuke "BlurLength"; `BlurAngle` reads "Angle", Nuke "BlurAngle"
@@ -816,7 +812,6 @@ Labels below are NodeBased's, then the guide's.
 - MotionBlur (`MotionBlur`): 1 of 2 paired knobs in Nuke's order; `shutterSamples` reads "Samples", Nuke "Shutter Samples"; `shutterTime` reads "Shutter", Nuke "Shutter Time"
 - VectorBlur (`VectorBlur`): 3 of 4 paired knobs in Nuke's order; `uv` reads "Vector layer", Nuke "uv channels"
 - Bilateral (`Bilateral`): `size` reads "Spatial size", Nuke "Size"
-- EdgeDetect (`EdgeDetect`): 4 of 5 paired knobs in Nuke's order; `edgedetector` reads "Edge Type", Nuke "Edge Detector"
 - GodRays (`GodRays`): 2 of 3 paired knobs in Nuke's order
 - ZSlice (`ZSlice`): `Zchan` reads "Depth layer", Nuke "Z"
 - ContactSheet (`ContactSheet`): 8 of 11 paired knobs in Nuke's order
@@ -843,11 +838,11 @@ Nuke's knob class for each knob: AColor_Knob (one slider that splits into r g b 
 - Add (`Add`): `value` (rgba). all split.
 - Gamma (`Gamma`): `value` (rgba). all split.
 - Clamp (`Clamp`): `minimum` (rgba), `maximum` (rgba). all split.
-- Blur (`Blur`): `size` (wh). `size` not splittable.
-- Sharpen (`Sharpen`): `size` (wh). `size` not splittable.
-- Erode (filter) (`ErodeFilter`): `size` (wh). `size` not splittable.
-- Glow (`Glow`): `size` (wh). `size` not splittable.
-- Soften (`Soften`): `size` (wh). `size` not splittable.
+- Blur (`Blur`): `size` (wh). all split.
+- Sharpen (`Sharpen`): `size` (wh). all split.
+- Erode (filter) (`ErodeFilter`): `size` (wh). all split.
+- Glow (`Glow`): `size` (wh). all split.
+- Soften (`Soften`): `size` (wh). all split.
 - Transform (`Transform`): `scale` (wh). all split.
 - Reformat (`Reformat`): `scale` (wh). all split.
 

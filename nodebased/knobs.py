@@ -185,7 +185,7 @@ KNOB_LAYOUT = {
                        "Off is Nuke's: the stored colour is corrected, and (un)premult by does the dividing when you want it."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Blur": _groups(
-        KnobGroup("float_slider", ("radius",), soft_range=(0, 100)),
+        KnobGroup("split", ("radius",), label="Size", soft_range=(0, 100), channels="wh", help="The blur's reach in pixels. ""The split button gives the width and the height their own size."),
         KnobGroup("enum", ("kernel_filter",), label="Filter", help="The blur's shape: box is the fastest, gaussian the smoothest."),
         KnobGroup("float_slider", ("quality",), label="Quality", soft_range=(1, 100),
                   help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
@@ -237,7 +237,7 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Sharpen": _groups(
         KnobGroup("float_slider", ("sharpen_amount",), label="Amount", soft_range=(0, 2)),
-        KnobGroup("float_slider", ("sharpen_size",), label="Size", soft_range=(0, 20)),
+        KnobGroup("split", ("sharpen_size",), label="Size", soft_range=(0, 20), channels="wh", help="The size of the blur the detail is taken from. ""The split button gives the width and the height their own size."),
         KnobGroup("float", ("minimum",), label="Minimum", help="The lowest pixel value the effect works on; a lower value passes unchanged."),
         KnobGroup("float", ("maximum",), label="Maximum", help="The highest pixel value the effect works on; a higher value passes unchanged."),
         KnobGroup("enum", ("kernel_filter",), label="Filter", help="The blur's shape: box is the fastest, gaussian the smoothest."),
@@ -289,10 +289,10 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Emboss": _groups(KnobGroup("float_slider", ("angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("width",), soft_range=(0, 20)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "BumpBoss": _groups(KnobGroup("enum", ("height_channel",)), KnobGroup("float_slider", ("light_angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "ErodeFilter": _groups(KnobGroup("float_slider", ("filter_size",), label="Size", soft_range=(0, 20)), KnobGroup("enum", ("filter_type",), label="Filter"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "ErodeFilter": _groups(KnobGroup("split", ("filter_size",), label="Size", soft_range=(0, 20), channels="wh", help="How far the erosion reaches; negative expands the brighter areas. ""The split button gives the width and the height their own size."), KnobGroup("enum", ("filter_type",), label="Filter"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Glow": _groups(
         KnobGroup("float_slider", ("glow_threshold",), label="Threshold", soft_range=(-2, 2)),
-        KnobGroup("float_slider", ("glow_size",), label="Size", soft_range=(0, 100)),
+        KnobGroup("split", ("glow_size",), label="Size", soft_range=(0, 100), channels="wh", help="The size of the glow's blur. ""The split button gives the width and the height their own size."),
         KnobGroup("float_slider", ("brightness",), label="Brightness", soft_range=(0, 4)),
         KnobGroup("color", ("red", "green", "blue"), label="Tint"),
         KnobGroup("float_slider", ("saturation",), label="Saturation", soft_range=(0, 2)),
@@ -303,7 +303,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("crop",), label="Crop to format"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Soften": _groups(
-        KnobGroup("float_slider", ("soften_size",), label="Size", soft_range=(0, 100)),
+        KnobGroup("split", ("soften_size",), label="Size", soft_range=(0, 100), channels="wh", help="The size of the blur. ""The split button gives the width and the height their own size."),
         KnobGroup("float_slider", ("amount",), label="Amount", soft_range=(0, 2),
                   help="How far from the picture to the soft one: 1 is all the way."),
         KnobGroup("float", ("minimum",), label="Minimum", help="The lowest pixel value the effect works on; a lower value passes unchanged."),
@@ -2042,6 +2042,25 @@ NUKE_LABELS.update({
     # label keeps the guide's text so the panel and the table read the same.
     "IBKGizmo": {"use_bg_luminance": "Use bkg luminnance"},
     "Vectorfield": {"cube_path": "Vectorfield file"},
+})
+
+
+# Lane 9 step D (11/2): the Filter nodes of step A. The guide's order for each (docs/parity/nuke_nodes.json); a knob NodeBased added keeps its
+# place after these, before the mask strip. `channels` leads where the guide has it first (EdgeExtend's trailed the tab).
+NUKE_LAYOUT_LANE9.update({
+    "Blur": ("channels", "radius", "kernel_filter", "quality", "crop"),
+    "Sharpen": ("channels", "minimum", "maximum", "sharpen_amount", "sharpen_size", "kernel_filter", "quality", "crop"),
+    "Soften": ("channels", "minimum", "maximum", "amount", "soften_size", "kernel_filter", "quality", "crop"),
+    "Glow": ("channels", "red", "glow_threshold", "brightness", "saturation", "width_channel", "nonlinear", "effect_only", "glow_size",
+             "kernel_filter", "quality", "crop"),
+    "EdgeDetect": ("edge_type", "channels", "threshold", "edge_erode_size", "edge_blur_size", "edge_blur_quality"),
+    "Laplacian": ("channels", "laplacian_size", "kernel_filter", "quality", "crop"),
+    "ErodeFilter": ("channels", "filter_size", "filter_type"),
+    "EdgeExtend": ("channels", "source_premultiplied", "erode", "premultiply"),
+})
+NUKE_LABELS.update({
+    "Glow": {"glow_threshold": "Tolerance"},
+    "EdgeDetect": {"edge_type": "Edge Detector"},
 })
 
 

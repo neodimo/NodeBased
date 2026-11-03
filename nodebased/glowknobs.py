@@ -38,7 +38,9 @@ def blurred(image, size, shape, quality, origin, width=None):
     weight = np.clip(np.asarray(width, np.float32), 0.0, 1.0) * LEVELS
     low = np.minimum(np.floor(weight).astype(int), LEVELS - 1)
     fraction = (weight - low).astype(np.float32)
-    levels = [blurknobs.filtered(image, size * k / LEVELS, shape, quality, origin) for k in range(LEVELS + 1)]
+    def at(k):
+        return tuple(v * k / LEVELS for v in size) if isinstance(size, tuple) else size * k / LEVELS
+    levels = [blurknobs.filtered(image, at(k), shape, quality, origin) for k in range(LEVELS + 1)]
     stack = np.stack(levels, axis=0)
     index = low[..., 0]
     rows, cols = np.indices(index.shape)

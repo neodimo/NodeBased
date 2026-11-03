@@ -954,7 +954,8 @@ class EdgeExtendTests(unittest.TestCase):
         np.testing.assert_array_equal(kernel("EdgeExtend", picture, **{**wide, "erode": 0.0}), base)
 
     def test_the_main_tab_lays_its_knobs_out_in_nuke_order(self):
-        self.assertEqual(labels("EdgeExtend")[:5], ["Size", "Alpha threshold", "Source Is Premultiplied", "Erode", "Premultiply"])
+        # The guide's Channels row leads (step D found the hook that orders the shared rows); the knobs NodeBased added follow the guide's.
+        self.assertEqual(labels("EdgeExtend")[:6], ["Channels", "Source Is Premultiplied", "Erode", "Premultiply", "Size", "Alpha threshold"])
 
     def test_every_paired_knob_acts(self):
         picture = self.matte()

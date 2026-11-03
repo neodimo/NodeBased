@@ -225,7 +225,8 @@ def _one_pixel_rule(params, region, arity):
     return [region.expand(1, 1)] + [region] * (arity - 1)
 
 def _erode_filter_rule(params, region, arity):
-    size = abs(float(params.get("filter_size", 0.0)))
+    from .blurknobs import size_value, _largest
+    size = _largest(size_value(params, "filter_size", 0.0))
     support = 0 if size < 0.5 else int(math.ceil(size))
     if params.get("filter_type", "box") == "gaussian" and support:
         support += int(math.ceil(max(1.0, size * 0.5)))
@@ -841,6 +842,9 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
     scaled = dict(params)
     for name in names:
         if name not in scaled:
+            continue
+        if isinstance(params[name], (list, tuple)):
+            scaled[name] = [v / tier for v in params[name]]      # a split knob (core.SPLITTABLE): each entry is in pixels
             continue
         value = scaled[name] / tier
         if isinstance(params[name], int):

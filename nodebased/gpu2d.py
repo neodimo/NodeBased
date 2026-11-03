@@ -231,6 +231,8 @@ def map_blur(p):
     if not blurknobs._get("Blur", p, "crop"):
         raise Unsupported("Blur with crop to format off grows its window")
     radius = p["radius"]
+    if isinstance(radius, (list, tuple)):
+        raise Unsupported("Blur with a split width and height has no GPU kernel")
     if radius < 0.5:
         return {"radius": 0, "scale": 1.0, "mix": float(p.get("mix", 1.0))}
     r = int(round(radius))

@@ -6855,7 +6855,10 @@ class Evaluator:
         # box < triangle < quadratic < gaussian smoothness ordering: box ramps linearly, triangle
         # and quadratic are progressively smoother polynomial ease curves, and gaussian instead
         # reaches for a true post-erode blur, as it already did.
-        size = float(p.get("filter_size", 1.0))
+        from .blurknobs import size_value
+        size = size_value(p, "filter_size", 1.0)
+        if isinstance(size, tuple):
+            return Evaluator._erode_filter_wh(image, p, size)
         if size <= -0.5:
             # The guide: a negative size lets brighter areas expand into darker ones, the erosion of the negated picture.
             return -Evaluator._erode_filter(-image, {**p, "filter_size": -size})
@@ -6890,6 +6893,51 @@ class Evaluator:
         return hard.astype(np.float32)
 
     @staticmethod
+    def _erode_filter_wh(image, p, size):
+        """Erode (filter) with a size split into a width and a height: the structuring element is an ellipse with those semi-axes, and
+        the fractional parts of the two sizes blend the four surrounding integer ellipses (bilinearly, with the same ease curve the
+        unsplit size uses). The sign of the larger entry decides between eroding and expanding; each axis then works at its magnitude."""
+        if abs(size[0]) < abs(size[1]) and size[1] <= -0.5 or abs(size[0]) >= abs(size[1]) and size[0] <= -0.5:
+            return -Evaluator._erode_filter_wh(-image, p, (-size[0], -size[1]))
+        sx, sy = max(0.0, size[0]), max(0.0, size[1])
+        sx, sy = (sx if sx >= 0.5 else 0.0), (sy if sy >= 0.5 else 0.0)
+        if sx == 0.0 and sy == 0.0:
+            return image.copy()
+        filter_type = p.get("filter_type", "box")
+
+        def ease(frac):
+            if filter_type == "triangle":
+                return frac * frac * (3.0 - 2.0 * frac)
+            if filter_type == "quadratic":
+                return frac * frac * frac * (frac * (frac * 6.0 - 15.0) + 10.0)
+            return frac
+
+        def erode_at(rx, ry):
+            if rx <= 0 and ry <= 0:
+                return image.copy()
+            h, w = image.shape[:2]
+            padded = np.pad(image, ((ry, ry), (rx, rx), (0, 0)), mode="edge")
+            rx2, ry2 = rx * rx, ry * ry
+            windows = [padded[ry+dy:ry+dy+h, rx+dx:rx+dx+w]
+                       for dy in range(-ry, ry+1) for dx in range(-rx, rx+1)
+                       if dx * dx * ry2 + dy * dy * rx2 <= rx2 * ry2]
+            return np.minimum.reduce(windows).astype(np.float32)
+
+        x0, y0 = int(math.floor(sx)), int(math.floor(sy))
+        wx, wy = ease(sx - x0), ease(sy - y0)
+        out = np.zeros_like(image, dtype=np.float64)
+        for ix, weight_x in ((0, 1.0 - wx), (1, wx)):
+            for iy, weight_y in ((0, 1.0 - wy), (1, wy)):
+                weight = weight_x * weight_y
+                if weight > 1e-9:
+                    out += weight * erode_at(x0 + ix, y0 + iy)
+        hard = out.astype(np.float32)
+        if filter_type == "gaussian":
+            soft = tuple(max(1.0, 0.5 * v) if v else 0.0 for v in (sx, sy))
+            hard = Evaluator._soften(hard, {"soften_size": soft})
+        return hard.astype(np.float32)
+
+    @staticmethod
     def _sharpen(image, p, origin=(0, 0)):
         # Unsharp mask: add back `amount` of the high-frequency detail a blur removed (nodebased/blurknobs.py: filter, quality, value
         # range). A flat image has no detail (blurred == image), so it is the identity at any amount.
@@ -6905,7 +6953,7 @@ class Evaluator:
         # channel in 0 .. 1 that scales the size per pixel.
         from . import blurknobs, glowknobs
         threshold = p.get("glow_threshold", 1.0)
-        size = float(p.get("glow_size", 8.0))
+        size = blurknobs.size_value(p, "glow_size", 8.0)
         shape, quality = blurknobs._get("Glow", p, "kernel_filter"), blurknobs._get("Glow", p, "quality")
         bright = np.clip(image[..., :3] - threshold, 0.0, None)
         nonlinear = bool(int(p.get("nonlinear", 0)))
