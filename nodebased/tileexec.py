@@ -1520,7 +1520,8 @@ class TileExecutor:
             elif kind == "ChromaKeyer":
                 filtered = imaging.Evaluator._chroma_keyer(image, params)
             elif kind == "IBKColor":
-                filtered = imaging.Evaluator._ibk_color(image, params)
+                pick = inputs[2] if len(inputs) > 2 and inputs[2] is not None else None
+                filtered = imaging.Evaluator._ibk_color(image, params, None if pick is None else _align_artifact_to(pick, image_artifact.region))
             else:
                 filtered = imaging.Evaluator._hue_keyer(image, params)
             if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:

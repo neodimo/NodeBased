@@ -48,7 +48,8 @@
     {"nodebased": [], "nuke": ["shownmetadata"], "kind": "panel", "reason": "the Read panel visibly lists the metadata of its resolved source file"},
     {"nodebased": [], "nuke": ["metadatafilter"], "kind": "panel", "reason": "the Read panel's transient filter hides metadata rows without saving a node value"}
    ],
-   "skip_default": ["frame"]
+   "skip_default": ["frame", "proxy_format"],
+   "value_map": {"proxy": {"": "none"}, "key1": {"": "none"}, "key2": {"": "none"}, "key3": {"": "none"}, "key4": {"": "none"}, "value1": {"": "none"}, "value2": {"": "none"}, "value3": {"": "none"}, "value4": {"": "none"}}
   },
   "Write": {
    "nodebased": "Write",
@@ -244,7 +245,8 @@
     {"nodebased": [], "nuke": ["mxf_edit_rate_knob"], "kind": "unsupported", "reason": "NodeBased's Write writes EXR, PNG, TIFF, JPEG and DPX (core.WRITE_FILE_TYPES); MOV and MXF files have no writer, so the codec and colour metadata of their tabs has nothing to act on (tests/test_2d_behaviour_write.py)"},
     {"nodebased": [], "nuke": ["mxf_codec_profile_knob"], "kind": "unsupported", "reason": "NodeBased's Write writes EXR, PNG, TIFF, JPEG and DPX (core.WRITE_FILE_TYPES); MOV and MXF files have no writer, so the codec and colour metadata of their tabs has nothing to act on (tests/test_2d_behaviour_write.py)"},
     {"nodebased": [], "nuke": ["mxf_tape_id_knob"], "kind": "unsupported", "reason": "NodeBased's Write writes EXR, PNG, TIFF, JPEG and DPX (core.WRITE_FILE_TYPES); MOV and MXF files have no writer, so the codec and colour metadata of their tabs has nothing to act on (tests/test_2d_behaviour_write.py)"}
-   ]
+   ],
+   "value_map": {"file": {"": "none"}, "proxy": {"": "none"}, "frame": {"": "none"}, "key1": {"": "none"}, "key2": {"": "none"}, "key3": {"": "none"}, "key4": {"": "none"}, "value1": {"": "none"}, "value2": {"": "none"}, "value3": {"": "none"}, "value4": {"": "none"}, "file_type": {"Auto": "none"}}
   },
   "Viewer": {
    "nodebased": "Viewer",
@@ -2808,6 +2810,7 @@
     {"nodebased": ["key_combine"], "nuke": ["combine"], "kind": "renamed", "reason": "same control under another name; how the matte joins what the channel holds"},
     {"nodebased": [], "nuke": ["range"], "kind": "panel", "reason": "the label of the four range points A, B, C and D, which NodeBased shows as four number fields (range_a to range_d)"}
    ],
+   "skip_default": ["range#2", "range#3"],
    "value_map": {"operation": {"luminance": "luminance key"}}
   },
   "ChromaKeyer": {
@@ -2947,6 +2950,7 @@
    "nodebased": "IBKColor",
    "inputs": [
     {"nodebased": "c", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "pick", "nuke": "1", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [

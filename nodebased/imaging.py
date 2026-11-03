@@ -4337,6 +4337,11 @@ class Evaluator:
                 cleaned = Evaluator._denoise(source.pixels, p, inputs[2].pixels)
                 pixels = Evaluator._apply_mask_mix(source.pixels, cleaned, None if mask is None else mask.fit(source.data), mix)
                 return Raster(pixels, source.data, source.display)
+            if kind == "IBKColor" and len(inputs) > 2 and inputs[2] is not None:
+                # The pick input (step M): its picture replaces the image's colour in the plate wherever the screen is found.
+                plate = Evaluator._ibk_color(source.pixels, p, inputs[2].fit(source.data))
+                pixels = Evaluator._apply_mask_mix(source.pixels, plate, None if mask is None else mask.fit(source.data), mix)
+                return Raster(pixels, source.data, source.display)
             if kind == "Bilateral" and len(inputs) > 2 and inputs[2] is not None:
                 # The guide input (lane 9 step G): the weights take their colours from the guide, fitted to the source's window.
                 guided = Evaluator._bilateral(source.pixels, p, inputs[2].fit(source.data))
@@ -6737,7 +6742,7 @@ class Evaluator:
         return padded[0:h] + padded[1:h + 1] + padded[2:h + 2]
 
     @staticmethod
-    def _ibk_color(image, p):
+    def _ibk_color(image, p, pick=None):
         """A clean screen plate from a blue or green screen. Pixels whose screen channel leads the
         larger of the other two by more than a quarter of itself count as known screen; the known
         set is eroded by `screen_erode` pixels so foreground edges and spill drop out, then each of
@@ -6745,8 +6750,11 @@ class Evaluator:
         neighbours (only known screen ever contributes, so the fill never smears foreground). A
         pixel further than `fill_size` from any screen stays unresolved: black, or with
         `patch_black` a dark screen colour at the `darks` level. The plate's screen channel is
-        clamped to `darks`..`lights`; alpha is 1."""
+        clamped to `darks`..`lights`; alpha is 1. With a `pick` picture (the node's second input, same pixel grid) the screen is
+        still found in `image`, but the colour the plate holds there is the pick's rather than the image's: a clean plate or a
+        sampled screen colour stands in for the computed one."""
         rgb = image[..., :3].astype(np.float32)
+        colour = rgb if pick is None else pick[..., :3].astype(np.float32)
         dominant = 2 if p.get("screen_type", "green") == "blue" else 1
         first, second = Evaluator._screen_channels(dominant)
         lead = rgb[..., dominant:dominant + 1] - np.maximum(rgb[..., first:first + 1], rgb[..., second:second + 1])
@@ -6754,7 +6762,7 @@ class Evaluator:
         erode = float(p.get("screen_erode", 1.0))
         if erode >= 0.5:
             known = Evaluator._box_extreme(known.astype(np.float32), erode, use_max=False) > 0.5
-        plate = np.where(known, rgb, 0.0).astype(np.float32)
+        plate = np.where(known, colour, 0.0).astype(np.float32)
         for _ in range(int(p.get("fill_size", 10))):
             if known.all():
                 break

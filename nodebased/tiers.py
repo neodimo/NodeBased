@@ -278,7 +278,9 @@ def _ibk_color_rule(params, region, arity):
     # The plate is read padded by the erode plus fill reach; the mask gates the result and only
     # needs the output region. (IBKGizmo and ChromaKeyer are pointwise and use `_identity`.)
     support = _ibk_color_support(params)
-    return [region.expand(support, support)] + [region] * (arity - 1)
+    padded = region.expand(support, support)
+    # Slots: image, mask, pick. The pick (the replacement screen colour) is sampled at the same pixels the image is.
+    return [padded] + [region] * (arity - 1) if arity < 3 else [padded, region, padded] + [region] * (arity - 3)
 
 
 def _screen_keyer_support(params):

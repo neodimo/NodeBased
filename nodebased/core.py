@@ -894,9 +894,9 @@ SPECS = {
     # IBKColor (step K1): builds a clean screen plate from a blue or green screen by repeated
     # edge-aware filling (docs/PARITY_2D.md). `fill_size` is Nuke's `size` (renamed: `size` is a
     # global LIMITS key with a minimum of 1), `screen_erode` its `erode`.
-    "IBKColor": {"inputs": ["c"], "optional_inputs": ["mask"],
-                 "params": {"screen_type": "green", "fill_size": 10, "screen_erode": 1.0,
-                           "darks": 0.05, "lights": 1000.0, "patch_black": 1, "mix": 1.0}},
+    "IBKColor": {"inputs": ["c"], "optional_inputs": ["mask", "pick"],
+                 "params": {"screen_type": "blue", "fill_size": 10, "screen_erode": 0.0,
+                           "darks": 0.05, "lights": 1000.0, "patch_black": 0, "mix": 1.0}},
     # IBKGizmo (step K1): keys the foreground `fg` against the clean plate `c` (an IBKColor output
     # or any plate of the screen); `bg` is optional and only feeds the luminance match.
     "IBKGizmo": {"inputs": ["fg", "c"], "optional_inputs": ["bg", "mask"],
@@ -967,8 +967,10 @@ SPECS = {
     "BurnIn": {"inputs": ["image"],
                "params": {"top_left": "[metadata input/filename]", "top_right": "[frame]", "bottom_left": "",
                           "bottom_right": "[metadata timecode]", "center": "", "font": "", "font_size": 24.0,
-                          "margin": 12.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "bar": 1,
-                          "bar_opacity": 0.5, **_metaknobs.new_params("BurnIn")}},
+                          "margin": 12.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "bar": 0,
+                          # Nuke's own start (step M): the background is off and, when it is turned on, opaque. A saved BurnIn keeps its bar
+                          # and its 0.5 (the values in the document itself).
+                          "bar_opacity": 1.0, **_metaknobs.new_params("BurnIn")}},
     # Difference: Nuke's two-input colour-difference keyer. Reuses Grade's "offset" and
     # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.

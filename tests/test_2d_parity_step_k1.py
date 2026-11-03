@@ -25,6 +25,9 @@ def disc_frame(size=64, radius=16.0, ramp=1.0, screen=SCREEN, disc=DISC):
     return (coverage * disc_px + (1 - coverage) * screen_px).astype(np.float32), coverage[..., 0]
 
 
+# The IBKColor a new node was before 2D behaviour step M (a new one now starts at Nuke's blue screen, erode 0, no patch black).
+OLD_IBK = dict(screen_type="green", screen_erode=1.0, patch_black=1)
+
 class Graph:
     def __init__(self):
         self.d = Dispatcher()
@@ -294,7 +297,7 @@ class GraphTests(unittest.TestCase):
         g = Graph()
         plate = screen_graph(g)
         g.add("key", "ChromaKeyer", {}, image=plate)
-        g.add("clean", "IBKColor", dict(fill_size=12), c=plate)
+        g.add("clean", "IBKColor", dict(OLD_IBK, fill_size=12), c=plate)
         g.add("ibk", "IBKGizmo", {}, fg=plate, c="clean")
         for name in ("key", "clean", "ibk"):
             out = evaluator_pixels(g.doc, name)
@@ -322,7 +325,7 @@ class GraphTests(unittest.TestCase):
                 np.testing.assert_allclose(evaluator_pixels(g.doc, "node"), evaluator_pixels(g.doc, plate))
         g = Graph()
         plate = screen_graph(g)
-        g.add("clean", "IBKColor", {}, c=plate)
+        g.add("clean", "IBKColor", dict(OLD_IBK), c=plate)
         g.add("node", "IBKGizmo", dict(mix=0.0), fg=plate, c="clean")
         np.testing.assert_allclose(evaluator_pixels(g.doc, "node"), evaluator_pixels(g.doc, plate))
 
@@ -366,13 +369,13 @@ class TilePathParityTests(unittest.TestCase):
                     g = Graph()
                     plate = screen_graph(g, width, height)
                     g.add("matte", "Constant", dict(width=width, height=height, red=1, green=1, blue=1, alpha=0.5))
-                    g.add("node", "IBKColor", dict(params, mix=0.9), c=plate, mask="matte")
+                    g.add("node", "IBKColor", dict(OLD_IBK, **params, mix=0.9), c=plate, mask="matte")
                     np.testing.assert_allclose(tile_pixels(g.doc, "node"), evaluator_pixels(g.doc, "node"), atol=1e-6)
 
     def test_ibk_gizmo_matches_across_both_paths_with_bg_and_mask(self):
         g = Graph()
         plate = screen_graph(g, 200, 150)
-        g.add("clean", "IBKColor", dict(fill_size=12), c=plate)
+        g.add("clean", "IBKColor", dict(OLD_IBK, fill_size=12), c=plate)
         g.add("bg", "Checker", dict(width=200, height=150, size=9))
         g.add("matte", "Constant", dict(width=200, height=150, red=1, green=1, blue=1, alpha=0.7))
         g.add("node", "IBKGizmo", dict(luminance_match=1, use_bg_luminance=1, mix=0.85),
@@ -403,7 +406,7 @@ class BypassTests(unittest.TestCase):
     def test_bypassed_gizmo_passes_fg_and_never_reads_the_plate(self):
         g = Graph()
         plate = screen_graph(g)
-        g.add("clean", "IBKColor", {}, c=plate)
+        g.add("clean", "IBKColor", dict(OLD_IBK), c=plate)
         g.add("node", "IBKGizmo", {}, fg=plate, c="clean")
         upstream = evaluator_pixels(g.doc, plate)
         self.assertFalse(np.array_equal(evaluator_pixels(g.doc, "node"), upstream))
