@@ -627,7 +627,7 @@ SPECS = {
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                               "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
                               "vector_sampling": "source", "vector_alpha": "none", "max_length": 100.0,
-                              "samples": 0, "mix": 1.0}},
+                              "samples": 0, "mix": 1.0, "invert_uv": 0, "vector_output": "result"}},
     # Shuffle's `layer` (step 5c) names one of the input's named layers (Raster.layers); empty or
     # "rgba" shuffles the input's own channels. Nuke's two-input Shuffle (12.1 and later), fidelity step B: the
     # inputs are B (`image`, the one every older Shuffle has) and A. Routing slot 1 reads layer `layer` (Nuke's
@@ -814,7 +814,7 @@ SPECS = {
               "flow_backend": "auto", **_retimeknobs.new_params("OFlow")}},
     "VectorToMotion": {"inputs": ["image"], "params": {"forward_layer": "smartvector.forward",
               "backward_layer": "smartvector.backward"}},
-    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward"}},
+    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask", "fgvecs"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward"}},
     # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
     "SmartVector": {"inputs": ["image"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
@@ -2142,7 +2142,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "u_channel": ["R", "G", "B", "A"], "v_channel": ["R", "G", "B", "A"],
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
            "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap", "none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
-           "vector_alpha": ["none", "weighted"], "vector_sampling": ["source", "destination"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
+           "vector_alpha": ["none", "weighted"], "vector_output": ["result", "uvs"], "vector_sampling": ["source", "destination"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
            "roworder": ["TopBottom", "BottomTop"], "colorder": ["LeftRight", "RightLeft", "Snake"],
            "mode": list(TRACKER_MODES), "pretrack_filter": list(_trackerknobs.PRETRACK_FILTERS),
            "grab_behavior": list(_trackerknobs.GRAB_BEHAVIOURS), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
@@ -2358,6 +2358,7 @@ LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_P
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)
 CHOICES.update(_denoiseknobs.CHOICES)
 LIMITS.update(_denoiseknobs.LIMITS)
+LIMITS["invert_uv"] = (0, 1)      # VectorBlur
 CHOICES.update(_warpknobs.CHOICES)
 LIMITS.update(_warpknobs.LIMITS)
 CHOICES["guide_channels"] = list(_bilateralknobs.GUIDE_CHANNELS)

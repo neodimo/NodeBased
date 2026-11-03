@@ -389,3 +389,26 @@ def multichannel(moments, width, height, background, *, passes, ambient, samples
     if motion_layer is not None and "motion" in chosen:
         layers["motion"] = motion_layer
     return beauty, {name: layers[name] for name in layers}
+
+
+def fgvecs_blur_params(params):
+    """The vector blur that a MotionBlur with its FgVecs input wired runs (lane 9 step L).
+
+    The guide: FgVecs carries "motion in your input sequence ... estimated before" and Shutter Time is "the equivalent shutter time of
+    the retimed sequence ... a shutter time of 0.5 is equivalent to a 180 degree mechanical shutter", Shutter Samples "the number of
+    in-between images used to create an output image during the shutter time". So a pixel moving v pixels per frame is exposed along a
+    streak of v * shutter pixels, centred on the frame (or starting or ending at it, per the shutter offset), averaged over `samples`
+    points spread evenly along the streak.
+    """
+    shutter = float(params.get("shutter", 1.0))
+    where = str(params.get("shutter_offset", "centred"))
+    if where == "start":
+        offset = 0.0
+    elif where == "end":
+        offset = -1.0
+    elif where == "custom":
+        offset = float(params.get("custom_offset", 0.0)) / shutter - 0.5 if shutter else 0.0
+    else:
+        offset = -0.5
+    return {"vector_scale": shutter, "max_length": 0.0, "vector_offset": offset, "vector_method": "forward", "vector_alpha": "none",
+            "vector_sampling": "source", "samples": int(params.get("samples", 4))}

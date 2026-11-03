@@ -3,7 +3,11 @@
 * Denoise: Denoise Amount lowers the residual variance of a plate with noise of a known amplitude; Output Noise is the source minus the
   result (so the result and the noise rebuild the source); Roll Off, Smoothness, Luminance Blend, Preserve Edges, Lift Blacks, Source,
   Noise Model, Profile and the Noise input each change the picture; graphs saved before keep their pictures (legacy_denoise); the tile
-  path equals the evaluator, with a mask.
+  path equals the evaluator, with a mask;
+* VectorBlur: on a plate of constant vectors the streak is the vector times Scale, Offset slides it, Method points it back, UV alpha keeps
+  the matte from smearing, Invert UV flips the vectors and Output UVs hands them back;
+* MotionBlur: with FgVecs wired a plate moving a whole number of pixels per frame is streaked over Shutter Time times that many pixels,
+  at Shutter Samples points, centred on the frame by default.
 """
 import copy
 import os
@@ -255,6 +259,145 @@ class DenoiseLayoutTests(unittest.TestCase):
                                                   "Smoothness", "Luminance blend", "Preserve edges"])
         kept, total = layout_order("Denoise")[0]
         self.assertEqual(kept, total)
+
+
+# ------------------------------------------------------------------------------------------------------ VectorBlur and MotionBlur
+W, H = 40, 12
+
+
+def ramp_plate():
+    """A horizontal ramp, opaque: a linear picture, so a symmetric streak leaves it alone and a shifted one moves it by the shift."""
+    g = Graph()
+    g.add("plate", "Ramp", dict(width=W, height=H, p0_x=0.0, p0_y=0.0, p1_x=float(W - 1), p1_y=0.0,
+                                color0_red=0.0, color0_green=0.0, color0_blue=0.0, color0_alpha=1.0,
+                                color1_red=1.0, color1_green=1.0, color1_blue=1.0, color1_alpha=1.0))
+    return g
+
+
+def vector_plate(g, u, v=0.0):
+    g.add("vec", "Constant", dict(width=W, height=H, red=u, green=v, blue=0.0, alpha=1.0))
+
+
+def interior(a, margin=8):
+    return np.asarray(a, np.float64)[:, margin:W - margin, :3]
+
+
+class VectorBlurConstantVectorTests(unittest.TestCase):
+    def blurred(self, u=4.0, v=0.0, **knob):
+        g = ramp_plate()
+        vector_plate(g, u, v)
+        g.add("node", "VectorBlur", dict(knob), image="plate", uv="vec")
+        return evaluator_pixels(g.doc, "node"), evaluator_pixels(g.doc, "plate")
+
+    def slope(self, plate):
+        return float(plate[5, 21, 0] - plate[5, 20, 0])
+
+    def test_the_streak_is_the_vector_times_the_scale(self):
+        for scale, shift in ((1.0, 2.0), (0.5, 1.0), (2.0, 4.0)):
+            with self.subTest(scale=scale):
+                out, plate = self.blurred(vector_scale=scale, vector_offset=0.0)
+                np.testing.assert_allclose(interior(out), interior(plate) - shift * self.slope(plate), atol=1e-5)
+
+    def test_scale_0_leaves_the_picture(self):
+        out, plate = self.blurred(vector_scale=0.0)
+        np.testing.assert_allclose(interior(out), interior(plate), atol=1e-6)
+
+    def test_offset_slides_the_streak_and_minus_a_half_centres_it(self):
+        centred, plate = self.blurred(vector_scale=1.0, vector_offset=-0.5)
+        np.testing.assert_allclose(interior(centred), interior(plate), atol=1e-5)                 # p - 0.5v .. p + 0.5v averages to p
+        slid, _ = self.blurred(vector_scale=1.0, vector_offset=0.5)
+        np.testing.assert_allclose(interior(slid), interior(plate) - 4.0 * self.slope(plate), atol=1e-5)
+
+    def test_the_method_points_the_streak_the_other_way(self):
+        forward, plate = self.blurred(vector_scale=1.0, vector_offset=0.0, vector_method="forward")
+        backward, _ = self.blurred(vector_scale=1.0, vector_offset=0.0, vector_method="backward")
+        np.testing.assert_allclose(interior(backward), interior(plate) + 2.0 * self.slope(plate), atol=1e-5)
+        self.assertTrue(differs(forward, backward))
+
+    def test_invert_uv_flips_the_vectors(self):
+        inverted, plate = self.blurred(vector_scale=1.0, vector_offset=0.0, invert_uv=1)
+        np.testing.assert_allclose(interior(inverted), interior(plate) + 2.0 * self.slope(plate), atol=1e-5)
+
+    def test_output_uvs_hands_back_the_vectors(self):
+        out, _ = self.blurred(u=4.0, v=-1.5, vector_output="uvs")
+        np.testing.assert_allclose(out[..., 0], 4.0, atol=1e-6)
+        np.testing.assert_allclose(out[..., 1], -1.5, atol=1e-6)
+        flipped, _ = self.blurred(u=4.0, v=-1.5, vector_output="uvs", invert_uv=1)
+        np.testing.assert_allclose(flipped[..., 0], -4.0, atol=1e-6)
+
+    def test_uv_alpha_weighted_keeps_the_matte_from_smearing(self):
+        picture = np.ones((H, W, 4), np.float32)
+        picture[:, W // 2:, 3] = 0.0
+        picture[:, W // 2:, :3] = 0.0
+        u = np.full((H, W), 4.0)
+        plain = Evaluator._vector_blur(picture, u, np.zeros_like(u), {**SPECS["VectorBlur"]["params"], "vector_alpha": "none"})
+        weighted = Evaluator._vector_blur(picture, u, np.zeros_like(u), {**SPECS["VectorBlur"]["params"], "vector_alpha": "weighted"})
+        np.testing.assert_array_equal(weighted[..., 3], picture[..., 3])                          # the matte stays where it was
+        self.assertTrue(differs(plain[..., 3], picture[..., 3]))                                   # unweighted, the matte smears
+        self.assertTrue(differs(plain, weighted))
+
+    def test_the_main_tab_lists_the_new_knobs_in_the_guides_order(self):
+        names = labels("VectorBlur")
+        self.assertLess(names.index("Output"), names.index("UV alpha"))
+        self.assertIn("Invert UV", names)
+
+
+class MotionBlurFgVecsTests(unittest.TestCase):
+    def graph(self, u=4.0, **knob):
+        g = ramp_plate()
+        vector_plate(g, u)
+        g.add("node", "MotionBlur", dict(knob), image="plate", fgvecs="vec")
+        return g
+
+    def run_node(self, **knob):
+        g = self.graph(**knob)
+        return evaluator_pixels(g.doc, "node"), evaluator_pixels(g.doc, "plate")
+
+    def slope(self, plate):
+        return float(plate[5, 21, 0] - plate[5, 20, 0])
+
+    def test_a_centred_shutter_leaves_a_linear_plate_and_the_streak_is_shutter_time_times_the_motion(self):
+        centred, plate = self.run_node(shutter=0.5, samples=3, shutter_offset="centred")
+        np.testing.assert_allclose(interior(centred), interior(plate), atol=1e-5)
+        start, _ = self.run_node(shutter=0.5, samples=3, shutter_offset="start")
+        # 4 px per frame x 0.5 = a 2 px streak from the pixel back along the motion, sampled at p, p-1, p-2
+        np.testing.assert_allclose(interior(start), interior(plate) - 1.0 * self.slope(plate), atol=1e-5)
+        end, _ = self.run_node(shutter=0.5, samples=3, shutter_offset="end")
+        np.testing.assert_allclose(interior(end), interior(plate) + 1.0 * self.slope(plate), atol=1e-5)
+
+    def test_the_shutter_time_scales_the_streak(self):
+        half, plate = self.run_node(shutter=0.5, samples=5, shutter_offset="start")
+        full, _ = self.run_node(shutter=1.0, samples=5, shutter_offset="start")
+        np.testing.assert_allclose(interior(half), interior(plate) - 1.0 * self.slope(plate), atol=1e-5)
+        np.testing.assert_allclose(interior(full), interior(plate) - 2.0 * self.slope(plate), atol=1e-5)
+
+    def test_the_samples_are_points_along_the_vector(self):
+        # a lone bright pixel under a 4 px streak sampled at 5 points (1 px apart) becomes five pixels at a fifth each
+        picture = np.zeros((H, W, 4), np.float32)
+        picture[..., 3] = 1.0
+        picture[5, 20, :3] = 1.0
+        u = np.full((H, W), 4.0)
+        from nodebased import motionblur
+        p = motionblur.fgvecs_blur_params({**SPECS["MotionBlur"]["params"], "shutter": 1.0, "samples": 5, "shutter_offset": "start"})
+        out = Evaluator._vector_blur(picture, u, np.zeros_like(u), p)
+        row = out[5, :, 0]
+        np.testing.assert_allclose(row[20:25], 0.2, atol=1e-6)                                    # the streak trails the pixel along the motion
+        self.assertEqual(float(row[:20].sum() + row[25:].sum()), 0.0)
+
+    def test_more_samples_change_the_picture_of_a_streaked_detail(self):
+        g = Graph()
+        g.add("plate", "Checker", dict(width=W, height=H, size=3))
+        vector_plate(g, 8.0)
+        g.add("few", "MotionBlur", dict(shutter=1.0, samples=2), image="plate", fgvecs="vec")
+        g.add("many", "MotionBlur", dict(shutter=1.0, samples=9), image="plate", fgvecs="vec")
+        self.assertTrue(differs(evaluator_pixels(g.doc, "few"), evaluator_pixels(g.doc, "many")))
+
+    def test_without_fgvecs_the_node_still_estimates_its_motion(self):
+        self.assertIn("fgvecs", SPECS["MotionBlur"]["optional_inputs"])
+        g = ramp_plate()
+        g.add("node", "MotionBlur", dict(shutter=1.0, samples=3), image="plate")
+        out = evaluator_pixels(g.doc, "node")
+        np.testing.assert_allclose(interior(out), interior(evaluator_pixels(g.doc, "plate")), atol=1e-5)   # a still plate has no motion to blur
 
 
 if __name__ == "__main__":

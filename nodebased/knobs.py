@@ -964,6 +964,8 @@ KNOB_LAYOUT = {
     "VectorBlur": _groups(
         KnobGroup("string", ("uv_layer",), label="UV channels"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
+        KnobGroup("enum", ("vector_output",), label="Output", help="Result is the blurred picture, UVs the vectors it follows (u in red, v in green)."),
+        KnobGroup("bool", ("invert_uv",), label="Invert UV", help="Point the vectors the other way."),
         KnobGroup("enum", ("vector_alpha",), label="UV alpha"),
         KnobGroup("float_slider", ("vector_scale",), label="Scale", soft_range=(0, 4)),
         KnobGroup("float_slider", ("vector_offset",), label="Offset", soft_range=(-1, 1)),

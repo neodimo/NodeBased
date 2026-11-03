@@ -35,6 +35,10 @@ NOT_PIXEL = {
          | {name: "acts on metadata, not pixels" for name in ("metainput", "rangeinput")}
          | {name: "acts on the bounding box only, outside the fixture's format" for name in ("pbb", "intersect")},
     # Lane 9 step F (11/2): DropShadow's merge needs the bg input; DirBlur's centre, sample count and pixel offset belong to zoom and radial blur, the default type being linear.
+    # Lane 9 step L (11/3): MotionBlur's shutter knobs act on the motion between frames, which the one-frame fixture lacks; with FgVecs wired they act
+    # (tests/test_2d_behaviour_filter_l.py). The Denoise and VectorBlur knobs are probed on the fixture.
+    "MotionBlur": {"shutterSamples": "the points along the motion vector; a still fixture has no motion, and the probe wires no FgVecs (tests/test_2d_behaviour_filter_l.py streaks a plate moving a whole number of pixels)",
+                   "shutterTime": "the exposure as a share of the motion between frames; a still fixture has none, and the probe wires no FgVecs (tests/test_2d_behaviour_filter_l.py)"},
     "DropShadow": {"operation": "merges the shadowed picture over the bg input, so it acts only with bg wired (tests/test_2d_behaviour_filter_f.py)"},
     "DirBlur": {"BlurCenter": "the origin of a zoom or radial blur (a linear blur uses it only with UseTarget on); the default type is linear (tests/test_2d_behaviour_filter_f.py)",
                 "Samples": "the number of taps of a zoom or radial blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)",

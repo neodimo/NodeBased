@@ -2351,7 +2351,8 @@
    "nodebased": "MotionBlur",
    "inputs": [
     {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
-    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "fgvecs", "nuke": "FgVecs", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["shutter"], "nuke": ["shutterTime"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Shutter Time', scripting name `shutterTime`"},
@@ -2405,6 +2406,8 @@
     {"nodebased": ["vector_scale"], "nuke": ["scale"], "kind": "renamed", "reason": "motion amount"},
     {"nodebased": ["vector_offset"], "nuke": ["offset"], "kind": "renamed", "reason": "motion offset"},
     {"nodebased": ["vector_alpha"], "nuke": ["alpha"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'uv alpha', scripting name `alpha`"},
+    {"nodebased": ["vector_output"], "nuke": ["output"], "kind": "renamed", "reason": "Output, result or uvs; prefixed because `output` is a shared name"},
+    {"nodebased": ["invert_uv"], "nuke": ["invert_uv"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["u_channel"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["v_channel"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},

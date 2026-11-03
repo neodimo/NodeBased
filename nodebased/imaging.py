@@ -2845,7 +2845,7 @@ class Evaluator:
                 kronos_frames = (target_frame, pairs, interpolation, unretimed)
                 fingerprint = [kind.lower(), target_frame, interpolation, kept,
                                *(d for _, a, b in pairs for d in (a[1], b[1])), *([unretimed[1]] if unretimed else [])]
-            if kind == "MotionBlur" and not node["disabled"]:
+            if kind == "MotionBlur" and not node["disabled"] and not node["inputs"].get("fgvecs"):
                 shutter = float(params["shutter"])
                 if params["shutter_offset"] == "start": low, high = frame, frame + shutter
                 elif params["shutter_offset"] == "end": low, high = frame - shutter, frame
@@ -3265,6 +3265,16 @@ class Evaluator:
                         warped = self._apply_mask_mix(base.pixels, warped,
                             None if mask is None else mask.fit(base.data), float(params["mix"]))
                     raster = Raster(warped.astype(np.float32), base.data, base.display, base.layers, base.meta)
+                elif kind == "MotionBlur" and node["inputs"].get("fgvecs") and not node["disabled"]:
+                    # FgVecs (lane 9 step L): the vectors (pixels per frame) are given, so no neighbouring frame is read or estimated.
+                    # Each pixel averages `samples` points along its vector over the shutter time (nodebased/motionblur.py).
+                    from . import motionblur as _motionblur
+                    image = values[node["inputs"]["image"]]
+                    vecs = values[node["inputs"]["fgvecs"]].fit(image.data)
+                    blurred = self._vector_blur(image.pixels, vecs[..., 0], vecs[..., 1], _motionblur.fgvecs_blur_params(params))
+                    mask = values.get(node["inputs"].get("mask"))
+                    raster = Raster(self._apply_mask_mix(image.pixels, blurred,
+                        None if mask is None else mask.fit(image.data), float(params["mix"])), image.data, image.display, image.layers, image.meta)
                 elif kind == "MotionBlur" and temporal_samples is not None:
                     from .opticalflow import flow_pair
                     (a, _), (b, _) = temporal_samples
@@ -4720,7 +4730,14 @@ class Evaluator:
         elif kind == "IDistort":
             filtered = Evaluator._idistort(source, u, v, p, out)
         else:
-            filtered = Evaluator._vector_blur(source.fit(out), u, v, p)
+            if int(p.get("invert_uv", 0)):
+                u, v = -u, -v                       # invert uv (lane 9 step L): the vectors point the other way
+            if str(p.get("vector_output", "result")) == "uvs":
+                # output uvs: the vectors the blur would follow, in the red and green channels (after invert uv and before scale)
+                filtered = np.zeros((out.height, out.width, 4), np.float32)
+                filtered[..., 0], filtered[..., 1], filtered[..., 3] = u, v, 1.0
+            else:
+                filtered = Evaluator._vector_blur(source.fit(out), u, v, p)
         if uv.data != out:
             # Outside the map's own window there is no map, so there is nothing to warp or blur.
             inside = np.zeros((out.height, out.width, 1), np.float32)
