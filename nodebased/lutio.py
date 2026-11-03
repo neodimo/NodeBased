@@ -229,8 +229,9 @@ def write_cube(path, values, size):
     return str(path)
 
 
-def identity_lattice(size):
-    axis = np.linspace(0.0, 1.0, size, dtype=np.float32)
+def identity_lattice(size, axis=None):
+    """The size**3 lattice of colours a graph is sampled on; `axis` (default evenly spaced 0..1) places the samples along each channel."""
+    axis = np.linspace(0.0, 1.0, size, dtype=np.float32) if axis is None else np.asarray(axis, dtype=np.float32)
     b, g, r = np.meshgrid(axis, axis, axis, indexing="ij")
     rgb = np.stack((r, g, b), axis=-1).reshape((size, size * size, 3))
     rgba = np.ones((size, size * size, 4), dtype=np.float32)
@@ -238,12 +239,52 @@ def identity_lattice(size):
     return rgba
 
 
-def export_graph_cube(document, target_key, path, size, source_space="ACEScg", output_space="ACEScg"):
-    """Evaluate the upstream graph on a synthetic identity lattice, replacing its image roots."""
+BIT_DEPTHS = {"8 bit": 8, "10 bit": 10, "12 bit": 12, "16 bit": 16}
+PRELUT_STYLES = ("logarithmic", "linear")
+_PRELUT_CURVE = 255.0           # the logarithmic 1D preLUT is log(1 + a x) / log(1 + a), x in 0..1
+
+
+def prelut(style, x):
+    """The 1D preLUT curve (Nuke's "1D preLUT size" style): the position of x along the mesh. Logarithmic spends more of the mesh on the darks."""
+    x = np.asarray(x, dtype=np.float64)
+    return np.log1p(_PRELUT_CURVE * x) / np.log1p(_PRELUT_CURVE) if style == "logarithmic" else x
+
+
+def prelut_inverse(style, u):
+    u = np.asarray(u, dtype=np.float64)
+    return np.expm1(u * np.log1p(_PRELUT_CURVE)) / _PRELUT_CURVE if style == "logarithmic" else u
+
+
+def write_3dl(path, values, size, shaper_size=1024, style="logarithmic", input_depth=10, output_depth=None, clamp=True):
+    """Write a Flame/Lustre .3dl: a 1D preLUT row (`shaper_size` entries of the curve at the input depth) and the blue-fastest mesh at the
+    output depth. `values` is the graph sampled at the lattice whose axis is prelut_inverse(style, evenly spaced) (red fastest, as for .cube),
+    so reading the file back (`read_3dl` and `apply_3dl`) maps a colour x through the preLUT then the mesh."""
+    path = Path(path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    output_depth = output_depth or input_depth
+    in_max, out_max = float((1 << input_depth) - 1), float((1 << output_depth) - 1)
+    mesh = np.asarray(values, dtype=np.float64).reshape((size, size, size, 3))             # [b, g, r]
+    if clamp:
+        mesh = np.clip(mesh, 0.0, 1.0)
+    codes = np.rint(np.clip(mesh, 0.0, 2.0) * out_max).astype(np.int64).transpose(2, 1, 0, 3).reshape((-1, 3))      # blue fastest
+    positions = np.rint(prelut(style, np.linspace(0.0, 1.0, int(shaper_size))) * in_max).astype(np.int64)
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("3DMESH\nMesh %d %d\n" % (int(round(math.log2(size - 1))), output_depth))
+        handle.write(" ".join(str(int(v)) for v in positions) + "\n")
+        for row in codes:
+            handle.write("%d %d %d\n" % tuple(int(v) for v in row))
+    return str(path)
+
+
+def export_graph_cube(document, target_key, path, size, source_space="ACEScg", output_space="ACEScg", file_type="cube", prelut_size=1024,
+                      prelut_style="logarithmic", input_bit_depth="10 bit", output_bit_depth="input bit depth", clamp_output=False):
+    """Evaluate the upstream graph on a synthetic identity lattice, replacing its image roots, and write it as a .cube or a .3dl (file_type)."""
     from copy import deepcopy
     path = str(path or "").strip()
-    if Path(path).suffix.lower() != ".cube":
-        raise ValueError("GenerateLUT: choose an output path ending in .cube")
+    if file_type not in ("cube", "3dl"):
+        raise ValueError("GenerateLUT: file type must be cube or 3dl")
+    if Path(path).suffix.lower() != "." + file_type:
+        raise ValueError(f"GenerateLUT: choose an output path ending in .{file_type}")
     if size not in (17, 33, 65):
         raise ValueError("GenerateLUT size must be 17, 33 or 65")
     target = document["nodes"].get(target_key)
@@ -272,7 +313,9 @@ def export_graph_cube(document, target_key, path, size, source_space="ACEScg", o
     roots = [key for key in ancestors if not any(v in ancestors for v in nodes[key]["inputs"].values())]
     if not roots:
         raise ValueError("GenerateLUT: upstream graph has no image source")
-    lattice = identity_lattice(size)
+    # A .3dl samples the graph where its preLUT will send the mesh's evenly spaced points, so the mesh is dense in the darks for a logarithmic preLUT.
+    axis = prelut_inverse(prelut_style, np.linspace(0.0, 1.0, size)) if file_type == "3dl" else None
+    lattice = identity_lattice(size, axis)
     lattice[..., :3] = convert_colorspace(lattice[..., :3], source_space, "ACEScg")
     from .raster import Raster
     raster = Raster.of(lattice)
@@ -289,4 +332,8 @@ def export_graph_cube(document, target_key, path, size, source_space="ACEScg", o
     result = sampled.pixels if isinstance(sampled, Raster) else sampled
     out = result[..., :3]
     out = convert_colorspace(out, "ACEScg", output_space) if output_space != "ACEScg" else out
-    return write_cube(path, out, size)
+    if file_type == "3dl":
+        in_depth = BIT_DEPTHS[input_bit_depth]
+        out_depth = in_depth if output_bit_depth == "input bit depth" else BIT_DEPTHS[output_bit_depth]
+        return write_3dl(path, out, size, prelut_size, prelut_style, in_depth, out_depth, bool(clamp_output))
+    return write_cube(path, np.clip(out, 0.0, 1.0) if clamp_output else out, size)

@@ -6,7 +6,9 @@ properties of the pixels (a wider screen range keys more, yellow takes yellow ou
 cases in tools/nuke_fidelity_cases_color.py stay not scored. An older document renders as it did before, bit for bit.
 """
 import copy
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -286,6 +288,117 @@ class MatchGradeTests(unittest.TestCase):
         for entry in pairs:
             if entry["kind"] == "unsupported":
                 self.assertTrue(entry["reason"])
+
+
+# ================================================================================================================ GenerateLUT
+class GenerateLutFileTests(unittest.TestCase):
+    """The file knobs only shape what the Generate button writes; each file is written and read back through the existing readers."""
+
+    def lut_doc(self, tmp, suffix, **params):
+        g = Graph()
+        g.add("src", "Constant", dict(width=8, height=8))
+        g.add("grade", "Grade", dict(multiply=1.6, offset=0.02, gamma=0.8), image="src")
+        g.add("lut", "GenerateLUT", dict(lut_path=str(Path(tmp) / f"out{suffix}"), lut_size=17, **params), source="grade")
+        return g.doc
+
+    @staticmethod
+    def expected(rgb):
+        """The Grade the document holds (multiply 1.6, offset 0.02, gamma 0.8) on straight colour values."""
+        rgb = np.asarray(rgb, np.float64)
+        return np.power(np.clip(rgb * 1.6 + 0.02, 0.0, None), 1.0 / 0.8)
+
+    def probe_colours(self):
+        return np.array([[[0.0, 0.0, 0.0, 1.0], [0.02, 0.05, 0.1, 1.0], [0.2, 0.4, 0.1, 1.0], [0.5, 0.3, 0.7, 1.0], [0.9, 0.8, 0.1, 1.0], [1.0, 1.0, 1.0, 1.0]]], np.float32)
+
+    def test_a_cube_round_trips_through_the_cube_reader(self):
+        from nodebased import lutio
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = self.lut_doc(tmp, ".cube", lut_file_type="cube")
+            path = lutio.export_graph_cube(doc, "lut", doc["nodes"]["lut"]["params"]["lut_path"], 17)
+            lut = lutio.read_cube(path)
+        probe = self.probe_colours()
+        mapped = lutio.apply_cube(probe, lut, "trilinear")
+        np.testing.assert_allclose(mapped[..., :3], self.expected(probe[..., :3]), atol=0.03)
+
+    def test_a_3dl_round_trips_through_the_3dl_reader_for_every_style_and_depth(self):
+        from nodebased import lutio
+        probe = self.probe_colours()
+        for style in ("logarithmic", "linear"):
+            for depth, tolerance in (("8 bit", 0.05), ("10 bit", 0.03), ("12 bit", 0.03), ("16 bit", 0.03)):
+                with self.subTest(style=style, depth=depth), tempfile.TemporaryDirectory() as tmp:
+                    doc = self.lut_doc(tmp, ".3dl", lut_file_type="3dl")
+                    path = lutio.export_graph_cube(doc, "lut", doc["nodes"]["lut"]["params"]["lut_path"], 17, file_type="3dl", prelut_style=style,
+                                                   input_bit_depth=depth, clamp_output=True)
+                    mesh, shaper = lutio.read_3dl(path)
+                    mapped = lutio.apply_3dl(probe, mesh, shaper, "trilinear")
+                    wanted = np.clip(self.expected(probe[..., :3]), 0.0, 1.0)
+                    np.testing.assert_allclose(mapped[..., :3], wanted, atol=tolerance)
+
+    def test_a_logarithmic_prelut_reads_the_darks_more_exactly_than_a_linear_one(self):
+        from nodebased import lutio
+        dark = np.array([[[0.004, 0.006, 0.01, 1.0], [0.01, 0.02, 0.005, 1.0], [0.03, 0.015, 0.02, 1.0]]], np.float32)
+        errors = {}
+        for style in ("logarithmic", "linear"):
+            with tempfile.TemporaryDirectory() as tmp:
+                doc = self.lut_doc(tmp, ".3dl", lut_file_type="3dl")
+                path = lutio.export_graph_cube(doc, "lut", doc["nodes"]["lut"]["params"]["lut_path"], 17, file_type="3dl", prelut_style=style,
+                                               input_bit_depth="16 bit", clamp_output=True)
+                mesh, shaper = lutio.read_3dl(path)
+                errors[style] = float(np.abs(lutio.apply_3dl(dark, mesh, shaper, "trilinear")[..., :3] - self.expected(dark[..., :3])).max())
+                if style == "linear":
+                    self.assertIsNone(shaper)                                                    # a linear preLUT is the identity row the reader drops
+                else:
+                    self.assertIsNotNone(shaper)
+        self.assertLess(errors["logarithmic"], errors["linear"])
+
+    def test_the_prelut_size_sets_the_length_of_the_preLUT_row(self):
+        from nodebased import lutio
+        for entries in (64, 256):
+            with self.subTest(entries=entries), tempfile.TemporaryDirectory() as tmp:
+                doc = self.lut_doc(tmp, ".3dl", lut_file_type="3dl")
+                path = lutio.export_graph_cube(doc, "lut", doc["nodes"]["lut"]["params"]["lut_path"], 17, file_type="3dl", prelut_size=entries)
+                _, shaper = lutio.read_3dl(path)
+                self.assertEqual(len(shaper), entries)
+
+    def test_the_output_bit_depth_sets_the_mesh_codes(self):
+        from nodebased import lutio
+        for out_depth, ceiling in (("8 bit", 255), ("12 bit", 4095), ("input bit depth", 1023)):
+            with self.subTest(out_depth=out_depth), tempfile.TemporaryDirectory() as tmp:
+                doc = self.lut_doc(tmp, ".3dl", lut_file_type="3dl")
+                path = lutio.export_graph_cube(doc, "lut", doc["nodes"]["lut"]["params"]["lut_path"], 17, file_type="3dl", input_bit_depth="10 bit",
+                                               output_bit_depth=out_depth, clamp_output=True)
+                codes = [int(v) for line in Path(path).read_text().splitlines()[3:] for v in line.split()]
+                self.assertEqual(max(codes), ceiling)                                           # the white corner is graded above 1 and clamped to full scale
+                self.assertAlmostEqual(min(codes) / ceiling, 0.0073, delta=0.003)                  # black is graded to the same fraction of full scale at any depth
+
+    def test_clamp_output_holds_the_written_values_to_zero_to_one(self):
+        from nodebased import lutio
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = self.lut_doc(tmp, ".cube", lut_file_type="cube")
+            target = doc["nodes"]["lut"]["params"]["lut_path"]
+            unclamped = lutio.read_cube(lutio.export_graph_cube(doc, "lut", target, 17, clamp_output=False))
+            clamped = lutio.read_cube(lutio.export_graph_cube(doc, "lut", target, 17, clamp_output=True))
+        self.assertGreater(float(unclamped.max()), 1.0)
+        self.assertLessEqual(float(clamped.max()), 1.0)
+        self.assertGreaterEqual(float(clamped.min()), 0.0)
+        np.testing.assert_array_equal(clamped, np.clip(unclamped, 0.0, 1.0))
+
+    def test_the_path_must_end_in_the_file_type(self):
+        from nodebased import lutio
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = self.lut_doc(tmp, ".cube", lut_file_type="3dl")
+            with self.assertRaises(ValueError):
+                lutio.export_graph_cube(doc, "lut", doc["nodes"]["lut"]["params"]["lut_path"], 17, file_type="3dl")
+
+    def test_an_older_document_writes_the_unclamped_cube_it_always_did(self):
+        doc = self.lut_doc("/nonexistent", ".cube")
+        params = doc["nodes"]["lut"]["params"]
+        for name in ("lut_file_type", "prelut_size", "prelut_style", "lut_input_bit_depth", "lut_output_bit_depth", "lut_clamp_output"):
+            params.pop(name, None)
+        upgraded = upgrade_document(doc)["nodes"]["lut"]["params"]
+        self.assertEqual(upgraded["lut_clamp_output"], 0)
+        self.assertEqual(SPECS["GenerateLUT"]["params"]["lut_clamp_output"], 1)                # a new node follows Nuke
+        self.assertEqual(SPECS["GenerateLUT"]["params"]["lut_file_type"], "cube")
 
 
 if __name__ == "__main__":

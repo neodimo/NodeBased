@@ -2001,6 +2001,12 @@
    ],
    "knobs": [
     {"nodebased": ["lut_path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output file', scripting name `file`"},
+    {"nodebased": ["lut_file_type"], "nuke": ["file_type"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'file type', scripting name `file_type`"},
+    {"nodebased": ["prelut_size"], "nuke": ["lut1d"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '1D preLUT size', scripting name `lut1d`"},
+    {"nodebased": ["prelut_style"], "nuke": ["style1d"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '1D preLUT size', scripting name `style1d`"},
+    {"nodebased": ["lut_input_bit_depth"], "nuke": ["bitdepth_id"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input bit depth (.3dl)', scripting name `bitdepth_id`"},
+    {"nodebased": ["lut_output_bit_depth"], "nuke": ["output_bitdepth_id"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output bit depth (.3dl)', scripting name `output_bitdepth_id`"},
+    {"nodebased": ["lut_clamp_output"], "nuke": ["clamp_output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'clamp ouput', scripting name `clamp_output`"},
     {"nodebased": ["lut_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["colorspace_in"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["colorspace_out"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}

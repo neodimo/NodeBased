@@ -361,7 +361,9 @@ SPECS = {
         "expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0, **_behaviour2d.new_params("Expression")}},
     # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
     "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0}},
-    "GenerateLUT": {"inputs": ["source"], "params": {"lut_path": "", "lut_size": 33, "colorspace_in": "ACEScg", "colorspace_out": "ACEScg"}},
+    "GenerateLUT": {"inputs": ["source"], "params": {"lut_path": "", "lut_size": 33, "colorspace_in": "ACEScg", "colorspace_out": "ACEScg",
+                                                  "lut_file_type": "cube", "prelut_size": 1024, "prelut_style": "logarithmic", "lut_input_bit_depth": "10 bit",
+                                                  "lut_output_bit_depth": "input bit depth", **_behaviour2d.new_params("GenerateLUT")}},
     "OCIOColorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIOColorspace")}},
     "OCIODisplay": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "linear", "display": "sRGB - Display", "view": "ACES 2.0 - SDR 100 nits (Rec.709)", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIODisplay")}},
     "OCIOFileTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"path": "", "transform_direction": "forward", "file_interpolation": "linear", "config": "", "mix": 1.0, **_behaviour2d.new_params("OCIOFileTransform")}},
@@ -1772,7 +1774,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "patch_black": (0, 1), "red_weight": (0.0, 1.0), "blue_green_weight": (0.0, 1.0),
           "luminance_match": (0, 1), "luminance_level": (0.0, 1.0), "use_bg_luminance": (0, 1),
           "screen_subtraction": (0, 1), "screen_range": (0.0, 4.0), "color_r": (0.0, 1000.0), "color_g": (0.0, 1000.0), "color_b": (0.0, 1000.0),
-          "luminance_level_enable": (0, 1), "apply_to_mask": (0, 1), "yellow": (0, 1), "cyan": (0, 1), "magenta": (0, 1), "use_bg_chroma": (0, 1),
+          "luminance_level_enable": (0, 1), "apply_to_mask": (0, 1), "prelut_size": (2, 65536), "yellow": (0, 1), "cyan": (0, 1), "magenta": (0, 1), "use_bg_chroma": (0, 1),
           # ScreenKeyer (step K2).
           "screen_red": (0.0, 1000.0), "screen_green": (0.0, 1000.0), "screen_blue": (0.0, 1000.0),
           "screen_gain": (0.0, 10.0), "screen_balance": (0.0, 1.0), "alpha_bias": (-1.0, 1.0),
@@ -2185,6 +2187,9 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            # MatchGrade (step K2): Nuke's Task, Analysis, Mask and Output menus.
            "match_task": ["Match Graded Source", "Match Different Clip"], "match_analysis": ["Analyze Reference Frames", "Auto-analyze Per Frame"],
            "grade_mask": ["None", "Alpha", "Inverted Alpha"], "match_output": ["Matched", "Source", "Target"],
+           # GenerateLUT (step K2): the file type and the files' bit depths and preLUT.
+           "lut_file_type": ["cube", "3dl"], "prelut_style": ["logarithmic", "linear"],
+           "lut_input_bit_depth": ["8 bit", "10 bit", "12 bit", "16 bit"], "lut_output_bit_depth": ["input bit depth", "8 bit", "10 bit", "12 bit", "16 bit"],
            # ScreenKeyer's output view (step K2).
            "keyer_view": list(_keyerknobs.KEYER_VIEWS),
            "screen_replace": list(_keyerknobs.REPLACE_METHODS), "inside_replace": list(_keyerknobs.REPLACE_METHODS),

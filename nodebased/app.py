@@ -17130,7 +17130,10 @@ class Window(QMainWindow):
         params = node["params"]
         try:
             path = export_graph_cube(self.dispatcher.document, key, params["lut_path"],
-                                     params["lut_size"], params["colorspace_in"], params["colorspace_out"])
+                                     params["lut_size"], params["colorspace_in"], params["colorspace_out"],
+                                     params.get("lut_file_type", "cube"), params.get("prelut_size", 1024), params.get("prelut_style", "logarithmic"),
+                                     params.get("lut_input_bit_depth", "10 bit"), params.get("lut_output_bit_depth", "input bit depth"),
+                                     bool(params.get("lut_clamp_output", 0)))
         except (OSError, ValueError, RuntimeError) as error:
             self.statusBar().showMessage(str(error), 10000)
             QMessageBox.warning(self, "LUT export", str(error))

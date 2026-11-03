@@ -38,6 +38,8 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
     IBKGizmo      luminance_level_enable
                                       1: `luminance_level` sets how far the plate follows the luminance match whenever the match is on. Nuke's
                                       "luminance level" has its own enable box (off by default), and with it off the match is whole.
+    GenerateLUT   lut_clamp_output
+                                      0: the written .cube holds the graph's values as they come (above 1 and below 0 included). Nuke's "clamp ouput" is on by default.
     Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
                                       (value - black) / (white - black) with gamma as the exponent.
     PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
@@ -71,6 +73,7 @@ NEW = {
     "OCIODisplay": {"divide_by_alpha": 0},
     "OCIOFileTransform": {"divide_by_alpha": 0},
     "IBKGizmo": {"luminance_level_enable": 0},
+    "GenerateLUT": {"lut_clamp_output": 1},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -92,8 +95,9 @@ OLD = {
     "OCIODisplay": {"divide_by_alpha": 1},
     "OCIOFileTransform": {"divide_by_alpha": 1},
     "IBKGizmo": {"luminance_level_enable": 1},
+    "GenerateLUT": {"lut_clamp_output": 0},
 }
-LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_channel_operations": (0, 1)}
+LIMITS = {"lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_channel_operations": (0, 1)}
 # The operations the Reference Guide lists for ChannelMerge, in its order (the guide's names; "b if not a" is its `A?A:B`).
 CHANNEL_MERGE_OPERATIONS = ("absminus", "b if not a", "divide", "from", "in", "max", "min", "minus", "multiply", "out", "plus", "stencil", "union", "xor")
 CHOICES = {"luminance_math": list(SATURATION_MATH), "channel_operation": list(CHANNEL_MERGE_OPERATIONS)}

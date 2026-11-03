@@ -72,6 +72,8 @@ NOT_PIXEL = {
                  "SourceXMethod": "acts only with the source cropped, which is another knob moved", "SourceYMethod": "acts only with the source cropped, which is another knob moved"},
     "IBKColor": {"Size": "acts on a plate with a keyed-out patch to fill (screen erode and patch black set, as in tests/test_2d_behaviour_knobs_color.py); the fixture is not such a plate",
                  "mult": "acts on a plate with a keyed-out patch to fill, as above"},
+    "GenerateLUT": {name: "shapes the file the Generate button writes and not the picture, which GenerateLUT passes through (tests/test_2d_behaviour_knobs_k.py writes each and reads it back)"
+                    for name in ("file_type", "lut1d", "style1d", "bitdepth_id", "output_bitdepth_id", "clamp_output")},
     "MatchGrade": {"analysisType": "acts across frames (reference frames or every frame); NodeBased's live match measures the frame it shows either way, and Analyze bakes reference frames (tests/test_2d_behaviour_knobs_k.py)",
                    "applyToMask": "acts only with a mask other than none, which is another knob moved (tests/test_2d_behaviour_knobs_k.py)"},
     "HueCorrect": {"mix_luminance": "restores the luminance the hue curves changed, so it acts only once a curve has changed it; the default curves are flat (tests/test_2d_behaviour_knobs_k.py moves it on a lum curve)"},
