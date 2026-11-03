@@ -48,7 +48,8 @@ NEW = {
 }
 # What an older document's node of the kind gets on load besides the legacy flags: the new knobs, at the value that leaves it as it was.
 from . import bilateralknobs as _bilateral      # noqa: E402  (Bilateral's tables live with its kernel)
-UPGRADE_EXTRA = {"Bilateral": _bilateral.UPGRADE, "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
+from . import vectorcornerpinknobs as _vcp      # noqa: E402
+UPGRADE_EXTRA = {"VectorCornerPin": _vcp.UPGRADE, "Bilateral": _bilateral.UPGRADE, "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
                  "Laplacian": {"laplacian_size": 3.0},
                  "Convolve": {"normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"}}
 

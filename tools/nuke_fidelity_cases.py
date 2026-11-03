@@ -429,6 +429,27 @@ def _run_tracker_document(case):
     return canvas
 
 
+def _run_plate_document(case):
+    """Run a case whose node reads the picture through the graph, not the array kernel (VectorCornerPin): `_plate` is the {"type", "params"}
+    spec of the plate in the node's image slot (at the fixture's size), `_frame` the frame shown. The answer is the node's picture over the
+    format's rectangle."""
+    from nodebased.core import Dispatcher, empty_document
+    from nodebased.imaging import Evaluator
+    knobs = dict(case.nb_params)
+    plate, frame = knobs.pop("_plate"), int(knobs.pop("_frame", 1))
+    d = Dispatcher(empty_document())
+    d.execute({"op": "create", "id": "bg", "type": plate["type"], "params": {"width": W, "height": H, **plate.get("params", {})}})
+    d.execute({"op": "create", "id": "n", "type": case.nb_kind, "params": knobs})
+    d.execute({"op": "connect", "id": "n", "input": "image", "source": "bg"})
+    raster = Evaluator().evaluate_raster(dict(d.document, view="n"), target="n", frame=frame)
+    shown, data = raster.display, raster.data
+    canvas = np.zeros((shown.height, shown.width, raster.pixels.shape[2]), np.float64)
+    both = shown.intersect(data)
+    canvas[both.y - shown.y:both.bottom - shown.y, both.x - shown.x:both.right - shown.x] = \
+        raster.pixels[both.y - data.y:both.bottom - data.y, both.x - data.x:both.right - data.x]
+    return canvas
+
+
 def run_nodebased(case, fx=None):
     """Run a case on NodeBased's evaluator kernel; returns the output array, or None when NodeBased cannot express the case.
 
@@ -442,6 +463,8 @@ def run_nodebased(case, fx=None):
         return _run_payload_document(case)
     if "_tracks" in case.nb_params:
         return _run_tracker_document(case)
+    if "_plate" in case.nb_params:
+        return _run_plate_document(case)
     from nodebased import core
     from nodebased.imaging import Evaluator
     fx = fx or make_fixtures()

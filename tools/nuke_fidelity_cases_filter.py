@@ -781,6 +781,7 @@ def cases():
     _dirblur_cases(Case, out)
     _lightwrap_cases(Case, out)
     _bilateral_cases(Case, out)
+    _vectorcornerpin_cases(Case, out)
     return out
 
 
@@ -1637,3 +1638,54 @@ def _bilateral_cases(Case, out):
          "Bilateral: filter median, 'weighted according to the middle value pixel'",
          unscored="the guide does not say whether the middle value is a weighted median or a plain one; NodeBased takes the weighted median under the "
                   "gaussian weights")
+
+
+VECTORCORNERPIN_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/vectorcornerpin.html"
+
+
+def _vectorcornerpin_cases(Case, out):
+    """VectorCornerPin: 'takes paint or an image from a reference frame and propagates it through the rest of the sequence' like CornerPin2D. The
+    user pins 'control the position of the pins at the current keyframe', the From quad is the corner pin's source (pin 1 the bottom left, 2 the
+    bottom right, 3 the top right, 4 the top left). With no SmartVector wired the pins do not move, so the picture is the corner pin of the From
+    quad onto the user pins. The plate is a ramp (a bilinear resample of a ramp is exact), the moves are whole pixels, and a pixel whose source
+    falls outside the plate is not scored. Points are in Nuke's pixel space (y up from the bottom edge)."""
+    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0}}
+    w, h = 16, 12
+
+    def pins(points, side="user"):
+        return {f"{side}{i}_{axis}": float(v) for i, point in enumerate(points, 1) for axis, v in zip("xy", point)}
+
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored=""):
+        out.append(Case(id=id, nuke="VectorCornerPin", nuke_class="VectorCornerPin", nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind="VectorCornerPin",
+                        nb_params={"_plate": plate, **nb_params}, nb_inputs=("A",), expected=expected, source=source, statement=statement, unscored=unscored))
+
+    def moved(dx, dy):
+        def expected(fx):
+            src = _plate_array(plate)
+            ref = np.zeros_like(src)
+            valid = np.ones(src.shape, bool)
+            for row in range(h):
+                for x in range(w):
+                    i, j = x - dx, row + dy             # a pin raised by dy (y up) draws the picture dy rows higher
+                    if 0 <= i < w and 0 <= j < h:
+                        ref[row, x] = src[j, i]
+                    else:
+                        valid[row, x] = False
+            return ref, valid
+        return expected
+
+    frame = ((0, 0), (w, 0), (w, h), (0, h))
+    case("vectorcornerpin_pins_on_the_frame_are_the_identity", (), pins(frame), moved(0, 0), "convention",
+         f"VectorCornerPin ({VECTORCORNERPIN_GUIDE}): the user pins on the format's four corners leave the picture where it is")
+    quad = tuple((x + 3, y + 2) for x, y in frame)
+    case("vectorcornerpin_pins_moved_carry_the_picture", (("user1", "3 2"), ("user2", "19 2"), ("user3", "19 14"), ("user4", "3 14")), pins(quad),
+         moved(3, 2), "convention", "VectorCornerPin: user pins 3 pixels right and 2 up put the picture there (the corner pin of the From quad onto the pins)")
+    flipped = (frame[1], frame[0], frame[3], frame[2])
+    case("vectorcornerpin_swapped_pins_mirror_the_picture", (("user1", "16 0"), ("user2", "0 0"), ("user3", "0 12"), ("user4", "16 12")), pins(flipped),
+         lambda fx: (_plate_array(plate)[:, ::-1], np.ones((h, w, 4), bool)), "convention",
+         "VectorCornerPin: pins 1 and 2, 3 and 4 exchanged turn the picture over left to right")
+    shifted_from = tuple((x + 3, y + 2) for x, y in frame)
+    case("vectorcornerpin_from_quad_picks_the_source", (("to1#2", "3 2"), ("to2#2", "19 2"), ("to3#2", "19 14"), ("to4#2", "3 14")),
+         {**pins(shifted_from, "from"), **pins(frame)}, moved(-3, -2), "convention",
+         "VectorCornerPin: the From quad is the source of the pin: a From quad 3 right and 2 up of the format, pinned to the format, moves the picture "
+         "3 left and 2 down")

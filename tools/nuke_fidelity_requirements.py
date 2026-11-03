@@ -45,6 +45,9 @@ NOT_PIXEL = {
                 "quailty": "caps the filter's size and so acts only once the size passes it; the default size 1 never does (tests/test_2d_behaviour_filter_g.py moves it at size 40)"},
     "Soften": {"crop": "crop to format acts on the bounding box only"},
     "Glow": {"crop": "crop to format acts on the bounding box only"},
+    # Lane 9 step G (11/3): the To pins are the baked pins, read only while Use baked pins is on (tests/test_2d_behaviour_filter_g.py).
+    "VectorCornerPin": {f"to{i}": "the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py"
+                        for i in (1, 2, 3, 4)},
     "Transform": {"skew_order": "orders the two skews, so it acts only when skew X and skew Y are both set; the probe moves one at a time (tests/test_2d_behaviour_transform.py)"},
     # Lane 2 step D (11/2): knobs that act only in a state the one-knob probe does not reach; tests/test_2d_behaviour_knobs_color.py shows each acting in that state.
     "Shuffle": {k: "routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph" for k in ("fromInput1", "fromInput2", "out2")},

@@ -4,7 +4,10 @@
   Positional Sigma the falloff, Filter gaussian or median; the older reading is kept for saved graphs (legacy_bilateral); the tile path
   equals the evaluator, with the guide and a mask;
 * Sharpen: the quality limit acts once the size passes it;
-* VectorCornerPin: see the second half of this module.
+* VectorCornerPin: the user pins, the From quad, the baked To pins and the Output choice act with no SmartVector wired (the pins stay put); graphs
+  saved before keep the older corner points; the main tab lists the knobs in Nuke's order. What the vectors add (the pins moving from the reference
+  frame to this one) needs vectors with motion, which the fixtures lack; tests/test_smartvector.py runs the node on a SmartVector rig whose motion is
+  zero.
 """
 import copy
 import os
@@ -282,6 +285,119 @@ class SharpenQualityTests(unittest.TestCase):
 
     def test_the_node_lists_the_knob_with_the_state_it_needs(self):
         self.assertIn("quailty", requirements.NOT_PIXEL["Sharpen"])
+
+
+# ------------------------------------------------------------------------------------------------------ VectorCornerPin
+W, H = 16, 12
+FRAME = ((0, 0), (W, 0), (W, H), (0, H))
+
+
+def pin_params(points, side="user"):
+    return {f"{side}{i}_{axis}": float(v) for i, point in enumerate(points, 1) for axis, v in zip("xy", point)}
+
+
+def pin_graph(vectors=False, **params):
+    g = Graph()
+    g.add("plate", "Ramp", dict(width=W, height=H, p0_x=0.0, p0_y=0.0, p1_x=15.0, p1_y=11.0))
+    inputs = {"image": "plate"}
+    g.add("node", "VectorCornerPin", params, **inputs)
+    return g
+
+
+def pinned(**params):
+    g = pin_graph(**params)
+    return Evaluator().evaluate_raster(dict(g.doc, view="node"), target="node", frame=1).pixels
+
+
+def plate():
+    g = pin_graph()
+    return Evaluator().evaluate_raster(dict(g.doc, view="plate"), target="plate", frame=1).pixels
+
+
+class VectorCornerPinTests(unittest.TestCase):
+    def test_default_pins_are_the_identity(self):
+        np.testing.assert_array_equal(pinned(), plate())
+
+    def test_user_pins_move_the_picture(self):
+        shifted = tuple((x + 3, y + 2) for x, y in FRAME)
+        out, src = pinned(**pin_params(shifted)), plate()
+        np.testing.assert_allclose(out[:H - 2, 3:], src[2:, :W - 3], atol=1e-6)         # up 2 (rows count down), right 3
+        self.assertEqual(float(np.abs(out[H - 2:]).max()), 0.0)                       # nothing was there below
+
+    def test_each_user_pin_changes_the_picture(self):
+        base = pinned()
+        for i in (1, 2, 3, 4):
+            with self.subTest(pin=i):
+                moved = pin_params(FRAME)
+                moved[f"user{i}_x"] += 2.0
+                self.assertTrue(differs(pinned(**moved), base))
+
+    def test_each_from_corner_changes_the_picture(self):
+        base = pinned()
+        for i in (1, 2, 3, 4):
+            with self.subTest(corner=i):
+                moved = pin_params(FRAME, "from")
+                moved[f"from{i}_y"] += 2.0
+                self.assertTrue(differs(pinned(**moved), base))
+
+    def test_the_to_pins_act_once_use_baked_is_on(self):
+        shifted = pin_params(tuple((x + 3, y) for x, y in FRAME), "to")
+        self.assertFalse(differs(pinned(**shifted), plate()))                      # the vectors' pins (here the user pins) still rule
+        self.assertTrue(differs(pinned(use_baked=1, **shifted), plate()))
+        np.testing.assert_allclose(pinned(use_baked=1, **shifted)[:, 3:], plate()[:, :W - 3], atol=1e-6)
+
+    def test_the_output_choice_gives_the_picture_or_a_map(self):
+        picture = pinned()
+        for mode in ("st-map", "st-map inverse"):
+            with self.subTest(mode=mode):
+                maps = pinned(output_mode=mode)
+                self.assertTrue(differs(maps, picture))
+                np.testing.assert_allclose(maps[3, 5, :2], [(5 + 0.5) / W, 1 - (3 + 0.5) / H], atol=1e-6)     # identity pins: each pixel its own centre
+                self.assertEqual(float(maps[3, 5, 3]), 1.0)
+
+    def test_the_st_map_of_a_move_and_its_inverse_undo_each_other(self):
+        shifted = pin_params(tuple((x + 3, y) for x, y in FRAME))
+        forward, inverse = pinned(output_mode="st-map", **shifted), pinned(output_mode="st-map inverse", **shifted)
+        # Output pixel (x, row) takes source column x - 3; a source column c lands on output column c + 3.
+        self.assertAlmostEqual(float(forward[4, 8, 0]), (8 - 3 + 0.5) / W, places=5)
+        self.assertAlmostEqual(float(inverse[4, 8, 0]), (8 + 3 + 0.5) / W, places=5)
+
+    def test_a_saved_graph_keeps_its_older_corner_points_and_its_vector_requirement(self):
+        g = pin_graph()
+        old = copy.deepcopy(g.doc)
+        for name in list(old["nodes"]["node"]["params"]):
+            if name.startswith(("user", "to", "from")) or name in ("output_mode", "use_baked", "legacy_vectorcornerpin"):
+                old["nodes"]["node"]["params"].pop(name)
+        loaded = upgrade_document(old)
+        validate(loaded)
+        params = loaded["nodes"]["node"]["params"]
+        self.assertEqual(params["legacy_vectorcornerpin"], 1)
+        with self.assertRaises(ValueError):
+            Evaluator().evaluate_raster(dict(loaded, view="node"), target="node", frame=1)       # the older node needs a SmartVector
+
+    def test_the_new_node_does_not_need_a_smartvector(self):
+        self.assertEqual(SPECS["VectorCornerPin"]["params"]["legacy_vectorcornerpin"], 0)
+        self.assertEqual(pinned().shape, (H, W, 4))
+
+    def test_the_main_tab_lists_the_knobs_in_nukes_order(self):
+        self.assertEqual(labels("VectorCornerPin")[:15], [
+            "Reference Frame", "User1 xy", "User2 xy", "User3 xy", "User4 xy", "To1 xy", "To2 xy", "To3 xy", "To4 xy", "Use baked pins",
+            "From1 xy", "From2 xy", "From3 xy", "From4 xy", "Output"])
+        kept, total = layout_order("VectorCornerPin")[0]
+        self.assertEqual(kept, total)
+
+    def test_the_cases_of_the_node_pass(self):
+        cases = [c for c in ruler.CASES if c.nuke == "VectorCornerPin"]
+        self.assertGreaterEqual(len([c for c in cases if not c.unscored]), 4)
+        for case in cases:
+            if case.unscored:
+                continue
+            with self.subTest(case=case.id):
+                result = audit.run_case(case)
+                self.assertEqual(result["status"], "pass", (case.id, result["max_abs_error"], result["worst"]))
+
+    def test_the_left_out_knobs_are_listed(self):
+        self.assertIn("to1", requirements.NOT_PIXEL["VectorCornerPin"])
 
 
 if __name__ == "__main__":

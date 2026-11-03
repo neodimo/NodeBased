@@ -1,3 +1,7 @@
+## 2026-11-03 - Lane 9 (2D behaviour), step G: Bilateral, Sharpen and VectorCornerPin
+
+Bilateral: guide input, Guide channels, Size as the window, Positional sigma, Filter (gaussian or median); `legacy_bilateral` keeps the older picture. Sharpen: `quailty` implemented, listed in `NOT_PIXEL` (acts above the size). VectorCornerPin: user, To and From pins, Output (warped src, st-map, st-map inverse), `use_baked`; `legacy_vectorcornerpin` keeps the corner points and the SmartVector requirement. Tests: `tests/test_2d_behaviour_filter_g.py`. Report: `docs/PARITY_2D_FIDELITY.md` (overall 93.0).
+
 ## 2026-11-02 - Lane 2 (2D behaviour), step G: EdgeBlur, GodRays, VolumeRays, BumpBoss
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:35 AM on 2026-11-03 PDT)

@@ -3168,9 +3168,14 @@ class Evaluator:
                     vectors = values.get(vectors_key) if vectors_key else None
                     layer_name = "smartvector.forward" if frame >= float(params["reference_frame"]) else "smartvector.backward"
                     vector_layer = None if vectors is None else (vectors.layers or {}).get(layer_name)
-                    if vector_layer is None:
+                    from . import vectorcornerpinknobs as _vcp
+                    pins_node = kind == "VectorCornerPin" and not _vcp.is_legacy(params)     # lane 9 step G: pins without vectors stay put
+                    if vector_layer is None and not (pins_node and vectors_key is None):
                         raise ValueError(f"{kind}: connect a SmartVector node to vectors")
-                    field = vector_layer.pixels[..., :2] / np.float32(tier)
+                    if vector_layer is None:
+                        field = np.zeros(base.pixels.shape[:2] + (2,), np.float32)
+                    else:
+                        field = vector_layer.pixels[..., :2] / np.float32(tier)
                     if frame < float(params["reference_frame"]):
                         field = -field   # backward layer maps current -> reference; invert for ref -> current.
                     if field.shape[:2] != base.pixels.shape[:2]:
@@ -3188,7 +3193,26 @@ class Evaluator:
                         elif backend == "auto" and vector_params.get("flow_on", "luminance") == "luminance":
                             from . import gpu3d
                             gpu_warp = gpu3d.available()
-                    if kind == "VectorCornerPin":
+                    if pins_node:
+                        h, w = base.pixels.shape[:2]
+                        src_quad = _vcp.points(params, "from", w, h, tier)
+                        if int(params.get("use_baked", 0)):
+                            pins = _vcp.points(params, "to", w, h, tier)
+                        else:
+                            user = _vcp.points(params, "user", w, h, tier)
+                            ux, uy = np.clip(user[:, 0], 0, w - 1).astype(np.float32), np.clip(user[:, 1], 0, h - 1).astype(np.float32)
+                            opticalflow = __import__("nodebased.opticalflow", fromlist=["_sample"])
+                            pins = user + np.stack([opticalflow._sample(field[..., axis], ux, uy) for axis in range(2)], axis=1)
+                        matrix = homography_from_corners(src_quad, pins)
+                        mode = str(params.get("output_mode", "warped src"))
+                        if mode != "warped src":
+                            warped = _vcp.st_map(matrix, w, h, inverse=mode == "st-map inverse")       # a map, not a picture: no mask or mix
+                        elif gpu_warp:
+                            from .opticalflow_gpu import warp_by_homography_gpu
+                            warped = warp_by_homography_gpu(base.pixels, matrix)
+                        else:
+                            warped = warp_by_homography(base.pixels, matrix)
+                    elif kind == "VectorCornerPin":
                         h, w = base.pixels.shape[:2]
                         points = np.asarray([[params[f"corner{i}_x"], params[f"corner{i}_y"]]
                                              for i in range(1, 5)], np.float32)
@@ -3223,7 +3247,7 @@ class Evaluator:
                         mask = values.get(node["inputs"].get("mask"))
                         warped = self._apply_mask_mix(base.pixels, warped,
                             None if mask is None else mask.fit(base.data), float(params["mix"]))
-                    else:
+                    elif not (pins_node and str(params.get("output_mode", "warped src")) != "warped src"):
                         mask = values.get(node["inputs"].get("mask"))
                         warped = self._apply_mask_mix(base.pixels, warped,
                             None if mask is None else mask.fit(base.data), float(params["mix"]))
