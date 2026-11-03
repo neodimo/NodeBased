@@ -192,5 +192,101 @@ class HueCorrectMixLuminanceTests(unittest.TestCase):
                     np.testing.assert_allclose(tiled(g.doc, edge), full, atol=1e-5)
 
 
+# ================================================================================================================ MatchGrade
+def varied(h=12, w=16, seed=3):
+    rng = np.random.default_rng(seed)
+    img = rng.uniform(0.05, 0.9, (h, w, 4)).astype(np.float32)
+    img[..., 3] = 1.0
+    return img
+
+
+def match(source, target, **params):
+    return Evaluator._match_grade(source, target, dict(SPECS["MatchGrade"]["params"], **params))
+
+
+class MatchGradeTests(unittest.TestCase):
+    def test_a_target_graded_by_a_known_grade_is_matched_back(self):
+        """Match Graded Source: the target is the source through a per-channel gain and offset; the match returns it within float rounding."""
+        src = varied()
+        tgt = src.copy()
+        gains, offsets = (1.4, 0.8, 1.1), (0.05, -0.02, 0.1)
+        for c in range(3):
+            tgt[..., c] = src[..., c] * gains[c] + offsets[c]
+        for task in ("Match Graded Source", "Match Different Clip"):
+            np.testing.assert_allclose(match(src, tgt, match_task=task)[..., :3], tgt[..., :3], atol=2e-5)
+
+    def test_the_defaults_leave_the_older_match_unchanged(self):
+        src, tgt = varied(), varied(seed=9)
+        out = match(src, tgt)
+        for c in range(3):
+            s, t = src[..., c], tgt[..., c]
+            ss, ts = float(np.std(s)), float(np.std(t))
+            np.testing.assert_array_equal(out[..., c], ((s - float(np.mean(s))) * (ts / ss) + float(np.mean(t))))
+
+    def alpha_split(self):
+        src, tgt = varied(), varied(seed=9)
+        src[:, :8, 3] = 1.0
+        src[:, 8:, 3] = 0.0
+        return src, tgt
+
+    def test_the_alpha_mask_limits_the_grade_to_the_non_black_alpha(self):
+        src, tgt = self.alpha_split()
+        out = match(src, tgt, grade_mask="Alpha", apply_to_mask=1)
+        np.testing.assert_array_equal(out[:, 8:, :3], src[:, 8:, :3])                 # the grade does not reach where alpha is black
+        self.assertFalse(np.allclose(out[:, :8, :3], src[:, :8, :3]))
+        inverted = match(src, tgt, grade_mask="Inverted Alpha", apply_to_mask=1)
+        np.testing.assert_array_equal(inverted[:, :8, :3], src[:, :8, :3])            # and the inverted alpha grades the other half
+        self.assertFalse(np.allclose(inverted[:, 8:, :3], src[:, 8:, :3]))
+
+    def test_without_apply_to_mask_the_grade_comes_from_the_region_and_covers_the_picture(self):
+        src, tgt = self.alpha_split()
+        masked = match(src, tgt, grade_mask="Alpha", apply_to_mask=1)
+        whole = match(src, tgt, grade_mask="Alpha", apply_to_mask=0)
+        self.assertFalse(np.allclose(whole[:, 8:, :3], src[:, 8:, :3]))               # the part outside the mask is graded too
+        np.testing.assert_allclose(whole[:, :8, :3], masked[:, :8, :3], atol=1e-6)    # where the mask is full, both give the same grade
+        # the grade is the one fitted to the masked region: the region's mean and spread now equal those of the target's same region
+        # (Match Graded Source reads the Source's alpha for both pictures)
+        left, wanted = whole[:, :8, :3].reshape(-1, 3), tgt[:, :8, :3].reshape(-1, 3)
+        np.testing.assert_allclose(left.mean(axis=0), wanted.mean(axis=0), atol=1e-5)
+        np.testing.assert_allclose(left.std(axis=0), wanted.std(axis=0), atol=1e-5)
+
+    def test_the_task_picks_whose_alpha_weighs_the_target(self):
+        src, tgt = self.alpha_split()
+        tgt = tgt.copy()
+        tgt[:, 8:, 3] = 0.0
+        tgt[:, :8, 3] = 1.0
+        tgt_other = tgt.copy()
+        tgt_other[:, :8, 3], tgt_other[:, 8:, 3] = 0.0, 1.0
+        graded = match(src, tgt_other, grade_mask="Alpha", match_task="Match Graded Source")
+        graded_same = match(src, tgt, grade_mask="Alpha", match_task="Match Graded Source")
+        np.testing.assert_array_equal(graded, graded_same)                             # only the Source's alpha is read
+        different = match(src, tgt_other, grade_mask="Alpha", match_task="Match Different Clip")
+        self.assertFalse(np.allclose(graded, different))                               # the target's own alpha is read
+
+    def test_output_shows_the_matched_source_or_target_picture(self):
+        g = Graph()
+        g.add("src", "Rectangle", dict(width=40, height=30, box_x=4, box_y=4, box_width=30, box_height=20, red=0.9, green=0.4, blue=0.2, alpha=1.0, softness=0.5))
+        g.add("tgt", "Rectangle", dict(width=40, height=30, box_x=0, box_y=0, box_width=40, box_height=30, red=0.3, green=0.6, blue=0.8, alpha=1.0, softness=0.2))
+        results = {}
+        for mode in ("Matched", "Source", "Target"):
+            g.add(f"node_{mode}", "MatchGrade", {"match_output": mode}, image="src", reference="tgt")
+            results[mode] = evaluator_pixels(g.doc, f"node_{mode}")
+        np.testing.assert_array_equal(results["Source"], evaluator_pixels(g.doc, "src"))
+        np.testing.assert_array_equal(results["Target"], evaluator_pixels(g.doc, "tgt"))
+        self.assertFalse(np.array_equal(results["Matched"], results["Source"]))
+        self.assertFalse(np.array_equal(results["Matched"], results["Target"]))
+
+    def test_the_new_knobs_are_paired_or_unpaired_with_a_reason(self):
+        import json
+        from tools import audit_nuke_fidelity as audit
+        pairs = json.loads(audit.MAP_JSON.read_text(encoding="utf-8"))["pairs"]["MatchGrade"]["knobs"]
+        nuke_names = {n for entry in pairs for n in (entry.get("nuke") or [])}
+        for name in ("matchGradeTask", "analysisType", "mask", "applyToMask", "output", "alignTargetToSource", "autoCrop"):
+            self.assertIn(name, nuke_names)
+        for entry in pairs:
+            if entry["kind"] == "unsupported":
+                self.assertTrue(entry["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4162,6 +4162,14 @@ class Evaluator:
             if target is not None and source.display != target.display:
                 raise ValueError("MatchGrade source and target formats must match")
             target_fit = target.fit(out) if target is not None else None
+            # Nuke's Output menu picks what the node shows: the matched picture, the Source input or the Target input.
+            shown = p.get("match_output", "Matched")
+            if shown == "Source":
+                return Raster(source.fit(out), out, source.display)
+            if shown == "Target":
+                if target is None:
+                    raise ValueError("MatchGrade: connect a target to view it")
+                return Raster(target_fit, out, source.display)
             pixels = Evaluator._match_grade(source.fit(out), target_fit, p)
             pixels = Evaluator._apply_mask_mix(source.fit(out), pixels,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
@@ -8867,22 +8875,44 @@ class Evaluator:
         # target is None once the node is baked (match_analyzed) and the reference is
         # disconnected: the measured gain/offset already live in the knobs, Nuke's baked-knob
         # workflow, so the live target statistics are neither read nor required.
+        # Nuke's Mask menu (`grade_mask`) limits the grade to the non-black areas of the Source's alpha (Alpha) or the non-white ones (Inverted Alpha).
+        # Task "Match Graded Source" reads only the Source's alpha, for both pictures; "Match Different Clip" reads each picture's own. With
+        # `apply_to_mask` on the grade is applied only where the mask is; off, the statistics come from the masked region and the grade
+        # is applied to the whole picture.
         out = source.copy()
         baked = bool(p.get("match_analyzed", 0))
+        mask_mode = p.get("grade_mask", "None")
+        weights = target_weights = None
+        if mask_mode != "None":
+            def region(picture):
+                alpha = picture[..., 3]
+                return (1.0 - alpha if mask_mode == "Inverted Alpha" else alpha).astype(np.float64)
+            weights = region(source)
+            target_weights = weights if (target is None or p.get("match_task", "Match Graded Source") == "Match Graded Source") else region(target)
+
+        def stats(channel_values, w):
+            if w is None:
+                return float(np.mean(channel_values)), float(np.std(channel_values))
+            total = max(float(w.sum()), 1e-12)
+            mean = float((channel_values * w).sum() / total)
+            return mean, float(np.sqrt((((channel_values - mean) ** 2) * w).sum() / total))
+
         for c, channel in enumerate("rgb"):
             s = source[..., c]
-            sm, ss = float(np.mean(s)), float(np.std(s))
+            sm, ss = stats(s, weights)
             if baked:
                 gain = float(p.get(f"grade_gain_{channel}", 1.0))
                 result = s * gain + float(p.get(f"grade_offset_{channel}", 0.0)) + float(p.get(f"grade_lift_{channel}", 0.0))
             else:
                 t = target[..., c]
-                tm, ts = float(np.mean(t)), float(np.std(t))
+                tm, ts = stats(t, target_weights)
                 gain = (ts / ss if ss > 1e-12 else 1.0) * float(p.get(f"grade_gain_{channel}", 1.0))
                 result = (s - sm) * gain + tm + float(p.get(f"grade_lift_{channel}", 0.0)) + float(p.get(f"grade_offset_{channel}", 0.0))
             gamma = max(1e-6, float(p.get(f"grade_gamma_{channel}", 1.0)))
             if gamma != 1.0:
                 result = np.sign(result) * np.power(np.abs(result), 1.0 / gamma)
+            if weights is not None and p.get("apply_to_mask", 1):
+                result = s + weights * (result - s)
             out[..., c] = result
         return out
 

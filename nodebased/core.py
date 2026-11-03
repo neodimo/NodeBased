@@ -375,7 +375,8 @@ SPECS = {
     "Sampler": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0, "sample_r": 0.0, "sample_g": 0.0, "sample_b": 0.0, "sample_a": 0.0}},
     # reference is optional so a baked (match_analyzed=1) node keeps working once Analyze has
     # measured and written grade_gain_*/grade_offset_*, exactly as Nuke's baked-knob workflow does.
-    "MatchGrade": {"inputs": ["image"], "optional_inputs": ["reference", "mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "mix": 1.0}},
+    "MatchGrade": {"inputs": ["image"], "optional_inputs": ["reference", "mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "match_task": "Match Graded Source", "match_analysis": "Analyze Reference Frames",
+                                           "grade_mask": "None", "apply_to_mask": 1, "match_output": "Matched", "mix": 1.0}},
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -1771,7 +1772,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "patch_black": (0, 1), "red_weight": (0.0, 1.0), "blue_green_weight": (0.0, 1.0),
           "luminance_match": (0, 1), "luminance_level": (0.0, 1.0), "use_bg_luminance": (0, 1),
           "screen_subtraction": (0, 1), "screen_range": (0.0, 4.0), "color_r": (0.0, 1000.0), "color_g": (0.0, 1000.0), "color_b": (0.0, 1000.0),
-          "luminance_level_enable": (0, 1), "yellow": (0, 1), "cyan": (0, 1), "magenta": (0, 1), "use_bg_chroma": (0, 1),
+          "luminance_level_enable": (0, 1), "apply_to_mask": (0, 1), "yellow": (0, 1), "cyan": (0, 1), "magenta": (0, 1), "use_bg_chroma": (0, 1),
           # ScreenKeyer (step K2).
           "screen_red": (0.0, 1000.0), "screen_green": (0.0, 1000.0), "screen_blue": (0.0, 1000.0),
           "screen_gain": (0.0, 10.0), "screen_balance": (0.0, 1.0), "alpha_bias": (-1.0, 1.0),
@@ -2181,6 +2182,9 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "out_channel": ["R", "G", "B", "A"],
            # IBKColor and IBKGizmo (step K1).
            "screen_type": ["green", "blue", "pick"],
+           # MatchGrade (step K2): Nuke's Task, Analysis, Mask and Output menus.
+           "match_task": ["Match Graded Source", "Match Different Clip"], "match_analysis": ["Analyze Reference Frames", "Auto-analyze Per Frame"],
+           "grade_mask": ["None", "Alpha", "Inverted Alpha"], "match_output": ["Matched", "Source", "Target"],
            # ScreenKeyer's output view (step K2).
            "keyer_view": list(_keyerknobs.KEYER_VIEWS),
            "screen_replace": list(_keyerknobs.REPLACE_METHODS), "inside_replace": list(_keyerknobs.REPLACE_METHODS),
