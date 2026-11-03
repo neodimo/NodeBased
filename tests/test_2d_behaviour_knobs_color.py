@@ -305,6 +305,99 @@ class OcioDirectionAndInterpolationTests(unittest.TestCase):
         self.assertTrue(any(e["kind"] == "extra" and e["nodebased"] == ["file_interpolation"] for e in entries))
 
 
+# ------------------------------------------------------------------------------------------------------------ Clamp split
+class ClampSplitTests(unittest.TestCase):
+    """Clamp's minimum and maximum are r g b a knobs in Nuke (docs/parity/nuke_split_knobs.json): each channel clamps to its own entry."""
+
+    def image(self):
+        rng = np.random.default_rng(11)
+        pixels = rng.random((10, 14, 4), dtype=np.float32) * 3.0 - 1.0
+        pixels[..., 3] = rng.random((10, 14), dtype=np.float32) * 3.0 - 1.0
+        return pixels
+
+    def test_clamp_declares_both_knobs_as_rgba_and_lays_them_out_split(self):
+        self.assertEqual(core.SPLITTABLE["Clamp"], {"minimum": "rgba", "maximum": "rgba"})
+        self.assertEqual(knobs.split_layout_problems(), [])
+        self.assertEqual({g.params[0]: g.kind for g in knobs.knob_layout("Clamp") if g.params[0] in ("minimum", "maximum")}, {"minimum": "split", "maximum": "split"})
+
+    def test_the_dispatcher_takes_a_list_of_four_and_refuses_the_wrong_length(self):
+        d = core.Dispatcher()
+        d.execute({"op": "create", "id": "c", "type": "Clamp", "params": {}})
+        d.execute({"op": "set", "id": "c", "param": "minimum", "value": [0.1, 0.2, 0.3, 0.4]})
+        self.assertEqual(d.document["nodes"]["c"]["params"]["minimum"], [0.1, 0.2, 0.3, 0.4])
+        with self.assertRaises(Exception):
+            d.execute({"op": "set", "id": "c", "param": "maximum", "value": [0.1, 0.2]})
+
+    def test_each_channel_clamps_to_its_own_entries(self):
+        src = self.image()
+        lo, hi = [-0.5, 0.0, 0.25, -1.0], [0.5, 1.0, 2.0, 0.75]
+        out = render("Clamp", {"minimum": lo, "maximum": hi, "channels": "rgba"}, source=src).pixels
+        for c in range(4):
+            np.testing.assert_array_equal(out[..., c], np.clip(src[..., c], lo[c], hi[c]), err_msg=f"channel {c}")
+
+    def test_channels_choose_which_entries_land(self):
+        src = self.image()
+        lo, hi = [-0.5, 0.0, 0.25, -1.0], [0.5, 1.0, 2.0, 0.75]
+        for channels, picked in (("rgb", (0, 1, 2)), ("alpha", (3,))):
+            out = render("Clamp", {"minimum": lo, "maximum": hi, "channels": channels}, source=src).pixels
+            for c in range(4):
+                expected = np.clip(src[..., c], lo[c], hi[c]) if c in picked else src[..., c]
+                np.testing.assert_array_equal(out[..., c], expected, err_msg=f"{channels} channel {c}")
+
+    def test_clamp_to_values_use_the_split_limits(self):
+        src = self.image()
+        lo, hi = [0.0, 0.2, 0.4, 0.0], [0.6, 0.8, 1.0, 1.0]
+        out = render("Clamp", {"minimum": lo, "maximum": hi, "MinClampTo_enable": 1, "MinClampTo": -9.0, "MaxClampTo_enable": 1, "MaxClampTo": 9.0},
+                     source=src).pixels
+        for c in range(3):
+            expected = np.where(src[..., c] < lo[c], -9.0, np.where(src[..., c] > hi[c], 9.0, src[..., c]))
+            np.testing.assert_array_equal(out[..., c], expected.astype(np.float32), err_msg=f"channel {c}")
+
+    def test_equal_entries_equal_the_unsplit_node(self):
+        src = self.image()
+        np.testing.assert_array_equal(render("Clamp", {"minimum": [0.1] * 4, "maximum": [0.9] * 4, "channels": "rgba"}, source=src).pixels,
+                                      render("Clamp", {"minimum": 0.1, "maximum": 0.9, "channels": "rgba"}, source=src).pixels)
+
+    def test_an_unsplit_clamp_keeps_its_pixels_bit_for_bit(self):
+        src = self.image()
+        for params in ({}, {"minimum": -0.3, "maximum": 1.7, "channels": "rgba"}, {"clamp_min": 0, "maximum": 0.5}, {"MinClampTo_enable": 1, "MinClampTo": 0.25}):
+            with self.subTest(params=params):
+                p = dict(SPECS["Clamp"]["params"], **params)
+                expected = src.copy()
+                lo = p["minimum"] if p["clamp_min"] else -np.inf
+                hi = p["maximum"] if p["clamp_max"] else np.inf
+                for c in Evaluator._CHANNEL_SETS[p["channels"]]:
+                    value = np.clip(src[..., c], lo, hi)
+                    if p["MinClampTo_enable"]:
+                        value = np.where(src[..., c] < lo, p["MinClampTo"], value)
+                    if p["MaxClampTo_enable"]:
+                        value = np.where(src[..., c] > hi, p["MaxClampTo"], value)
+                    expected[..., c] = value
+                np.testing.assert_array_equal(render("Clamp", params, source=src).pixels, expected)
+
+    def test_tiles_equal_the_whole_frame(self):
+        from tests.test_2d_behaviour_color_a import tiled
+        from tests.test_2d_parity_group_3b import Graph
+        for masked in (False, True):
+            g = Graph()
+            g.add("plate", "Ramp", dict(width=61, height=47, color0_red=-0.4, color1_red=1.6, color0_green=0.2, color1_green=1.3, color0_alpha=0.1, color1_alpha=0.9))
+            g.add("matte", "Radial", dict(width=61, height=47, box_x=4, box_y=4, box_width=50, box_height=38, softness=0.8))
+            inputs = {"image": "plate"}
+            if masked:
+                inputs["mask"] = "matte"
+            g.add("node", "Clamp", {"minimum": [0.1, 0.3, 0.0, 0.0], "maximum": [0.9, 0.7, 1.0, 0.5], "channels": "rgba"}, **inputs)
+            full = evaluator_pixels(g.doc, "node")
+            for edge in (7, 16, 32):
+                with self.subTest(masked=masked, edge=edge):
+                    np.testing.assert_allclose(tiled(g.doc, edge), full, atol=1e-5)
+
+    def test_the_nodes_split_table_has_no_clamp_entry_left_open(self):
+        table = requirements.load_split_table()["knobs"]["Clamp"]
+        self.assertEqual(table, {"minimum": "rgba", "maximum": "rgba"})
+        frac, detail = requirements.splits_component("Clamp", "Clamp", MAPPING["pairs"]["Clamp"]["knobs"], requirements.load_split_table())
+        self.assertEqual((frac, detail["split_missing"], detail["split_partial"]), (1.0, [], []))
+
+
 # ----------------------------------------------------------------------------------------------------------- layout
 def main_labels(kind):
     """The main tab's labels in panel order, for the groups that hold a param (the order the user sees)."""

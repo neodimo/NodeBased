@@ -93,6 +93,7 @@ SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: spli
                      for name in ("saturation", "contrast", "gamma", "gain", "offset")},
     "Multiply": {"multiply": "rgba"}, "Add": {"offset": "rgba"}, "Gamma": {"gamma": "rgba"},
     "ColorLookup": {"source": "rgba", "target": "rgba"},
+    "Clamp": {"minimum": "rgba", "maximum": "rgba"},      # Nuke's minimum and maximum are r g b a knobs
 }
 
 

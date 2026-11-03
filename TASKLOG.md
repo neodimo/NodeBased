@@ -1,3 +1,22 @@
+## 2026-11-02 - lane 2 (2D behaviour), step D of 4: the colour, keyer and channel knobs act, and their panels read like Nuke's
+
+- **What was done (evidence):** three commits, targeted gate green. (1) The 30 lane-2 knobs the audit called inert were each moved in the state where they act and shown to change pixels
+  (`tests/test_2d_behaviour_knobs_color.py`, 24 tests): 29 now carry a `NOT_PIXEL` reason in `tools/nuke_fidelity_requirements.py` naming that state (a mask, a replace mode, an inside matte, a
+  second layer, a Set button, a look or file); none was a missing kernel. One is unpaired: OCIOFileTransform `interpolation` (OpenColorIO 2.5.2 returns the same pixels for nearest, linear,
+  tetrahedral and best on a bent .cube, checked in the test), its param `file_interpolation` stays as an `extra`. (2) Main tabs in Nuke's order and labels: Clamp, Exposure, ColorLookup,
+  Keyer (A, B, C, D as four knobs), Keylight, IBKGizmo (`ublu` reads "Use bkg luminnance", the guide's own spelling of its label), AddMix (A, B), ShuffleCopy (1 in, 2 in), MatchGrade,
+  OCIOColorspace, OCIOLookTransform, OCIODisplay, OCIOFileTransform (Input, Output, Invert direction, File), Vectorfield (Vectorfield file); ColorLookup's Set RGB, Set RGBA and Set A are `panel`
+  entries in the mapping (they are buttons, `colorlookupknobs.set_points`). The Copy table was already in order. (3) Clamp `minimum` and `maximum` are `rgba` split knobs read through
+  `Evaluator._channel_value` (the tile path calls the same kernel); scalar documents are bit for bit as before, no schema bump.
+- **Numbers:** overall 87.6 -> 89.0 (counting only NodeBased's nodes 89.8 -> 91.2), previous formula 92.0 -> 92.0 (measured from main `1e219846`). Inert knobs
+  on the fixture 72 -> 42 (lane 2 had 30, now 0). Layout differences 57 -> 43 lines (lane 2 had 14 nodes, now 0). Split knobs: nodes splitting all 8 -> 9 of 14 (Clamp). Nodes with behaviour
+  checked 54 -> 54: Posterize, HistEQ and MinColor already carry cases from steps A and B, all `not scored` with reasons; no citable form was found to add (Posterize's page reads as a bit depth
+  while the node is used as a level count, HistEQ's page gives no binning or range, MinColor's delta comes from the Find Pixel Delta button).
+- **Changed pinned tests:** `tests/test_split_knobs.py` (Keyer, IBKGizmo and ScreenKeyer label lists, the Keyer range row became four knobs A to D).
+- **Still open (Color, Keyer, Channel):** `math` unchecked for OCIOColorspace, OCIODisplay, OCIOFileTransform, OCIOLogConvert and OCIOLookTransform (no fixture colour config; a case needs a stated transform);
+  knob coverage low for MatchGrade (3 of 33), OCIODisplay (3 of 17), OCIOLookTransform (4 of 14), OCIOColorspace (2 of 11), GenerateLUT, Vectorfield, Sampler, Histogram, IBKGizmo (7 of 15), HSVTool (14 of 25);
+  ColorTransfer, Primatte, Ultimatte not in NodeBased; Cryptomatte and Encryptomatte 1 of 4. **Not done:** visual QA, GPU islands untouched, CI not read.
+
 ## 2026-11-02 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step C of 3: the draw nodes, Defocus and EdgeExtend compute what Nuke computes (integrator tick)
 
 - **What was done:** `main` `1045deae` -> `d66b7cca` plus this docs commit. Evidence and per-lane commit

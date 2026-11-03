@@ -1,3 +1,8 @@
+## 2026-11-02 - Lane 2 (2D behaviour), step D of 4: the colour, keyer and channel knobs act, and their panels read like Nuke's
+
+Overall fidelity 87.6 -> 89.0 (previous formula 92.0). 30 inert lane-2 knobs: 29 listed `NOT_PIXEL` with the state they act in and a pixel test, 1 unpaired (OCIOFileTransform interpolation, ignored by OpenColorIO 2.5.2).
+Main tabs of 14 nodes follow Nuke's order and labels (`NUKE_LAYOUT` plus `NUKE_LABELS` additions in `nodebased/knobs.py`). Clamp minimum and maximum split (`SPLITTABLE`, `_channel_value`). Details in TASKLOG.md.
+
 ## 2026-11-02 - Lane 9 (2D behaviour), step B of 3: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox, BlackOutside
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:15 PM on 2026-11-02 PDT)

@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 88.9 / 100** (167 nodes scored, rank-weighted; 91.2 counting only the nodes NodeBased has).
+**Overall fidelity: 89.0 / 100** (167 nodes scored, rank-weighted; 91.2 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 92.0 (94.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -36,7 +36,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Draw | 77.2 | 65.4 | 86.5 | 17 |
 | Time | 96.1 | 78.9 | 96.1 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
-| Color | 94.8 | 80.5 | 94.4 | 34 |
+| Color | 95.1 | 80.7 | 94.4 | 34 |
 | Filter | 83.0 | 71.4 | 91.2 | 32 |
 | Keyer | 89.3 | 67.9 | 88.3 | 11 |
 | Merge | 91.7 | 83.8 | 99.4 | 12 |
@@ -46,7 +46,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 Behaviour checked: 54 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 26 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 281 of the 323 paired knobs probed change the output pixels; 42 change nothing on the fixture (listed per node below). Splits: 8 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 281 of the 323 paired knobs probed change the output pixels; 42 change nothing on the fixture (listed per node below). Splits: 9 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -126,7 +126,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Multiply | `Multiply` | supported | 98.9 | 98.8 | 100 (1/1) | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | - | 100 (1/1) | unmeasured |
 | 6 | Add | `Add` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | - | 100 (1/1) | unmeasured |
 | 7 | Gamma | `Gamma` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | - | 100 (1/1) | unmeasured |
-| 8 | Clamp | `Clamp` | supported | 91.5 | 99.4 | 100 (8/8) | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | 100 | 0 (0/2) | unmeasured |
+| 8 | Clamp | `Clamp` | supported | 99.5 | 99.4 | 100 (8/8) | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | 100 | 100 (2/2) | unmeasured |
 | 9 | HueCorrect | `HueCorrect` | supported | 82.4 | 80.0 | 50 (1/2) | - | 100 | 100 | 100 | 100 (15/15) | - | - | unmeasured |
 | 10 | ColorLookup | `ColorLookup` | supported | 92.1 | 90.0 | 75 (6/8) | - | 100 | 100 | 100 | 100 (7/7) | 100 | - | unmeasured |
 | 11 | Exposure | `Exposure` | supported | 95.7 | 93.6 | 86 (6/7) | 100 (6/6) | 93 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -842,7 +842,7 @@ Nuke's knob class for each knob: AColor_Knob (one slider that splits into r g b 
 - Multiply (`Multiply`): `value` (rgba). all split.
 - Add (`Add`): `value` (rgba). all split.
 - Gamma (`Gamma`): `value` (rgba). all split.
-- Clamp (`Clamp`): `minimum` (rgba), `maximum` (rgba). `minimum` not splittable, `maximum` not splittable.
+- Clamp (`Clamp`): `minimum` (rgba), `maximum` (rgba). all split.
 - Blur (`Blur`): `size` (wh). `size` not splittable.
 - Sharpen (`Sharpen`): `size` (wh). `size` not splittable.
 - Erode (filter) (`ErodeFilter`): `size` (wh). `size` not splittable.

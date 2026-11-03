@@ -196,8 +196,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("channels",)), KnobGroup("bool", ("clamp",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Clamp": _groups(
-        KnobGroup("float_slider", ("minimum",), soft_range=(-1, 1)),
-        KnobGroup("float_slider", ("maximum",), soft_range=(0, 4)),
+        KnobGroup("split", ("minimum",), soft_range=(-1, 1), channels="rgba"),
+        KnobGroup("split", ("maximum",), soft_range=(0, 4), channels="rgba"),
         KnobGroup("bool", ("clamp_min",)), KnobGroup("bool", ("clamp_max",)),
         KnobGroup("float", ("MinClampTo",), label="Minimum clamp to"),
         KnobGroup("bool", ("MinClampTo_enable",), label="Replace minimum"),

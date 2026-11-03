@@ -6074,9 +6074,10 @@ class Evaluator:
     @staticmethod
     def _clamp(image, p):
         out = image.copy()
-        lo = p.get("minimum", 0.0) if p.get("clamp_min", 1) else -np.inf
-        hi = p.get("maximum", 1.0) if p.get("clamp_max", 1) else np.inf
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            # minimum and maximum are r g b a knobs in Nuke (AColor_Knob): one number, or each channel's own entry once split.
+            lo = Evaluator._channel_value(p, "minimum", 0.0, c) if p.get("clamp_min", 1) else -np.inf
+            hi = Evaluator._channel_value(p, "maximum", 1.0, c) if p.get("clamp_max", 1) else np.inf
             value = np.clip(image[..., c], lo, hi)
             if p.get("MinClampTo_enable", 0):
                 value = np.where(image[..., c] < lo, p.get("MinClampTo", 0.0), value)
