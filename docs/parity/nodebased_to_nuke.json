@@ -2347,10 +2347,15 @@
    "nodebased": "Bilateral",
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
-    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"},
+    {"nodebased": "guide", "nuke": "guide", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["guide_channels"], "nuke": ["guide"], "kind": "renamed", "reason": "`guide` is the input's name in NodeBased; the Guide Channels choice is guide_channels"},
     {"nodebased": ["spatial_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Size', scripting name `size`"},
+    {"nodebased": ["positional_sigma"], "nuke": ["positionalSigma"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `positionalSigma`"},
+    {"nodebased": ["bilateral_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "`filter` is already Transform's pixel-filter choice in the shared CHOICES; the Bilateral one is gaussian or median"},
+    {"nodebased": ["legacy_bilateral"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Bilateral page was followed keep their pictures; lane 9 step G"},
     {"nodebased": ["colour_sigma"], "nuke": ["colourSigma"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `colourSigma`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},

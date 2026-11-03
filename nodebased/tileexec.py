@@ -1451,7 +1451,8 @@ class TileExecutor:
             elif kind == "Defocus":
                 filtered = imaging.Evaluator._defocus(image, params)
             elif kind == "Bilateral":
-                filtered = imaging.Evaluator._bilateral(image, params)
+                guide = inputs[2] if len(inputs) > 2 and inputs[2] is not None else None
+                filtered = imaging.Evaluator._bilateral(image, params, None if guide is None else _align_artifact_to(guide, image_artifact.region))
             elif kind == "Denoise":
                 strength = float(params.get("denoise_strength", 0.2))
                 filtered = imaging.Evaluator._bilateral(image, {"spatial_size": 2.0 + 5.0 * strength, "colour_sigma": max(0.01, strength)})

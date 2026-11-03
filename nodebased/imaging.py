@@ -4204,6 +4204,11 @@ class Evaluator:
                 pixels = Evaluator._merge_gated(str(p.get("operation", "over")), shadowed, bg.fit(box), mix,
                                                 None if mask is None else mask.fit(box))
                 return Raster(pixels, box, source.display)
+            if kind == "Bilateral" and len(inputs) > 2 and inputs[2] is not None:
+                # The guide input (lane 9 step G): the weights take their colours from the guide, fitted to the source's window.
+                guided = Evaluator._bilateral(source.pixels, p, inputs[2].fit(source.data))
+                pixels = Evaluator._apply_mask_mix(source.pixels, guided, None if mask is None else mask.fit(source.data), mix)
+                return Raster(pixels, source.data, source.display)
             filtered_box = Evaluator._filter_window(kind, p, source)
             # A gated filter blends against the untouched source, so the source's own rectangle is
             # part of the answer. An ungated one is replaced outright and keeps only its own.
@@ -7174,26 +7179,10 @@ class Evaluator:
         return result
 
     @staticmethod
-    def _bilateral(image, p):
-        """Small bilateral filter; edge-aware RGB weights, spatial Gaussian and extended borders."""
-        radius = int(math.ceil(max(0.0, float(p.get("spatial_size", 3.0)))))
-        if radius == 0:
-            return image.copy()
-        sigma = max(1e-5, float(p.get("colour_sigma", 0.1)))
-        h, w = image.shape[:2]
-        pad = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
-        out = np.zeros_like(image, dtype=np.float64)
-        total = np.zeros((h, w, 1), dtype=np.float64)
-        center = image.astype(np.float64)
-        for dy in range(-radius, radius + 1):
-            for dx in range(-radius, radius + 1):
-                spatial = math.exp(-(dx * dx + dy * dy) / max(1.0, 2.0 * radius * radius))
-                sample = pad[radius + dy:radius + dy + h, radius + dx:radius + dx + w].astype(np.float64)
-                diff = sample[..., :3] - center[..., :3]
-                weight = spatial * np.exp(-np.sum(diff * diff, axis=2, keepdims=True) / (2 * sigma * sigma))
-                out += sample * weight
-                total += weight
-        return (out / np.maximum(total, 1e-20)).astype(np.float32)
+    def _bilateral(image, p, guide=None):
+        """Bilateral filter (nodebased/bilateralknobs.py): edge-aware weights from the guide (the picture itself when None), extended borders."""
+        from . import bilateralknobs
+        return bilateralknobs.bilateral(image, p, guide)
 
     @staticmethod
     def _degrain_simple(image, p):

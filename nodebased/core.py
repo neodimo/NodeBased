@@ -221,6 +221,7 @@ from . import blurknobs as _blurknobs
 from . import filterbehaviour as _filterbehaviour
 from . import effectbehaviour as _effectbehaviour
 from . import raysbehaviour as _raysbehaviour
+from . import bilateralknobs as _bilateralknobs
 from . import transformbehaviour as _transformbehaviour
 from . import drawbehaviour as _drawbehaviour
 from . import timeknobs as _timeknobs
@@ -374,8 +375,8 @@ SPECS = {
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus")}},
-    "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask"],
-                  "params": {"spatial_size": 3.0, "colour_sigma": 0.1, "mix": 1.0}},
+    "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask", "guide"],
+                  "params": {"spatial_size": 3.0, "colour_sigma": 0.4, "mix": 1.0, **_bilateralknobs.NEW}},
     "Denoise": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"denoise_strength": 0.2, "temporal": 0, "mix": 1.0}},
     "DegrainSimple": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -1674,7 +1675,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "filter_size": (-500.0, 500.0), "threshold": (0.0, 100.0),
-          "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_dropshadow_angle": (0, 1), "legacy_dirblur_knobs": (0, 1), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
+          "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_dropshadow_angle": (0, 1), "legacy_dirblur_knobs": (0, 1), "legacy_bilateral": (0, 1), "positional_sigma": (0.00001, 10.0), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "edgeblur_tint": (0.0, 100.0), "edgeblur_brightness": (0.0, 100.0),
@@ -2314,6 +2315,8 @@ CHOICES.update(_behaviour2d.CHOICES)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
 CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric Creation: the two styles the guide describes plainly
+CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)
+CHOICES["guide_channels"] = list(_bilateralknobs.GUIDE_CHANNELS)
 CHOICES["merge_bbox"] = list(_mergeknobs.BBOX_CHOICES)
 NODE_LIMITS["Sharpen"] = NODE_LIMITS["Soften"] = {"minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0)}
 NODE_LIMITS["Grade"] = {"black": (-1000.0, 1000.0), "white": (-1000.0, 1000.0), "blackpoint": (-1000.0, 1000.0)}

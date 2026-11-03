@@ -326,7 +326,14 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("legacy_defocus",), label="Legacy aspect",
                   help="Narrow the disc's height by the aspect instead of widening its width, as graphs saved before the Defocus page was followed do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "Bilateral": _groups(KnobGroup("float_slider", ("spatial_size",), label="Spatial size", soft_range=(0, 20)), KnobGroup("float_slider", ("colour_sigma",), label="Colour sigma", soft_range=(0.001, 2)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Bilateral": _groups(
+        KnobGroup("enum", ("guide_channels",), label="Guide channels", help="The channels of the guide input the weights are taken from (the picture's own colours when no guide is wired)."),
+        KnobGroup("float_slider", ("spatial_size",), label="Size", soft_range=(0, 20), help="The width and height of the window of pixels compared."),
+        KnobGroup("float_slider", ("positional_sigma",), label="Positional sigma", soft_range=(0.01, 2), help="How much nearby pixels count; the falloff is this times the size, in pixels."),
+        KnobGroup("float_slider", ("colour_sigma",), label="Colour sigma", soft_range=(0.001, 2), help="How much blur crosses an edge; lower keeps edges."),
+        KnobGroup("enum", ("bilateral_filter",), label="Filter", help="Gaussian weights the colours; median takes the weighted middle value."),
+        KnobGroup("bool", ("legacy_bilateral",), label="Legacy filter", help="Read the size as a radius and the colours from the picture, as graphs saved before the Bilateral page was followed do."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Denoise": _groups(KnobGroup("float_slider", ("denoise_strength",), label="Strength", soft_range=(0, 2)), KnobGroup("bool", ("temporal",), label="Temporal (frame cache)"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "DegrainSimple": _groups(KnobGroup("float_slider", ("red_amount",), label="Red", soft_range=(0, 4)), KnobGroup("float_slider", ("green_amount",), label="Green", soft_range=(0, 4)), KnobGroup("float_slider", ("blue_amount",), label="Blue", soft_range=(0, 4)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ZDefocus": _groups(

@@ -507,6 +507,9 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         param = {"Bilateral": "spatial_size", "Denoise": "denoise_strength", "DegrainSimple": "red_amount"}[kind]
         size = float(params.get(param, 0.0))
         support = int(math.ceil(2.0 + 5.0 * size)) if kind == "Denoise" else int(math.ceil(size))
+        if kind == "Bilateral":
+            from . import bilateralknobs
+            support = bilateralknobs.radius(params)
         if kind == "DegrainSimple": support = int(math.ceil(max(float(params.get("red_amount", 0)), float(params.get("green_amount", 0)), float(params.get("blue_amount", 0)))))
         return (support, support)
     if kind == "Defocus":

@@ -332,8 +332,10 @@ def _position_rule(params, region, arity):
 
 
 def _bilateral_rule(params, region, arity):
-    support = int(math.ceil(abs(float(params.get("spatial_size", 0.0)))))
-    return [region.expand(support, support)] + [region] * (arity - 1)
+    from . import bilateralknobs
+    support = bilateralknobs.radius(params)
+    # input 0 is the picture, 1 the mask, 2 the guide: the picture and the guide are read a window's reach past the region.
+    return [region.expand(support, support)] + [region] * (arity - 1) if arity < 3 else [region.expand(support, support), region, region.expand(support, support)] + [region] * (arity - 3)
 
 
 def _denoise_rule(params, region, arity):

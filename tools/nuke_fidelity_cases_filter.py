@@ -780,6 +780,7 @@ def cases():
     _dropshadow_cases(Case, out)
     _dirblur_cases(Case, out)
     _lightwrap_cases(Case, out)
+    _bilateral_cases(Case, out)
     return out
 
 
@@ -1604,3 +1605,35 @@ def _lightwrap_cases(Case, out):
          lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "convention", "LightWrap: how much of the background is added at an edge pixel",
          unscored="the guide describes the effect ('a reflection of light around the edges of your foreground object by blending in whatever is in the "
                   "background') and gives neither the falloff nor the blur's filter, so the amount cannot be written down without guessing")
+
+
+BILATERAL_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/filter_nodes/bilateral.html"
+
+
+def _bilateral_cases(Case, out):
+    """Bilateral: a smoothing filter that preserves edges. Size is 'the height and width of the area within which pixels are compared', Colour Sigma
+    'controls the amount of blur that occurs over edges in the image, lower values preserve edges more reliably', Positional Sigma 'controls the
+    amount that nearby pixels affect the overall blur', and the guide input 'computes color similarity while filtering'. The guide gives no weight
+    formula, no pixel scale for the positional sigma and no median rule beyond 'weighted according to the middle value pixel', so the exact smoothed
+    picture is not scored; the two limits the text does state are. The guide input needs a third slot the case runner cannot fill; the step's
+    test module (tests/test_2d_behaviour_filter_g.py) shows a step edge staying where the guide puts it."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored=""):
+        out.append(Case(id=id, nuke="Bilateral", nuke_class="Bilateral", nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind="Bilateral",
+                        nb_params=nb_params, nb_inputs=("A",), expected=expected, source=source, statement=statement, unscored=unscored))
+
+    same = lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool))
+    case("bilateral_size_1_compares_only_the_pixel", (("size", 1.0),), {"spatial_size": 1.0}, same, "convention",
+         f"Bilateral ({BILATERAL_GUIDE}): size 'sets the height and width of the area within which pixels are compared'; a 1 by 1 area holds only the "
+         "pixel itself, so the picture is unchanged")
+    case("bilateral_tiny_colour_sigma_keeps_every_edge", (("colourSigma", 1e-4),), {"colour_sigma": 1e-4}, same, "convention",
+         "Bilateral: colour sigma 'controls the amount of blur that occurs over edges, lower values preserve edges more reliably'; in the limit no "
+         "pixel is blended with one of a different colour, so the picture is unchanged")
+    case("bilateral_gaussian_weights", (("size", 3.0), ("positionalSigma", 0.4), ("colourSigma", 0.4), ("filter", "gaussian")), {}, same, "convention",
+         "Bilateral at its defaults: the smoothed pixels",
+         unscored="the guide names no weight formula and no pixel scale for the positional sigma; NodeBased uses the classic Gaussian form with sigma "
+                  "positionalSigma x size pixels (nodebased/bilateralknobs.py), and tests/test_2d_behaviour_filter_g.py shows a step edge staying sharp "
+                  "while flat noise smooths")
+    case("bilateral_median_filter", (("filter", "median"),), {"bilateral_filter": "median"}, same, "convention",
+         "Bilateral: filter median, 'weighted according to the middle value pixel'",
+         unscored="the guide does not say whether the middle value is a weighted median or a plain one; NodeBased takes the weighted median under the "
+                  "gaussian weights")
