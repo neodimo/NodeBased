@@ -1,5 +1,26 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step N: VectorDistort, PointsTo3D and Reconcile3D get Nuke's inputs and main knobs
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (7:55 AM on 2026-11-03 PDT)
+
+`main` moved `7121124f` -> `709ddee2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `709ddee2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0737.log`, started 7:37 AM): **Ran 9021 tests in 588.405 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step N of 2: VectorDistort, PointsTo3D and Reconcile3D get Nuke's inputs and main knobs.** Commits:
+  - `f2710257` tests: the chrome wrapper's windowed-path equivalence test skips VectorDistort, which the wrapper covers but which runs on its own temporal route (ops2d_chrome.NOT_WINDOWED); its channels stay tested in test_2d_behaviour_transform_n (integrator fix after the stacked suite went red)
+  - `d17957d4` PointsTo3D and Reconcile3D: the img input, Camera type (free move or nodal), the point3D and point2D results; Reconcile3D's XY and XYZ outputs and its 2D transform (track, offset, stabilize); the seven picture-resampling knobs are listed unsupported. The audit report and the step N notes are rebuilt (2D behaviour, lane 9 step N, part 2)
+  - `7e18810d` VectorDistort: Hold Frame, Output (warped src, st-map, st-map inverse), Filter and the Channels selector. Hold off carries the current frame back to the reference; Frame Distance is listed unsupported with its reason. Graphs saved before keep their picture (legacy_vectordistort) (2D behaviour, lane 9 step N, part 1)
+  Diff: 15 files changed, 707 insertions(+), 67 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** two code commits; new module tests.test_2d_behaviour_transform_n (34 tests: a Noise plate that moves three whole pixels with a real SmartVector on it; a Camera3D sliding along x with a known 3D point). Targeted gate: tests.test_track3d, test_nuke_fidelity_audit, test_knowledge, test_bypass, test_knobs, test_core, test_tiers, test_tiles, test_smartvector, test_knob_sliders, test_2d_behaviour_filter_k, test_desktop.PropertiesLabelTests and FluidPropertiesPanelTests.
 - **VectorDistort (`nodebased/vectordistortknobs.py`, flag `legacy_vectordistort`, saved nodes 1):** Hold Frame (on warps the reference frame; off carries the current frame back to the reference with the vectors reversed), Output (warped src, st-map, st-map inverse; a map takes no mask, mix or fade), Filter (the Transform group's list, Cubic by default; saved nodes keep bilinear), Channels (the shared strip's `restrict`, applied in the node's own branch). Frame Distance is listed `unsupported`: Nuke's SmartVector keeps vector sets for 1 to 64 frame hops and NodeBased's keeps one accumulated set per frame.
 - **PointsTo3D (`nodebased/track3dknobs.py`):** `img` input (its display window is the plate the points are read against), Camera type (free move, the old triangulation, or nodal: Point A one focal length in front of the camera, B and C ignored; the unit is our reading, millimetres as scene units), point3D and point2D listed `panel` (read from `Evaluator.track3d_diagnostics[key]`: `position`, `point2d`). No schema bump (a missing `camera_mov_type` loads as free move through `transformbehaviour.UPGRADE_EXTRA`).

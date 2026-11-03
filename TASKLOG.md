@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step N of 2: VectorDistort, PointsTo3D and Reconcile3D get Nuke's inputs and main knobs (integrator tick)
+
+- **What was done:** `main` `7121124f` -> `709ddee2` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `709ddee2`: Ran 9021 tests in 588.405 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step N: VectorDistort, PointsTo3D and Reconcile3D get Nuke's inputs and main knobs
 
 - **What was done (evidence):** two code commits; new module tests.test_2d_behaviour_transform_n (34 tests: a Noise plate that moves three whole pixels with a real SmartVector on it; a Camera3D sliding along x with a known 3D point). Targeted gate: tests.test_track3d, test_nuke_fidelity_audit, test_knowledge, test_bypass, test_knobs, test_core, test_tiers, test_tiles, test_smartvector, test_knob_sliders, test_2d_behaviour_filter_k, test_desktop.PropertiesLabelTests and FluidPropertiesPanelTests.
