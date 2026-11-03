@@ -1,5 +1,25 @@
 ## 2026-11-03 - lane 9 (2D behaviour), step I: Roto's per-shape controls and the Tracker's Transform tab
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (2:15 AM on 2026-11-03 PDT)
+
+`main` moved `772f2ca6` -> `ae01e17b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `ae01e17b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0205.log`, started 2:05 AM): **Ran 8657 tests in 578.163 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step I of 2: Roto's per-shape knobs and Tracker's secondary knobs.** Commits:
+  - `f9f945d2` Tracker: black outside and clamp on the Transform tab read as the guide does (black outside on by default; off carries the edge pixels over the format; clamp limits a sharpening filter); graphs saved before keep their pixels; pixel tests for reference frame, filter, clamp, black outside and jitter period; the fidelity report is rebuilt (2D behaviour, lane 9 step I, part 2)
+  - `41e5c505` Roto: the guide's blending modes (minus is A - B, plus from, difference, exclusion, max, min, screen), open splines as a stroke of the stated width, and pixel tests for colour, invert, visible, the shape transform and lifetime; older graphs keep their minus and hard stroke edge (2D behaviour, lane 9 step I, part 1)
+  Diff: 18 files changed, 746 insertions(+), 44 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Roto draws the guide's blending modes (`shapes.BLEND_MODES`; `roto.BLEND_OPS` holds the formulas, A the shape and B what is below, mixed by the shape's coverage) and an open spline with a one-pixel soft edge (`stroke_soft`, set on a resolved shape by `shapes._resolve_shape` when `legacy_roto_shapes` is 0). A saved Roto gets `legacy_roto_shapes` 1 on load (`drawbehaviour.LEGACY`): minus resolves to `from` and the hard edge stays. The Tracker reads black outside and clamp through `legacy_transform_edges` (`trackerknobs.NEW` 0 with black outside 1; `OLD` 1); `TileExecutor._tracker_needs_full_frame` decides which Trackers tile. Tests: `tests/test_2d_behaviour_roto_shapes.py`, `tests/test_2d_behaviour_tracker.py`; cases in `tools/nuke_fidelity_cases_filter.py`.
 
 ## 2026-11-03 - lane 9 (2D behaviour), step H: GridWarp and SplineWarp
