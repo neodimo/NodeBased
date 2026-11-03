@@ -1,5 +1,26 @@
 ## 2026-11-03 - lane 2 (2D behaviour), step L of 2: Write, Root and SmartVector
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:35 AM on 2026-11-03 PDT)
+
+`main` moved `3334d42c` -> `dc48cb50` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `dc48cb50` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0625.log`, started 6:25 AM): **Ran 8937 tests in 578.163 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step L of 2: Write's secondary knobs, the project settings' main knobs, and SmartVector's outputs.** Commits:
+  - `1bed708d` TASKLOG: step L inert-knob figure stated as measured
+  - `5221fc05` SmartVector gets the Matte input, Matte Channel and Output; the project settings and Write step notes; regenerate the fidelity report (94.7)
+  - `dcab9cfb` Root: the project settings take name, label, project directory, lock connections and lock range; Write's Metadata Export tab (MOV and MXF colour tags) is a per-format tab and no longer scored
+  Diff: 20 files changed, 520 insertions(+), 100 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - Code: `nodebased/projectsettings.py` (`settings.project`), `nodebased/smartvectormatte.py`, SmartVector evaluator block in `imaging.py`, core.py (settings op, validate, Read path, connect lock, SmartVector spec/choices/migration), app.py (title, `offer_sequence_range`).
 - Tests: `tests/test_2d_behaviour_root_l.py`, `tests/test_2d_behaviour_smartvector_l.py`, `RootPairingTests` (12 knobs), `SequenceRangeOfferTests` (locked range).
 - Report: overall 93.8 -> 94.7; Write 70.9 -> 90.3; Root 30.0 -> 40.0; SmartVector 17.1 -> 62.1. Schema unchanged (29).

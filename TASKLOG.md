@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step L of 2: Write's secondary knobs, the project settings' main knobs, and SmartVector's outputs (integrator tick)
+
+- **What was done:** `main` `3334d42c` -> `dc48cb50` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `dc48cb50`: Ran 8937 tests in 578.163 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - lane 2 (2D behaviour), step L of 2: Write's last knobs, the project settings on Root, and SmartVector's matte
 
 - **What was done (evidence):** two code commits plus a docs commit; targeted gate green (the new Root and SmartVector modules, audit, knowledge, tiles, bypass, knobs, tiers, core, the properties-panel tests, test_smartvector, the Write and Read modules, the sequence-range offer tests, cache correctness).
