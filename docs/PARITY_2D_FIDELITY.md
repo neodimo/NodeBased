@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 94.4 / 100** (167 nodes scored, rank-weighted; 96.8 counting only the nodes NodeBased has).
+**Overall fidelity: 94.8 / 100** (167 nodes scored, rank-weighted; 97.1 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.8 (96.2 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 94.3 (96.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -32,9 +32,9 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
-| Image | 86.9 | 90.9 | 86.0 | 6 |
+| Image | 90.9 | 94.2 | 91.0 | 6 |
 | Draw | 92.1 | 83.8 | 90.9 | 17 |
-| Time | 97.8 | 87.1 | 97.6 | 13 |
+| Time | 98.3 | 90.6 | 98.0 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 96.9 | 88.5 | 96.2 | 34 |
 | Filter | 95.6 | 87.6 | 94.7 | 32 |
@@ -42,7 +42,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Merge | 99.5 | 98.7 | 99.5 | 12 |
 | Transform | 95.1 | 87.7 | 94.2 | 20 |
 | Metadata | 99.4 | 98.9 | 99.4 | 5 |
-| Other | 80.4 | 43.2 | 80.3 | 12 |
+| Other | 80.8 | 44.0 | 80.8 | 12 |
 
 Behaviour checked: 95 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
@@ -57,7 +57,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Read | `Read` | supported | 87.1 | 87.1 | 100 (32/32) | - | 35 | - | - | - | 100 | - | no fixture |
-| 2 | Write | `Write` | supported | 70.9 | 67.2 | 61 (27/56) | - | 42 | - | 100 | - | 100 | - | no fixture |
+| 2 | Write | `Write` | supported | 90.3 | 91.0 | 100 (27/27) | - | 42 | - | 100 | - | 100 | - | no fixture |
 | 3 | Viewer | `Viewer` | supported | 90.0 | 89.7 | 83 (20/24) | - | - | 100 | 100 | - | - | - | no fixture |
 | 4 | Constant | `Constant` | supported | 97.6 | 97.2 | 100 (4/4) | 100 (2/2) | 75 | - | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 5 | UDIM Import | - | missing | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
@@ -101,7 +101,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | TimeWarp | `TimeWarp` | supported | 82.4 | 78.4 | 67 (2/3) | - | 50 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
 | 8 | Kronos | `Kronos` | supported | 65.8 | 59.1 | 42 (9/26) | - | 57 | 25 | - | 100 (30/30) | 100 | - | unmeasured |
 | 8 | OFlow | `OFlow` | supported | 82.4 | 78.4 | 67 (12/21) | - | 50 | 100 | - | 100 (30/30) | 100 | - | unmeasured |
-| 8 | SmartVector | `SmartVector` | supported | 17.1 | 16.2 | 12 (1/11) | - | 0 | 50 | - | - | - | - | no fixture |
+| 8 | SmartVector | `SmartVector` | supported | 62.1 | 51.3 | 35 (3/11) | - | 67 | 100 | - | - | 100 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
@@ -280,7 +280,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | no fixture |
 | 8 | VariableGroup | - | missing | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
 | 10 | Precomp | `Precomp` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | - | - | - | 100 | - | no fixture |
-| 11 | Root | `time and settings` | partial | 30.0 | 28.0 | 20 (7/43) | - | 60 | - | - | - | - | - | no fixture |
+| 11 | Root | `time and settings` | partial | 40.0 | 39.3 | 37 (12/43) | - | 50 | - | - | - | - | - | no fixture |
 | 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | no fixture |
 
@@ -291,16 +291,16 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
 | 1 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 2 | Write (Image #2) | `Write` | 14.53 | 70.9 | 29 secondary knobs missing |
-| 3 | Read (Image #1) | `Read` | 12.94 | 87.1 | nothing missing that the guide lists |
-| 4 | Roto (Draw #1) | `Roto` | 10.39 | 89.6 | 26 secondary knobs missing |
-| 5 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 6 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 7 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 8 | Root (Other #11) | `time and settings` | 6.36 | 30.0 | primary knobs missing: `name`, `project_directory`, `Script_directory`, `label`, `lock_connections`, `lock_range`, `format`, `proxy_type` and 4 more; 24 secondary knobs missing |
-| 9 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 10 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 11 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 2 | Read (Image #1) | `Read` | 12.94 | 87.1 | nothing missing that the guide lists |
+| 3 | Roto (Draw #1) | `Roto` | 10.39 | 89.6 | 26 secondary knobs missing |
+| 4 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 5 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 6 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 7 | Root (Other #11) | `time and settings` | 5.45 | 40.0 | primary knobs missing: `Script_directory`, `format`, `proxy_type`, `proxy_format`, `proxySetting`, `is_live`, `render_mode`; 24 secondary knobs missing |
+| 8 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 9 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 10 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 11 | Write (Image #2) | `Write` | 4.86 | 90.3 | nothing missing that the guide lists |
 | 12 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
 | 13 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
 | 14 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
@@ -310,13 +310,13 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 18 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
 | 19 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
 | 20 | PointsTo3D (Transform #17) | `PointsTo3D` | 2.65 | 55.0 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img` |
-| 21 | SmartVector (Time #8) | `SmartVector` | 2.59 | 17.1 | primary knobs missing: `strengthReg`, `matteChannel`, `output`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue`; sockets missing: `Matte` |
-| 22 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
-| 23 | BurnIn (Other #7) | `BurnIn` | 1.67 | 88.3 | nothing missing that the guide lists |
-| 24 | ZDefocus (Filter #8) | `ZDefocus` | 1.57 | 74.8 | primary knobs missing: `output`, `show_image`, `fill_foreground`, `focal_point`, `blur_dof`, `autoLayerSpacing`, `nLayers`, `layerCurve`; 19 secondary knobs missing |
-| 25 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
-| 26 | VectorDistort (Transform #16) | `VectorDistort` | 1.34 | 57.1 | primary knobs missing: `holdFrame`, `frameDistance`; 2 secondary knobs missing: `outputMode`, `imageFilter`; node chrome missing: channels selector |
-| 27 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 21 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
+| 22 | BurnIn (Other #7) | `BurnIn` | 1.67 | 88.3 | nothing missing that the guide lists |
+| 23 | ZDefocus (Filter #8) | `ZDefocus` | 1.57 | 74.8 | primary knobs missing: `output`, `show_image`, `fill_foreground`, `focal_point`, `blur_dof`, `autoLayerSpacing`, `nLayers`, `layerCurve`; 19 secondary knobs missing |
+| 24 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
+| 25 | VectorDistort (Transform #16) | `VectorDistort` | 1.34 | 57.1 | primary knobs missing: `holdFrame`, `frameDistance`; 2 secondary knobs missing: `outputMode`, `imageFilter`; node chrome missing: channels selector |
+| 26 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 27 | SmartVector (Time #8) | `SmartVector` | 1.18 | 62.1 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
 | 28 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
 | 29 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
 | 30 | IBKColor (Keyer #7) | `IBKColor` | 1.12 | 84.4 | sockets missing: `1` |
