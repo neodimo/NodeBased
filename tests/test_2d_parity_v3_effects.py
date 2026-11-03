@@ -47,7 +47,7 @@ class OpticalEffectsTests(unittest.TestCase):
     def test_godrays_zero_decay_is_identity_and_moves_energy_inward(self):
         image = np.zeros((9, 17, 4), np.float32); image[..., 3] = 1
         image[4, 2, :3] = 1
-        p = dict(SPECS["GodRays"]["params"], center_x=8, center_y=4, steps=8, translate=1)
+        p = dict(SPECS["GodRays"]["params"], center_x=8, center_y=4, steps=8, translate=1, legacy_godrays=1)
         p["decay"] = 0
         self.assertTrue(np.array_equal(Evaluator._godrays(image, p), image))
         p["decay"] = .9

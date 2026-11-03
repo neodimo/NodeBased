@@ -220,6 +220,7 @@ from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import filterbehaviour as _filterbehaviour
 from . import effectbehaviour as _effectbehaviour
+from . import raysbehaviour as _raysbehaviour
 from . import transformbehaviour as _transformbehaviour
 from . import drawbehaviour as _drawbehaviour
 from . import timeknobs as _timeknobs
@@ -452,7 +453,10 @@ SPECS = {
     "Flare": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"position_x": 480.0, "position_y": 270.0, "tracker_id": "", "track_index": -1, "brightness": 1.0, "streaks": 6, "length": 180.0, "rotation": 0.0, "ghosts": 5, "spread": 0.65, "size": 18.0, "red": 0.7, "green": 0.85, "blue": 1.0, "chromatic_shift": 2.0, "mix": 1.0}},
     "Glint": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "rays": 4, "length": 12.0, "rotation": 0.0, "falloff": 0.8, "mix": 1.0}},
     "Sparkles": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "size": 3.0, "density": 0.02, "seed": 1, "mix": 1.0}},
-    "GodRays": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0}},
+    # GodRays (step G, lane 2): Nuke's transform-average (translate, rotate, scale, skew about the centre; from and to colour; gamma; max) for a new node,
+    # with steps 5; `decay` and `translate` belong to the older additive smear a saved node keeps (`legacy_godrays` 1, steps as saved).
+    "GodRays": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 5, "decay": 0.9, "translate": 1.0, "mix": 1.0,
+                                                                              **_raysbehaviour.new_params("GodRays")}},
     "VolumeRays": {"inputs": ["image", "matte"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0}},
     "ScannedGrain": {"inputs": ["image", "plate"], "optional_inputs": ["mask"], "params": {"amount": 1.0, "response": 1.0, "seed": 1, "preset": "neutral", "irregularity": 0.0, "minimum": 0.0, "apply_through_alpha": 0, "mix": 1.0}},
     # Posterize (step 5b): `colors` levels per channel in the selected channels.
@@ -1671,7 +1675,10 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_dropshadow_angle": (0, 1), "legacy_dirblur_knobs": (0, 1), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
-          "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "edgeblur_tint": (0.0, 100.0), "edgeblur_brightness": (0.0, 100.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
+          "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "edgeblur_tint": (0.0, 100.0), "edgeblur_brightness": (0.0, 100.0),
+          "legacy_godrays": (0, 1), "rays_translate_x": (-1000000.0, 1000000.0), "rays_translate_y": (-1000000.0, 1000000.0), "rays_rotate": (-100000.0, 100000.0),
+          "rays_scale": (0.001, 1000.0), "rays_skew": (-100.0, 100.0), "rays_from_color": (-1000.0, 1000.0), "rays_to_color": (-1000.0, 1000.0),
+          "rays_gamma": (0.01, 100.0), "rays_max": (0, 1), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (0, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),

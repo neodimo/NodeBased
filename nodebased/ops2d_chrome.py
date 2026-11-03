@@ -68,6 +68,8 @@ FILTER_CHROME = {
     # TVIScale (fidelity step L) has `channels` (default all) and the mask strip; its own kernel (nodebased/tviscale.py)
     # applies them on the enlarged picture, so the generic wrapper below never runs it.
     "TVIScale": ("all", True, False),
+    # GodRays (lane 2 step G) has `channels` (the guide's default is none: read as all) and the mask strip.
+    "GodRays": ("all", True, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
@@ -285,6 +287,8 @@ def upgrade_nodes(nodes):
         added.update(drawbehaviour.upgrade_params(node.get("type")))           # the Draw group (lane 9 step C)
         from . import effectbehaviour
         added.update(effectbehaviour.upgrade_params(node.get("type")))         # EdgeBlur, GodRays, BumpBoss (lane 2 step G)
+        from . import raysbehaviour
+        added.update(raysbehaviour.upgrade_params(node.get("type")))
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

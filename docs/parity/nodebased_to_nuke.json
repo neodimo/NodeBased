@@ -2506,9 +2506,23 @@
    "knobs": [
     {"nodebased": ["center_x", "center_y"], "nuke": ["center"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["steps"], "nuke": ["steps"], "kind": "same"},
-    {"nodebased": ["translate"], "nuke": ["translate"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
-    {"nodebased": ["decay"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["decay"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["rays_translate_x", "rays_translate_y"], "nuke": ["translate"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["rays_rotate"], "nuke": ["rotate"], "kind": "renamed", "reason": "same control under another name; `rotate` is a global name other nodes use"},
+    {"nodebased": ["rays_scale"], "nuke": ["scale"], "kind": "renamed", "reason": "same control under another name; `scale` is a global name other nodes use"},
+    {"nodebased": ["rays_skew"], "nuke": ["skew"], "kind": "renamed", "reason": "same control under another name; `skew` is a global name other nodes use"},
+    {"nodebased": ["rays_from_color"], "nuke": ["from_color"], "kind": "renamed", "reason": "same control under another name; a single gain for red, green and blue"},
+    {"nodebased": ["rays_to_color"], "nuke": ["to_color"], "kind": "renamed", "reason": "same control under another name; a single gain for red, green and blue"},
+    {"nodebased": ["rays_gamma"], "nuke": ["gamma"], "kind": "renamed", "reason": "same control under another name; `gamma` is a global name other nodes use"},
+    {"nodebased": ["rays_max"], "nuke": ["max"], "kind": "renamed", "reason": "same control under another name; `max` is a global name other nodes use"},
+    {"nodebased": ["translate"], "kind": "extra", "reason": "NodeBased-only: the older GodRays's reach toward the centre, read only while `legacy_godrays` is on (Nuke's translate is the pair rays_translate_x/y)"},
+    {"nodebased": ["legacy_godrays"], "kind": "extra", "reason": "NodeBased-only: graphs saved before GodRays followed the guide keep the older additive smear; lane 2 step G"},
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
   "VolumeRays": {

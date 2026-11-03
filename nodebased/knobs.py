@@ -444,7 +444,23 @@ KNOB_LAYOUT = {
     "Flare": _groups(KnobGroup("xy", ("position_x", "position_y"), label="Position"), KnobGroup("string", ("tracker_id",), label="Tracker link"), KnobGroup("int", ("track_index",), label="Track index"), KnobGroup("float_slider", ("brightness",), soft_range=(0, 4)), KnobGroup("int", ("streaks",)), KnobGroup("float_slider", ("length",), soft_range=(0, 1000)), KnobGroup("float", ("rotation",)), KnobGroup("int", ("ghosts",)), KnobGroup("float", ("spread",)), KnobGroup("float_slider", ("size",), soft_range=(0, 200)), KnobGroup("color", ("red", "green", "blue")), KnobGroup("float", ("chromatic_shift",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Glint": _groups(KnobGroup("float", ("tolerance",)), KnobGroup("int", ("rays",)), KnobGroup("float", ("length",)), KnobGroup("float", ("rotation",)), KnobGroup("float", ("falloff",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Sparkles": _groups(KnobGroup("float", ("tolerance",)), KnobGroup("float", ("size",)), KnobGroup("float_slider", ("density",), soft_range=(0, 1)), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "GodRays": _groups(KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "GodRays": _groups(
+        KnobGroup("enum", ("channels",)),
+        KnobGroup("xy", ("rays_translate_x", "rays_translate_y"), label="Translate xy", help="Where the rays or blur are pulled toward, in pixels from the picture."),
+        KnobGroup("float", ("rays_rotate",), label="Rotate", help="The rotation about the centre over the length of the rays, in degrees."),
+        KnobGroup("float", ("rays_scale",), label="Scale", help="The zoom about the centre over the length of the rays: below one zooms out, above one zooms in."),
+        KnobGroup("float", ("rays_skew",), label="Skew", help="The skew about the centre over the length of the rays."),
+        KnobGroup("xy", ("center_x", "center_y"), label="Center", help="The centre of the rotation, scale and skew."),
+        KnobGroup("float", ("rays_from_color",), label="From color", help="The colour the first sample is multiplied by."),
+        KnobGroup("float", ("rays_to_color",), label="To color", help="The colour the last sample is multiplied by."),
+        KnobGroup("float", ("rays_gamma",), label="Gamma", help="The gamma space in which the two colours are interpolated."),
+        KnobGroup("int", ("steps",), help="The number of steps used to make the rays; more steps give shorter, smoother rays."),
+        KnobGroup("bool", ("rays_max",), label="Max", help="Output only the brightest result of each channel instead of the average."),
+        KnobGroup("bool", ("legacy_godrays",), label="Legacy rays",
+                  help="Run the older additive smear (Decay and Reach) instead of Nuke's transform average. Set on graphs saved before GodRays followed Nuke."),
+        KnobGroup("float_slider", ("decay",), label="Decay", soft_range=(0, 1), help="Legacy rays only: how fast each step of the older smear fades."),
+        KnobGroup("float", ("translate",), label="Reach", help="Legacy rays only: how far toward the centre the older smear reaches."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "VolumeRays": _groups(KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ScannedGrain": _groups(KnobGroup("float_slider", ("amount",), soft_range=(0, 4)), KnobGroup("float_slider", ("response",), soft_range=(0.1, 4)), KnobGroup("enum", ("preset",)), KnobGroup("float_slider", ("irregularity",), soft_range=(0, 1)), KnobGroup("float_slider", ("minimum",), soft_range=(0, 1)), KnobGroup("bool", ("apply_through_alpha",), label="Apply through alpha"), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Posterize": _groups(
@@ -2131,6 +2147,8 @@ NUKE_LABELS.setdefault("Roto", {})["invert"] = "Invert matte"       # the mask r
 
 # Lane 2 step G (11/2): EdgeBlur, GodRays and BumpBoss in the guide's order (docs/parity/nuke_nodes.json), the mask strip and mix closing the tab.
 NUKE_LAYOUT_LANE9.update({
+    "GodRays": ("channels", "rays_translate_x", "rays_rotate", "rays_scale", "rays_skew", "center_x", "rays_from_color", "rays_to_color", "rays_gamma",
+                "steps", "rays_max", "legacy_godrays", "decay", "translate"),
     "EdgeBlur": ("channels", "edge_matte", "edgeblur_size", "kernel_filter", "quality", "crop", "edge_mult", "edgeblur_tint", "edgeblur_brightness"),
 })
 

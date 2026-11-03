@@ -20,13 +20,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from nodebased import knobs
 from nodebased.core import SPECS, upgrade_document, validate
 from nodebased.imaging import Evaluator
-from tests.test_2d_behaviour_filter_a import Graph, differs, evaluator_pixels, kern, tile_pixels
+from nodebased.tileexec import TileExecutor
+from tests.test_2d_behaviour_filter_a import Graph, differs, evaluator_pixels, kern, texture, tile_pixels
 
 import audit_nuke_fidelity as audit  # noqa: E402
 import nuke_fidelity_cases as ruler  # noqa: E402
 
 STEP_NODES = ("EdgeBlur", "GodRays", "VolumeRays", "BumpBoss")
-CASED_NODES = ("EdgeBlur",)
+CASED_NODES = ("EdgeBlur", "GodRays")
 
 
 def render(document, target):
@@ -190,6 +191,116 @@ class EdgeBlurTests(unittest.TestCase):
         labels = [group.label for group in knobs.knob_layout("EdgeBlur")]
         self.assertEqual(labels, ["Channels", "Matte input", "Size", "Filter", "Quality", "Crop to format", "Edge mult", "Tint", "Brightness",
                                   "Mask", "Inject", "Invert", "Fringe", "Mix"])
+
+
+# --------------------------------------------------------------------------------------------------------------- GodRays
+def point(x=12, y=6, h=12, w=16):
+    out = np.zeros((h, w, 4), np.float32)
+    out[y, x] = 1.0
+    return out
+
+
+def rays(image, **knobs):
+    return kern("GodRays", image, **{"legacy_godrays": 0, "rays_max": 1, **knobs})
+
+
+class GodRaysTests(unittest.TestCase):
+    def test_a_new_node_has_the_guides_knobs_and_defaults(self):
+        p = SPECS["GodRays"]["params"]
+        for name, value in (("legacy_godrays", 0), ("steps", 5), ("rays_translate_x", 0.0), ("rays_translate_y", 0.0), ("rays_rotate", 0.0),
+                            ("rays_scale", 1.0), ("rays_skew", 0.0), ("rays_from_color", 1.0), ("rays_to_color", 1.0), ("rays_gamma", 1.0), ("rays_max", 0)):
+            self.assertEqual(p[name], value, name)
+
+    def test_the_default_node_leaves_the_picture_alone(self):
+        pixels = texture()
+        np.testing.assert_allclose(kern("GodRays", pixels), pixels, atol=1e-6)
+
+    def test_scale_below_one_pulls_the_pixel_toward_the_centre_and_above_one_pushes_it_out(self):
+        base = dict(center_x=4.0, center_y=6.0, steps=2)
+        down = rays(point(), rays_scale=0.5, **base)
+        up = rays(point(x=6), rays_scale=2.0, **base)
+        self.assertEqual({x for x in range(16) if down[6, x, 0] > 0.5}, {8, 10, 12})
+        self.assertEqual({x for x in range(16) if up[6, x, 0] > 0.5}, {6, 7, 8})              # 4 + 2 * 1, 4 + 2 * 1.5, 4 + 2 * 2
+        self.assertAlmostEqual(float(down[:, :, 0].sum()), 3.0, places=4)                    # nowhere else
+
+    def test_the_average_is_the_mean_of_the_samples_taken_singly(self):
+        mean = rays(point(), rays_max=0, center_x=4.0, center_y=6.0, steps=2, rays_scale=0.5)
+        for x in (8, 10, 12):
+            self.assertAlmostEqual(float(mean[6, x, 0]), 1.0 / 3.0, places=5)                # steps + 1 samples
+        self.assertAlmostEqual(float(mean[:, :, 0].sum()), 1.0, places=5)
+
+    def test_translate_moves_the_samples_along_the_vector(self):
+        out = rays(point(), rays_translate_x=4.0, steps=2)
+        self.assertEqual({x for x in range(16) if out[6, x, 0] > 0.5}, {12, 14})            # the third sample, at x 16, is off the picture
+        down = rays(point(), rays_translate_y=3.0, steps=1)
+        self.assertEqual({y for y in range(12) if down[y, 12, 0] > 0.5}, {6, 9})
+
+    def test_rotate_turns_the_samples_about_the_centre(self):
+        out = rays(point(), rays_rotate=90.0, center_x=8.0, center_y=6.0, steps=1)
+        self.assertGreater(float(out[6, 12, 0]), 0.99)
+        self.assertGreater(float(out[10, 8, 0]), 0.99)                                       # a quarter turn: 4 right of the centre becomes 4 below it
+
+    def test_skew_shears_the_samples_about_the_centre(self):
+        out = rays(point(y=9), rays_skew=1.0, center_x=12.0, center_y=6.0, steps=1)
+        self.assertGreater(float(out[9, 12, 0]), 0.99)
+        self.assertGreater(float(out[9, 15, 0]), 0.99)                                       # 3 below the centre shears 3 to the right
+
+    def test_the_colours_run_from_the_first_sample_to_the_last_through_the_gamma_space(self):
+        plain = rays(point(), center_x=4.0, center_y=6.0, steps=2, rays_scale=0.5, rays_from_color=0.5, rays_to_color=2.0)
+        self.assertAlmostEqual(float(plain[6, 12, 0]), 0.5, places=5)
+        self.assertAlmostEqual(float(plain[6, 10, 0]), 1.25, places=5)                       # halfway, in linear space
+        self.assertAlmostEqual(float(plain[6, 8, 0]), 2.0, places=5)
+        self.assertAlmostEqual(float(plain[6, 12, 3]), 1.0, places=5)                        # the alpha is not multiplied
+        gamma = rays(point(), center_x=4.0, center_y=6.0, steps=2, rays_scale=0.5, rays_from_color=0.5, rays_to_color=2.0, rays_gamma=2.0)
+        self.assertAlmostEqual(float(gamma[6, 10, 0]), ((0.5 ** 0.5 + 2.0 ** 0.5) / 2) ** 2, places=5)
+        self.assertAlmostEqual(float(gamma[6, 12, 0]), 0.5, places=5)
+
+    def test_every_paired_knob_changes_the_pixels(self):
+        pixels = texture()
+        base = kern("GodRays", pixels, center_x=20.0, center_y=15.0, rays_scale=0.8)
+        moves = {"steps": 9, "center_x": 25.0, "center_y": 9.0, "rays_translate_x": 5.0, "rays_translate_y": 4.0, "rays_rotate": 15.0,
+                 "rays_scale": 1.3, "rays_skew": 0.3, "rays_from_color": 0.4, "rays_to_color": 2.0, "rays_max": 1}
+        for name, value in moves.items():
+            with self.subTest(knob=name):
+                self.assertTrue(differs(kern("GodRays", pixels, **{"center_x": 20.0, "center_y": 15.0, "rays_scale": 0.8, name: value}), base), name)
+        shaded = kern("GodRays", pixels, center_x=20.0, center_y=15.0, rays_scale=0.8, rays_from_color=0.4)
+        self.assertTrue(differs(kern("GodRays", pixels, center_x=20.0, center_y=15.0, rays_scale=0.8, rays_from_color=0.4, rays_gamma=2.0), shaded))
+
+    def test_a_document_saved_before_the_step_renders_as_it_did(self):
+        g = Graph()
+        g.add("plate", "Checker", dict(width=45, height=37, size=5))
+        g.add("node", "GodRays", dict(center_x=20.0, center_y=15.0, steps=8, decay=0.8, translate=0.9), image="plate")
+        old = copy.deepcopy(g.doc)
+        for name in list(old["nodes"]["node"]["params"]):
+            if name.startswith("rays_") or name == "legacy_godrays":
+                del old["nodes"]["node"]["params"][name]
+        loaded = upgrade_document(old)
+        validate(loaded)
+        self.assertEqual(loaded["nodes"]["node"]["params"]["legacy_godrays"], 1)
+        image = render(loaded, "plate")
+        h, w = image.shape[:2]
+        yy, xx = np.mgrid[:h, :w].astype(np.float32)
+        acc = np.zeros_like(image[..., :3])
+        bright = np.maximum(image[..., :3], 0.0)
+        for i in range(1, 9):
+            t = 0.9 * i / 8
+            sx = np.clip(np.rint(xx + (xx - 20.0) * t).astype(int), 0, w - 1)
+            sy = np.clip(np.rint(yy + (yy - 15.0) * t).astype(int), 0, h - 1)
+            acc += bright[sy, sx] * (0.8 ** i)
+        expected = image.copy()
+        expected[..., :3] += acc / 8
+        np.testing.assert_array_equal(render(loaded, "node"), expected)
+
+    def test_the_node_is_a_whole_frame_job_as_before(self):
+        g = Graph()
+        g.add("plate", "Checker", dict(width=45, height=37, size=5))
+        g.add("node", "GodRays", {}, image="plate")
+        self.assertFalse(TileExecutor(evaluator=Evaluator()).supports_tiled(dict(g.doc, view="node"), "node"))
+
+    def test_the_main_tab_reads_in_the_guides_order(self):
+        labels = [group.label for group in knobs.knob_layout("GodRays")]
+        self.assertEqual(labels[:11], ["Channels", "Translate xy", "Rotate", "Scale", "Skew", "Center", "From color", "To color", "Gamma", "Steps", "Max"])
+        self.assertEqual(labels[-1], "Mix")
 
 
 if __name__ == "__main__":

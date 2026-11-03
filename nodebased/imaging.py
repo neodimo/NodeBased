@@ -7602,6 +7602,10 @@ class Evaluator:
 
     @staticmethod
     def _godrays(image, p, origin=(0, 0), matte=None):
+        # Nuke's GodRays (nodebased/raysbehaviour.py); VolumeRays and an older GodRays node (no legacy_godrays, or 1) run the smear below.
+        from . import raysbehaviour
+        if matte is None and not raysbehaviour.is_legacy(p):
+            return raysbehaviour.godrays(image, p, origin)
         decay = max(0.0, float(p.get("decay", .9)))
         if decay == 0.0: return image.copy()
         steps = max(1, min(256, int(p.get("steps", 32))))

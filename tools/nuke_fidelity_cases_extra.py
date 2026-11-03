@@ -134,4 +134,68 @@ def cases():
          in_band(6, 6.0), "guide", "EdgeBlur: a size above quality scales the image down, filters, and scales up with linear interpolation",
          unscored="the guide does not give the scale factor, the down-scaling filter or the block alignment, so the pixels cannot be written "
                   "down; tests check that the result is bounded and tile-exact", nuke_inputs=("E",), nb_inputs=("E",))
+
+    # ------------------------------------------------------------------------------------------------------- GodRays
+    rays_note = ("GodRays guide: 'Averages together many samples of the image between its initial position and the translate and center "
+                 "indicators'; scale 'Controls the direction of zoom in relation to the center widget. Values less than one zoom out'. The "
+                 "samples sit at equal fractions t = k / steps (k = 0 to steps) of the way from the initial picture (t = 0) to the full "
+                 "transform (t = 1), the endpoints being the guide's 'initial' and 'final' image; the spacing is the long-established reading. "
+                 "The fixture P is one white pixel at x 12 and y 6 and the centre sits at x 4 and y 6, so the pixel's distance 8 becomes 8 * scale")
+    rays = {"legacy_godrays": 0, "steps": 2, "center_x": 4.0, "center_y": 6.0, "rays_scale": 0.5, "rays_max": 1, "rays_translate_x": 0.0,
+            "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_skew": 0.0, "rays_from_color": 1.0, "rays_to_color": 1.0, "rays_gamma": 1.0}
+    rays_knobs = (("center", "4 6"), ("scale", 0.5), ("steps", 2.0), ("max", True))
+
+    def streak(values):
+        """Zeros with `values[(x, channels)]` at row 6; valid at the pixels named (all channels, or the channels given)."""
+        def expected(fx):
+            ref = np.zeros(fx["P"].shape, np.float64)
+            valid = np.zeros(fx["P"].shape, bool)
+            for x, channels, value in values:
+                for c in channels:
+                    ref[6, x, c] = value
+                    valid[6, x, c] = True
+            return ref, valid
+        return expected
+
+    def everywhere(fx):
+        return np.zeros(fx["P"].shape, np.float64), np.ones(fx["P"].shape, bool)
+
+    def streak_all(fx):
+        ref, _ = everywhere(fx)
+        for x in (12, 10, 8):
+            ref[6, x, :] = 1.0
+        return ref, np.ones(ref.shape, bool)
+
+    case("godrays_default_is_identity", "GodRays", "GodRays", (("steps", 5.0),), "GodRays",
+         {"legacy_godrays": 0, "steps": 5}, lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "guide",
+         "GodRays at its defaults (translate 0 0, rotate 0, scale 1, skew 0, from and to colour 1): every sample is the unmoved picture, so the "
+         "average of the samples is the picture")
+    case("godrays_max_streaks_along_the_ray", "GodRays", "GodRays", rays_knobs, "GodRays", dict(rays), streak_all, "convention",
+         "GodRays with max on, scale 0.5 and steps 2: the white pixel appears at its initial position and at the samples toward the centre "
+         "(x 12, 10 and 8 on the row of the centre), at full strength, and nowhere else. " + rays_note, nuke_inputs=("P",), nb_inputs=("P",))
+    case("godrays_from_and_to_colour_at_the_ends", "GodRays", "GodRays", rays_knobs + (("from_color", 0.5), ("to_color", 2.0)), "GodRays",
+         {**rays, "rays_from_color": 0.5, "rays_to_color": 2.0},
+         streak([(12, (0, 1, 2), 0.5), (8, (0, 1, 2), 2.0)]), "guide",
+         "GodRays from color 0.5 and to color 2: from color 'sets the color by which the initial image is multiplied' and to color 'the color by "
+         "which the final image is multiplied', so the white pixel is 0.5 where it started and 2 at the last sample (x 12 and x 8); the "
+         "samples between are not scored. " + rays_note, nuke_inputs=("P",), nb_inputs=("P",))
+    case("godrays_average_weights", "GodRays", "GodRays", (("center", "4 6"), ("scale", 0.5), ("steps", 2.0)), "GodRays",
+         {**rays, "rays_max": 0}, everywhere, "convention", "GodRays with max off: each sample's share of the average",
+         unscored="the guide says 'averages together many samples' without saying whether steps counts the samples or the gaps between them "
+                  "(2 or 3 samples at steps 2), so the weight of each streak pixel cannot be written down without guessing; tests check that "
+                  "the average is the mean of the same samples taken singly", nuke_inputs=("P",), nb_inputs=("P",))
+    for knob, nb_name, value in (("translate", "rays_translate_x", 3.0), ("rotate", "rays_rotate", 20.0), ("skew", "rays_skew", 0.4)):
+        case(f"godrays_{knob}_direction", "GodRays", "GodRays", (("center", "4 6"), (knob, value if knob != "translate" else "3 0"), ("steps", 2.0), ("max", True)),
+             "GodRays", {**rays, "rays_scale": 1.0, nb_name: value}, everywhere, "convention",
+             f"GodRays {knob}: the direction and sign of the movement",
+             unscored=f"the guide names {knob} but not its sign (clockwise or not, up or down; Nuke's y runs up), the order it combines with the "
+                      "other controls (its note says translate and skew do not merge correctly with scale), or its units; tests check that the "
+                      "samples move along the ray the knob names and that the knob acts",
+             nuke_inputs=("P",), nb_inputs=("P",))
+    case("godrays_gamma_space", "GodRays", "GodRays", rays_knobs + (("from_color", 0.5), ("to_color", 2.0), ("gamma", 2.2)), "GodRays",
+         {**rays, "rays_from_color": 0.5, "rays_to_color": 2.0, "rays_gamma": 2.2}, everywhere, "convention",
+         "GodRays gamma: the colours are interpolated in the gamma space", unscored="the guide gives gamma one sentence ('the gamma space in "
+         "which colors are interpolated') and no formula; the ends are unchanged by it and the middle sample is not scored",
+         nuke_inputs=("P",), nb_inputs=("P",))
+
     return out
