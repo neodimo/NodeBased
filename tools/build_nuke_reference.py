@@ -31,7 +31,8 @@ SLUG_BY_GROUP = {("Color", "Multiply"): "multiply_color", ("Merge", "Multiply"):
 # Pages whose knob tables hold many per-format option tabs. Only these tabs are scored; the rest are recorded as format options.
 KEEP_TABS = {
     "Read": {"Read Tab", "Context", "Sequence Tab", "Metadata Tab"},
-    "Write": {"Write Tab", "Context", None, "Metadata Export"},
+    # "Metadata Export" holds only the colour tags of the MOV codecs and the MXF container (mov64_*, mxf_*), formats the Write cannot produce.
+    "Write": {"Write Tab", "Context", None},
     "Viewer": {"Viewer Tab"},
 }
 CHROME = {"channels": "channels", "maskChannelInput": "mask_channel", "maskChannelMask": "mask_channel", "inject": "mask_inject",

@@ -190,7 +190,8 @@ class RootPairingTests(unittest.TestCase):
 
     def test_the_paired_knobs_are_exactly_the_ones_that_act(self):
         self.assertEqual(set(self.paired), {"first_frame", "last_frame", "fps", "OCIO_config", "monitorLUT",
-                                            "proxy", "proxy_scale"})
+                                            "proxy", "proxy_scale", "name", "project_directory", "label",
+                                            "lock_connections", "lock_range"})
         from audit_nuke_fidelity import document_default
         for knob, fields in self.paired.items():
             for field in fields:
@@ -202,11 +203,11 @@ class RootPairingTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             document_default("time.shutter")
 
-    def test_the_score_counts_seven_knobs_and_the_defaults_that_agree(self):
+    def test_the_score_counts_twelve_knobs_and_the_defaults_that_agree(self):
         from audit_nuke_fidelity import score_pair
         res = score_pair("Root", self.pair, self.nuke)
-        self.assertEqual(res["detail"]["knob_counts"], (7, 43))
-        self.assertEqual(res["detail"]["default_counts"], (3, 5))   # frames and fps agree; the OCIO config and view do not
+        self.assertEqual(res["detail"]["knob_counts"], (12, 43))
+        self.assertEqual(res["detail"]["default_counts"], (5, 10))   # frames, fps and the two locks agree; the guide writes an empty text as "none", which the text fields do not match, and the OCIO config and view differ
         self.assertEqual(set(res["components"]), {"knobs", "defaults"})
 
     def test_frame_range_bounds_the_playhead(self):

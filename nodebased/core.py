@@ -211,6 +211,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
          "lens_cx": 0.0, "lens_cy": 0.0}
 
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
+from . import projectsettings as _projectsettings
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
 from . import behaviour2d as _behaviour2d
@@ -3084,7 +3085,7 @@ def empty_document():
 def validate_settings(settings):
     # "formats" is the additive registry section (lane L2 step 4c); a hand-built document without it
     # still validates and falls back to the built-in list through `document_formats`.
-    if not isinstance(settings, dict) or set(settings) not in ({"color", "viewer"}, {"color", "viewer", "formats"}):
+    if not isinstance(settings, dict) or not {"color", "viewer"} <= set(settings) <= {"color", "viewer", "formats", "project"}:
         raise ValueError("settings must define color and viewer")
     color = settings["color"]
     if not isinstance(color, dict) or set(color) != {"config", "working_space", "display", "view"}:
@@ -3129,6 +3130,8 @@ def validate_settings(settings):
                 raise ValueError(f"settings.viewer.{name} must be an input number from 1 to {VIEWER_INPUT_COUNT}")
         if viewer["compare"] not in COMPARE_MODES:
             raise ValueError(f"settings.viewer.compare must be one of {list(COMPARE_MODES)}")
+    if "project" in settings:
+        _projectsettings.validate(settings["project"])
     if "formats" in settings:
         formats = settings["formats"]
         if not isinstance(formats, dict) or len(formats) > FORMAT_COUNT_LIMIT:
@@ -3570,7 +3573,7 @@ class Dispatcher:
                 raise ValueError("Node ID already exists")
             params = {**SPECS[kind]["params"], **cmd.get("params", {})}
             if kind == "Read" and params["path"]:
-                params["path"] = str(Path(params["path"]).expanduser().resolve())
+                params["path"] = _projectsettings.resolve_media_path(doc, params["path"])
             if kind == "Reformat" and "format" in cmd.get("params", {}):
                 # Only when the caller actually named a format: an explicit width/height passed
                 # alongside a default, unmentioned "format" must not be clobbered back to preset.
@@ -3721,12 +3724,15 @@ class Dispatcher:
             changes = cmd.get("settings")
             if not isinstance(changes, dict):
                 raise ValueError("settings operation requires a settings object")
-            unknown = set(changes) - {"color", "viewer"}
+            unknown = set(changes) - {"color", "viewer", "project"}
             if unknown:
                 raise ValueError(f"Unknown settings groups: {sorted(unknown)}")
             for group, values in changes.items():
                 if not isinstance(values, dict):
                     raise ValueError(f"settings.{group} must be an object")
+                if group == "project":
+                    _projectsettings.merge(doc["settings"], values)
+                    continue
                 unknown_fields = set(values) - set(doc["settings"][group])
                 if unknown_fields:
                     raise ValueError(f"Unknown settings.{group} fields: {sorted(unknown_fields)}")
@@ -3738,7 +3744,7 @@ class Dispatcher:
             name = cmd["param"]
             value = cmd["value"]
             if node["type"] == "Read" and name == "path" and isinstance(value, str) and value:
-                value = str(Path(value).expanduser().resolve())
+                value = _projectsettings.resolve_media_path(doc, value)
             if isinstance(value, (list, tuple)) and name in SPLITTABLE.get(node["type"], {}):
                 # A split value is stored as a plain list of floats (whole numbers included), so a document holds one form of it.
                 value = [float(v) if type(v) in (float, int) else v for v in value]
@@ -3747,6 +3753,8 @@ class Dispatcher:
                 _resolve_reformat_format(node["params"], doc)
         elif op == "connect":
             slot = cmd["input"]
+            if _projectsettings.project(doc)["lock_connections"]:
+                raise ValueError("The project's connections are locked: unlock them in the project settings")
             if node["type"] == "Group" and node["params"].get("lock_connections", 0):
                 raise ValueError("Group: unlock connections before changing an input")
             node["inputs"][slot] = cmd.get("source")

@@ -3289,6 +3289,15 @@ class SequenceRangeOfferTests(unittest.TestCase):
         self.assertEqual((w.dispatcher.document["time"]["first"], w.dispatcher.document["time"]["last"]),
                          (1, 24))
 
+    def test_a_locked_range_stays_put_and_asks_nothing(self):
+        w = self.window
+        w.command({"op": "settings", "settings": {"project": {"lock_range": True}}})
+        before = dict(w.dispatcher.document["time"])
+        with unittest.mock.patch.object(QMessageBox, "question") as question:
+            w.offer_sequence_range(self._chosen(1, 24))
+        question.assert_not_called()
+        self.assertEqual(w.dispatcher.document["time"], before)
+
     def test_customized_range_asks_before_changing(self):
         w = self.window
         w.set_time(first=200, last=300, current=200, fps=24.0)

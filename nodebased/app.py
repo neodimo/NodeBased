@@ -42,6 +42,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
+from . import projectsettings as _projectsettings
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
@@ -11965,7 +11966,9 @@ class Window(QMainWindow):
                 stamp = time.localtime()
             self.status_summary["saved"].setText("Saved " + time.strftime("%I:%M %p", stamp).lstrip("0"))
         self._title_dirty = dirty
-        self.setWindowTitle(f"NodeBased {__version__} · {Path(self.project_path).name if self.project_path else 'Untitled'}{' *' if dirty else ''}")
+        fields = _projectsettings.project(self.dispatcher.document)
+        shown = fields["name"] or (Path(self.project_path).name if self.project_path else "Untitled")
+        self.setWindowTitle(f"NodeBased {__version__} · {shown}{' — ' + fields['label'] if fields['label'] else ''}{' *' if dirty else ''}")
         if not hasattr(self, "topbar"):
             return
         if self.project_path:
@@ -15591,6 +15594,8 @@ class Window(QMainWindow):
         actually set deliberately.
         """
         if not chosen.get("sequence") or chosen.get("first") is None:
+            return
+        if _projectsettings.project(self.dispatcher.document)["lock_range"]:
             return
         time_range = self.dispatcher.document["time"]
         if (time_range["first"], time_range["last"]) == (chosen["first"], chosen["last"]):

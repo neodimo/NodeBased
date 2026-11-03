@@ -88,6 +88,9 @@ def document_default(path):
     doc = core.demo_document()
     if path == "settings.viewer.proxy":                     # optional key: absent means the full-size tier
         return core.viewer_proxy(doc)
+    if path.startswith("settings.project."):                # optional group: a field not set holds its default
+        from nodebased import projectsettings
+        return projectsettings.DEFAULTS[path.split(".", 2)[2]]
     value = doc
     for part in path.split("."):
         value = value[part]
