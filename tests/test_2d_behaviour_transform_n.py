@@ -201,3 +201,188 @@ class VectorDistortSavedGraphs(unittest.TestCase):
 
     def test_the_node_lists_the_knobs_with_the_state_they_need(self):
         self.assertIn("VectorDistort", requirements.NOT_PROBED)
+
+
+# ---------------------------------------------------------------------------------------------------------- PointsTo3D and Reconcile3D
+from nodebased import filmback, scene3d, track3d, track3dknobs      # noqa: E402
+
+WORLD = np.array((0.35, -0.2, -4.0))
+CAM_X = {1: -1.0, 2: 0.0, 3: 1.0}
+
+
+def camera_at(frame, doc_params):
+    return scene3d.camera_from_node({"params": dict(doc_params, tx=CAM_X[frame], target_x=CAM_X[frame])})
+
+
+def track_rig(size=(640, 480), points_params=None, reconcile_params=None, img_size=None):
+    """A Camera3D that slides along x over three frames (looking straight ahead), a PointsTo3D whose three points are WORLD seen from those frames,
+    and a Reconcile3D on the same camera."""
+    d = Dispatcher()
+    add(d, "cam", "Camera3D")
+    for f, x in CAM_X.items():
+        d.execute(dict(op="set_key", id="cam", param="tx", frame=f, value=x))
+        d.execute(dict(op="set_key", id="cam", param="target_x", frame=f, value=x))
+    base = d.document["nodes"]["cam"]["params"]
+    base = dict(base, tz=0.0, target_z=-1.0)
+    d.execute(dict(op="set", id="cam", param="tz", value=0.0))
+    d.execute(dict(op="set", id="cam", param="target_z", value=-1.0))
+    d.execute(dict(op="set", id="cam", param="ty", value=0.0))
+    d.execute(dict(op="set", id="cam", param="target_y", value=0.0))
+    base = dict(d.document["nodes"]["cam"]["params"])
+    pixels = [scene3d.project(camera_at(f, base), size[0], size[1], WORLD[None, :])[0][0] for f in CAM_X]
+    tri = {"image_width": size[0], "image_height": size[1], "frame0": 1, "frame1": 2, "frame2": 3}
+    for i, (x, y) in enumerate(pixels):
+        tri.update({f"track_x{i}": float(x), f"track_y{i}": float(y)})
+    tri.update(points_params or {})
+    add(d, "tri", "PointsTo3D", tri, camera="cam")
+    rec = {"image_width": size[0], "image_height": size[1], "point_x": float(WORLD[0]), "point_y": float(WORLD[1]), "point_z": float(WORLD[2]),
+           "frame_start": 1, "frame_end": 3, **(reconcile_params or {})}
+    add(d, "rec", "Reconcile3D", rec, camera="cam")
+    if img_size is not None:
+        add(d, "plate", "Constant", dict(width=img_size[0], height=img_size[1]))
+        d.execute(dict(op="connect", id="tri", input="img", source="plate"))
+        d.execute(dict(op="connect", id="rec", input="img", source="plate"))
+    d.execute(dict(op="time", first=1, last=3))
+    return d.document, pixels, base
+
+
+def solve(doc, frame=1):
+    ev = Evaluator()
+    ev.evaluate_raster(doc, "tri", frame=frame, typed=True)
+    return ev.track3d_diagnostics["tri"]
+
+
+def reconcile(doc, frame=2):
+    return Evaluator().evaluate_raster(doc, "rec", frame=frame, typed=True)
+
+
+class PointsTo3DBehaviour(unittest.TestCase):
+    def test_free_move_triangulates_the_known_point_within_a_millimetre(self):
+        doc, _, _ = track_rig()
+        np.testing.assert_allclose(solve(doc)["position"], WORLD, atol=1e-3)
+
+    def test_a_node_saved_before_reads_as_free_move(self):
+        self.assertEqual(SPECS["PointsTo3D"]["params"]["camera_mov_type"], "free move")
+
+    def test_nodal_puts_point_a_one_focal_length_in_front_of_the_camera_and_ignores_b_and_c(self):
+        doc, pixels, base = track_rig(points_params={"camera_mov_type": "nodal"})
+        out = solve(doc)["position"]
+        camera = camera_at(1, base)
+        focal = filmback.focal_from_fov(camera.fov, camera.vaperture)
+        eye, view = scene3d._view_basis(camera)
+        self.assertAlmostEqual(float(np.linalg.norm(np.asarray(out) - eye)), focal, places=4)
+        # it lies on Point A's ray: through the camera it lands on Point A
+        landed = scene3d.project_lens(camera, 640, 480, np.asarray(out)[None, :])[0][0]
+        np.testing.assert_allclose(landed, pixels[0], atol=1e-2)
+        # Points B and C (and their frames) change nothing
+        other, _, _ = track_rig(points_params={"camera_mov_type": "nodal", "track_x1": 5.0, "track_y1": 6.0, "track_x2": 9.0, "frame2": 2})
+        np.testing.assert_allclose(solve(other)["position"], out, atol=1e-9)
+        # free move with the same points lands on the known world point instead
+        free, _, _ = track_rig()
+        self.assertGreater(float(np.linalg.norm(np.asarray(solve(free)["position"]) - np.asarray(out))), 0.5)
+
+    def test_nodal_needs_no_parallax(self):
+        _, pixels, _ = track_rig()
+        same = {"frame1": 1, "frame2": 1, "track_x1": pixels[0][0], "track_y1": pixels[0][1], "track_x2": pixels[0][0], "track_y2": pixels[0][1]}
+        same = {k: float(v) if k.startswith("track") else v for k, v in same.items()}
+        doc, _, _ = track_rig(points_params={"camera_mov_type": "nodal", **same})
+        solve(doc)                                  # all three points at one frame and pixel: free move would refuse (too_parallel_rays)
+        free, _, _ = track_rig(points_params=same)
+        with self.assertRaisesRegex(ValueError, "too_parallel_rays"):
+            solve(free)
+
+    def test_point3d_and_point2d_are_the_results_the_node_reports(self):
+        doc, pixels, _ = track_rig()
+        for frame, expected in ((1, pixels[0]), (2, pixels[1]), (3, pixels[2])):
+            diag = solve(doc, frame=frame)
+            np.testing.assert_allclose(diag["position"], WORLD, atol=1e-3)                  # point3D
+            np.testing.assert_allclose(diag["point2d"], expected, atol=1e-2)                # point2D: the point seen from the current frame
+
+    def test_the_img_input_gives_the_plate_the_points_are_read_against(self):
+        doc, _, _ = track_rig(size=(320, 240), points_params={"image_width": 100, "image_height": 100}, img_size=(320, 240))
+        np.testing.assert_allclose(solve(doc)["position"], WORLD, atol=1e-3)       # the node's own 100 x 100 is not used
+        without, _, _ = track_rig(size=(320, 240), points_params={"image_width": 100, "image_height": 100})
+        self.assertGreater(float(np.linalg.norm(np.asarray(solve(without)["position"]) - WORLD)), 0.05)
+
+
+class Reconcile3DBehaviour(unittest.TestCase):
+    def test_xy_output_is_the_point_through_the_camera_and_xyz_output_the_point(self):
+        doc, pixels, _ = track_rig()
+        for frame, expected in ((1, pixels[0]), (2, pixels[1]), (3, pixels[2])):
+            result = reconcile(doc, frame=frame)
+            np.testing.assert_allclose(result["output"], expected, atol=1e-3)
+            np.testing.assert_allclose(result["outputxyz"], WORLD, atol=1e-9)
+
+    def test_the_img_input_sets_the_output_resolution(self):
+        doc, _, _ = track_rig(size=(320, 240), reconcile_params={"image_width": 1920, "image_height": 1080}, img_size=(320, 240))
+        without, _, _ = track_rig(size=(320, 240), reconcile_params={"image_width": 1920, "image_height": 1080})
+        with_img, without_img = reconcile(doc)["output"], reconcile(without)["output"]
+        self.assertGreater(abs(without_img[0] - with_img[0]), 100.0)                      # the 1920 x 1080 centre is far from the 320 x 240 one
+        expected = scene3d.project(camera_at(2, track_rig()[2]), 320, 240, WORLD[None, :])[0][0]
+        np.testing.assert_allclose(with_img, expected, atol=1e-3)
+
+    def test_the_transform_moves_the_track_point_to_the_projected_point_plus_offset(self):
+        for kw, expect in (({}, lambda out: (out[0], out[1])),
+                           ({"track_x": 10.0, "track_y": 20.0}, lambda out: (out[0] - 10.0, out[1] - 20.0)),
+                           ({"offset_x": 3.0, "offset_y": -4.0}, lambda out: (out[0] + 3.0, out[1] - 4.0)),
+                           ({"track_x": 10.0, "offset_x": 3.0}, lambda out: (out[0] - 7.0, out[1]))):
+            with self.subTest(kw=kw):
+                doc, _, _ = track_rig(reconcile_params=kw)
+                result = reconcile(doc)
+                np.testing.assert_allclose(result["transform_value"], expect(result["output"]), atol=1e-6)
+                for sample in result["points"]:
+                    np.testing.assert_allclose((sample["translate_x"], sample["translate_y"]), expect((sample["x"], sample["y"])), atol=1e-6)
+
+    def test_stabilize_reverses_the_transform(self):
+        kw = {"track_x": 10.0, "track_y": 20.0, "offset_x": 3.0}
+        normal = reconcile(track_rig(reconcile_params=kw)[0])
+        reversed_ = reconcile(track_rig(reconcile_params={**kw, "stabilize": 1})[0])
+        np.testing.assert_allclose(reversed_["transform_value"], -np.asarray(normal["transform_value"]), atol=1e-6)
+        np.testing.assert_allclose(reversed_["output"], normal["output"], atol=1e-9)                # the XY output does not change
+
+    def test_track_offset_and_stabilize_change_the_transform_and_not_the_projected_track(self):
+        base = reconcile(track_rig()[0])
+        for kw in ({"track_x": 5.0}, {"track_y": 5.0}, {"offset_x": 5.0}, {"offset_y": 5.0}, {"stabilize": 1, "offset_x": 1.0}):
+            with self.subTest(kw=kw):
+                other = reconcile(track_rig(reconcile_params=kw)[0])
+                self.assertTrue(differs(other["transform_value"], base["transform_value"], 1e-6))
+                self.assertEqual(other["track"]["x"]["curve"], base["track"]["x"]["curve"])
+                self.assertEqual(other["track"]["y"]["curve"], base["track"]["y"]["curve"])
+
+    def test_the_transform_curves_hold_a_key_per_frame(self):
+        result = reconcile(track_rig(reconcile_params={"track_x": 10.0})[0])
+        self.assertEqual([k["frame"] for k in result["transform"]["x"]["curve"]["keys"]], [1, 2, 3])
+
+    def test_the_unbuilt_knobs_are_listed_with_reasons(self):
+        import json
+        docs = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "parity")
+        entries = json.load(open(os.path.join(docs, "nodebased_to_nuke.json")))["pairs"]["Reconcile3D"]["knobs"]
+        for name in ("filter", "clamp", "black_outside", "motionblur", "shutter", "shutteroffset", "shuttercustomoffset"):
+            entry = next(e for e in entries if e["nuke"] == [name])
+            self.assertEqual((entry["kind"], entry["nodebased"]), ("unsupported", []), name)
+            self.assertTrue(entry["reason"])
+        for name in ("calc_output", "output", "outputxyz"):
+            entry = next(e for e in entries if e["nuke"] == [name])
+            self.assertEqual(entry["kind"], "panel", name)
+
+
+class TrackHelperSavedGraphs(unittest.TestCase):
+    def test_the_main_tab_lists_the_knobs_in_the_guides_order(self):
+        for kind, nuke_key in (("PointsTo3D", "PointsTo3D"), ("Reconcile3D", "Reconcile3D")):
+            kept, total = layout_order(nuke_key)[0]
+            self.assertEqual(kept, total, kind)
+
+    def test_the_node_lists_the_knobs_with_the_state_they_need(self):
+        for kind in ("PointsTo3D", "Reconcile3D"):
+            self.assertIn(kind, requirements.NOT_PROBED)
+
+    def test_old_documents_load_with_the_old_reading(self):
+        doc, _, _ = track_rig()
+        for kind, names in (("tri", ("camera_mov_type",)), ("rec", ("track_x", "track_y", "offset_x", "offset_y", "stabilize"))):
+            for name in names:
+                doc["nodes"][kind]["params"].pop(name, None)
+        migrated = upgrade_document(copy.deepcopy(doc))
+        validate(migrated)
+        np.testing.assert_allclose(solve(migrated)["position"], WORLD, atol=1e-3)
+        result = reconcile(migrated)
+        np.testing.assert_allclose(result["transform_value"], result["output"], atol=1e-6)      # no track point and no offset: the projected point itself

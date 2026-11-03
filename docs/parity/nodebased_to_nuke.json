@@ -3724,9 +3724,13 @@
    "nodebased": "PointsTo3D",
    "inputs": [
     {"nodebased": "camera", "nuke": "cam", "kind": "mapped"},
+    {"nodebased": "img", "nuke": "img", "kind": "mapped"},
     {"nodebased": "object", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
+    {"nodebased": ["camera_mov_type"], "nuke": ["cameraMovType"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `cameraMovType` (lane 9 step N)"},
+    {"nodebased": [], "nuke": ["point3D"], "kind": "panel", "reason": "the Output tab's 3D result; a render never writes a parameter, so it is read from the evaluated node (`Evaluator.track3d_diagnostics[key][\"position\"]`, nodebased/track3dknobs.py)"},
+    {"nodebased": [], "nuke": ["point2D"], "kind": "panel", "reason": "the Output tab's screen-space result (the 3D point through the camera at the current frame), read from `Evaluator.track3d_diagnostics[key][\"point2d\"]` (nodebased/track3dknobs.py)"},
     {"nodebased": ["track_x0", "track_y0"], "nuke": ["pointA"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["track_x1", "track_y1"], "nuke": ["pointB"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["track_x2", "track_y2"], "nuke": ["pointC"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
@@ -3758,10 +3762,24 @@
    "nodebased": "Reconcile3D",
    "inputs": [
     {"nodebased": "camera", "nuke": "cam", "kind": "mapped"},
-    {"nodebased": "point", "nuke": "axis", "kind": "mapped"}
+    {"nodebased": "point", "nuke": "axis", "kind": "mapped"},
+    {"nodebased": "img", "nuke": "img", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["point_x", "point_y", "point_z"], "nuke": ["point"], "kind": "components", "reason": "3D point as three scalar params"},
+    {"nodebased": [], "nuke": ["calc_output"], "kind": "panel", "reason": "NodeBased's Reconcile3D always evaluates live; there is no frozen output to switch (nodebased/track3dknobs.py)"},
+    {"nodebased": [], "nuke": ["output"], "kind": "panel", "reason": "XY output: the projected point, read from the evaluated track (`output` for the current frame, `points` for every frame; nodebased/track3dknobs.py)"},
+    {"nodebased": [], "nuke": ["outputxyz"], "kind": "panel", "reason": "XYZ output: the point in 3D after the axis input, read from the evaluated track (`outputxyz`; nodebased/track3dknobs.py)"},
+    {"nodebased": ["track_x", "track_y"], "nuke": ["track"], "kind": "components", "reason": "NodeBased stores the point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["offset_x", "offset_y"], "nuke": ["offset"], "kind": "components", "reason": "NodeBased stores the offset as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["stabilize"], "nuke": ["stabilize"], "kind": "same"},
+    {"nodebased": [], "nuke": ["filter"], "kind": "unsupported", "reason": "resamples the moved picture; NodeBased's Reconcile3D outputs a track (the transform's translation per frame), not the moved picture (nodebased/track3dknobs.py)"},
+    {"nodebased": [], "nuke": ["clamp"], "kind": "unsupported", "reason": "limits the resampling filter's negative lobes on the moved picture, which this node does not output"},
+    {"nodebased": [], "nuke": ["black_outside"], "kind": "unsupported", "reason": "fills the area outside the moved picture, which this node does not output"},
+    {"nodebased": [], "nuke": ["motionblur"], "kind": "unsupported", "reason": "samples the moved picture across the shutter, which this node does not output"},
+    {"nodebased": [], "nuke": ["shutter"], "kind": "unsupported", "reason": "the shutter length of the picture's motion blur, which this node does not output"},
+    {"nodebased": [], "nuke": ["shutteroffset"], "kind": "unsupported", "reason": "where the picture's motion-blur shutter opens, which this node does not output"},
+    {"nodebased": [], "nuke": ["shuttercustomoffset"], "kind": "unsupported", "reason": "the custom shutter offset of the picture's motion blur, which this node does not output"},
     {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["image_width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},

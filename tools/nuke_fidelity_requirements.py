@@ -114,6 +114,8 @@ NOT_PROBED = {
     "GridWarp": "the grids live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)",
     # Lane 9 step N (11/3): the tracking helpers need data the one-frame fixture lacks.
     "VectorDistort": "the warp needs a SmartVector measured on a sequence, which a one-frame probe lacks; tests/test_2d_behaviour_transform_n.py moves each knob on a plate that moves three whole pixels",
+    "PointsTo3D": "the node needs an animated camera and tracked points, which the one-frame fixture lacks; tests/test_2d_behaviour_transform_n.py moves each knob on a known camera and 3D point",
+    "Reconcile3D": "the node needs a camera and a 3D point and outputs a track, not pixels; tests/test_2d_behaviour_transform_n.py moves each knob on a known camera and 3D point",
     "SplineWarp": "the curve pairs live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)",
 }
 

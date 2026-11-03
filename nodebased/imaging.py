@@ -2353,15 +2353,27 @@ class Evaluator:
                         value = None if source is None else values[source]
                     else:
                         from . import track3d
+                        from . import track3dknobs as _t3k
                         camera_key = node["inputs"]["camera"]
                         count = int(params["track_count"])
+                        nodal = str(params.get("camera_mov_type", "free move")) == "nodal"
+                        if nodal:
+                            count = 1          # Point A only: "this ignores Point B and Point C"
                         frames = [int(params[f"frame{i}"]) for i in range(count)]
                         points = [(params[f"track_x{i}"], params[f"track_y{i}"]) for i in range(count)]
                         cameras = [values[camera_key] if f == frame else
                                    self.evaluate_raster(doc, camera_key, cancel=cancel, frame=f, tier=1, typed=True)
                                    for f in frames]
-                        xyz, residuals = track3d.triangulate(cameras, points, params["image_width"],
-                                                             params["image_height"], params["min_ray_angle"])
+                        img_key = node["inputs"].get("img")
+                        plate_w, plate_h = _t3k.plate_size(values.get(img_key) if img_key else None, tier,
+                                                           params["image_width"], params["image_height"])
+                        if nodal:
+                            xyz = _t3k.nodal_point(cameras[0], points[0], plate_w, plate_h)
+                            residuals = [0.0]
+                        else:
+                            xyz, residuals = track3d.triangulate(cameras, points, plate_w, plate_h, params["min_ray_angle"])
+                        current_camera = values[camera_key]
+                        point2d = scene3d.project_lens(current_camera, plate_w, plate_h, np.asarray(xyz, np.float64)[None, :])[0][0]
                         resolved = {**params, "tx": float(xyz[0]), "ty": float(xyz[1]), "tz": float(xyz[2])}
                         member_key = node["inputs"].get("object")
                         member = None if member_key is None else values[member_key]
@@ -2372,7 +2384,7 @@ class Evaluator:
                         # Runtime-only diagnostic, queried by callers without changing saved documents.
                         self.track3d_diagnostics = getattr(self, "track3d_diagnostics", {})
                         self.track3d_diagnostics[key] = {"position": xyz.tolist(), "residuals": residuals,
-                                                         "frames": frames}
+                                                         "frames": frames, "point2d": [float(point2d[0]), float(point2d[1])]}
                 elif kind == "Reconcile3D":
                     if node["disabled"]:
                         source = node["inputs"].get("point")
@@ -2397,13 +2409,19 @@ class Evaluator:
                                 local_point = (geo.vertices[vertex_index] if vertex_index >= 0
                                                else np.mean(geo.vertices, axis=0))
                                 point = (matrix @ np.r_[local_point, 1.0])[:3]
+                        from . import track3dknobs as _t3k
+                        img_key = node["inputs"].get("img")
+                        plate_w, plate_h = _t3k.plate_size(values.get(img_key) if img_key else None, tier,
+                                                           params["image_width"], params["image_height"])
                         frames = range(int(params["frame_start"]), int(params["frame_end"]) + 1)
                         samples = []
                         for f in frames:
                             camera = values[camera_key] if f == frame else self.evaluate_raster(
                                 doc, camera_key, cancel=cancel, frame=f, tier=1, typed=True)
-                            sample = track3d.reconcile(camera, point, params["image_width"], params["image_height"])
+                            sample = track3d.reconcile(camera, point, plate_w, plate_h)
                             sample["frame"] = f
+                            shift = _t3k.translation((sample["x"], sample["y"]), params)
+                            sample["translate_x"], sample["translate_y"] = float(shift[0]), float(shift[1])
                             samples.append(sample)
                         keys_x = [{"frame": int(p["frame"]), "value": p["x"]} for p in samples]
                         keys_y = [{"frame": int(p["frame"]), "value": p["y"]} for p in samples]
@@ -2412,6 +2430,14 @@ class Evaluator:
                                  "y": {"value": samples[0]["y"], "curve": {"interpolation": "linear", "keys": keys_y}},
                                  "error": 0.0}
                         value = {"kind": "TrackerTrack", "track": track, "points": samples}
+                        # XY output, XYZ output and the 2D transform's translation (nodebased/track3dknobs.py).
+                        current = min(samples, key=lambda s: abs(s["frame"] - frame))
+                        value["output"] = (current["x"], current["y"])
+                        value["outputxyz"] = tuple(float(v) for v in point)
+                        value["transform"] = {axis: {"value": samples[0][f"translate_{axis}"],
+                                                     "curve": {"interpolation": "linear", "keys": [{"frame": int(s["frame"]), "value": s[f"translate_{axis}"]} for s in samples]}}
+                                              for axis in "xy"}
+                        value["transform_value"] = (current["translate_x"], current["translate_y"])
                         self.track3d_tracks = getattr(self, "track3d_tracks", {})
                         self.track3d_tracks[key] = value
                 elif kind == "Camera3D":

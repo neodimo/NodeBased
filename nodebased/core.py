@@ -229,6 +229,7 @@ from . import vectorblurknobs as _vectorblurknobs
 from . import warpknobs as _warpknobs
 from . import vectorcornerpinknobs as _vectorcornerpinknobs
 from . import vectordistortknobs as _vectordistortknobs
+from . import track3dknobs as _track3dknobs
 from . import drawfxbehaviour as _drawfxbehaviour
 from . import transformbehaviour as _transformbehaviour
 from . import lensdistortion as _lensdistortion
@@ -1071,13 +1072,15 @@ SPECS = {
     # transforms in order via ordinary scene nesting (see scene3d.scene_from_node). With nothing
     # wired it produces an empty scene.
     "Axis3D": {"inputs": [], "optional_inputs": ["object"], "params": dict(_XFORM)},
-    "PointsTo3D": {"inputs": ["camera"], "optional_inputs": ["object"], "params": {
+    "PointsTo3D": {"inputs": ["camera"], "optional_inputs": ["object", "img"], "params": {
+        **_track3dknobs.POINTS_NEW,
         "frame0": 1, "frame1": 2, "frame2": 3,
         "track_x0": 0.0, "track_y0": 0.0, "track_x1": 0.0, "track_y1": 0.0,
         "track_x2": 0.0, "track_y2": 0.0, "track_count": 3,
         "image_width": 1920, "image_height": 1080, "min_ray_angle": 1.0,
         **_XFORM}},
-    "Reconcile3D": {"inputs": ["camera"], "optional_inputs": ["point"], "params": {
+    "Reconcile3D": {"inputs": ["camera"], "optional_inputs": ["point", "img"], "params": {
+        **_track3dknobs.RECONCILE_NEW,
         "point_x": 0.0, "point_y": 0.0, "point_z": 0.0,
         "frame_start": 1, "frame_end": 100, "image_width": 1920, "image_height": 1080,
         "vertex_index": -1}},
@@ -1664,6 +1667,7 @@ OUTPUT_TYPES.update({"FluidSource3D": "fluid", "FluidForce3D": "fluid", "FluidCo
                      "FluidSurface3D": "geometry", "FluidFoam3D": "particles", "FluidWhitewater3D": "particles"})
 INPUT_TYPES["fluid"] = ("fluid",)
 INPUT_TYPES["volume"] = ("volume",)
+INPUT_TYPES["img"] = ("image",)        # PointsTo3D and Reconcile3D: the plate that gives the format (lane 9 step N)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
@@ -2045,6 +2049,7 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                                  for axis in ("x", "y") for i in range(3)}},
                "Reconcile3D": {"frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000),
                                "image_width": (1, 32768), "image_height": (1, 32768), "vertex_index": (-1, 100000000),
+                               **_track3dknobs.LIMITS,
                                **{f"point_{axis}": (-1000000.0, 1000000.0) for axis in "xyz"}},
                "VectorBlur": {"samples": (0, 64)},
                "MotionBlur": {"samples": (1, 64)},
@@ -2375,6 +2380,7 @@ CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)
 CHOICES["image_filter"] = list(_transformbehaviour.CHOICES)        # VectorDistort Filter (lane 9 step N)
 LIMITS.update(_vectordistortknobs.LIMITS)
+CHOICES["camera_mov_type"] = list(_track3dknobs.CAMERA_TYPES)       # PointsTo3D Camera type (lane 9 step N)
 LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_PARAMS})
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)
 CHOICES.update(_denoiseknobs.CHOICES)

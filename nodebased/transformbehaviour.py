@@ -67,6 +67,9 @@ UPGRADE_EXTRA = {"Transform": {"black_outside": 0},
                  # A Tile saved before it had a filter scaled each tile with bilinear sampling.
                  "Tile": {"filter": "bilinear"},
                  # VectorDistort (lane 9 step N): held reference frame, bilinear sampling and no output choice, as before.
+                 # PointsTo3D and Reconcile3D (lane 9 step N): free move was the only reading; no track point, offset or stabilize.
+                 "PointsTo3D": {"camera_mov_type": "free move"},
+                 "Reconcile3D": {"track_x": 0.0, "track_y": 0.0, "offset_x": 0.0, "offset_y": 0.0, "stabilize": 0},
                  "VectorDistort": {"legacy_vectordistort": 1, "hold_frame": 1, "output_mode": "warped src", "image_filter": "bilinear"}}
 
 
