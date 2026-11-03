@@ -38,7 +38,8 @@ NOT_PIXEL = {
     "DropShadow": {"operation": "merges the shadowed picture over the bg input, so it acts only with bg wired (tests/test_2d_behaviour_filter_f.py)"},
     "DirBlur": {"BlurCenter": "the origin of a zoom or radial blur (a linear blur uses it only with UseTarget on); the default type is linear (tests/test_2d_behaviour_filter_f.py)",
                 "Samples": "the number of taps of a zoom or radial blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)",
-                "pixeloffset": "offsets the samples of a zoom blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)"},
+                "pixeloffset": "offsets the samples of a zoom blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)",
+                "holdout": "keeps the held-out pixels out of a zoom blur's average, and the picture's alpha is the holdout channel; the default type is linear (tests/test_2d_behaviour_filter_k.py)"},
     # Lane 9 step K (11/3): a quality knob that scales the picture down once the filter is wider than it acts only at a size past it, and Laplacian's crop
     # to format acts on the bounding box only; Dither's static seed acts across frames.
     "Laplacian": {"quailty": "caps the filter's size and so acts only once the size passes it; the default size never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)",

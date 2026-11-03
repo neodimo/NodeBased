@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 93.8 / 100** (167 nodes scored, rank-weighted; 96.1 counting only the nodes NodeBased has).
+**Overall fidelity: 94.0 / 100** (167 nodes scored, rank-weighted; 96.3 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.4 (95.8 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -33,20 +33,20 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
 | Image | 86.7 | 90.6 | 86.0 | 6 |
-| Draw | 91.4 | 83.2 | 90.9 | 17 |
+| Draw | 92.1 | 83.8 | 90.9 | 17 |
 | Time | 97.7 | 86.8 | 97.6 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 95.6 | 84.8 | 94.6 | 34 |
-| Filter | 93.5 | 80.9 | 93.2 | 32 |
+| Filter | 94.4 | 83.1 | 93.2 | 32 |
 | Keyer | 91.6 | 77.2 | 90.7 | 11 |
 | Merge | 99.4 | 98.6 | 99.5 | 12 |
-| Transform | 94.8 | 87.0 | 94.2 | 20 |
+| Transform | 95.1 | 87.7 | 94.2 | 20 |
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
 Behaviour checked: 94 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 351 of the 364 paired knobs probed change the output pixels; 13 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 358 of the 358 paired knobs probed change the output pixels; 0 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -69,13 +69,13 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Roto | `Roto` | supported | 89.6 | 86.8 | 67 (49/75) | - | 100 | 100 | 100 | 100 (36/36) | 100 | - | unmeasured |
-| 2 | Text | `Text` | supported | 95.4 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 80 | - | no fixture |
+| 2 | Text | `Text` | supported | 98.3 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 100 | - | no fixture |
 | 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 5 | Radial | `Radial` | supported | 98.7 | 98.8 | 100 (14/14) | - | 88 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | Noise | `Noise` | supported | 99.6 | 99.5 | 100 (26/26) | - | 96 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 7 | RotoPaint | `RotoPaint` | supported | 95.2 | 93.9 | 85 (74/88) | - | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 8 | LightWrap | `LightWrap` | supported | 95.4 | 98.9 | 100 (27/27) | 79 (21/26) | 89 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 8 | LightWrap | `LightWrap` | supported | 99.1 | 98.9 | 100 (27/27) | 100 (26/26) | 89 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 9 | Grain | `Grain` | supported | 96.7 | 95.0 | 88 (13/14) | 100 (13/13) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (6/6) | - | - | unmeasured |
 | 10 | DustBust | - | supported | 0.0 | 0.0 | 0 (0/5) | - | - | 0 | - | - | - | - | no fixture |
@@ -83,7 +83,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 11 | Flare | `Flare` | supported | 77.2 | 62.9 | 24 (10/50) | 100 (10/10) | 90 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 11 | Glint | `Glint` | supported | 94.0 | 90.8 | 77 (10/13) | 100 (10/10) | 100 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
 | 11 | Sparkles | `Sparkles` | supported | 80.5 | 68.4 | 36 (9/32) | 100 (9/9) | 89 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
-| 12 | Dither | `Dither` | supported | 94.9 | 99.2 | 100 (4/4) | 75 (3/4) | 92 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 12 | Dither | `Dither` | supported | 99.3 | 99.2 | 100 (4/4) | 100 (3/3) | 92 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 
 ### Time
@@ -163,32 +163,32 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 4 | Median | `Median` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 5 | Glow | `Glow` | supported | 99.1 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
-| 6 | Soften | `Soften` | supported | 95.1 | 97.9 | 100 (7/7) | 83 (5/6) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
+| 6 | Soften | `Soften` | supported | 98.5 | 97.9 | 100 (7/7) | 100 (5/5) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 7 | DropShadow | `DropShadow` | supported | 96.8 | 96.1 | 100 (9/9) | 100 (8/8) | 67 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 8 | Defocus | `Defocus` | supported | 88.6 | 82.9 | 60 (3/5) | 100 (3/3) | 89 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 8 | ZDefocus | `ZDefocus` | supported | 74.1 | 69.2 | 31 (9/36) | - | 67 | 100 | 100 | 100 (2/2) | 93 | - | unmeasured |
-| 9 | DirBlur | `DirBlur` | supported | 89.1 | 96.0 | 100 (12/12) | 57 (4/7) | 60 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
+| 8 | ZDefocus | `ZDefocus` | supported | 74.8 | 69.2 | 31 (9/36) | - | 67 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 9 | DirBlur | `DirBlur` | supported | 96.5 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (4/4) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 82.6 | 75.0 | 50 (3/6) | 100 (3/3) | 100 | 50 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
-| 12 | DegrainSimple | `DegrainSimple` | supported | 88.1 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 50 | - | no fixture |
-| 12 | Denoise | `Denoise` | supported | 25.4 | 18.1 | 6 (2/37) | - | 50 | 33 | - | - | 50 | - | no fixture |
-| 13 | MotionBlur | `MotionBlur` | supported | 25.0 | 26.4 | 33 (2/6) | - | 0 | 25 | - | - | 25 | - | no fixture |
+| 12 | DegrainSimple | `DegrainSimple` | supported | 95.2 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 100 | - | no fixture |
+| 12 | Denoise | `Denoise` | supported | 33.7 | 18.1 | 6 (2/37) | - | 50 | 33 | - | - | 100 | - | no fixture |
+| 13 | MotionBlur | `MotionBlur` | supported | 37.5 | 26.4 | 33 (2/6) | - | 0 | 25 | - | - | 100 | - | no fixture |
 | 13 | MotionBlur2D | `MotionBlur2D` | supported | 68.1 | 63.9 | 75 (3/4) | - | 33 | 50 | - | - | 100 | - | no fixture |
 | 13 | MotionBlur3D | `MotionBlur3D` | supported | 63.9 | 55.6 | 50 (3/6) | - | 33 | 100 | - | - | 100 | - | no fixture |
-| 13 | VectorBlur | `VectorBlur` | supported | 56.1 | 57.9 | 29 (4/15) | - | 67 | 100 | 100 | - | 38 | - | no fixture |
+| 13 | VectorBlur | `VectorBlur` | supported | 65.0 | 57.9 | 29 (4/15) | - | 67 | 100 | 100 | - | 100 | - | no fixture |
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 16 | BumpBoss | `BumpBoss` | supported | 44.4 | 42.2 | 0 (0/6) | - | 100 | 67 | 100 | - | - | - | unmeasured |
-| 16 | EdgeDetect | `EdgeDetect` | supported | 84.7 | 80.6 | 64 (5/7) | 86 (4/5) | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 16 | EdgeDetect | `EdgeDetect` | supported | 87.9 | 80.6 | 64 (5/7) | 100 (4/4) | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 16 | Emboss | `Emboss` | supported | 71.1 | 54.5 | 18 (2/13) | 100 (2/2) | 86 | 100 | 100 | - | 100 | - | unmeasured |
-| 16 | Laplacian | `Laplacian` | supported | 91.3 | 100.0 | 100 (4/4) | 50 (2/4) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 16 | Laplacian | `Laplacian` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 17 | Inpaint | `Inpaint` | supported | 98.7 | 98.8 | 100 (11/11) | - | 91 | 100 | 100 | - | 100 | - | no fixture |
 | 18 | GodRays | `GodRays` | supported | 98.9 | 98.8 | 100 (10/10) | 100 (10/10) | 88 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 18 | LevelSet | `LevelSet` | supported | 100.0 | 100.0 | 100 (8/8) | - | 100 | 100 | - | - | 100 | - | no fixture |
 | 18 | VolumeRays | `VolumeRays` | supported | 80.5 | 65.3 | 48 (11/24) | 100 (11/11) | 100 | 100 | - | - | 100 | - | unmeasured |
-| 19 | ZSlice | `ZSlice` | supported | 73.8 | 76.7 | 100 (3/3) | - | 50 | 100 | 17 | - | 50 | - | no fixture |
+| 19 | ZSlice | `ZSlice` | supported | 81.0 | 76.7 | 100 (3/3) | - | 50 | 100 | 17 | - | 100 | - | no fixture |
 | 20 | Bokeh | - | supported | 0.0 | 0.0 | 0 (0/42) | - | - | 0 | - | - | - | - | no fixture |
 
 ### Keyer
@@ -234,20 +234,20 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 3 | Tracker | `Tracker` | supported | 91.1 | 89.3 | 78 (41/54) | - | 83 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
 | 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
-| 6 | CornerPin2D | `CornerPin` | supported | 99.4 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 95 | - | unmeasured |
+| 6 | CornerPin2D | `CornerPin` | supported | 100.0 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 7 | Mirror | `Mirror` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 8 | Stabilize | `Stabilize` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | Position | `Position` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | - | - | unmeasured |
 | 10 | AdjustBBox | `AdjustBBox` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | - | - | unmeasured |
 | 11 | BlackOutside | `BlackOutside` | supported | 100.0 | 100.0 | - | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
-| 12 | STMap | `STMap` | supported | 95.6 | 98.1 | 100 (6/6) | - | 86 | 100 | 100 | - | 83 | - | no fixture |
-| 13 | IDistort | `IDistort` | supported | 92.1 | 94.3 | 100 (8/8) | - | 57 | 100 | 100 | - | 88 | - | no fixture |
+| 12 | STMap | `STMap` | supported | 98.0 | 98.1 | 100 (6/6) | - | 86 | 100 | 100 | - | 100 | - | no fixture |
+| 13 | IDistort | `IDistort` | supported | 93.9 | 94.3 | 100 (8/8) | - | 57 | 100 | 100 | - | 100 | - | no fixture |
 | 14 | GridWarp | `GridWarp` | supported | 70.2 | 63.2 | 15 (5/34) | - | 73 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 14 | SplineWarp | `SplineWarp` | supported | 82.1 | 79.7 | 67 (12/23) | - | 64 | 67 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 15 | Tile | `Tile` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
 | 16 | VectorCornerPin | `VectorCornerPin` | supported | 93.3 | 91.0 | 81 (13/17) | - | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 16 | VectorDistort | `VectorDistort` | supported | 57.1 | 44.4 | 33 (2/6) | - | 100 | 100 | 0 | - | 100 | - | no fixture |
-| 17 | PointsTo3D | `PointsTo3D` | supported | 46.7 | 48.3 | 60 (6/9) | - | 0 | 50 | - | - | 50 | - | no fixture |
+| 17 | PointsTo3D | `PointsTo3D` | supported | 55.0 | 48.3 | 60 (6/9) | - | 0 | 50 | - | - | 100 | - | no fixture |
 | 18 | Reconcile3D | `Reconcile3D` | supported | 41.3 | 36.7 | 13 (1/14) | - | 100 | 67 | - | - | - | - | no fixture |
 | 19 | TVIScale | `TVIScale` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
 | 20 | LensDistortion | `Undistort` | supported | 77.6 | 70.2 | 37 (20/58) | - | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
@@ -303,23 +303,23 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 11 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
 | 12 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
 | 13 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
-| 14 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.14 | 46.7 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img`; knob order differs from Nuke's (3 of 6 in order) |
-| 15 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 16 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 17 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 18 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 19 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 20 | Denoise (Filter #12) | `Denoise` | 3.11 | 25.4 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise`; 1 label differs from Nuke's |
-| 21 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
+| 14 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 15 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 16 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 17 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 18 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 19 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
+| 20 | Denoise (Filter #12) | `Denoise` | 2.76 | 33.7 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise` |
+| 21 | PointsTo3D (Transform #17) | `PointsTo3D` | 2.65 | 55.0 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img` |
 | 22 | SmartVector (Time #8) | `SmartVector` | 2.59 | 17.1 | primary knobs missing: `strengthReg`, `matteChannel`, `output`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue`; sockets missing: `Matte` |
-| 23 | Text (Draw #2) | `Text` | 2.29 | 95.4 | 1 secondary knob missing: `group_animation`; knob order differs from Nuke's (27 of 40 in order); 1 label differs from Nuke's |
-| 24 | AddTimeCode (Metadata #4) | `AddTimeCode` | 2.22 | 91.1 | knob order differs from Nuke's (4 of 5 in order); 1 label differs from Nuke's |
-| 25 | BurnIn (Other #7) | `BurnIn` | 2.20 | 84.6 | knob order differs from Nuke's (10 of 18 in order) |
-| 26 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
-| 27 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
-| 28 | MatchGrade (Color #16) | `MatchGrade` | 1.73 | 44.5 | primary knobs missing: `matchGradeTask`, `analysisType`, `mask`, `applyToMask`, `output`, `alignTargetToSource`, `autoCrop`; 23 secondary knobs missing |
-| 29 | IBKGizmo (Keyer #7) | `IBKGizmo` | 1.68 | 76.4 | primary knobs missing: `color`, `level`, `ll_enable`, `autolevels`, `yellow`, `cyan`, `magenta`, `ubcr` |
-| 30 | GenerateLUT (Color #21) | `GenerateLUT` | 1.65 | 30.9 | primary knobs missing: `file_type`; 7 secondary knobs missing: `lut1d`, `style1d`, `bitdepth_id`, `output_bitdepth_id`, `clamp_output` ... |
+| 23 | AddTimeCode (Metadata #4) | `AddTimeCode` | 2.22 | 91.1 | knob order differs from Nuke's (4 of 5 in order); 1 label differs from Nuke's |
+| 24 | BurnIn (Other #7) | `BurnIn` | 2.20 | 84.6 | knob order differs from Nuke's (10 of 18 in order) |
+| 25 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
+| 26 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
+| 27 | MatchGrade (Color #16) | `MatchGrade` | 1.73 | 44.5 | primary knobs missing: `matchGradeTask`, `analysisType`, `mask`, `applyToMask`, `output`, `alignTargetToSource`, `autoCrop`; 23 secondary knobs missing |
+| 28 | IBKGizmo (Keyer #7) | `IBKGizmo` | 1.68 | 76.4 | primary knobs missing: `color`, `level`, `ll_enable`, `autolevels`, `yellow`, `cyan`, `magenta`, `ubcr` |
+| 29 | GenerateLUT (Color #21) | `GenerateLUT` | 1.65 | 30.9 | primary knobs missing: `file_type`; 7 secondary knobs missing: `lut1d`, `style1d`, `bitdepth_id`, `output_bitdepth_id`, `clamp_output` ... |
+| 30 | ZDefocus (Filter #8) | `ZDefocus` | 1.57 | 74.8 | primary knobs missing: `output`, `show_image`, `fill_foreground`, `focal_point`, `blur_dof`, `autoLayerSpacing`, `nLayers`, `layerCurve`; 19 secondary knobs missing |
 
 ## Formula cases
 
@@ -1208,35 +1208,18 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 
 Each paired knob below was moved off its default to every value its `LIMITS` and `CHOICES` allow the probe to try, alone and with each other paired knob moved first, and NodeBased's output did not change on the fixture. Either the knob is not implemented, or it acts only in a state the probe does not reach (two other knobs moved together, a payload the default node does not hold). Implement it, or unpair it in `docs/parity/nodebased_to_nuke.json` with a reason.
 
-- LightWrap (`LightWrap`): `disableluma`, `enableglow`, `LumaTolerance`, `white`, `gray`
-- Dither (`Dither`): `static_seed`
-- Soften (`Soften`): `quailty`
-- DirBlur (`DirBlur`): `holdout`, `PixelAspect`, `Quality`
-- EdgeDetect (`EdgeDetect`): `blurquality`
-- Laplacian (`Laplacian`): `quailty`, `crop`
 
-Not probed, because a one-frame pixel probe cannot see them: acts across frames (frame range, retiming, motion blur): `after`, `before`, `first`, `frame`, `frame_mode`, `last`, `motionblur`, `origfirst`, `origlast`, `origset`, `shutter`, `shuttercustomoffset`, `shutteroffset`; acts on metadata, not pixels: `metainput`, `rangeinput`; acts on the bounding box only, outside the fixture's format: `intersect`, `pbb`; Blur's `crop` (crop to format acts on the bounding box only); ChromaKeyer's `_replaceAlphaDiff` (acts only with a replace mode other than none); ChromaKeyer's `_replaceColor` (acts only with a replace mode other than none); ChromaKeyer's `_replaceAmount` (acts only with a replace mode other than none); ColorLookup's `source` (feeds the Set RGB, Set RGBA and Set A buttons, which add curve points; the kernel reads the curves, not these two); ColorLookup's `target` (feeds the Set RGB, Set RGBA and Set A buttons, which add curve points; the kernel reads the curves, not these two); Crop's `reformat` (makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)); Crop's `crop` (black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)); DirBlur's `BlurCenter` (the origin of a zoom or radial blur (a linear blur uses it only with UseTarget on); the default type is linear (tests/test_2d_behaviour_filter_f.py)); DirBlur's `Samples` (the number of taps of a zoom or radial blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)); DirBlur's `pixeloffset` (offsets the samples of a zoom blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)); DropShadow's `operation` (merges the shadowed picture over the bg input, so it acts only with bg wired (tests/test_2d_behaviour_filter_f.py)); EdgeBlur's `controlchannel` (picks the channel whose edges are blurred; the fixture's channels all change at every pixel, so the band is full whichever is read (tests/test_2d_behaviour_extra_filter.py shows it on a hard matte)); EdgeBlur's `edge_mult` (sets the width of the edge band; the fixture's alpha changes at every pixel, so the band is full at every value the probe tries (tests/test_2d_behaviour_extra_filter.py shows the band narrow)); EdgeBlur's `quality` (acts only when size exceeds quality, which is the size knob moved too (tests/test_2d_behaviour_filter_a.py shows the scaling for Blur; the cases here do the same for EdgeBlur)); EdgeBlur's `crop` (crop to format acts on the bounding box only (tests/test_2d_behaviour_extra_filter.py shows the window grow)); Glow's `crop` (crop to format acts on the bounding box only); HSVTool's `srccolor` (acts only with Color Replacement on (source and destination colour)); HSVTool's `dstcolor` (acts only with Color Replacement on (source and destination colour)); HSVTool's `huerolloffrange` (acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved); HSVTool's `satrolloffrange` (acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved); HSVTool's `brtrolloffrange` (acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved); IBKColor's `Size` (acts on a plate with a keyed-out patch to fill (screen erode and patch black set, as in tests/test_2d_behaviour_knobs_color.py); the fixture is not such a plate); IBKColor's `mult` (acts on a plate with a keyed-out patch to fill, as above); IBKGizmo's `ublu` (acts only with a background wired and luminance matching on); KeyMix's `invertMask` (inverts the mask channel, so it acts only with a mask wired); Keylight's `despillBias` (acts only with the despill bias ganged to the alpha bias off); Keylight's `insideReplaceMethod` (acts only with an inside matte wired); Keylight's `insideReplaceColour` (acts only with an inside matte wired); Keylight's `insideComponent` (acts only with an inside matte wired); Keylight's `outsideComponent` (acts only with an outside matte wired); Keylight's `SourceXMethod` (acts only with the source cropped, which is another knob moved); Keylight's `SourceYMethod` (acts only with the source cropped, which is another knob moved); LightWrap's `shadows_gain` (grades only the darkest part of the wrap; the fixture's wrap has none (tests/test_2d_behaviour_filter_f.py moves it on a dark wrap)); Merge's `screen_alpha` (acts only for operations that do not already composite by alpha (plus, minus, multiply and the like), not the default over); Sharpen's `crop` (crop to format acts on the bounding box only); Sharpen's `quailty` (caps the filter's size and so acts only once the size passes it; the default size 1 never does (tests/test_2d_behaviour_filter_g.py moves it at size 40)); Shuffle's `fromInput1` (routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph); Shuffle's `fromInput2` (routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph); Shuffle's `out2` (routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph); SoftClip's `softclip_min` (acts only with a conversion chosen; the default conversion is none); Soften's `crop` (crop to format acts on the bounding box only); TimeDissolve's `in` (acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)); TimeDissolve's `out` (acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)); TimeDissolve's `lut` (acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)); Toe's `invert` (inverts the mask channel, so it acts only with the mask channel on); Transform's `skew_order` (orders the two skews, so it acts only when skew X and skew Y are both set; the probe moves one at a time (tests/test_2d_behaviour_transform.py)); VectorCornerPin's `to1` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py); VectorCornerPin's `to2` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py); VectorCornerPin's `to3` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py); VectorCornerPin's `to4` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py). Whole nodes not probed: GridWarp (the grids live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)); Roto (shapes live in the node's payload and the default node holds none); RotoPaint (strokes live in the node's payload and the default node holds none); SplineWarp (the curve pairs live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)); Tracker (tracks are solved across frames; a one-frame probe cannot move them). Taps, whose behaviour is their input and which have neither `acts` nor `math`: `Viewer`, `Write`, `NoOp`, `Dot`, `PostageStamp`, `Output`, `Profile`, `PlanarTracker`.
+Not probed, because a one-frame pixel probe cannot see them: acts across frames (frame range, retiming, motion blur): `after`, `before`, `first`, `frame`, `frame_mode`, `last`, `motionblur`, `origfirst`, `origlast`, `origset`, `shutter`, `shuttercustomoffset`, `shutteroffset`; acts on metadata, not pixels: `metainput`, `rangeinput`; acts on the bounding box only, outside the fixture's format: `intersect`, `pbb`; Blur's `crop` (crop to format acts on the bounding box only); ChromaKeyer's `_replaceAlphaDiff` (acts only with a replace mode other than none); ChromaKeyer's `_replaceColor` (acts only with a replace mode other than none); ChromaKeyer's `_replaceAmount` (acts only with a replace mode other than none); ColorLookup's `source` (feeds the Set RGB, Set RGBA and Set A buttons, which add curve points; the kernel reads the curves, not these two); ColorLookup's `target` (feeds the Set RGB, Set RGBA and Set A buttons, which add curve points; the kernel reads the curves, not these two); Crop's `reformat` (makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)); Crop's `crop` (black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)); DirBlur's `BlurCenter` (the origin of a zoom or radial blur (a linear blur uses it only with UseTarget on); the default type is linear (tests/test_2d_behaviour_filter_f.py)); DirBlur's `Samples` (the number of taps of a zoom or radial blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)); DirBlur's `pixeloffset` (offsets the samples of a zoom blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)); DirBlur's `holdout` (keeps the held-out pixels out of a zoom blur's average, and the picture's alpha is the holdout channel; the default type is linear (tests/test_2d_behaviour_filter_k.py)); Dither's `static_seed` (holds the seed across frames, so a one-frame probe cannot see it (tests/test_2d_behaviour_draw.py compares two frames)); DropShadow's `operation` (merges the shadowed picture over the bg input, so it acts only with bg wired (tests/test_2d_behaviour_filter_f.py)); EdgeBlur's `controlchannel` (picks the channel whose edges are blurred; the fixture's channels all change at every pixel, so the band is full whichever is read (tests/test_2d_behaviour_extra_filter.py shows it on a hard matte)); EdgeBlur's `edge_mult` (sets the width of the edge band; the fixture's alpha changes at every pixel, so the band is full at every value the probe tries (tests/test_2d_behaviour_extra_filter.py shows the band narrow)); EdgeBlur's `quality` (acts only when size exceeds quality, which is the size knob moved too (tests/test_2d_behaviour_filter_a.py shows the scaling for Blur; the cases here do the same for EdgeBlur)); EdgeBlur's `crop` (crop to format acts on the bounding box only (tests/test_2d_behaviour_extra_filter.py shows the window grow)); EdgeDetect's `blurquality` (caps the pre-blur's size and so acts only once the blur size passes it; the default blur size 0 never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)); Glow's `crop` (crop to format acts on the bounding box only); HSVTool's `srccolor` (acts only with Color Replacement on (source and destination colour)); HSVTool's `dstcolor` (acts only with Color Replacement on (source and destination colour)); HSVTool's `huerolloffrange` (acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved); HSVTool's `satrolloffrange` (acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved); HSVTool's `brtrolloffrange` (acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved); IBKColor's `Size` (acts on a plate with a keyed-out patch to fill (screen erode and patch black set, as in tests/test_2d_behaviour_knobs_color.py); the fixture is not such a plate); IBKColor's `mult` (acts on a plate with a keyed-out patch to fill, as above); IBKGizmo's `ublu` (acts only with a background wired and luminance matching on); KeyMix's `invertMask` (inverts the mask channel, so it acts only with a mask wired); Keylight's `despillBias` (acts only with the despill bias ganged to the alpha bias off); Keylight's `insideReplaceMethod` (acts only with an inside matte wired); Keylight's `insideReplaceColour` (acts only with an inside matte wired); Keylight's `insideComponent` (acts only with an inside matte wired); Keylight's `outsideComponent` (acts only with an outside matte wired); Keylight's `SourceXMethod` (acts only with the source cropped, which is another knob moved); Keylight's `SourceYMethod` (acts only with the source cropped, which is another knob moved); Laplacian's `quailty` (caps the filter's size and so acts only once the size passes it; the default size never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)); Laplacian's `crop` (crop to format acts on the bounding box only); LightWrap's `shadows_gain` (grades only the darkest part of the wrap; the fixture's wrap has none (tests/test_2d_behaviour_filter_f.py moves it on a dark wrap)); Merge's `screen_alpha` (acts only for operations that do not already composite by alpha (plus, minus, multiply and the like), not the default over); Sharpen's `crop` (crop to format acts on the bounding box only); Sharpen's `quailty` (caps the filter's size and so acts only once the size passes it; the default size 1 never does (tests/test_2d_behaviour_filter_g.py moves it at size 40)); Shuffle's `fromInput1` (routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph); Shuffle's `fromInput2` (routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph); Shuffle's `out2` (routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph); SoftClip's `softclip_min` (acts only with a conversion chosen; the default conversion is none); Soften's `crop` (crop to format acts on the bounding box only); Soften's `quailty` (caps the filter's size and so acts only once the size passes it; the default size never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)); TimeDissolve's `in` (acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)); TimeDissolve's `out` (acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)); TimeDissolve's `lut` (acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)); Toe's `invert` (inverts the mask channel, so it acts only with the mask channel on); Transform's `skew_order` (orders the two skews, so it acts only when skew X and skew Y are both set; the probe moves one at a time (tests/test_2d_behaviour_transform.py)); VectorCornerPin's `to1` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py); VectorCornerPin's `to2` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py); VectorCornerPin's `to3` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py); VectorCornerPin's `to4` (the baked pin at the current frame, read only while Use baked pins is on (the Bake Corners button sets it); tests/test_2d_behaviour_filter_g.py). Whole nodes not probed: GridWarp (the grids live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)); Roto (shapes live in the node's payload and the default node holds none); RotoPaint (strokes live in the node's payload and the default node holds none); SplineWarp (the curve pairs live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)); Tracker (tracks are solved across frames; a one-frame probe cannot move them). Taps, whose behaviour is their input and which have neither `acts` nor `math`: `Viewer`, `Write`, `NoOp`, `Dot`, `PostageStamp`, `Output`, `Profile`, `PlanarTracker`.
 
 ### Layout differences
 
 Labels below are NodeBased's, then the guide's.
 
 - CurveTool (`CurveTool`): 8 of 11 paired knobs in Nuke's order
-- Text (`Text`): 27 of 40 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
 - AppendClip (`AppendClip`): 3 of 5 paired knobs in Nuke's order
 - TimeBlur (`TimeBlur`): 3 of 4 paired knobs in Nuke's order
-- ZDefocus (`ZDefocus`): `center` reads "Focus plane", Nuke "focus plane (C)"
-- Denoise (`Denoise`): `amount` reads "Strength", Nuke "Denoise Amount"
-- DegrainSimple (`DegrainSimple`): `rVal` reads "Red", Nuke "R blur"; `gVal` reads "Green", Nuke "G blur"; `bVal` reads "Blue", Nuke "B blur"
-- MotionBlur (`MotionBlur`): 1 of 2 paired knobs in Nuke's order; `shutterSamples` reads "Samples", Nuke "Shutter Samples"; `shutterTime` reads "Shutter", Nuke "Shutter Time"
-- VectorBlur (`VectorBlur`): 3 of 4 paired knobs in Nuke's order; `uv` reads "Vector layer", Nuke "uv channels"
-- ZSlice (`ZSlice`): `Zchan` reads "Depth layer", Nuke "Z"
 - ContactSheet (`ContactSheet`): 8 of 11 paired knobs in Nuke's order
 - ZMerge (`ZMerge`): `z_channel` reads "Depth layer", Nuke "Z channel"
-- CornerPin2D (`CornerPin`): `invert` reads "Direction", Nuke "invert"
-- STMap (`STMap`): 4 of 6 paired knobs in Nuke's order
-- IDistort (`IDistort`): 6 of 8 paired knobs in Nuke's order
-- PointsTo3D (`PointsTo3D`): 3 of 6 paired knobs in Nuke's order
 - AddTimeCode (`AddTimeCode`): 4 of 5 paired knobs in Nuke's order; `startcode` reads "Start timecode", Nuke "startcode"
 - BurnIn (`BurnIn`): 10 of 18 paired knobs in Nuke's order
 - Precomp (`Precomp`): 5 of 7 paired knobs in Nuke's order
