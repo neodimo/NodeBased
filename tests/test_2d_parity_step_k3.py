@@ -206,7 +206,7 @@ class MatteTests(Scratch):
         self.assertFalse(self.matte(dict(matte_list="nobody")).any())
 
     def test_views(self):
-        g = self.graph(dict(matte_list="cube", crypto_view="final"))
+        g = self.graph(dict(matte_list="cube", crypto_view="final", preview_enabled=0))     # Preview off: the input's own colour
         final = evaluator_pixels(g.doc, "key")
         np.testing.assert_array_equal(final[..., :3], beauty()[..., :3])       # colour untouched
         np.testing.assert_array_equal(final[..., 3], truth("cube"))            # matte in alpha
@@ -319,7 +319,7 @@ class LayersOnlyFileTests(Scratch):
         path = self.write_raw(names, list(layers.values()), meta)
         g = Graph()
         g.add("src", "Read", {"path": path})
-        g.add("key", "Cryptomatte", dict(matte_list="cube"), image="src")
+        g.add("key", "Cryptomatte", dict(matte_list="cube", preview_enabled=0), image="src")
         out = evaluator_pixels(g.doc, "key")
         np.testing.assert_array_equal(out[..., 3], truth("cube"))
         np.testing.assert_array_equal(out[..., :3], np.zeros((H, W, 3), np.float32))

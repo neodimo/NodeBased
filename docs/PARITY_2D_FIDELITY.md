@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 90.9 / 100** (167 nodes scored, rank-weighted; 93.2 counting only the nodes NodeBased has).
+**Overall fidelity: 91.1 / 100** (167 nodes scored, rank-weighted; 93.4 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 92.1 (94.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 92.3 (94.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -38,7 +38,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 95.1 | 80.7 | 94.4 | 34 |
 | Filter | 89.1 | 73.1 | 91.2 | 32 |
-| Keyer | 89.3 | 67.9 | 88.3 | 11 |
+| Keyer | 91.6 | 77.2 | 90.7 | 11 |
 | Merge | 99.4 | 98.6 | 99.5 | 12 |
 | Transform | 89.2 | 74.7 | 91.2 | 20 |
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
@@ -204,8 +204,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 6 | Ultimatte | - | missing | 0.0 | 0.0 | 0 (0/60) | - | - | 0 | - | - | - | - | no fixture |
 | 7 | IBKColor | `IBKColor` | supported | 84.4 | 79.2 | 100 (6/6) | 100 (4/4) | 25 | 50 | - | - | 100 | - | unmeasured |
 | 7 | IBKGizmo | `IBKGizmo` | supported | 76.4 | 59.7 | 47 (7/15) | 100 (6/6) | 71 | 100 | - | - | 100 | - | unmeasured |
-| 8 | Cryptomatte | `Cryptomatte` | partial | 43.8 | 40.0 | 25 (1/4) | - | - | 100 | - | - | - | - | no fixture |
-| 8 | Encryptomatte | `Encryptomatte` | partial | 46.4 | 42.9 | 29 (1/4) | - | - | 100 | - | - | - | - | no fixture |
+| 8 | Cryptomatte | `Cryptomatte` | partial | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 8 | Encryptomatte | `Encryptomatte` | partial | 92.9 | 90.5 | 86 (3/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
 ### Merge
 
@@ -308,18 +308,18 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 16 | DirBlur (Filter #9) | `DirBlur` | 4.41 | 60.3 | behaviour unchecked (no pixel case); knobs that change no pixels: `holdout`, `BlurCenter`, `UseTarget`, `Samples`, `PixelAspect`, `Quality` and 1 more; knob order differs from Nuke's (9 of 12 in order); 3 labels differ from Nuke's |
 | 17 | LightWrap (Draw #8) | `LightWrap` | 4.24 | 66.1 | behaviour unchecked (no pixel case); knobs that change no pixels: `disableluma`, `enableglow`, `saturation`, `LumaTolerance`, `white`, `gray` and 13 more; knob order differs from Nuke's (21 of 27 in order) |
 | 18 | LensDistortion (Transform #20) | `Undistort` | 3.95 | 21.0 | primary knobs missing: `distortionModelPreset`, `lens`; 55 secondary knobs missing |
-| 19 | Cryptomatte (Keyer #8) | `Cryptomatte` | 3.52 | 43.8 | primary knobs missing: `manifestSource`, `sidecarFilepath`, `previewEnabled` |
-| 20 | Encryptomatte (Keyer #8) | `Encryptomatte` | 3.35 | 46.4 | primary knobs missing: `matteNameType`, `mergeOperation`; 1 secondary knob missing: `exportWrite` |
-| 21 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 22 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
-| 23 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.14 | 46.7 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img`; knob order differs from Nuke's (3 of 6 in order) |
-| 24 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 25 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 26 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 27 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 28 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 29 | Denoise (Filter #12) | `Denoise` | 3.11 | 25.4 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise`; 1 label differs from Nuke's |
-| 30 | GridWarp (Transform #14) | `GridWarp` | 2.63 | 26.3 | 32 secondary knobs missing; sockets missing: `bg`, `dst`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 19 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 20 | Reconcile3D (Transform #18) | `Reconcile3D` | 3.26 | 41.3 | 13 secondary knobs missing; sockets missing: `img` |
+| 21 | PointsTo3D (Transform #17) | `PointsTo3D` | 3.14 | 46.7 | primary knobs missing: `cameraMovType`; 2 secondary knobs missing: `point3D`, `point2D`; sockets missing: `img`; knob order differs from Nuke's (3 of 6 in order) |
+| 22 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 23 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 24 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 25 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 26 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 27 | Denoise (Filter #12) | `Denoise` | 3.11 | 25.4 | primary knobs missing: `type`, `model`, `lift_blacks`, `profile`, `output`, `rolloff`, `smoothness`, `lumablend` and 1 more; 26 secondary knobs missing; sockets missing: `Motion`, `Noise`; 1 label differs from Nuke's |
+| 28 | GridWarp (Transform #14) | `GridWarp` | 2.63 | 26.3 | 32 secondary knobs missing; sockets missing: `bg`, `dst`; node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 29 | SmartVector (Time #8) | `SmartVector` | 2.59 | 17.1 | primary knobs missing: `strengthReg`, `matteChannel`, `output`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue`; sockets missing: `Matte` |
+| 30 | Bilateral (Filter #14) | `Bilateral` | 2.56 | 64.2 | primary knobs missing: `guide`, `positionalSigma`, `filter`; sockets missing: `guide`; 1 label differs from Nuke's |
 
 ## Formula cases
 

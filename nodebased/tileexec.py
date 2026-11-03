@@ -775,6 +775,9 @@ class TileExecutor:
             params = _tracked_transform_params(document, node_id, kind, params, frame, tier)
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
+        if kind == "Encryptomatte":
+            params["_matte_names"] = [document["nodes"][node["inputs"][f"matte{i}"]]["name"]
+                                      if node["inputs"].get(f"matte{i}") in document["nodes"] else "" for i in range(8)]
         halo = resolve_halo(kind, params)
         if kind == "RotoPaint" and not node["disabled"]:
             extra = self._rotopaint_halo(document, node_id, frame, tier, params)
@@ -1659,37 +1662,28 @@ def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
         layers["out2"] = np.concatenate(channels, axis=-1).astype(np.float32)
     elif kind == "Encryptomatte" and not disabled:
         from . import cryptomatte
+        names = cryptomatte.matte_names(params)
+        mask_artifact = inputs[9] if len(inputs) > 9 else None
+        mask = None if mask_artifact is None else _align_artifact_to(mask_artifact, region)[..., 3]
+        mix = float(np.clip(params.get("mix", 1.0), 0.0, 1.0))
         entries = []
         for i, artifact in enumerate(inputs[1:9]):
-            name = str(params.get(f"id{i}") or "").strip()
+            name = names[i]
             if artifact is None or not name:
                 continue
-            matte = _align_artifact_to(artifact, region).astype(np.float32, copy=False)
-            coverage = matte[..., 3]
-            entries.append((cryptomatte.name_to_bits(name), coverage))
+            coverage = _align_artifact_to(artifact, region).astype(np.float32, copy=False)[..., 3]
+            if mask is not None:
+                coverage = coverage * mask
+            entries.append((cryptomatte.name_to_bits(name), (coverage * mix).astype(np.float32)))
         if entries:
-            coverage = np.stack([entry[1] for entry in entries], axis=-1)
-            mask_artifact = inputs[9] if len(inputs) > 9 else None
-            if mask_artifact is not None:
-                mask = _align_artifact_to(mask_artifact, region)[..., 3]
-                coverage *= mask[..., None]
-            coverage *= float(np.clip(params.get("mix", 1.0), 0.0, 1.0))
-            order = np.argsort(-coverage, axis=-1, kind="stable")
-            ranked_ids = np.broadcast_to(np.asarray([entry[0] for entry in entries], np.uint32),
-                                         coverage.shape)
-            ranked_ids = np.take_along_axis(ranked_ids, order, axis=-1)
-            ranked_cov = np.take_along_axis(coverage, order, axis=-1)
-            padded = ((len(entries) + 1) // 2) * 2
-            if padded > len(entries):
-                ranked_ids = np.pad(ranked_ids, ((0, 0), (0, 0), (0, padded-len(entries))))
-                ranked_cov = np.pad(ranked_cov, ((0, 0), (0, 0), (0, padded-len(entries))))
             layer_name = str(params.get("layer_name") or "crypto_object")
-            for group in range(padded // 2):
-                arr = np.zeros((*ranked_cov.shape[:2], 4), np.float32)
-                arr[..., 0] = np.ascontiguousarray(ranked_ids[..., 2*group]).view(np.float32)
-                arr[..., 1] = ranked_cov[..., 2*group]
-                arr[..., 2] = np.ascontiguousarray(ranked_ids[..., 2*group+1]).view(np.float32)
-                arr[..., 3] = ranked_cov[..., 2*group+1]
+            operation = params.get("merge_operation", "replace")
+            old_names = cryptomatte.set_layer_names(layers, layer_name)
+            merging = bool(old_names) and operation != "replace"
+            written = cryptomatte.write_set(entries, [layers[name] for name in old_names] if merging else None, operation)
+            if merging:
+                layers = {k: v for k, v in layers.items() if k not in old_names}
+            for group, arr in enumerate(written):
                 layers[f"{layer_name}{group:02d}"] = arr
     elif kind == "ZMerge":
         first, second = inputs[0], inputs[1]

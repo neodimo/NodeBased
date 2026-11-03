@@ -895,8 +895,12 @@ SPECS = {
     # Cryptomatte (step K3): an ID matte from the Cryptomatte layer set of a multichannel EXR (docs/PARITY_2D.md).
     # `crypto_layer` names the set (empty = the first), `matte_list` lists the names (or `<raw ids>`)
     # to extract, `crypto_view` picks the output. Whole-image path only: it reads named layers.
+    # Lane 2 step F: `manifest_source` takes the name-to-id manifest from the file header (metadata) or from the JSON file at
+    # `sidecar_filepath` (sidecar); `preview_enabled` paints each id its own colour into the colour channels of the final view (the matte
+    # in alpha is the same either way). Saved nodes keep the plain input colour (`preview_enabled` 0, set by the load-time default below).
     "Cryptomatte": {"inputs": ["image"], "optional_inputs": ["mask"],
-                    "params": {"crypto_layer": "", "matte_list": "", "crypto_view": "final", "mix": 1.0}},
+                    "params": {"crypto_layer": "", "manifest_source": "metadata", "sidecar_filepath": "", "preview_enabled": 1,
+                               "matte_list": "", "crypto_view": "final", "mix": 1.0}},
     # Encryptomatte (step D2 finish): writes ranked Cryptomatte layers from up to eight named matte
     # inputs (docs/PARITY_2D.md Keyer row 8), readable straight back by this application's own
     # `Cryptomatte` node (and by any other Cryptomatte-aware reader once written to an EXR).
@@ -905,8 +909,10 @@ SPECS = {
     # passes through unchanged; only its layers and header metadata gain the crypto set, so bypass
     # (core.bypass_slot's default first-input rule) already does the right thing. Whole-image path
     # only, like the Cryptomatte reader: it writes named layers, which the tile path does not carry.
+    # Lane 2 step F: `matte_name_type` auto names each wired matte after the node it comes from, manual uses `id0`..`id7`; `merge_operation`
+    # adds the mattes to the set of that name already on the image (over, under, plus), `replace` writes the set afresh as it always did.
     "Encryptomatte": {"inputs": ["image"], "optional_inputs": [*[f"matte{i}" for i in range(8)], "mask"],
-                      "params": {"layer_name": "crypto_object",
+                      "params": {"matte_name_type": "auto", "layer_name": "crypto_object", "merge_operation": "over",
                                  **{f"id{i}": "" for i in range(8)}, "mix": 1.0}},
     # Image metadata (step S3; docs/PARITY_2D.md). ModifyMetaData's `edits` is one edit per line: `set <key> <value>`
     # (the value may hold [frame] and [metadata key]), `remove <key>`, `rename <old> <new>`. CopyMetaData lays the
@@ -1628,7 +1634,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "frame": (-1000000.0, 1000000.0), "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000), "reanchor_interval": (1, 100),
           "input_start": (-1000000.0, 1000000.0), "input_end": (-1000000.0, 1000000.0), "output_start": (-1000000.0, 1000000.0), "shutter_time": (0.0, 100.0),
           "vector_detail": (1, 6), "shutter_samples": (1, 32), "samples": (1, 64), "speed": (-100.0, 100.0), "fade_frames": (0, 10000), "temporal_frames": (1, 16), "blur_size": (0.0, 100.0),
-          "power": (-8, 8), "reload": (0, 1000000), "legacy_scale": (0, 1),
+          "power": (-8, 8), "reload": (0, 1000000), "legacy_scale": (0, 1), "preview_enabled": (0, 1),
           "tvi_iterations": (0, 200), "tvi_lambda": (0.0, 10000.0), "tvi_a": (0.0, 1.0),
           **{f"corner{i}_{axis}": (-8192.0, 8192.0) for i in range(1, 5) for axis in ("x", "y")},
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
@@ -2145,6 +2151,9 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "outside_component": list(_keyerknobs.COMPONENTS),
            # Cryptomatte's output view (step K3).
            "crypto_view": ["final", "matte", "colors"],
+           "manifest_source": ["metadata", "sidecar"],
+           # Encryptomatte (lane 2 step F).
+           "matte_name_type": ["auto", "manual"], "merge_operation": ["over", "under", "plus", "replace"],
            # Keyer's keyed quantity (group c3).
            "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max", "redscreen", "greenscreen", "bluescreen"],
            # Reformat (group 2c5).
@@ -2754,6 +2763,22 @@ def upgrade_document(document):
                     if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
                         _step_i_defaults(graph["nodes"])
             _step_i_defaults(nodes)
+            # Lane 2 step F: a Cryptomatte or Encryptomatte saved before its new knobs keeps what it did (no id colours in the final view,
+            # the names typed in `id0`..`id7`, the set written afresh). A node made since carries every key, so nothing is overwritten.
+            def _crypto_legacy(scope):
+                for current in scope.values():
+                    if not isinstance(current, dict):
+                        continue
+                    params = current.get("params")
+                    if isinstance(params, dict) and current.get("type") == "Cryptomatte":
+                        params.setdefault("preview_enabled", 0)
+                    if isinstance(params, dict) and current.get("type") == "Encryptomatte":
+                        params.setdefault("matte_name_type", "manual")
+                        params.setdefault("merge_operation", "replace")
+                    graph = current.get("graph")
+                    if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                        _crypto_legacy(graph["nodes"])
+            _crypto_legacy(nodes)
             for node in nodes.values():
                 if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D"):
                     params = node.get("params")

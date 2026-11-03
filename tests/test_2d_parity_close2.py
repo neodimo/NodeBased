@@ -321,7 +321,8 @@ def _build_encryptomatte(mattes, layer_name="crypto_object"):
     d = Dispatcher()
     d.execute({"op": "create", "id": "beauty", "type": "Constant", "params": {
         "width": 8, "height": 6, "red": 0.2, "green": 0.4, "blue": 0.6, "alpha": 1}})
-    d.execute({"op": "create", "id": "enc", "type": "Encryptomatte", "params": {"layer_name": layer_name}})
+    d.execute({"op": "create", "id": "enc", "type": "Encryptomatte",
+               "params": {"layer_name": layer_name, "matte_name_type": "manual"}})   # these tests type the names (the node's default is auto since lane 2 step F)
     d.execute({"op": "connect", "id": "enc", "input": "image", "source": "beauty"})
     for i, (name, alpha) in enumerate(mattes):
         d.execute({"op": "create", "id": f"m{i}", "type": "Constant", "params": {

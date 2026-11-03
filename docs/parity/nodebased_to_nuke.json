@@ -2742,6 +2742,9 @@
    ],
    "knobs": [
     {"nodebased": ["crypto_layer"], "nuke": ["cryptoLayerChoice"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Layer Selection', scripting name `cryptoLayerChoice`"},
+    {"nodebased": ["manifest_source"], "nuke": ["manifestSource"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Manifest Source', scripting name `manifestSource`"},
+    {"nodebased": ["sidecar_filepath"], "nuke": ["sidecarFilepath"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'sidecar', scripting name `sidecarFilepath`"},
+    {"nodebased": ["preview_enabled"], "nuke": ["previewEnabled"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Preview', scripting name `previewEnabled`"},
     {"nodebased": ["matte_list"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["crypto_view"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
@@ -2762,8 +2765,11 @@
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
-    {"nodebased": ["layer_name"], "nuke": ["matteName"], "kind": "renamed", "reason": "name of the matte layer"},
-    {"nodebased": ["id0"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["matte_name_type"], "nuke": ["matteNameType"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Matte Name', scripting name `matteNameType`"},
+    {"nodebased": ["layer_name"], "kind": "extra", "reason": "stands for Nuke's Cryptomatte Layer drop-down (no scripting name, not a counted knob): the set the mattes are added to, `crypto_object` unless renamed"},
+    {"nodebased": ["id0"], "nuke": ["matteName"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Matte Name', scripting name `matteName`, the name typed for the single Matte input (NodeBased's first matte input; `id1` to `id7` name the extra ones)"},
+    {"nodebased": ["merge_operation"], "nuke": ["mergeOperation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Merge Operation', scripting name `mergeOperation` ; NodeBased offers over, under and plus on a set of ids (the Merge operations that mean something on coverage), and `replace`, the older behaviour of writing the set afresh"},
+    {"nodebased": [], "nuke": ["exportWrite"], "kind": "unsupported", "reason": "a button that adds a Write node to the graph with the settings for .exr output; NodeBased has no node-creating button on a node panel, and a Write node set to exr writes the Cryptomatte layers and their manifest header as they are (tests/test_2d_behaviour_crypto.py)"},
     {"nodebased": ["id1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["id2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["id3"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},

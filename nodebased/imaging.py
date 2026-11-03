@@ -1643,6 +1643,9 @@ class Evaluator:
             if kind == "Read" and _readproxy.active(params, tier):
                 # The proxy stands in for the file while a proxy tier is on (nodebased/readproxy.py).
                 proxy_original, params = params, _readproxy.proxy_params(params)
+            if kind == "Encryptomatte":
+                params["_matte_names"] = [nodes[node["inputs"].get(f"matte{i}")]["name"] if node["inputs"].get(f"matte{i}") in nodes else ""
+                                          for i in range(8)]
             if kind == "ContactSheet":
                 params["_contact_labels"] = [nodes[node["inputs"].get(f"clip{i}")]["name"]
                                              if node["inputs"].get(f"clip{i}") in nodes else f"clip{i}"
@@ -4434,7 +4437,7 @@ class Evaluator:
         """Cryptomatte: the matte of the listed ids from the input's Cryptomatte layer set.
 
         The matte is the coverage summed over every rank whose id is listed (`nodebased/cryptomatte.py`).
-        View `final` keeps the input's colour and puts the matte in alpha (straight, not premultiplied),
+        View `final` keeps the input's colour (or paints the id colours there, with Preview on) and puts the matte in alpha (straight, not premultiplied),
         `matte` writes the matte as grey with the same alpha, `colors` paints every id its own colour.
         An empty matte list is an empty matte. The layers ride on the whole-image raster only, so the
         node sits on a Read (or a tap of one) and never runs on the tile path.
@@ -4448,7 +4451,12 @@ class Evaluator:
         for layer in members:
             if source.layers[layer].data != source.data:
                 raise ValueError(f"Cryptomatte: layer {layer!r} does not cover the same window as the image")
-        ids = cryptomatte.parse_matte_list(p.get("matte_list", ""), cryptomatte.manifest_for(source, name))
+        # Manifest Source: the table the file header holds (metadata), or the JSON file at the sidecar path (sidecar); the one named is the only one read.
+        if p.get("manifest_source", "metadata") == "sidecar":
+            manifest = cryptomatte.read_sidecar(p.get("sidecar_filepath", ""))
+        else:
+            manifest = cryptomatte.manifest_for(source, name)
+        ids = cryptomatte.parse_matte_list(p.get("matte_list", ""), manifest)
         view = p.get("crypto_view", "final")
         matte = cryptomatte.matte(source, members, ids)
         result = source.pixels.copy()
@@ -4459,6 +4467,9 @@ class Evaluator:
             result[..., :3] = cryptomatte.preview(source, members)
             result[..., 3] = 1.0
         else:
+            # Preview: the id colours are drawn in the colour channels (the matte boundaries); off, the input shows. The matte in alpha is the same.
+            if p.get("preview_enabled", 0):
+                result[..., :3] = cryptomatte.preview(source, members)
             result[..., 3] = matte
         pixels = Evaluator._apply_mask_mix(source.pixels, result, None if mask is None else mask.fit(source.data),
                                            p.get("mix", 1.0))
@@ -4482,8 +4493,9 @@ class Evaluator:
         matte_mask = inputs[9] if len(inputs) > 9 else None
         mask_pixels = None if matte_mask is None else matte_mask.fit(source.data)
         matte_mix = float(np.clip(p.get("mix", 1.0), 0.0, 1.0))
+        names = cryptomatte.matte_names(p)
         for i, matte in enumerate(inputs[1:9]):
-            name = str(p.get(f"id{i}") or "").strip()
+            name = names[i]
             if matte is None or not name:
                 continue
             if matte.display != source.display:
@@ -4495,28 +4507,19 @@ class Evaluator:
             entries.append((name, cov * matte_mix))
         if not entries:
             return Raster(source.pixels, source.data, source.display, source.layers, source.meta)
-        ids = np.array([cryptomatte.name_to_bits(name) for name, _ in entries], np.uint32)
-        coverage = np.stack([cov for _, cov in entries], axis=-1).astype(np.float32)   # (H, W, N)
-        order = np.argsort(-coverage, axis=-1, kind="stable")
-        ranked_ids = ids[order]
-        ranked_cov = np.take_along_axis(coverage, order, axis=-1)
-        levels = max(2, -(-len(entries) // 2) * 2)   # even, at least 2: one group per two ranks
-        pad = levels - len(entries)
-        if pad:
-            ranked_ids = np.pad(ranked_ids, ((0, 0), (0, 0), (0, pad)))
-            ranked_cov = np.pad(ranked_cov, ((0, 0), (0, 0), (0, pad)))
-        new_layers = {}
-        for group in range(levels // 2):
-            layer = np.zeros((*ranked_cov.shape[:2], 4), np.float32)
-            layer[..., 0] = np.ascontiguousarray(ranked_ids[..., 2 * group]).view(np.float32)
-            layer[..., 1] = ranked_cov[..., 2 * group]
-            layer[..., 2] = np.ascontiguousarray(ranked_ids[..., 2 * group + 1]).view(np.float32)
-            layer[..., 3] = ranked_cov[..., 2 * group + 1]
-            new_layers[f"{layer_name}{group:02d}"] = Raster(layer, source.data, source.display)
-        manifest = {name: format(int(cryptomatte.name_to_bits(name)), "08x") for name, _ in entries}
+        operation = p.get("merge_operation", "replace")
+        old_layers = cryptomatte.set_layer_names(source.layers or {}, layer_name)
+        existing = [source.layers[name].pixels for name in old_layers] if operation != "replace" else None
+        written = cryptomatte.write_set([(cryptomatte.name_to_bits(name), cov) for name, cov in entries], existing, operation)
+        new_layers = {f"{layer_name}{group:02d}": Raster(layer, source.data, source.display) for group, layer in enumerate(written)}
+        ids = {**(cryptomatte.manifest_for(source, layer_name) if existing else {}),
+               **{name: cryptomatte.name_to_bits(name) for name, _ in entries}}
+        manifest = {name: format(int(bits), "08x") for name, bits in ids.items()}
         header = cryptomatte3d.cryptomatte_header(
             {layer_name: {"key": cryptomatte.set_key(layer_name), "manifest": manifest}})
-        merged_layers = {**(source.layers or {}), **new_layers}
+        # Merged into a set already there, the old rank layers go (the written ones hold every rank); written afresh, they stay as they always did.
+        kept = {k: v for k, v in (source.layers or {}).items() if k not in old_layers} if existing else (source.layers or {})
+        merged_layers = {**kept, **new_layers}
         merged_meta = {**(source.meta or {}), **header}
         return Raster(source.pixels, source.data, source.display, merged_layers, merged_meta)
 

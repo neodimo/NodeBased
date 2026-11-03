@@ -163,6 +163,18 @@ def parse_manifest(text):
     return {str(name): int(str(value), 16) & _MASK for name, value in table.items()}
 
 
+def read_sidecar(path):
+    """`{name: 32-bit id}` from a sidecar manifest file: the JSON text a header's `manifest` entry holds, kept in its own file."""
+    from pathlib import Path
+    path = str(path or "").strip()
+    if not path:
+        raise ValueError("Cryptomatte: Manifest Source is Sidecar but no sidecar file is set")
+    file = Path(path).expanduser()
+    if not file.is_file():
+        raise ValueError(f"Cryptomatte: the sidecar manifest does not exist: {file}")
+    return parse_manifest(file.read_text(encoding="utf-8"))
+
+
 def layer_sets(raster):
     """The Cryptomatte sets on a raster: `{set name: [layer names in rank order]}`. A set is a run
     of layers `<name>NN` that each hold R, G, B and A (the EXR reader stores a group without its
@@ -288,3 +300,74 @@ def token_for(raster, set_name, bits):
         if value == bits:
             return escape_name(name)
     return id_token(bits)
+
+
+MERGE_OPERATIONS = ("over", "under", "plus", "replace")
+
+
+def matte_names(params, sources=None):
+    """The eight matte names Encryptomatte writes: with `matte_name_type` auto, the name of the node each matte comes from (`sources`, the
+    walk's `_matte_names`; Nuke: "the name of the matte source node is used. For example, Roto1"); with manual, the names typed in `id0`..`id7`."""
+    typed = [str(params.get(f"id{i}") or "").strip() for i in range(8)]
+    if params.get("matte_name_type", "manual") != "auto":
+        return typed
+    named = params.get("_matte_names") if sources is None else sources
+    if named is None:
+        return typed
+    return [str(name or "").strip() for name in named] + [""] * (8 - len(named))
+
+
+def set_layer_names(layer_names, set_name):
+    """The rank layers of the set `set_name` among `layer_names` (`<set_name>NN`), in rank order."""
+    import re
+    found = [(int(m.group(1)), name) for name in layer_names for m in [re.fullmatch(re.escape(set_name) + r"(\d+)", name)] if m]
+    return [name for _, name in sorted(found)]
+
+
+def rank_arrays(layers):
+    """(ids, coverage) of the rank layers `layers` (arrays of shape (H, W, 4), best first): ids (H, W, K) uint32, coverage (H, W, K) float32."""
+    ids, coverage = [], []
+    for layer in layers:
+        layer = np.asarray(layer)
+        for slot in (0, 2):
+            ids.append(np.ascontiguousarray(layer[..., slot]).view(np.uint32))
+            coverage.append(layer[..., slot + 1])
+    return np.stack(ids, axis=-1), np.stack(coverage, axis=-1).astype(np.float32)
+
+
+def write_set(entries, existing=None, operation="replace"):
+    """The rank layers (a list of (H, W, 4) float32 arrays, group 0 first) of a Cryptomatte set made from `entries`, a list of
+    (id bits, coverage array). With `existing` (the rank layers already on the image under this set's name) and an operation other than
+    `replace`, the new mattes join the set the way a Merge joins its A input to its B: `over` takes the old coverage down by the new
+    mattes' total (B * (1 - a)), `under` takes the new coverage down by the old total (A * (1 - b)), `plus` keeps both. `replace` writes the
+    entries alone (the set that was there is gone), padded to an even number of ranks."""
+    new_ids = np.broadcast_to(np.array([bits for bits, _ in entries], np.uint32), (*entries[0][1].shape, len(entries)))
+    new_cov = np.stack([cov for _, cov in entries], axis=-1).astype(np.float32)
+    merging = bool(existing) and operation != "replace"
+    if merging:
+        old_ids, old_cov = rank_arrays(existing)
+        if operation == "over":
+            old_cov = old_cov * (1.0 - np.clip(new_cov.sum(axis=-1, keepdims=True), 0.0, 1.0))
+        elif operation == "under":
+            new_cov = new_cov * (1.0 - np.clip(old_cov.sum(axis=-1, keepdims=True), 0.0, 1.0))
+        ids, cov = np.concatenate([old_ids, new_ids], axis=-1), np.concatenate([old_cov, new_cov], axis=-1)
+    else:
+        ids, cov = new_ids, new_cov
+    order = np.argsort(-cov, axis=-1, kind="stable")
+    ids, cov = np.take_along_axis(ids, order, axis=-1), np.take_along_axis(cov, order, axis=-1)
+    if merging:     # ranks that hold nothing anywhere are dropped, so adding mattes over and over does not grow the set for ever
+        keep = max(1, int(np.flatnonzero((cov > 0).any(axis=(0, 1)))[-1]) + 1 if (cov > 0).any() else 1)
+        ids, cov = ids[..., :keep], cov[..., :keep]
+    levels = max(2, -(-cov.shape[-1] // 2) * 2)     # even, at least 2: one group per two ranks
+    pad = levels - cov.shape[-1]
+    if pad:
+        ids, cov = np.pad(ids, ((0, 0), (0, 0), (0, pad))), np.pad(cov, ((0, 0), (0, 0), (0, pad)))
+    layers = []
+    for group in range(levels // 2):
+        layer = np.zeros((*cov.shape[:2], 4), np.float32)
+        layer[..., 0] = np.ascontiguousarray(ids[..., 2 * group]).view(np.float32)
+        layer[..., 1] = cov[..., 2 * group]
+        layer[..., 2] = np.ascontiguousarray(ids[..., 2 * group + 1]).view(np.float32)
+        layer[..., 3] = cov[..., 2 * group + 1]
+        layers.append(layer)
+    return layers

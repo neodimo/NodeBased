@@ -1126,13 +1126,24 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("source_crop_top",), label="Crop top", soft_range=(0, 1)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Cryptomatte": _groups(
-        KnobGroup("string", ("crypto_layer",), label="Layer"),
+        KnobGroup("string", ("crypto_layer",), label="Layer Selection"),
+        KnobGroup("enum", ("manifest_source",), label="Manifest Source",
+                  help="Where the names-to-ids manifest comes from: the metadata embedded in the file, or the separate JSON file named below."),
+        KnobGroup("file_read", ("sidecar_filepath",), label="Sidecar",
+                  help="The manifest JSON file read when Manifest Source is Sidecar."),
+        KnobGroup("bool", ("preview_enabled",), label="Preview",
+                  help="Paints every id its own colour in the final view, so each matte's boundaries show. Off, the input shows; the matte in alpha is the same."),
         KnobGroup("string", ("matte_list",), label="Matte list"),
         KnobGroup("enum", ("crypto_view",), label="View"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Encryptomatte": _groups(
-        KnobGroup("string", ("layer_name",), label="Layer"),
-        *[KnobGroup("string", (f"id{i}",), label=f"Matte {i} name") for i in range(8)],
+        KnobGroup("enum", ("matte_name_type",), label="Matte Name",
+                  help="How each incoming matte is named: auto uses the name of the node it comes from (Roto1), manual uses the names typed below."),
+        *[KnobGroup("string", (f"id{i}",), label="Matte name" if i == 0 else f"Matte {i} name") for i in range(8)],
+        KnobGroup("enum", ("merge_operation",), label="Merge Operation",
+                  help="How the new mattes join the set already on the image: over (the new matte in front), under (behind) or plus. Replace writes the set afresh, as older graphs did."),
+        KnobGroup("string", ("layer_name",), label="Cryptomatte Layer",
+                  help="The set the mattes are added to; a set of that name already on the image is joined, otherwise a new one is written."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "IBKColor": _groups(
         KnobGroup("enum", ("screen_type",), label="Screen type"),
@@ -2051,6 +2062,13 @@ NUKE_LABELS.update({
     # label keeps the guide's text so the panel and the table read the same.
     "IBKGizmo": {"use_bg_luminance": "Use bkg luminnance"},
     "Vectorfield": {"cube_path": "Vectorfield file"},
+})
+
+
+# Lane 2 step F (11/2): Cryptomatte and Encryptomatte in the guide's order; NodeBased's own knobs follow.
+NUKE_LAYOUT.update({
+    "Cryptomatte": ("crypto_layer", "manifest_source", "sidecar_filepath", "preview_enabled", "matte_list"),
+    "Encryptomatte": ("matte_name_type", "id0", "merge_operation", "layer_name"),
 })
 
 
