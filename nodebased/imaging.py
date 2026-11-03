@@ -32,6 +32,7 @@ from . import timeknobs
 from . import tracker
 from . import transformbehaviour as _transformbehaviour
 from . import filterbehaviour as _filterbehaviour
+from . import vectorblurknobs as _vectorblurknobs
 from . import drawbehaviour as _draw
 from .raster import Raster, as_array, scale_window
 from .tiers import Region
@@ -2845,7 +2846,7 @@ class Evaluator:
                 kronos_frames = (target_frame, pairs, interpolation, unretimed)
                 fingerprint = [kind.lower(), target_frame, interpolation, kept,
                                *(d for _, a, b in pairs for d in (a[1], b[1])), *([unretimed[1]] if unretimed else [])]
-            if kind == "MotionBlur" and not node["disabled"] and not node["inputs"].get("fgvecs"):
+            if kind == "MotionBlur" and not node["disabled"] and not (node["inputs"].get("fgvecs") or node["inputs"].get("bgvecs")):
                 shutter = float(params["shutter"])
                 if params["shutter_offset"] == "start": low, high = frame, frame + shutter
                 elif params["shutter_offset"] == "end": low, high = frame - shutter, frame
@@ -2907,12 +2908,33 @@ class Evaluator:
                     t = float(params["which"]) if "which" in curves else t
                 params["which"] = t
                 fingerprint = ["time-dissolve", round(t, 9)]
-            if kind == "Denoise" and params.get("temporal") and not node["disabled"]:
+            denoise_roles = None
+            if kind == "Denoise" and not node["disabled"]:
+                from . import denoiseknobs as _dnk
                 source_key = node["inputs"].get("image")
-                temporal_samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
-                                                         tier=tier, typed=True, return_digest=True)
-                                    for sample_frame in (max(int(doc.get("time", {}).get("first", frame - 1)), frame - 1),
-                                                        min(int(doc.get("time", {}).get("last", frame + 1)), frame + 1))]
+                first_frame = int(doc.get("time", {}).get("first", frame - 1))
+                last_frame = int(doc.get("time", {}).get("last", frame + 1))
+                if _dnk.is_legacy(params):
+                    if params.get("temporal"):
+                        temporal_samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
+                                                                 tier=tier, typed=True, return_digest=True)
+                                            for sample_frame in (max(first_frame, frame - 1), min(last_frame, frame + 1))]
+                else:
+                    # The other frames the finished Denoise reads (nodebased/denoiseknobs.py): the neighbours temporal processing
+                    # blends, the frame the noise is analysed on and the frame the Automatic profile is measured on.
+                    wanted = []
+                    for distance in range(1, _dnk.temporal_frames(params) + 1):
+                        for offset in (-distance, distance):
+                            if first_frame <= frame + offset <= last_frame:
+                                wanted.append((f"neighbour:{offset}", frame + offset))
+                    if _dnk.wants_analysis_frame(params) and int(params["denoise_analysis_frame"]) != frame:
+                        wanted.append(("analysis", int(params["denoise_analysis_frame"])))
+                    if _dnk.wants_profile_frame(params) and int(params["denoise_profile_frame"]) != frame:
+                        wanted.append(("profile", int(params["denoise_profile_frame"])))
+                    if wanted:
+                        temporal_samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
+                                                                 tier=tier, typed=True, return_digest=True) for _, sample_frame in wanted]
+                        denoise_roles = [role for role, _ in wanted]
             if kind in _TIME_REMAP_KINDS and not node["disabled"]:
                 # The fingerprint is the *nested* call's own digest, not this walk's
                 # `hashes[source]` (which was computed at the wrong, outer `frame`): a still keeps
@@ -3265,12 +3287,20 @@ class Evaluator:
                         warped = self._apply_mask_mix(base.pixels, warped,
                             None if mask is None else mask.fit(base.data), float(params["mix"]))
                     raster = Raster(warped.astype(np.float32), base.data, base.display, base.layers, base.meta)
-                elif kind == "MotionBlur" and node["inputs"].get("fgvecs") and not node["disabled"]:
+                elif kind == "MotionBlur" and (node["inputs"].get("fgvecs") or node["inputs"].get("bgvecs")) and not node["disabled"]:
                     # FgVecs (lane 9 step L): the vectors (pixels per frame) are given, so no neighbouring frame is read or estimated.
                     # Each pixel averages `samples` points along its vector over the shutter time (nodebased/motionblur.py).
+                    # With BgVecs and a matte the vector is matte * FgVecs + (1 - matte) * BgVecs (nodebased/motionblurknobs.py).
                     from . import motionblur as _motionblur
+                    from . import motionblurknobs as _mbknobs
                     image = values[node["inputs"]["image"]]
-                    vecs = values[node["inputs"]["fgvecs"]].fit(image.data)
+                    fg_key, bg_key = node["inputs"].get("fgvecs"), node["inputs"].get("bgvecs")
+                    vecs = values[fg_key or bg_key].fit(image.data)[..., :2]
+                    if fg_key and bg_key:
+                        matte_key = node["inputs"].get("matte")
+                        matte = _mbknobs.matte_from_channel(params.get("motion_matte_channel", "None"), image.pixels,
+                                                           None if not matte_key else values[matte_key].fit(image.data))
+                        vecs = _mbknobs.combine_vectors(vecs, values[bg_key].fit(image.data)[..., :2], matte)
                     blurred = self._vector_blur(image.pixels, vecs[..., 0], vecs[..., 1], _motionblur.fgvecs_blur_params(params))
                     mask = values.get(node["inputs"].get("mask"))
                     raster = Raster(self._apply_mask_mix(image.pixels, blurred,
@@ -3282,10 +3312,18 @@ class Evaluator:
                         raise ValueError("MotionBlur: shutter samples must have matching display windows")
                     output_data = a.data.union(b.data)
                     ap, bp = a.fit(output_data), b.fit(output_data)
-                    flow = self._motion_flow(values[node["inputs"]["image"]], ap, bp,
-                                             output_data, params)
+                    from . import motionblurknobs as _mbknobs
+                    image = values[node["inputs"]["image"]]
+                    matte = None
+                    if not _mbknobs.is_legacy(params):
+                        matte_key = node["inputs"].get("matte")
+                        matte = _mbknobs.matte_from_channel(params.get("motion_matte_channel", "None"), image.fit(output_data),
+                                                           None if not matte_key else values[matte_key].fit(output_data))
+                    flow = self._motion_flow(image, ap, bp, output_data, params, matte)
                     pblur = {"vector_scale": 1.0, "max_length": 100.0, "vector_offset": 0.0,
                              "vector_method": "forward", "vector_alpha": "none", "samples": int(params["samples"])}
+                    if not _mbknobs.is_legacy(params):
+                        pblur["resample"] = _mbknobs.resample_name(params)
                     blurred = self._vector_blur(ap, flow[...,0], flow[...,1], pblur)
                     mask = values.get(node["inputs"].get("mask"))
                     raster = Raster(self._apply_mask_mix(a.pixels, blurred,
@@ -3485,11 +3523,24 @@ class Evaluator:
                         raster = gpu_raster
                     elif temporal_samples is not None:
                         source = images[0]
-                        prev, nxt = (r for r, _ in temporal_samples)
-                        if prev.data != source.data or nxt.data != source.data:
-                            raise ValueError("Denoise temporal frames must have matching data windows")
-                        average = (prev.pixels + source.pixels + nxt.pixels) / np.float32(3.0)
-                        denoised = self._denoise(average, params)
+                        if denoise_roles is not None:
+                            # the finished Denoise: other frames by role, the Noise input and the Motion input (nodebased/denoiseknobs.py)
+                            refs = {"neighbours": []}
+                            for role, (picture, _) in zip(denoise_roles, temporal_samples):
+                                if role.startswith("neighbour:"):
+                                    refs["neighbours"].append((int(role.split(":")[1]), picture.fit(source.data)))
+                                else:
+                                    refs[role] = picture.fit(source.data)
+                            if len(images) > 3 and images[3] is not None:
+                                refs["motion"] = images[3].fit(source.data)[..., :2]
+                            noise_in = images[2] if len(images) > 2 else None
+                            denoised = self._denoise(source.pixels, params, None if noise_in is None else noise_in.pixels, refs)
+                        else:
+                            prev, nxt = (r for r, _ in temporal_samples)
+                            if prev.data != source.data or nxt.data != source.data:
+                                raise ValueError("Denoise temporal frames must have matching data windows")
+                            average = (prev.pixels + source.pixels + nxt.pixels) / np.float32(3.0)
+                            denoised = self._denoise(average, params)
                         mask = images[1] if len(images) > 1 else None
                         pixels = self._apply_mask_mix(source.pixels, denoised,
                                                       None if mask is None else mask.fit(source.data), params.get("mix", 1.0))
@@ -4707,6 +4758,9 @@ class Evaluator:
                              "no silent resampling is performed")
         mix = p.get("mix", 1.0)
         base = uv.data if kind == "STMap" else source.data
+        grow = int(p.get("grow_bbox", 0)) if kind == "VectorBlur" else 0
+        if grow > 0:
+            base = base.expand(grow, grow)             # expand blur bbox (nodebased/vectorblurknobs.py): the window grows on every side
         from . import keymixknobs
         # STMap's mask channel (fidelity step H) gates against the source too, so it joins the source rectangle like a wired mask.
         mask_token = p.get("maskChannelInput", "none") if kind == "STMap" else "none"
@@ -4716,6 +4770,9 @@ class Evaluator:
             return Raster(np.zeros((out.height, out.width, 4), np.float32), out, source.display)
         u_index, v_index = Evaluator._UV_SLOT[p["u_channel"]], Evaluator._UV_SLOT[p["v_channel"]]
         uv_pixels = uv.fit(out)
+        if grow > 0:
+            # the ring has no map of its own: it takes the nearest edge vectors
+            uv_pixels = np.pad(uv.fit(source.data), ((grow, grow), (grow, grow), (0, 0)), mode="edge")
         u = np.nan_to_num(uv_pixels[..., u_index], nan=0.0, posinf=0.0, neginf=0.0)
         v = np.nan_to_num(uv_pixels[..., v_index], nan=0.0, posinf=0.0, neginf=0.0)
         if kind == "STMap" and int(p.get("premultiplied", 0)):
@@ -4730,6 +4787,7 @@ class Evaluator:
         elif kind == "IDistort":
             filtered = Evaluator._idistort(source, u, v, p, out)
         else:
+            u, v = _vectorblurknobs.preprocess(u, v, p)      # uv offset, then blur uv
             if int(p.get("invert_uv", 0)):
                 u, v = -u, -v                       # invert uv (lane 9 step L): the vectors point the other way
             if str(p.get("vector_output", "result")) == "uvs":
@@ -4738,7 +4796,7 @@ class Evaluator:
                 filtered[..., 0], filtered[..., 1], filtered[..., 3] = u, v, 1.0
             else:
                 filtered = Evaluator._vector_blur(source.fit(out), u, v, p)
-        if uv.data != out:
+        if uv.data != out and not grow:
             # Outside the map's own window there is no map, so there is nothing to warp or blur.
             inside = np.zeros((out.height, out.width, 1), np.float32)
             overlap = out.intersect(uv.data)
@@ -5072,6 +5130,7 @@ class Evaluator:
         ix = np.arange(width, dtype=np.float64)[None, :]
         iy = np.arange(height, dtype=np.float64)[:, None]
         weighted = p.get("vector_alpha", "none") == "weighted"
+        soft_lines = bool(int(p.get("soft_lines", 0)))
         total = np.zeros(src.shape, np.float32)
         norm = np.zeros(src.shape[:2] + (1,), np.float32)
         fixed_samples = int(p["samples"]) if p.get("samples") else 0
@@ -5090,18 +5149,31 @@ class Evaluator:
                 sy = iy - sign * t * sample_vy
             else:
                 sx, sy = ix - sign * t * vx, iy - sign * t * vy
-            sample = Evaluator._resample(src, sx.astype(np.float32), sy.astype(np.float32), "bilinear")
-            weight = live[..., None].astype(np.float32)
-            if weighted:
-                weight = weight * sample[..., 3:4]
-            total += sample * live[..., None].astype(np.float32)
+            resample_name = p.get("resample", "bilinear")
+            sample = Evaluator._resample(src, sx.astype(np.float32), sy.astype(np.float32), resample_name)
+            if soft_lines:
+                # soft lines (nodebased/vectorblurknobs.py): the line is drawn three pixels wide, one pixel either side of it at a quarter weight
+                across_x, across_y = -vy / np.maximum(length, 1e-12), vx / np.maximum(length, 1e-12)
+                side = [Evaluator._resample(src, (sx + sign_ * across_x).astype(np.float32), (sy + sign_ * across_y).astype(np.float32), resample_name)
+                        for sign_ in (-1.0, 1.0)]
+                sample = (0.5 * sample + 0.25 * (side[0] + side[1])).astype(np.float32)
+            share = live[..., None].astype(np.float32)
+            profile = _vectorblurknobs.line_weight(t, float(p["vector_offset"]), p)
+            if profile is not None:
+                share = share * (np.asarray(profile, np.float32)[..., None] if np.ndim(profile) else np.float32(profile))
+            weight = share * sample[..., 3:4] if weighted else share
+            total += sample * share
             norm += weight
         if not weighted:
-            return (total / np.maximum(norm, 1e-12)).astype(np.float32)
-        result = np.zeros_like(src)
-        straight = np.where(norm > 0, total[..., :3] / np.maximum(norm, 1e-12), 0.0)
-        result[..., :3] = straight * src[..., 3:4]
-        result[..., 3:4] = src[..., 3:4]
+            result = (total / np.maximum(norm, 1e-12)).astype(np.float32)
+        else:
+            result = np.zeros_like(src)
+            straight = np.where(norm > 0, total[..., :3] / np.maximum(norm, 1e-12), 0.0)
+            result[..., :3] = straight * src[..., 3:4]
+            result[..., 3:4] = src[..., 3:4]
+        if soft_lines and int(p.get("blur_inside", 1)):
+            # blur inside: with soft lines on, where nothing moves a small blur gives a smoother join to the blurred lines
+            result = np.where((length <= 1e-9)[..., None], _vectorblurknobs.box3(src), result).astype(np.float32)
         return result
 
     @staticmethod
@@ -5113,10 +5185,13 @@ class Evaluator:
         return layer.fit(output_data)[..., :2].astype(np.float32)
 
     @staticmethod
-    def _motion_flow(source, first, second, output_data, params):
+    def _motion_flow(source, first, second, output_data, params, matte=None):
         field = Evaluator._motion_layer(source, params.get("vector_layer", "vector.forward"), output_data)
         if field is not None:
             return field
+        from . import motionblurknobs
+        if not motionblurknobs.is_legacy(params):
+            return motionblurknobs.estimate_flow(first, second, params, matte)
         from .opticalflow import flow_pair
         flow, _, _ = flow_pair(first, second, vector_detail=4, smoothness=1.0,
                                backend=params.get("flow_backend", "auto"))
@@ -7330,10 +7405,11 @@ class Evaluator:
         return result
 
     @staticmethod
-    def _denoise(image, p, noise=None):
-        """Denoise (nodebased/denoiseknobs.py); `noise` is the Noise input's pixels, None for the nominal noise level."""
+    def _denoise(image, p, noise=None, refs=None):
+        """Denoise (nodebased/denoiseknobs.py); `noise` is the Noise input's pixels, None for the nominal noise level; `refs` the other frames
+        and the Motion input's vectors."""
         from . import denoiseknobs
-        return denoiseknobs.denoise(image, p, noise)
+        return denoiseknobs.denoise(image, p, noise, refs)
 
     @staticmethod
     def _bilateral(image, p, guide=None):

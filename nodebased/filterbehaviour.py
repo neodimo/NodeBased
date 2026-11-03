@@ -50,7 +50,9 @@ NEW = {
 from . import bilateralknobs as _bilateral      # noqa: E402  (Bilateral's tables live with its kernel)
 from . import vectorcornerpinknobs as _vcp      # noqa: E402
 from . import denoiseknobs as _denoise          # noqa: E402
-UPGRADE_EXTRA = {"Denoise": _denoise.UPGRADE, "VectorCornerPin": _vcp.UPGRADE, "Bilateral": _bilateral.UPGRADE, "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
+from . import motionblurknobs as _motionblur    # noqa: E402
+from . import vectorblurknobs as _vectorblur    # noqa: E402
+UPGRADE_EXTRA = {"Denoise": _denoise.UPGRADE, "MotionBlur": _motionblur.UPGRADE, "VectorBlur": _vectorblur.UPGRADE, "VectorCornerPin": _vcp.UPGRADE, "Bilateral": _bilateral.UPGRADE, "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
                  "Laplacian": {"laplacian_size": 3.0},
                  "Convolve": {"normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"}}
 

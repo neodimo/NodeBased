@@ -411,4 +411,5 @@ def fgvecs_blur_params(params):
     else:
         offset = -0.5
     return {"vector_scale": shutter, "max_length": 0.0, "vector_offset": offset, "vector_method": "forward", "vector_alpha": "none",
-            "vector_sampling": "source", "samples": int(params.get("samples", 4))}
+            "vector_sampling": "source", "samples": int(params.get("samples", 4)),
+            "resample": str(params.get("motion_resampling", "Bilinear")).lower()}

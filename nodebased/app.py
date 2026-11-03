@@ -12796,6 +12796,18 @@ class Window(QMainWindow):
                     button.setToolTip(tip)
                     button.clicked.connect(lambda _checked=False, k=key, h=handler: h(k))
                     form.addRow(button)
+            if node["type"] == "Denoise":
+                # Nuke's Noise Analysis buttons: Analyze Noise, Export and Import (nodebased/denoiseknobs.py).
+                for name, text, tip, handler in (
+                        ("denoise-analyze", "Analyze noise", "Measure the noise now and hold the result on the node, locked",
+                         lambda k: self.denoise_analyze(k)),
+                        ("denoise-export", "Export", "Write the held analysis to the Analysis file", lambda k: self.denoise_export(k)),
+                        ("denoise-import", "Import", "Read the Analysis file into the held analysis and lock it", lambda k: self.denoise_import(k))):
+                    button = QPushButton(text)
+                    button.setObjectName(name)
+                    button.setToolTip(tip)
+                    button.clicked.connect(lambda _checked=False, k=key, h=handler: h(k))
+                    form.addRow(button)
             if node["type"] == "Read":
                 localize_button = QPushButton("Update localization")
                 localize_button.setObjectName("read-update-localization")
@@ -17412,6 +17424,52 @@ class Window(QMainWindow):
         self.statusBar().showMessage(f"Precomp rendered {len(written)} file{'s' if len(written) != 1 else ''}", 8000)
         self.command({"op": "set", "id": key, "param": "reload_write", "value": int(params.get("reload_write", 0)) + 1})
         return written
+
+    def denoise_analyze(self, key):
+        """Analyze Noise for Denoise: measure the noise now, hold the result on the node and lock the analysis."""
+        from . import denoiseknobs
+        try:
+            held = denoiseknobs.analyze_node(self.evaluator, self.graph_document(), key, self.dispatcher.document["time"]["current"])
+        except Exception as error:  # noqa: BLE001 - shown to the artist
+            self.statusBar().showMessage(f"Analyze noise failed: {error}", 12000)
+            return {}
+        for param, value in held.items():
+            self.commit_param(key, param, value)
+        self.statusBar().showMessage("Noise analysis held on the node and locked", 6000)
+        return held
+
+    def denoise_export(self, key):
+        """Export for Denoise: the held analysis (the Constant profile's level, with an Automatic profile also its profile) to the Analysis file."""
+        from . import denoiseknobs
+        params = self.graph_nodes()[key]["params"]
+        path = str(params.get("denoise_analysis_file", "")).strip()
+        analysis = denoiseknobs.held_analysis({**denoiseknobs.NEW, **params})
+        if not path:
+            self.statusBar().showMessage("Set the Analysis file first", 8000)
+            return None
+        if analysis is None:
+            self.statusBar().showMessage("Nothing to export: analyze the noise first", 8000)
+            return None
+        denoiseknobs.export_analysis(path, analysis, str(params.get("denoise_profile", "Constant")) == "Automatic")
+        self.statusBar().showMessage(f"Analysis exported to {path}", 6000)
+        return path
+
+    def denoise_import(self, key):
+        """Import for Denoise: read the Analysis file into the held analysis and lock it."""
+        from . import denoiseknobs
+        path = str(self.graph_nodes()[key]["params"].get("denoise_analysis_file", "")).strip()
+        if not path:
+            self.statusBar().showMessage("Set the Analysis file first", 8000)
+            return {}
+        try:
+            held = denoiseknobs.imported_params(denoiseknobs.import_analysis(path))
+        except (OSError, ValueError, KeyError) as error:
+            self.statusBar().showMessage(f"Import failed: {error}", 12000)
+            return {}
+        for param, value in held.items():
+            self.commit_param(key, param, value)
+        self.statusBar().showMessage("Noise analysis imported and locked", 6000)
+        return held
 
     def update_localization(self, key):
         """Nuke's updateLocalization for Read: replace the local copies of the Read's files now."""

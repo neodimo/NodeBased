@@ -124,7 +124,7 @@ NODE_CATEGORIES = {
         "Soften": "A soft gaussian-leaning blur with Nuke's filter shapes, amount, quality limit and value range.",
         "Defocus": "A disc blur that mimics an out-of-focus lens.",
         "Bilateral": "Smooths noise while preserving colour edges.",
-        "Denoise": "A practical bilateral-plus-temporal noise reducer (not Nuke Denoise).",
+        "Denoise": "Noise reducer after Nuke Denoise: a measured noise level, per-band and per-channel tuning and temporal blending (not Foundry's model).",
         "DegrainSimple": "Blurs RGB channels by separately chosen amounts.",
         "ZDefocus": "Blurs by depth around a chosen focal plane.",
         "Inpaint": "Fills a matte from neighboring frames, then a named spatial fill method.",

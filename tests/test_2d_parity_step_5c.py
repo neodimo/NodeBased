@@ -225,7 +225,7 @@ class IDistortTests(Scratch):
 
 class VectorBlurTests(Scratch):
     def test_a_uniform_field_gives_every_pixel_the_same_streak(self):
-        _, raster = self.run_node("VectorBlur", dot_image(8, 8), dict(uv_layer="motion"),
+        _, raster = self.run_node("VectorBlur", dot_image(8, 8), dict(vector_blur_type="uniform", uv_layer="motion"),
                                   layers=dict(motion=constant_layer(6.0, 0.0)))
         row = raster.pixels[8, :, 0]
         np.testing.assert_allclose(row[8:15], np.full(7, 1 / 7, np.float32), atol=1e-6)   # forward: with the motion
@@ -235,26 +235,26 @@ class VectorBlurTests(Scratch):
         # one vertical column of pixels: the same field blurs a vertical line into one streak per row
         line = rgba((0, 0, 0, 0))
         line[:, 4] = 1.0
-        _, streaks = self.run_node("VectorBlur", line, dict(uv_layer="motion"), layers=dict(motion=constant_layer(6.0, 0.0)))
+        _, streaks = self.run_node("VectorBlur", line, dict(vector_blur_type="uniform", uv_layer="motion"), layers=dict(motion=constant_layer(6.0, 0.0)))
         np.testing.assert_allclose(streaks.pixels[:, 4:11, 0], np.full((H, 7), 1 / 7, np.float32), atol=1e-6)
 
     def test_backward_method_streaks_the_other_way_and_scale_and_max_length_apply(self):
         layers = dict(motion=constant_layer(6.0, 0.0))
-        _, back = self.run_node("VectorBlur", dot_image(14, 8), dict(uv_layer="motion", vector_method="backward"),
+        _, back = self.run_node("VectorBlur", dot_image(14, 8), dict(vector_blur_type="uniform", uv_layer="motion", vector_method="backward"),
                                 layers=layers)
         np.testing.assert_allclose(back.pixels[8, 8:15, 0], np.full(7, 1 / 7, np.float32), atol=1e-6)
         self.assertEqual(float(np.abs(back.pixels[8, 15:]).max()), 0.0)
-        _, half = self.run_node("VectorBlur", dot_image(8, 8), dict(uv_layer="motion", vector_scale=0.5), layers=layers)
+        _, half = self.run_node("VectorBlur", dot_image(8, 8), dict(vector_blur_type="uniform", uv_layer="motion", vector_scale=0.5), layers=layers)
         np.testing.assert_allclose(half.pixels[8, 8:12, 0], np.full(4, 0.25, np.float32), atol=1e-6)
-        _, capped = self.run_node("VectorBlur", dot_image(8, 8), dict(uv_layer="motion", max_length=2.0), layers=layers)
+        _, capped = self.run_node("VectorBlur", dot_image(8, 8), dict(vector_blur_type="uniform", uv_layer="motion", max_length=2.0), layers=layers)
         np.testing.assert_allclose(capped.pixels[8, 8:11, 0], np.full(3, 1 / 3, np.float32), atol=1e-6)
         self.assertEqual(float(np.abs(capped.pixels[8, 11:]).max()), 0.0)
 
     def test_offset_shifts_the_shutter_and_zero_vectors_leave_the_picture_alone(self):
-        _, shifted = self.run_node("VectorBlur", dot_image(8, 8), dict(uv_layer="motion", vector_offset=1.0),
+        _, shifted = self.run_node("VectorBlur", dot_image(8, 8), dict(vector_blur_type="uniform", uv_layer="motion", vector_offset=1.0),
                                    layers=dict(motion=constant_layer(4.0, 0.0)))
         np.testing.assert_allclose(shifted.pixels[8, 12:17, 0], np.full(5, 0.2, np.float32), atol=1e-6)
-        _, still = self.run_node("VectorBlur", texture(), dict(uv_layer="motion"),
+        _, still = self.run_node("VectorBlur", texture(), dict(vector_blur_type="uniform", uv_layer="motion"),
                                  layers=dict(motion=constant_layer(0.0, 0.0)))
         np.testing.assert_allclose(still.pixels, texture(), atol=1e-6)
 
@@ -262,15 +262,15 @@ class VectorBlurTests(Scratch):
         source = rgba((0, 0, 0, 0))
         source[8, 8] = (1.0, 0.5, 0.25, 1.0)
         layers = dict(motion=constant_layer(4.0, 0.0))
-        _, plain = self.run_node("VectorBlur", source, dict(uv_layer="motion"), layers=layers)
-        _, weighted = self.run_node("VectorBlur", source, dict(uv_layer="motion", vector_alpha="weighted"), layers=layers)
+        _, plain = self.run_node("VectorBlur", source, dict(vector_blur_type="uniform", uv_layer="motion"), layers=layers)
+        _, weighted = self.run_node("VectorBlur", source, dict(vector_blur_type="uniform", uv_layer="motion", vector_alpha="weighted"), layers=layers)
         np.testing.assert_allclose(plain.pixels[8, 8:13, 3], np.full(5, 0.2, np.float32), atol=1e-6)
         np.testing.assert_array_equal(weighted.pixels[..., 3], source[..., 3])       # matte untouched
         np.testing.assert_allclose(weighted.pixels[8, 8], (1.0, 0.5, 0.25, 1.0), atol=1e-6)
         self.assertEqual(float(np.abs(weighted.pixels[8, 9:, :3]).max()), 0.0)        # no alpha, no colour kept
 
     def test_streak_length_from_a_wired_diagonal_field(self):
-        _, raster = self.run_node("VectorBlur", dot_image(6, 4), dict(vector_scale=1.0), uv_image=constant_layer(3.0, 4.0))
+        _, raster = self.run_node("VectorBlur", dot_image(6, 4), dict(vector_blur_type="uniform", vector_scale=1.0), uv_image=constant_layer(3.0, 4.0))
         red = raster.pixels[..., 0]
         self.assertAlmostEqual(float(red.sum()), 1.0, places=5)     # every sample's weight lands somewhere
         hits = np.argwhere(red > 1e-6)

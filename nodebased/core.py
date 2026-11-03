@@ -223,6 +223,8 @@ from . import effectbehaviour as _effectbehaviour
 from . import raysbehaviour as _raysbehaviour
 from . import bilateralknobs as _bilateralknobs
 from . import denoiseknobs as _denoiseknobs
+from . import motionblurknobs as _motionblurknobs
+from . import vectorblurknobs as _vectorblurknobs
 from . import warpknobs as _warpknobs
 from . import vectorcornerpinknobs as _vectorcornerpinknobs
 from . import drawfxbehaviour as _drawfxbehaviour
@@ -390,7 +392,7 @@ SPECS = {
                 "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus")}},
     "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask", "guide"],
                   "params": {"spatial_size": 3.0, "colour_sigma": 0.4, "mix": 1.0, **_bilateralknobs.NEW}},
-    "Denoise": {"inputs": ["image"], "optional_inputs": ["mask", "noise"],
+    "Denoise": {"inputs": ["image"], "optional_inputs": ["mask", "noise", "motion"],
                 "params": {"denoise_strength": 0.2, "temporal": 0, "mix": 1.0, **_denoiseknobs.NEW}},
     "DegrainSimple": {"inputs": ["image"], "optional_inputs": ["mask"],
                        "params": {"red_amount": 1.0, "green_amount": 1.0, "blue_amount": 1.0, "mix": 1.0}},
@@ -631,7 +633,7 @@ SPECS = {
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                               "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
                               "vector_sampling": "source", "vector_alpha": "none", "max_length": 100.0,
-                              "samples": 0, "mix": 1.0, "invert_uv": 0, "vector_output": "result"}},
+                              "samples": 0, "mix": 1.0, "invert_uv": 0, "vector_output": "result", **_vectorblurknobs.NEW}},
     # Shuffle's `layer` (step 5c) names one of the input's named layers (Raster.layers); empty or
     # "rgba" shuffles the input's own channels. Nuke's two-input Shuffle (12.1 and later), fidelity step B: the
     # inputs are B (`image`, the one every older Shuffle has) and A. Routing slot 1 reads layer `layer` (Nuke's
@@ -818,7 +820,7 @@ SPECS = {
               "flow_backend": "auto", **_retimeknobs.new_params("OFlow")}},
     "VectorToMotion": {"inputs": ["image"], "params": {"forward_layer": "smartvector.forward",
               "backward_layer": "smartvector.backward"}},
-    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask", "fgvecs"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward"}},
+    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask", "fgvecs", "bgvecs", "matte"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward", **_motionblurknobs.NEW}},
     # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
     "SmartVector": {"inputs": ["image"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
@@ -2366,6 +2368,10 @@ LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_P
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)
 CHOICES.update(_denoiseknobs.CHOICES)
 LIMITS.update(_denoiseknobs.LIMITS)
+CHOICES.update(_motionblurknobs.CHOICES)
+LIMITS.update(_motionblurknobs.LIMITS)
+CHOICES.update(_vectorblurknobs.CHOICES)
+LIMITS.update(_vectorblurknobs.LIMITS)
 LIMITS["invert_uv"] = (0, 1)      # VectorBlur
 CHOICES.update(_warpknobs.CHOICES)
 LIMITS.update(_warpknobs.LIMITS)
