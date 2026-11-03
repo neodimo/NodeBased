@@ -256,8 +256,8 @@ def square(size=40, lo=15, hi=25, alpha=1.0, colour=(1.0, 0.5, 0.25)):
 class DropShadowPixelTests(unittest.TestCase):
     def test_square_gets_a_shadow_at_the_offset_and_its_own_pixels_are_unchanged(self):
         frame = square()
-        # angle -90 points straight down (y is up, as in Nuke): the shadow lands 6 rows lower
-        out = kernel("DropShadow", frame, angle=-90.0, distance=6.0, shadow_size=0.0, opacity=1.0)
+        # angle 270 points straight down (the guide: 0 is left and 180 is right): the shadow lands 6 rows lower
+        out = kernel("DropShadow", frame, angle=270.0, distance=6.0, shadow_size=0.0, opacity=1.0)
         np.testing.assert_array_equal(out[15:25, 15:25], frame[15:25, 15:25])
         shadow = out[..., 3] - frame[..., 3]
         expected = np.zeros((40, 40), np.float32)
@@ -266,8 +266,8 @@ class DropShadowPixelTests(unittest.TestCase):
         np.testing.assert_allclose(shadow, expected, atol=1e-7)
         np.testing.assert_array_equal(out[25:31, 15:25, :3], np.zeros((6, 10, 3), np.float32))  # black tint
 
-    def test_angle_zero_offsets_right_and_a_tint_colours_the_shadow(self):
-        out = kernel("DropShadow", square(), angle=0.0, distance=4.0, shadow_size=0.0, opacity=1.0,
+    def test_angle_180_offsets_right_and_a_tint_colours_the_shadow(self):
+        out = kernel("DropShadow", square(), angle=180.0, distance=4.0, shadow_size=0.0, opacity=1.0,
                      red=0.0, green=1.0, blue=0.0)
         self.assertEqual(tuple(out[20, 27]), (0.0, 1.0, 0.0, 1.0))     # in the shadow band
         self.assertEqual(tuple(out[20, 30]), (0.0, 0.0, 0.0, 0.0))     # past it
@@ -275,7 +275,7 @@ class DropShadowPixelTests(unittest.TestCase):
 
     def test_opacity_scales_the_shadow_and_zero_is_identity(self):
         frame = square()
-        half = kernel("DropShadow", frame, angle=0.0, distance=4.0, shadow_size=0.0, opacity=0.5)
+        half = kernel("DropShadow", frame, angle=180.0, distance=4.0, shadow_size=0.0, opacity=0.5)
         self.assertAlmostEqual(float(half[20, 27, 3]), 0.5, places=6)
         np.testing.assert_array_equal(kernel("DropShadow", frame, opacity=0.0), frame)
 
@@ -300,7 +300,7 @@ class DropShadowPixelTests(unittest.TestCase):
 
     def test_shadow_falling_off_the_frame_is_clipped_not_wrapped(self):
         frame = square(size=20, lo=10, hi=20)
-        out = kernel("DropShadow", frame, angle=0.0, distance=8.0, shadow_size=0.0, opacity=1.0)
+        out = kernel("DropShadow", frame, angle=180.0, distance=8.0, shadow_size=0.0, opacity=1.0)
         np.testing.assert_array_equal(out, frame)                 # every shadow pixel is off the right edge or hidden
 
 

@@ -2101,7 +2101,8 @@
     {"nodebased": ["enable_dropshadow_effect"], "nuke": ["enable_dropshadow_effect"], "kind": "same"},
     {"nodebased": ["inherit_input_color"], "nuke": ["inherit_input_color"], "kind": "same"},
     {"nodebased": ["shrink_expand"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shrink/expand', scripting name `size`"},
-    {"nodebased": ["operation"], "nuke": ["operation"], "kind": "same"}
+    {"nodebased": ["operation"], "nuke": ["operation"], "kind": "same"},
+    {"nodebased": ["legacy_dropshadow_angle"], "kind": "extra", "reason": "NodeBased-only: graphs saved before DropShadow followed the guide (0 is left, 180 is right) count the angle from the right; lane 9 step F"}
    ]
   },
   "Defocus": {

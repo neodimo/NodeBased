@@ -32,6 +32,7 @@ LEGACY = {
     "Matrix": {"legacy_matrix_unclipped": 1},
     "Laplacian": {"legacy_laplacian": 1},
     "Convolve": {"legacy_convolve": 1},
+    "DropShadow": {"legacy_dropshadow_angle": 1},
 }
 NEW = {
     "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
@@ -39,6 +40,7 @@ NEW = {
     "Median": {"legacy_median_radius": 0},
     "Matrix": {"legacy_matrix_unclipped": 0},
     "Laplacian": {"legacy_laplacian": 0},
+    "DropShadow": {"legacy_dropshadow_angle": 0},
     "Convolve": {"legacy_convolve": 0, "normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"},
 }
 # What an older document's node of the kind gets on load besides the legacy flags: the new knobs, at the value that leaves it as it was.
@@ -54,6 +56,43 @@ def new_params(kind):
 def upgrade_params(kind):
     """What an older document's node of `kind` gets on load."""
     return {**LEGACY.get(kind, {}), **UPGRADE_EXTRA.get(kind, {})}
+
+
+def parse_point(text):
+    """`x,y` (or `x y`, or a two-number list) as a pair of floats; None when it is blank or not two numbers."""
+    if isinstance(text, (list, tuple)):
+        values = list(text)
+    else:
+        values = str(text or "").replace(",", " ").split()
+    try:
+        return (float(values[0]), float(values[1])) if len(values) == 2 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def shifted_target(p, dx, dy):
+    """DirBlur's Linear Target moved by (-dx, -dy), the way its centre is handed to the kernel relative to a rectangle's corner."""
+    point = parse_point(p.get("target", ""))
+    return p.get("target", "") if point is None else f"{point[0] - dx:g},{point[1] - dy:g}"
+
+
+def dirblur_target_direction(p):
+    """DirBlur's linear direction (array columns, rows; a unit vector) from BlurCenter to the Linear Target when UseTarget is on, else None
+    ("a vector is created between this and BlurCenter. This vector then determines the direction of linear blur")."""
+    if not int(p.get("UseTarget", 0)):
+        return None
+    point = parse_point(p.get("target", ""))
+    if point is None:
+        return None
+    vx, vy = point[0] - float(p.get("center_x", 0.0)), point[1] - float(p.get("center_y", 0.0))
+    size = math.hypot(vx, vy)
+    return None if size == 0.0 else (vx / size, vy / size)
+
+
+def dirblur_sample_count(p, automatic):
+    """Zoom and radial blur take `Samples` taps when it is set ("the number of samples"); 0 leaves the node's own count."""
+    wanted = int(p.get("Samples", 0))
+    return automatic if wanted <= 0 else max(1, wanted)
 
 
 def is_legacy(kind, p, name):

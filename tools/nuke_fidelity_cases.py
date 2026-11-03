@@ -381,6 +381,34 @@ def _run_payload_document(case):
     return np.asarray(Evaluator().evaluate_raster(d.document, target="n").pixels, dtype=np.float64)
 
 
+def _run_tracker_document(case):
+    """Run a Tracker case: the tracks (`_tracks`, a list of {frame: (x, y)} dicts) live in the node's payload, and `_frame` is the frame shown.
+    The plate (`_bg`, a {"type", "params"} spec at the fixture's size) goes in the node's image slot. The answer is the picture the evaluator
+    returns for the node over the format's rectangle (zero where the moved picture does not reach)."""
+    from nodebased.core import Dispatcher, empty_document
+    from nodebased.imaging import Evaluator
+    knobs = dict(case.nb_params)
+    tracks, frame, bg = knobs.pop("_tracks"), int(knobs.pop("_frame", 1)), knobs.pop("_bg")
+
+    def keyed(values):
+        frames = sorted(values)
+        return {"value": float(values[frames[0]]), "curve": {"interpolation": "linear",
+                                                              "keys": [{"frame": f, "value": float(values[f])} for f in frames]}}
+    d = Dispatcher(empty_document())
+    d.execute({"op": "create", "id": "bg", "type": bg["type"], "params": {"width": W, "height": H, **bg.get("params", {})}})
+    d.execute({"op": "create", "id": "n", "type": "Tracker", "params": knobs})
+    d.execute({"op": "connect", "id": "n", "input": "image", "source": "bg"})
+    d.execute({"op": "set_tracks", "id": "n", "tracks": [{"name": f"track{i + 1}", "enabled": 1, "x": keyed({f: p[0] for f, p in t.items()}),
+                                                          "y": keyed({f: p[1] for f, p in t.items()})} for i, t in enumerate(tracks)]})
+    raster = Evaluator().evaluate_raster(dict(d.document, view="n"), target="n", frame=frame)
+    shown, data = raster.display, raster.data
+    canvas = np.zeros((shown.height, shown.width, raster.pixels.shape[2]), np.float64)
+    both = shown.intersect(data)
+    canvas[both.y - shown.y:both.bottom - shown.y, both.x - shown.x:both.right - shown.x] = \
+        raster.pixels[both.y - data.y:both.bottom - data.y, both.x - data.x:both.right - data.x]
+    return canvas
+
+
 def run_nodebased(case, fx=None):
     """Run a case on NodeBased's evaluator kernel; returns the output array, or None when NodeBased cannot express the case.
 
@@ -392,6 +420,8 @@ def run_nodebased(case, fx=None):
         return None
     if "_shapes" in case.nb_params or "_items" in case.nb_params:
         return _run_payload_document(case)
+    if "_tracks" in case.nb_params:
+        return _run_tracker_document(case)
     from nodebased import core
     from nodebased.imaging import Evaluator
     fx = fx or make_fixtures()

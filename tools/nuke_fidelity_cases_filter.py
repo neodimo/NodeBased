@@ -776,6 +776,9 @@ def cases():
     _draw_cases(Case, out)
     _roto_cases(Case, out)
     _rotopaint_cases(Case, out)
+    _tracker_cases(Case, out)
+    _dropshadow_cases(Case, out)
+    _dirblur_cases(Case, out)
     return out
 
 
@@ -1393,3 +1396,178 @@ def _rotopaint_cases(Case, out):
          f"RotoPaint's reveal tool ({ROTOPAINT_GUIDE}, tool list: 'brush, clone/reveal, blur, and dodge/burn'): a reveal stroke shows the other image "
          "(Nuke's second bg input) where the brush paints, and leaves the first alone elsewhere",
          nuke_inputs=("bg", "bg2"))
+
+
+# ------------------------------------------------------------------------------------------------------------- step F
+TRACKER_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/tracker.html"
+
+
+def bilinear_shift(a, sx, sy):
+    """`a` (rows, columns, channels) moved by (sx, sy) pixels, sampled bilinearly: out[y, x] = a[y - sy, x - sx], the edge pixel repeating past the picture."""
+    a = np.asarray(a, np.float64)
+    h, w = a.shape[:2]
+    fx = np.arange(w)[None, :] - sx
+    fy = np.arange(h)[:, None] - sy
+    x0, y0 = np.floor(fx).astype(int), np.floor(fy).astype(int)
+    tx, ty = (fx - x0)[..., None], (fy - y0)[..., None]
+
+    def at(yy, xx):
+        return a[np.clip(yy, 0, h - 1), np.clip(xx, 0, w - 1)]
+    return ((at(y0, x0) * (1 - tx) + at(y0, x0 + 1) * tx) * (1 - ty) + (at(y0 + 1, x0) * (1 - tx) + at(y0 + 1, x0 + 1) * tx) * ty)
+
+
+def _tracker_cases(Case, out):
+    """Tracker: the transform its tracks give. One track moves by a sub-pixel (2.5, 1.5) between frames 1 and 2 (x across, y down, the
+    track's own pixel coordinates); match-move applies that motion to the plate, stabilise removes it. The plate is a ramp, so a bilinear
+    resample of it is exact; pixels whose source falls outside the plate are not scored. (Finding the track in footage is tested in
+    tests/test_2d_behaviour_filter_f.py: a case here has one frame and no footage to follow.)"""
+    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0}}
+    track = {1: (8.0, 6.0), 2: (10.5, 7.5)}
+    xx = np.arange(16)[None, :]
+    yy = np.arange(12)[:, None]
+
+    def moved_by(sx, sy, inside):
+        def expected(fx):
+            ref = bilinear_shift(_plate_array(plate), sx, sy)
+            return ref, np.broadcast_to(inside[..., None], ref.shape).copy()
+        return expected
+    forward = (xx >= 3) & (yy >= 2)
+    backward = (xx <= 12) & (yy <= 9)
+    out.append(Case(
+        id="tracker_match_move_follows_the_track", nuke="Tracker", nuke_class="Tracker4", nuke_knobs=(("transform", "match-move"),),
+        nuke_inputs=("bg",), nb_kind="Tracker", nb_params={"_tracks": [track], "_frame": 2, "_bg": plate, "mode": "match_move", "filter": "bilinear"},
+        nb_inputs=(), expected=moved_by(2.5, 1.5, forward), source="guide",
+        statement=f"Tracker ({TRACKER_GUIDE}): the transform menu's match-move 'applies the tracked motion to the image': a track that moves 2.5 pixels "
+                  "right and 1.5 down between the reference frame and frame 2 moves the plate by the same, resampled bilinearly"))
+    out.append(Case(
+        id="tracker_stabilise_removes_the_track", nuke="Tracker", nuke_class="Tracker4", nuke_knobs=(("transform", "stabilize"),),
+        nuke_inputs=("bg",), nb_kind="Tracker", nb_params={"_tracks": [track], "_frame": 2, "_bg": plate, "mode": "stabilise", "filter": "bilinear"},
+        nb_inputs=(), expected=moved_by(-2.5, -1.5, backward), source="guide",
+        statement=f"Tracker ({TRACKER_GUIDE}): stabilize 'removes the tracked motion from the image': the same track moves the plate 2.5 left and 1.5 up"))
+    out.append(Case(
+        id="tracker_reference_frame_is_the_identity", nuke="Tracker", nuke_class="Tracker4", nuke_knobs=(("transform", "match-move"),),
+        nuke_inputs=("bg",), nb_kind="Tracker", nb_params={"_tracks": [track], "_frame": 1, "_bg": plate, "mode": "match_move", "filter": "bilinear"},
+        nb_inputs=(), expected=moved_by(0.0, 0.0, np.ones((12, 16), bool)), source="guide",
+        statement="Tracker: at the reference frame the track has not moved, so match-move leaves the plate as it is"))
+
+
+DROPSHADOW_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/filter_nodes/dropshadow.html"
+
+
+def _shift_zero(a, dx, dy):
+    """`a` moved by (dx, dy) whole pixels, transparent (zero) where nothing arrives."""
+    out = np.zeros_like(a)
+    h, w = a.shape[:2]
+    out[max(0, dy):h + min(0, dy), max(0, dx):w + min(0, dx)] = a[max(0, -dy):h - max(0, dy), max(0, -dx):w - max(0, dx)]
+    return out
+
+
+def _dropshadow_cases(Case, out):
+    """DropShadow: the input's alpha, moved by the angle and distance, scaled by the opacity, tinted by the colour and put under the input.
+    The guide: angle 'where 0/360 is equal to left and 180 is right', distance 'in pixels', opacity 'controls the opacity of the shadow effect',
+    colour 'controls the color used for the drop shadow effect' (inherit input color off), 'enable drop shadow: when enabled, the drop shadow
+    effect is applied'. It states no composite formula; the shadow goes under the input as the standard over (shadow * (1 - alpha) added to the
+    premultiplied input). Pixels the shifted alpha reads from beyond the 16 x 12 picture are not scored (the guide does not say what is there)."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored=""):
+        out.append(Case(id=id, nuke="DropShadow", nuke_class="DropShadow", nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind="DropShadow",
+                        nb_params=nb_params, nb_inputs=("A",), expected=expected, source=source, statement=statement, unscored=unscored))
+
+    def shadowed(dx, dy, opacity=1.0, tint=(0.0, 0.0, 0.0), inherit=False):
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            alpha = src[..., 3:4]
+            planes = src if inherit else alpha
+            moved = _shift_zero(planes, dx, dy) * opacity
+            colour = np.ones(4) if inherit else np.array([*tint, 1.0])
+            ref = src + moved * colour * (1.0 - alpha)
+            valid = np.ones(src.shape, bool)
+            if dx > 0:
+                valid[:, :dx] = False
+            if dx < 0:
+                valid[:, dx:] = False
+            if dy > 0:
+                valid[:dy] = False
+            if dy < 0:
+                valid[dy:] = False
+            return ref, valid
+        return expected
+
+    base = {"distance": 3.0, "shadow_size": 0.0, "opacity": 1.0, "red": 0.0, "green": 0.0, "blue": 0.0}
+    knobs = (("dropshadow_distance", 3), ("softness", 0), ("opacity", 1.0))
+    case("dropshadow_angle_180_casts_right", knobs + (("dropshadow_angle", 180),), {**base, "angle": 180.0}, shadowed(3, 0), "convention",
+         f"DropShadow ({DROPSHADOW_GUIDE}): angle 'where 0/360 is equal to left and 180 is right' and distance 'in pixels': at 180 and 3 the shadow "
+         "is the alpha moved 3 pixels right, under the input")
+    case("dropshadow_angle_0_casts_left", knobs + (("dropshadow_angle", 0),), {**base, "angle": 0.0}, shadowed(-3, 0), "convention",
+         "DropShadow: angle 0 casts the shadow to the left")
+    case("dropshadow_distance_moves_the_shadow", (("dropshadow_distance", 5), ("softness", 0), ("opacity", 1.0), ("dropshadow_angle", 180)),
+         {**base, "distance": 5.0, "angle": 180.0}, shadowed(5, 0), "convention", "DropShadow: distance 5 moves the shadow 5 pixels")
+    case("dropshadow_opacity_scales_the_shadow", knobs[:2] + (("opacity", 0.4), ("dropshadow_angle", 180)),
+         {**base, "opacity": 0.4, "angle": 180.0}, shadowed(3, 0, opacity=0.4), "convention",
+         "DropShadow: opacity 'controls the opacity of the shadow effect': at 0.4 the shadow is 0.4 as strong")
+    case("dropshadow_colour_tints_the_shadow", knobs + (("dropshadow_angle", 180), ("color", [1.0, 0.25, 0.0])),
+         {**base, "angle": 180.0, "red": 1.0, "green": 0.25, "blue": 0.0}, shadowed(3, 0, tint=(1.0, 0.25, 0.0)), "convention",
+         "DropShadow: colour 'controls the color used for the drop shadow effect': the shadow takes it")
+    case("dropshadow_inherit_input_colour", knobs + (("dropshadow_angle", 180), ("inherit_input_color", True)),
+         {**base, "angle": 180.0, "inherit_input_color": 1}, shadowed(3, 0, inherit=True), "convention",
+         "DropShadow: inherit input color 'uses the input color as the shadow': the shadow carries the input's own colour and alpha")
+    case("dropshadow_disabled_is_the_input", (("enable_dropshadow_effect", False),), {**base, "enable_dropshadow_effect": 0},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "guide",
+         "DropShadow: 'enable drop shadow: when enabled, the drop shadow effect is applied': off, the picture passes unchanged")
+    case("dropshadow_angle_90_direction", knobs + (("dropshadow_angle", 90),), {**base, "angle": 90.0}, shadowed(0, -3), "convention",
+         "DropShadow: whether 90 casts up or down", unscored="the guide gives 0 as left and 180 as right and does not say which way the angle turns, "
+                                                             "so up or down at 90 and 270 is not stated")
+    case("dropshadow_softness_blur", (("softness", 4), ("dropshadow_distance", 3), ("dropshadow_angle", 180)),
+         {**base, "shadow_size": 4.0, "angle": 180.0}, shadowed(3, 0), "convention", "DropShadow: softness blurs the shadow",
+         unscored="the guide says softness 'controls how much blur/feather is applied to the shadow effect' and names no filter or radius; that a larger "
+                  "softness spreads the shadow and keeps its total is tested in tests/test_2d_behaviour_filter_f.py")
+
+
+DIRBLUR_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/filter_nodes/dirblur.html"
+
+
+def _dirblur_cases(Case, out):
+    """DirBlur: linear blur 'smears pixels in a given direction'; BlurLength is 'the length (in pixels) of the blur applied'; BlurAngle 'determines the
+    direction of linear blur'. The smear is taken as a uniform box of that length along the direction (the form a motion blur has); on whole-pixel
+    steps along the axes a length of 3 is the mean of three pixels. Pixels within one of the edge, where the box reaches past the picture, are not scored."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored=""):
+        out.append(Case(id=id, nuke="DirBlur", nuke_class="DirBlur2", nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind="DirBlur",
+                        nb_params=nb_params, nb_inputs=("A",), expected=expected, source=source, statement=statement, unscored=unscored))
+
+    def box_along_rows(length):
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            half = length // 2
+            ref = src.copy()
+            acc = np.zeros_like(src)
+            for t in range(-half, half + 1):
+                acc += _shifted(src, 0, t, half)
+            ref[...] = acc / length
+            return ref, _interior(src.shape, half) & np.ones(src.shape, bool)
+        return expected
+
+    def box_along_columns(length):
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            half = length // 2
+            acc = np.zeros_like(src)
+            for t in range(-half, half + 1):
+                acc += _shifted(src, t, 0, half)
+            return acc / length, _interior(src.shape, half)
+        return expected
+    common = {"blur_type": "linear", "channels": "rgba"}
+    case("dirblur_linear_length_3_along_x", (("BlurType", "linear"), ("BlurLength", 3), ("BlurAngle", 0)),
+         {**common, "length": 3.0, "angle": 0.0}, box_along_rows(3), "convention",
+         f"DirBlur ({DIRBLUR_GUIDE}): linear blur at angle 0 and length 3 averages each pixel with its two horizontal neighbours")
+    case("dirblur_linear_length_5_along_x", (("BlurType", "linear"), ("BlurLength", 5), ("BlurAngle", 0)),
+         {**common, "length": 5.0, "angle": 0.0}, box_along_rows(5), "convention", "DirBlur: length 5 is the mean of five pixels along the line")
+    case("dirblur_linear_angle_90_runs_down_the_columns", (("BlurType", "linear"), ("BlurLength", 3), ("BlurAngle", 90)),
+         {**common, "length": 3.0, "angle": 90.0}, box_along_columns(3), "convention",
+         "DirBlur: BlurAngle 90 turns the linear smear to the vertical")
+    case("dirblur_linear_length_1_is_the_input", (("BlurType", "linear"), ("BlurLength", 1), ("BlurAngle", 0)), {**common, "length": 1.0, "angle": 0.0},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "convention",
+         "DirBlur: a length of one pixel smears nothing")
+    case("dirblur_zoom_and_radial_formulas", (("BlurType", "zoom"), ("BlurLength", 10)), {"blur_type": "zoom", "length": 10.0, "center_x": 8.5, "center_y": 6.5},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "convention", "DirBlur: the zoom and radial smears",
+         unscored="the guide says BlurLength is 'in pixels' for every type and gives no path for zoom or radial (NodeBased reads the zoom length as a percent of "
+                  "the distance to the centre and the radial length as degrees); what is stated (the centre pixel stays, rays stay on their line, "
+                  "flat areas stay) is tested in tests/test_2d_behaviour_filter_f.py")

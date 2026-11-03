@@ -31,6 +31,7 @@ from . import tiers
 from . import timeknobs
 from . import tracker
 from . import transformbehaviour as _transformbehaviour
+from . import filterbehaviour as _filterbehaviour
 from . import drawbehaviour as _draw
 from .raster import Raster, as_array, scale_window
 from .tiers import Region
@@ -5385,7 +5386,7 @@ class Evaluator:
             # Radial and zoom are centred on a canvas point; the kernel sees only an array, so the
             # centre is handed over relative to this rectangle's own corner.
             local = dict(p, center_x=float(p.get("center_x", 0.0)) - out.x,
-                         center_y=float(p.get("center_y", 0.0)) - out.y)
+                         center_y=float(p.get("center_y", 0.0)) - out.y, target=_filterbehaviour.shifted_target(p, out.x, out.y))
             return Evaluator._dirblur(source.fit(out), local)
         if kind == "Mirror":
             if _transformbehaviour.is_legacy("Mirror", p, "legacy_mirror_window"):
@@ -7285,7 +7286,12 @@ class Evaluator:
         if not int(p.get("enable_dropshadow_effect", 1)):
             return image.copy()                      # fidelity step H: Nuke's "enable drop shadow" off draws the input alone
         height, width = image.shape[:2]
-        dx, dy = Evaluator._shadow_offset(p)
+        # The guide's angle: "0/360 is equal to left and 180 is right"; the offset below counts from right, counter-clockwise, so a new node
+        # turns the angle about the vertical (180 - angle). A node saved before the guide's reading keeps its angle as it was.
+        if _filterbehaviour.is_legacy("DropShadow", p, "legacy_dropshadow_angle"):
+            dx, dy = Evaluator._shadow_offset(p)
+        else:
+            dx, dy = Evaluator._shadow_offset(dict(p, angle=180.0 - float(p.get("angle", 225.0))))
         inherit = bool(int(p.get("inherit_input_color", 0)))
         # The alpha, or with `inherit_input_color` the premultiplied RGBA, so the shadow takes the colour it was cast from.
         planes = image if inherit else image[..., 3:4]
@@ -8023,6 +8029,9 @@ class Evaluator:
             reach = int(math.floor(half + 0.5))
             angle = math.radians(float(p.get("angle", 0.0)))
             dx, dy = math.cos(angle), -math.sin(angle)
+            toward = _filterbehaviour.dirblur_target_direction(p)
+            if toward is not None:
+                dx, dy = toward                  # UseTarget: the vector from BlurCenter to the target decides the direction
             pad = reach + 1
             padded = np.pad(image, ((pad, pad), (pad, pad), (0, 0)), mode="edge").astype(np.float64)
             acc = np.zeros(image.shape, dtype=np.float64)
@@ -8049,16 +8058,18 @@ class Evaluator:
                 span = abs(float(p.get("length", 0.0))) / 100.0
                 if span <= 0.0:
                     return image.copy()
-                count = int(min(96, max(2, math.ceil(far * span) + 1)))
-                steps = [1.0 + s for s in np.linspace(-span / 2.0, span / 2.0, count)]
-                positions = [(cx + rx * s, cy + ry * s) for s in steps]
+                count = _filterbehaviour.dirblur_sample_count(p, int(min(96, max(2, math.ceil(far * span) + 1))))
+                steps = [1.0 + s for s in (np.linspace(-span / 2.0, span / 2.0, count) if count > 1 else [0.0])]
+                reach_r = np.maximum(np.hypot(rx, ry), 1e-9)
+                push = float(p.get("pixeloffset", 0.0))        # lets you offset pixels along the direction of the blur
+                positions = [(cx + rx * s + push * rx / reach_r, cy + ry * s + push * ry / reach_r) for s in steps]
             else:
                 sweep = math.radians(abs(float(p.get("angle", 0.0))))
                 if sweep <= 0.0:
                     return image.copy()
-                count = int(min(96, max(2, math.ceil(far * sweep) + 1)))
+                count = _filterbehaviour.dirblur_sample_count(p, int(min(96, max(2, math.ceil(far * sweep) + 1))))
                 positions = []
-                for a in np.linspace(-sweep / 2.0, sweep / 2.0, count):
+                for a in (np.linspace(-sweep / 2.0, sweep / 2.0, count) if count > 1 else [0.0]):
                     c, s = math.cos(a), math.sin(a)
                     positions.append((cx + rx * c - ry * s, cy + rx * s + ry * c))
             acc = np.zeros(image.shape, dtype=np.float64)

@@ -396,7 +396,7 @@ SPECS = {
     "DirBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"blur_type": "linear", "angle": 0.0, "length": 20.0,
                            "center_x": 480.0, "center_y": 270.0, "BlurLayer": "rgba", "holdout": "off",
-                           "target": "", "UseTarget": 0, "Samples": 0, "PixelAspect": 1.0, "Quality": "normal", "pixeloffset": 0.0,
+                           "target": "480,240", "UseTarget": 0, "Samples": 0, "PixelAspect": 1.0, "Quality": "normal", "pixeloffset": 0.0,
                            "channels": "rgba", "mix": 1.0}},
     # DropShadow (step 3b): the input's alpha, offset by `distance` along `angle` (degrees,
     # counter-clockwise from +x with y up; the default points down and to the right), blurred by
@@ -405,9 +405,10 @@ SPECS = {
     # Step H adds Nuke's `bg` input (last, so the mask keeps its slot), merged under the shadowed picture with `operation`, and the
     # enable switch, `inherit_input_color` and the shrink / expand of the shadow (`shrink_expand`, Nuke's `size`).
     "DropShadow": {"inputs": ["image"], "optional_inputs": ["mask", "bg"],
-                   "params": {"angle": -45.0, "distance": 10.0, "shadow_size": 5.0, "opacity": 0.5,
+                   "params": {"angle": 225.0, "distance": 10.0, "shadow_size": 5.0, "opacity": 0.5,
                               "red": 0.0, "green": 0.0, "blue": 0.0, "mix": 1.0, "enable_dropshadow_effect": 1,
-                              "inherit_input_color": 0, "shrink_expand": 0.0, "operation": "over"}},
+                              "inherit_input_color": 0, "shrink_expand": 0.0, "operation": "over",
+                              **_filterbehaviour.new_params("DropShadow")}},
     # EdgeBlur (step 5a): blur only along the matte's edge. "edgeblur_size" is the Gaussian's
     # pixel reach (Nuke's `size`, renamed because "size" is a global LIMITS key with a 1 minimum);
     # `edge_mult` scales the width of the band around the alpha edge the blur is confined to
@@ -1662,7 +1663,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "filter_size": (-500.0, 500.0), "threshold": (0.0, 100.0),
-          "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
+          "laplacian_size": (0.0, 500.0), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_dropshadow_angle": (0, 1), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),

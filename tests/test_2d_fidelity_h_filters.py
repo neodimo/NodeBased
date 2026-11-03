@@ -318,7 +318,7 @@ class DropShadowTests(unittest.TestCase):
         g.add("src", "Rectangle", dict(width=N, height=N, legacy_draw_axes=1, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
                                        red=1.0, green=0.0, blue=0.0, alpha=1.0))
         constant(g, "bg", (0.5, 0.5, 0.5, 1.0))
-        g.add("sh", "DropShadow", {**dict(angle=0.0, distance=4.0, shadow_size=0.0, opacity=1.0, operation=operation), **params},
+        g.add("sh", "DropShadow", {**dict(angle=180.0, distance=4.0, shadow_size=0.0, opacity=1.0, operation=operation), **params},
               image="src", bg="bg")
         return g
 
