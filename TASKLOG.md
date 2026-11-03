@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step M of 2: ZDefocus gets Nuke's main tab: focal point, depth of field, layers and output modes (integrator tick)
+
+- **What was done:** `main` `a0488e12` -> `ef146d03` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `ef146d03`: Ran 8972 tests in 606.182 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step M: ZDefocus gets Nuke's main tab
 
 - **What was done (evidence):** one code commit plus one for the filter knobs; targeted gate green: tests.test_2d_behaviour_zdefocus_m (35, new), _draw, _filter_k, test_2d_parity_step_f2, test_tile_layers, test_tiers, test_nuke_fidelity_audit, test_knowledge, test_tiles, test_bypass, test_knobs, test_core, test_desktop.PropertiesLabelTests and FluidPropertiesPanelTests, test_nodecatalog, test_cache_correctness (test_directviewer_hit_order, 245 s, green on the first commit).

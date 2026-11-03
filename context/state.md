@@ -1,5 +1,25 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step M: ZDefocus gets Nuke's main tab
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (7:02 AM on 2026-11-03 PDT)
+
+`main` moved `a0488e12` -> `ef146d03` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `ef146d03` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0647.log`, started 6:47 AM): **Ran 8972 tests in 606.182 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step M of 2: ZDefocus gets Nuke's main tab: focal point, depth of field, layers and output modes.** Commits:
+  - `dc853f0b` ZDefocus: filter shape, aspect ratio, catadioptric and its size, bloom with threshold and gain, and gamma correction. Graphs saved before keep their picture; the audit report and the step M notes are rebuilt (2D behaviour, lane 9 step M)
+  - `e9af9382` ZDefocus gets Nuke's main tab: focal point, depth of field, blur inside, fill foreground, automatic layer spacing, depth layers, layer curve, and the output views (focal plane setup, layer setup, filter shape setup) with show image. Blur follows a thin-lens rule (size at infinite depth, larger in front of the focus plane, clipped at maximum). Graphs saved before keep their picture (legacy_zdefocus_focus). The audit report is rebuilt (2D behaviour, lane 9 step M)
+  Diff: 14 files changed, 754 insertions(+), 46 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** one code commit plus one for the filter knobs; targeted gate green: tests.test_2d_behaviour_zdefocus_m (35, new), _draw, _filter_k, test_2d_parity_step_f2, test_tile_layers, test_tiers, test_nuke_fidelity_audit, test_knowledge, test_tiles, test_bypass, test_knobs, test_core, test_desktop.PropertiesLabelTests and FluidPropertiesPanelTests, test_nodecatalog, test_cache_correctness (test_directviewer_hit_order, 245 s, green on the first commit).
 - **ZDefocus (`nodebased/zdefocusknobs.py`, flag `legacy_zdefocus_focus`, saved nodes 1):** output (result, focal plane setup, layer setup, filter shape setup), show image, fill foreground, focal point (`focal_x`, `focal_y`), blur inside, automatic layer spacing, depth layers, layer curve; and the secondary knobs shape, aspect, catadioptric and its size, bloom, threshold, gain, gamma correction. Blur follows size * |d - edge of the depth-of-field slice| / d, clipped at maximum; the layers are the blur sizes between 0 and maximum.
 - **Kernels changed:** `Evaluator._zdefocus` (evaluator and tile path share it); a focal point or the filter shape view needs the whole frame (`zdefocusknobs.needs_full_frame`, checked in `TileExecutor.supports_tiled`). Graphs saved before keep their picture (tested).
