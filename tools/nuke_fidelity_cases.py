@@ -363,11 +363,14 @@ def _run_payload_document(case):
     paint = items is not None
     kind = case.nb_kind
     d = Dispatcher(empty_document())
-    d.execute({"op": "create", "id": "n", "type": kind, "params": {"width": W, "height": H, **knobs}})
+    d.execute({"op": "create", "id": "n", "type": kind, "params": {**({} if paint else {"width": W, "height": H}), **knobs}})
 
     def plate(name, colour, slot):
-        d.execute({"op": "create", "id": name, "type": "Constant", "params": {"width": W, "height": H, "red": colour[0], "green": colour[1],
-                                                                                 "blue": colour[2], "alpha": colour[3]}})
+        if isinstance(colour, dict):                      # {"type": ..., "params": ...}: a textured plate
+            d.execute({"op": "create", "id": name, "type": colour["type"], "params": {"width": W, "height": H, **colour.get("params", {})}})
+        else:
+            d.execute({"op": "create", "id": name, "type": "Constant", "params": {"width": W, "height": H, "red": colour[0], "green": colour[1],
+                                                                                     "blue": colour[2], "alpha": colour[3]}})
         d.execute({"op": "connect", "id": "n", "input": slot, "source": name})
     if bg is not None:
         plate("bg", bg, "image" if paint else "bg")

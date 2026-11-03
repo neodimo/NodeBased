@@ -4137,7 +4137,8 @@ class Evaluator:
             if mask is not None and mask.display != source.display:
                 raise ValueError("RotoPaint mask must match the plate format")
             painted = paint.rasterise(source.fit(out), data or [], frame,
-                                      source=source.fit(out), reveal=None if reveal is None else reveal.fit(out))
+                                      source=source.fit(out), reveal=None if reveal is None else reveal.fit(out),
+                                      replace=_draw.paint_replaces(p))
             layers = source.layers
             layer_name = _chrome.output_mask_layer("RotoPaint", p)
             if layer_name:
@@ -5772,7 +5773,7 @@ class Evaluator:
             if base is None:
                 raise ValueError("RotoPaint: connect an image")
             source = inputs[1] if len(inputs) > 1 else None
-            return paint.rasterise(base, data or [], frame, source=source)
+            return paint.rasterise(base, data or [], frame, source=source, replace=_draw.paint_replaces(p))
         if kind == "ChannelShuffle":
             a, b = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             index = {"r": 0, "g": 1, "b": 2, "a": 3}

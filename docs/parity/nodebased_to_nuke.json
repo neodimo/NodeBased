@@ -340,6 +340,7 @@
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": [], "nuke": ["key"], "kind": "panel", "reason": "the shape list's spline key row (which key, how many, set or delete a key): the Roto panel shows per shape whether it is animated and keyed at the current frame (nodebased/rotopanel.py), and a key is set or deleted through the shape's per-property key curves (docs/ROTO_TRACKING.md, keyed values); there are no previous-key and next-key buttons"},
     {"nodebased": ["width", "height"], "nuke": ["format"], "kind": "components", "reason": "NodeBased sizes a generator with width/height; Nuke sets the format knob"},
     {"nodebased": ["premultiply_mode"], "nuke": ["premultiply"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'premultiply', scripting name `premultiply`"},
     {"nodebased": ["invert"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
@@ -625,6 +626,8 @@
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": [], "nuke": ["key"], "kind": "panel", "reason": "the shape list's spline key row (which key, how many, set or delete a key): the Roto panel shows per shape whether it is animated and keyed at the current frame (nodebased/rotopanel.py), and a key is set or deleted through the shape's per-property key curves (docs/ROTO_TRACKING.md, keyed values); there are no previous-key and next-key buttons"},
+    {"nodebased": ["legacy_paint_replace"], "kind": "extra", "reason": "NodeBased-only: graphs saved before RotoPaint followed the guide's Replace ignored the knob; lane 9 step E"},
     {"nodebased": ["dustbust_frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["dustbust_frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["dustbust_sensitivity"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},

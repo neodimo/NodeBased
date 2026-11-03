@@ -775,6 +775,7 @@ def cases():
                          "the mirrors and the filters")
     _draw_cases(Case, out)
     _roto_cases(Case, out)
+    _rotopaint_cases(Case, out)
     return out
 
 
@@ -1306,3 +1307,89 @@ def _roto_cases(Case, out):
          {"_shapes": feathered, "_bg": (0.0, 0.0, 0.0, 0.0), "premultiply_mode": "rgba"}, premult_rgba, "guide",
          "Roto premultiply rgba: 'selecting rgba premultiplies the alpha against itself (a*a)': on an empty plate the alpha holds the matte, "
          "so it ends as the matte squared (0.5625 where the matte reads 0.75); the colour channels are not compared")
+
+
+# ------------------------------------------------------------------------------------------------ RotoPaint (lane 9, step E)
+ROTOPAINT_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/draw_nodes/rotopaint.html"
+
+
+def paint_stroke(tool="paint", x=8.0, y=6.0, **extra):
+    """One single-dab stroke as the node's payload stores it: size 6, hard (hardness 1), red, full opacity; pressure 1."""
+    item = {"kind": "stroke", "name": "stroke1", "points": [{"x": float(x), "y": float(y), "pressure": 1.0}],
+            "brush": {"size": 6.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.2, "strength": 0.2}, "tool": tool,
+            "lifetime": {"mode": "all"}, "color": [1.0, 0.0, 0.0, 1.0], "source_offset": [0.0, 0.0], "source_frame": "relative",
+            "opacity": 1.0, "blend": "over", "visible": True, "follow_track": None, "patch_blend": 0.0}
+    item.update(extra)
+    return item
+
+
+def _plate_array(spec):
+    """The picture of a plate spec ({"type", "params"} or a flat RGBA tuple) at the fixture's size, from the evaluator (the plate is not under test)."""
+    from nodebased.core import Dispatcher, empty_document
+    from nodebased.imaging import Evaluator
+    d = Dispatcher(empty_document())
+    if isinstance(spec, dict):
+        d.execute({"op": "create", "id": "p", "type": spec["type"], "params": {"width": 16, "height": 12, **spec.get("params", {})}})
+    else:
+        d.execute({"op": "create", "id": "p", "type": "Constant", "params": {"width": 16, "height": 12, "red": spec[0], "green": spec[1],
+                                                                              "blue": spec[2], "alpha": spec[3]}})
+    d.execute({"op": "view", "id": "p"})
+    return np.asarray(Evaluator().evaluate_raster(d.document, target="p").pixels, np.float64)
+
+
+def _rotopaint_cases(Case, out):
+    """RotoPaint: what a stroke in the node's payload draws. A single dab with hardness 1 is a disc of the brush size's diameter; a pixel the
+    rim passes through is not scored (the rim's antialiasing is not stated), so the disc's interior and the picture outside the rim are."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored="", nuke_inputs=("bg",)):
+        out.append(Case(id=id, nuke="RotoPaint", nuke_class="RotoPaint", nuke_knobs=nuke_knobs, nuke_inputs=nuke_inputs, nb_kind="RotoPaint",
+                        nb_params=nb_params, nb_inputs=(), expected=expected, source=source, statement=statement, unscored=unscored))
+
+    yy, xx = np.mgrid[0:12, 0:16]
+    dist = np.hypot(xx + 0.5 - 8.0, yy + 0.5 - 6.0)
+    flat = (0.2, 0.4, 0.6, 1.0)
+    checker = {"type": "Checker", "params": {"size": 2}}
+
+    def disc(radius, inside, plate=flat):
+        """`inside` is the picture inside the disc (an RGBA tuple or an array), `plate` the picture outside; the rim (within 1 of the radius) is not scored."""
+        def expected(fx):
+            ground = _plate_array(plate)
+            ref = np.where((dist < radius)[..., None], np.asarray(inside, np.float64) if not isinstance(inside, np.ndarray) else inside, ground)
+            valid = ((dist < radius - 1.0) | (dist > radius + 1.0))[..., None] & np.ones((12, 16, 4), bool)
+            return ref, valid
+        return expected
+
+    case("rotopaint_stroke_is_a_disc_of_the_brush_diameter", (("brush_size", 6),), {"_items": [paint_stroke()], "_bg": flat},
+         disc(3.0, (1.0, 0.0, 0.0, 1.0)), "guide",
+         f"RotoPaint brush size ({ROTOPAINT_GUIDE}): 'sets the brush stroke diameter in pixels'; with hardness 1 (a hard edge) one dab of size 6 paints "
+         "the colour at full strength within 3 pixels of its centre and leaves the picture alone beyond; the rim is not scored")
+    case("rotopaint_a_larger_brush_paints_a_larger_disc", (("brush_size", 10),),
+         {"_items": [paint_stroke(brush={"size": 10.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.2, "strength": 0.2})], "_bg": flat},
+         disc(5.0, (1.0, 0.0, 0.0, 1.0)), "guide", "RotoPaint brush size: a size of 10 paints a disc of diameter 10 (radius 5)")
+    case("rotopaint_opacity_scales_the_stroke", (("opacity", 0.5),), {"_items": [paint_stroke(opacity=0.5)], "_bg": flat},
+         disc(3.0, tuple(0.5 * np.array((1.0, 0.0, 0.0, 1.0)) + 0.5 * np.array(flat))), "guide",
+         f"RotoPaint opacity ({ROTOPAINT_GUIDE}): 'the opacity of a shape or stroke in the list; 1 is totally opaque and 0 is transparent': at 0.5 the "
+         "stroke's interior is the colour and the picture half and half")
+    case("rotopaint_hardness_falloff_curve", (("brush_hardness", 0.2),),
+         {"_items": [paint_stroke(brush={"size": 6.0, "hardness": 0.2, "opacity": 1.0, "spacing": 0.2, "strength": 0.2})], "_bg": flat},
+         disc(3.0, (1.0, 0.0, 0.0, 1.0)), "guide", "RotoPaint brush hardness: the falloff from the brush centre to its edge",
+         unscored="the guide says hardness 'defines the rate of falloff from the brush center to its edge' and that increasing it 'decreases blurring "
+                  "at the stroke edges', but gives no curve; the monotone property (a harder brush paints more of a given pixel, a softer one less "
+                  "at the same distance) is tested in tests/test_2d_behaviour_roto.py")
+
+    def clone_expected(fx):
+        ground = _plate_array(checker)
+        shifted = np.roll(ground, 3, axis=1)          # a pixel takes the source three to its left: the clone offset moves the source 3 right
+        shifted[:, :3] = ground[:, :1]                # beyond the source's left edge its edge pixel repeats
+        ref = np.where((dist < 3.0)[..., None], shifted, ground)
+        valid = ((dist < 2.0) | (dist > 4.0))[..., None] & np.ones((12, 16, 4), bool)
+        return ref, valid
+    case("rotopaint_clone_offset_moves_the_source", (("source_transform_translate", [3, 0]),),
+         {"_items": [paint_stroke("clone", source_offset=[3.0, 0.0])], "_bg": checker}, clone_expected, "guide",
+         f"RotoPaint clone ({ROTOPAINT_GUIDE}): 'Clone tool: Ctrl/Cmd+click and drag to set the clone offset': the pixels the clone dab covers show the "
+         "plate moved by the offset (3 to the right: each covered pixel takes the plate pixel 3 to its left); the rim is not scored")
+    second = (0.9, 0.1, 0.2, 1.0)
+    case("rotopaint_reveal_shows_the_second_image", (("brush_type", "reveal"),),
+         {"_items": [paint_stroke("reveal")], "_bg": flat, "_second": second}, disc(3.0, second), "convention",
+         f"RotoPaint's reveal tool ({ROTOPAINT_GUIDE}, tool list: 'brush, clone/reveal, blur, and dodge/burn'): a reveal stroke shows the other image "
+         "(Nuke's second bg input) where the brush paints, and leaves the first alone elsewhere",
+         nuke_inputs=("bg", "bg2"))

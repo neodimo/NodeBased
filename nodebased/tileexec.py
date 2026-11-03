@@ -1193,7 +1193,8 @@ class TileExecutor:
 
         painted = paint.rasterise(base, items, frame, source=base, reveal=reveal,
                                   origin=(region.x, region.y),
-                                  canvas_size=(region.full_width, region.full_height))
+                                  canvas_size=(region.full_width, region.full_height),
+                                  replace=_drawbehaviour.paint_replaces(params))
         painted = paintknobs.premultiply(painted, params)
         return Evaluator._apply_mask_mix(base, painted, mask=mask, mix=params.get("mix", 1.0))
 

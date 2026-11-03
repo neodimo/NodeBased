@@ -235,8 +235,8 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
 
 
 def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
-              canvas_size=None):
-    out = image.copy()
+              canvas_size=None, replace=False):
+    out = np.zeros_like(image) if replace else image.copy()
     plate = image
     for item in items:
         delta = item.get("_track_delta", (0.0, 0.0))

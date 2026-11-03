@@ -810,6 +810,8 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("global_motionblur_shutter",), label="Global shutter", soft_range=(0, 2)),
         KnobGroup("enum", ("global_motionblur_shutter_offset_type",), label="Global shutter offset"),
         KnobGroup("float", ("global_motionblur_shutter_offset",), label="Global custom offset"),
+        KnobGroup("bool", ("legacy_paint_replace",), label="Legacy replace",
+                  help="Ignore Replace, as graphs saved before RotoPaint followed the guide do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Ramp": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),

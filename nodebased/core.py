@@ -636,7 +636,7 @@ SPECS = {
     "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2", "mask"],
                   "params": {"dustbust_frame_start": 1, "dustbust_frame_end": 100, "dustbust_sensitivity": 0.5,
                              "dustbust_patch_blend": 0.5, "mix": 1.0,
-                             **_paintknobs.new_params("RotoPaint")}},
+                             **_paintknobs.new_params("RotoPaint"), **_drawbehaviour.new_params("RotoPaint")}},
     # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
     # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
     # but unlike those three they also take an optional "image" input the shape is composited over
