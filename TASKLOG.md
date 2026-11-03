@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step H of 2: ScannedGrain, Flare, Glint and Sparkles compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `477d0dbb` -> `7d19d55b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7d19d55b`: Ran 8612 tests in 580.983 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step H of 2: GridWarp and SplineWarp get Nuke's inputs, mask controls and a checked warp (integrator tick)
 
 - **What was done:** `main` `ae42d3b7` -> `97ccfc91` plus this docs commit. Evidence and per-lane commit

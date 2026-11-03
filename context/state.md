@@ -1,5 +1,27 @@
 ## 2026-11-03 - lane 9 (2D behaviour), step H: GridWarp and SplineWarp
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:55 AM on 2026-11-03 PDT)
+
+`main` moved `477d0dbb` -> `7d19d55b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7d19d55b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0145.log`, started 1:45 AM): **Ran 8612 tests in 580.983 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step H of 2: ScannedGrain, Flare, Glint and Sparkles compute what Nuke computes.** Commits:
+  - `ae638c67` docs: fidelity report rebuilt on main 477d0dbb (lane 9 step H in)
+  - `2ceb0438` docs: fidelity report rebuilt on main ae42d3b7 (lane 9 step G in)
+  - `8d0bccf8` Regenerate the fidelity report and write up 2D behaviour step H
+  - `09f290eb` Flare, Glint, Sparkles and ScannedGrain compute what Nuke computes
+  Diff: 20 files changed, 1523 insertions(+), 108 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:35 AM on 2026-11-03 PDT)
 
 `main` moved `ae42d3b7` -> `97ccfc91` (lane commits cherry-picked onto main in lane order) and then to this
