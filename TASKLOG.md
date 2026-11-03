@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step C of 3: the draw nodes, Defocus and EdgeExtend compute what Nuke computes (integrator tick)
+
+- **What was done:** `main` `1045deae` -> `d66b7cca` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `d66b7cca`: Ran 8256 tests in 601.077 s, OK (skipped=37), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02 - lane 9 (2D behaviour), step C of 3: the draw nodes, Defocus and EdgeExtend
 
 - **What was done (evidence):** ten nodes read against the Nuke 17.0 pages and their kernels; three commits (Rectangle, Radial, Ramp; Noise, Grid, Grain, Dither; Defocus, ZDefocus, EdgeExtend).

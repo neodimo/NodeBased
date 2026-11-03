@@ -1,5 +1,28 @@
 ## 2026-11-02 - Lane 9 (2D behaviour), step B of 3: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox, BlackOutside
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:15 PM on 2026-11-02 PDT)
+
+`main` moved `1045deae` -> `d66b7cca` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d66b7cca` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-1556.log`, started 3:56 PM): **Ran 8256 tests in 601.077 s, OK (skipped=37), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step C of 3: the draw nodes, Defocus and EdgeExtend compute what Nuke computes.** Commits:
+  - `3b4baf83` RotoPaint clone tests pin the older Rectangle axes: the patch they paint was placed y-down; Rectangle now counts y up like Nuke (step C), which moved the patch, not the clone
+  - `f0b7d395` TASKLOG: lane 9 step C note
+  - `772f4c52` Defocus, ZDefocus and EdgeExtend compute what Nuke computes: Defocus's aspect ratio widens the disc without changing its height and scaling splits into width and height; ZDefocus gains the page's direct math, size and distance conversions; EdgeExtend gains source is premultiplied, premultiply and erode; older documents keep the older readings
+  - `e89b4450` Noise, Grid, Grain and Dither compute what Nuke computes: Noise samples a 3D field with zoffset, xrotate, yrotate, x/ysize and the transform tab, draws its colour and ramp as coverage; Grid counts squares from a Nuke default of 10 and draws the ramp; Grain gains irregularity, minimum rgb and Apply only through alpha with brightness weighting; Dither adds up to half the amount with monodither and static seed; older documents keep the older readings
+  - `bbed26d9` Rectangle, Radial and Ramp compute what Nuke computes: y counts from the bottom, ramps sampled at the pixel centre with the guide's five types, invert applies to the coverage, Radial gains perceptually linear and the colour ramp; older documents keep the older reading behind legacy_draw_axes
+  Diff: 25 files changed, 2147 insertions(+), 145 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:45 PM on 2026-11-02 PDT)
 
 `main` moved `f8775c44` -> `81851da6` (lane commits cherry-picked onto main in lane order) and then to this
