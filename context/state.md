@@ -1,3 +1,8 @@
+## 2026-11-02 - Lane 9 (2D behaviour), hangfix-1102: queue panel close, GPU display surface, CornerPin case
+
+Branch `openclaw/nb-2d-behaviour` (not merged). See the TASKLOG note of the same date for causes, the fixes and the measured frame times. Status: the queue panel close waits no longer than 2 seconds for running work;
+a GPU display is never built off the GUI thread without a surface made on it; the skewed CornerPin fidelity case no longer has a pixel centre on a quad edge. Open: CI on the pushed branch.
+
 ## 2026-11-02 - Lane 9 (2D behaviour), step B of 3: Transform, Reformat, CornerPin, Crop, Mirror, Position, Tile, AdjustBBox, BlackOutside
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:15 PM on 2026-11-02 PDT)
