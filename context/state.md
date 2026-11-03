@@ -1,3 +1,7 @@
+## 2026-11-03 - lane 2 (2D behaviour), step K: IBKGizmo, MatchGrade, HueCorrect, GenerateLUT and the time and metadata layouts
+
+Three code commits on openclaw/nb-2d-parity after 69aa0d36; see TASKLOG.md for the knobs, the legacy flags and the scores. No schema bump.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step K of 2: the thirteen knobs that change nothing, and Nuke's labels and order
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:05 AM on 2026-11-03 PDT)
