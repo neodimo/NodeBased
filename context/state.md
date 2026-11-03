@@ -1,3 +1,7 @@
+## 2026-11-03 - lane 9 (2D behaviour), step H: GridWarp and SplineWarp
+
+GridWarp has `dst` and `bg` inputs, `grid_output`, `background`, `background_mix` and the mask strip; SplineWarp has `premultiply`, `outputMask`, `crop_to_format`, `boundary_bbox`, `layer_warp`, `pair_warp` and `channels`. Code in `nodebased/warpknobs.py`, kernel `Evaluator._warp_node`. Tests `tests/test_2d_behaviour_warp_h.py` (19). Fidelity GridWarp 26.3 -> 70.2, SplineWarp 35.2 -> 82.1, overall 93.2 -> 93.3. See TASKLOG for what is open.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step G: Bilateral, Sharpen and VectorCornerPin
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (1:05 AM on 2026-11-03 PDT)

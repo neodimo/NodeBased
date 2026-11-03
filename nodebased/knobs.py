@@ -802,10 +802,19 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("curve_resolution",), label="Curve resolution"),
         KnobGroup("enum", ("bbox",), label="Bounding box"),
         KnobGroup("enum", ("root_warp",), label="Root warp"),
+        KnobGroup("float_slider", ("layer_warp",), label="Layer warp", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("pair_warp",), label="Pair warp", soft_range=(0, 1)),
+        KnobGroup("bool", ("premultiply",), label="Premultiply input"),
+        KnobGroup("string", ("outputMask",), label="Output mask"),
+        KnobGroup("bool", ("crop_to_format",), label="Crop to format"),
+        KnobGroup("bool", ("boundary_bbox",), label="Bounding box boundary curve"),
         KnobGroup("enum", ("filter",)), KnobGroup("enum", ("output",))),
     "GridWarp": _groups(
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
         KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
+        KnobGroup("enum", ("grid_output",), label="Output"),
+        KnobGroup("enum", ("background",), label="Background"),
+        KnobGroup("float_slider", ("background_mix",), label="Background mix", soft_range=(0, 1)),
         KnobGroup("enum", ("bbox",), label="Bounding box"), KnobGroup("enum", ("filter",))),
     "GridWarpTracker": _groups(
         KnobGroup("enum", ("drive",), label="Drive"),
@@ -2178,6 +2187,15 @@ NUKE_LAYOUT_LANE9.update({
     "VolumeRays": ("style", "luma_tol", "center_x", "pre_blur", "comp_me", "chk_desat", "CCorrect1_gamma", "CCorrect1_gain", "chk_radial", "radial_size", "rad_softness"),
     "EdgeBlur": ("channels", "edge_matte", "edgeblur_size", "kernel_filter", "quality", "crop", "edge_mult", "edgeblur_tint", "edgeblur_brightness"),
 })
+
+# Lane 9 step H (11/3): GridWarp and SplineWarp in the guide's order (docs/parity/nuke_nodes.json): channels and the mask strip lead GridWarp, channels
+# and the Output group lead SplineWarp; rows, columns, the curve resolution and NodeBased's own box choice keep their place after these.
+NUKE_LAYOUT_LANE9.update({
+    "GridWarp": ("channels", "maskChannelInput", "inject", "invert_mask", "fringe", "grid_output", "mix", "background", "background_mix", "bbox", "filter"),
+    "SplineWarp": ("channels", "premultiply", "outputMask", "crop_to_format", "boundary_bbox", "output", "mix", "root_warp", "layer_warp", "pair_warp"),
+})
+NUKE_LABELS.setdefault("GridWarp", {})["bbox"] = "Set bbox to"
+NUKE_LABELS.setdefault("SplineWarp", {})["boundary_bbox"] = "Bbox boundary curve"
 
 
 def _nuke_layouts():

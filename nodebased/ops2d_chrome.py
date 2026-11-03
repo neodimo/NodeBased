@@ -70,6 +70,9 @@ FILTER_CHROME = {
     "TVIScale": ("all", True, False),
     # GodRays (lane 2 step G) has `channels` (the guide's default is none: read as all) and the mask strip.
     "GodRays": ("all", True, False),
+    # GridWarp (lane 9 step H) has `channels` (the guide's default is all) and the mask strip, around its own full-frame kernel. SplineWarp's table
+    # lists `channels` only; its mask input is gated by the kernel itself.
+    "GridWarp": ("all", True, False), "SplineWarp": ("all", False, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
@@ -289,6 +292,8 @@ def upgrade_nodes(nodes):
         added.update(effectbehaviour.upgrade_params(node.get("type")))         # EdgeBlur, GodRays, BumpBoss (lane 2 step G)
         from . import raysbehaviour
         added.update(raysbehaviour.upgrade_params(node.get("type")))
+        from . import warpknobs
+        added.update(warpknobs.upgrade_params(node.get("type")))              # GridWarp and SplineWarp (lane 9 step H)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

@@ -782,6 +782,7 @@ def cases():
     _lightwrap_cases(Case, out)
     _bilateral_cases(Case, out)
     _vectorcornerpin_cases(Case, out)
+    _warp_cases(Case, out)
     return out
 
 
@@ -1689,3 +1690,72 @@ def _vectorcornerpin_cases(Case, out):
          {**pins(shifted_from, "from"), **pins(frame)}, moved(-3, -2), "convention",
          "VectorCornerPin: the From quad is the source of the pin: a From quad 3 right and 2 up of the format, pinned to the format, moves the picture "
          "3 left and 2 down")
+
+
+WARP_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/gridwarp.html"
+
+
+def warp_point(x, y, in_y=0.0, out_y=0.0):
+    return {"x": float(x), "y": float(y), "in_x": 0.0, "in_y": float(in_y), "out_x": 0.0, "out_y": float(out_y)}
+
+
+def _warp_cases(Case, out):
+    """GridWarp and SplineWarp: 'the source grid (or curves) is carried onto the destination one'. A key (or curve) moved by a known offset moves the
+    pixels under it by that offset, the controls left alone stay, and mix 0 is the input. The plate is a ramp (a bilinear resample of a ramp is exact),
+    the moves are whole pixels, and only the pixels the statement is about are scored (the field around a control is the interpolant's, which the guide
+    does not give). Payload coordinates are pixel centres, rows counted from the top."""
+    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0}}
+    w, h = 16, 12
+    xs, ys = (0.5, 7.5, 15.5), (0.5, 5.5, 11.5)
+    grid = [[{"x": x, "y": y} for x in xs] for y in ys]
+    moved_grid = [[dict(point) for point in row] for row in grid]
+    moved_grid[1][1] = {"x": 10.5, "y": 5.5}            # the one interior key, three pixels to the right
+    grid_node = {"rows": 3, "columns": 3, "filter": "bilinear"}
+
+    def case(id, kind, nb_params, expected, statement, unscored=""):
+        out.append(Case(id=id, nuke=kind, nuke_class=kind, nuke_knobs=(), nuke_inputs=("A",), nb_kind=kind,
+                        nb_params={"_plate": plate, **nb_params}, nb_inputs=("A",), expected=expected, source="convention",
+                        statement=f"{kind} ({WARP_GUIDE}): {statement}", unscored=unscored))
+
+    def key_moved(fx):
+        src = _plate_array(plate)
+        ref, valid = src.copy(), np.zeros(src.shape, bool)
+        ref[5, 10] = src[5, 7]
+        for row, col in ((0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1), (5, 10)):
+            valid[row, col] = True
+        return ref, valid
+
+    def whole(fx):
+        src = _plate_array(plate)
+        return src, np.ones(src.shape, bool)
+
+    case("gridwarp_interior_key_moves_the_pixel_under_it", "GridWarp", {**grid_node, "_warp": {"source": grid, "destination": moved_grid}}, key_moved,
+         "an interior key moved 3 pixels right carries the picture under it 3 pixels right and leaves the corner keys where they are")
+    case("gridwarp_mix_zero_is_the_source", "GridWarp", {**grid_node, "mix": 0.0, "_warp": {"source": grid, "destination": moved_grid}}, whole,
+         "mix 0 gives the source back")
+    case("gridwarp_output_source_is_the_source", "GridWarp", {**grid_node, "grid_output": "source", "_warp": {"source": grid, "destination": moved_grid}},
+         whole, "output 'source' shows the source picture, unwarped")
+    case("gridwarp_background_over_the_source", "GridWarp",
+         {**grid_node, "background": "on src", "background_mix": 1.0, "_warp": {"source": grid, "destination": moved_grid}}, key_moved,
+         "the warped picture composited over the source (on src) with the background mix full, an opaque picture, is the warped picture",
+         unscored="the guide's page for this node is a video transcript with no formula for the background and its mix; the reading is NodeBased's")
+
+    def curve(x, extent=(0.5, 10.5)):
+        # Handles a third of the length along the curve make the Bezier a straight, evenly sampled line (zero handles bunch the samples at the ends).
+        third = (extent[1] - extent[0]) / 3.0
+        return [warp_point(x, extent[0], out_y=third), warp_point(x, extent[1], in_y=-third)]
+
+    pairs = {"pairs": [{"name": "edge", "source": curve(7.5), "destination": curve(10.5)}]}
+    spline = {"curve_resolution": 5, "filter": "bilinear"}       # samples every 2 pixels: 0.5, 2.5 ... 10.5, each at a pixel centre
+
+    def on_curve(fx):
+        src = _plate_array(plate)
+        ref, valid = src.copy(), np.zeros(src.shape, bool)
+        for row in range(0, 11, 2):
+            ref[row, 10] = src[row, 7]
+            valid[row, 10] = True
+        return ref, valid
+
+    case("splinewarp_curve_moves_the_pixels_on_it", "SplineWarp", {**spline, "_warp": pairs}, on_curve,
+         "a source curve paired with a destination curve 3 pixels right carries the pixels on the curve 3 pixels right (the pixels at the curve's samples are scored)")
+    case("splinewarp_mix_zero_is_the_input", "SplineWarp", {**spline, "mix": 0.0, "_warp": pairs}, whole, "mix 0 gives the input back")

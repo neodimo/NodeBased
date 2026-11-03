@@ -4859,6 +4859,7 @@ class Evaluator:
     def _warp_node(kind, p, inputs, data, frame=1):
         """Evaluate curve/grid controls as an inverse-sampled image or normalized STMap."""
         from . import warps
+        from . import warpknobs as warps_knobs
         source = inputs[0]
         mask = inputs[1] if len(inputs) > 1 else None
         if mask is not None and mask.display != source.display:
@@ -4891,18 +4892,40 @@ class Evaluator:
         else:
             control_source = control_destination = np.zeros((0, 2), np.float64)
         out = source.data
-        if p.get("bbox") == "union" and len(control_destination):
+        gridwarp = kind == "GridWarp"
+        dst_in = inputs[2] if gridwarp and len(inputs) > 2 else None
+        bg_in = inputs[3] if gridwarp and len(inputs) > 3 else None
+        choice = str(p.get("grid_output", "source warped")) if gridwarp else "source warped"
+        if choice == "source":
+            return source
+        if choice == "destination" and dst_in is None:
+            return source
+        if choice == "destination":
+            return dst_in
+        # destination warped: the dst picture goes from the destination grid back to the source one
+        subject = dst_in if choice == "destination warped" and dst_in is not None else source
+        if choice == "destination warped":
+            control_source, control_destination = control_destination, control_source
+        if kind == "SplineWarp":
+            control_destination = warps_knobs.scaled_destination(control_source, control_destination, warps_knobs.amount(p))
+        if (p.get("bbox") == "union" and len(control_destination)
+                and (kind != "SplineWarp" or int(p.get("boundary_bbox", 1)))):
             low = np.floor(control_destination.min(axis=0)).astype(int)
             high = np.ceil(control_destination.max(axis=0)).astype(int) + 1
             from .tiers import Region
             out = out.union(Region(int(low[0]), int(low[1]), int(high[0]-low[0]), int(high[1]-low[1])))
+        if kind == "SplineWarp" and int(p.get("crop_to_format", 0)):
+            cropped = out.intersect(source.display)
+            if cropped.width > 0 and cropped.height > 0:
+                out = cropped
         yy, xx = np.mgrid[out.y:out.bottom, out.x:out.right]
         x, y = xx.astype(np.float64) + 0.5, yy.astype(np.float64) + 0.5
         field = (warps.displacement_field(control_source, control_destination, x, y, sigma)
                  if len(control_source) else np.zeros(x.shape + (2,), np.float32))
-        sx = x - field[..., 0] - source.data.x - 0.5
-        sy = y - field[..., 1] - source.data.y - 0.5
-        warped = Evaluator._resample(source.pixels, sx.astype(np.float32), sy.astype(np.float32), p["filter"])
+        sx = x - field[..., 0] - subject.data.x - 0.5
+        sy = y - field[..., 1] - subject.data.y - 0.5
+        resampled = warps_knobs.premultiplied(subject.pixels) if kind == "SplineWarp" and int(p.get("premultiply", 0)) else subject.pixels
+        warped = Evaluator._resample(resampled, sx.astype(np.float32), sy.astype(np.float32), p["filter"])
         if kind == "SplineWarp" and p.get("output", "image") == "stmap":
             mapped_x, mapped_y = x - field[..., 0], y - field[..., 1]
             result = np.zeros((out.height, out.width, 4), np.float32)
@@ -4916,11 +4939,22 @@ class Evaluator:
             blended = Evaluator._apply_mask_mix(identity, result,
                                                   None if mask is None else mask.fit(out), mix)
             return Raster(blended, out, source.display)
-        if mix == 0.0:
+        if mix == 0.0 and choice == "source warped":
             return source
-        pixels = Evaluator._apply_mask_mix(source.fit(out), warped,
+        if gridwarp and float(p.get("background_mix", 0.0)) > 0.0:
+            backdrop = warps_knobs.background_pixels(
+                str(p.get("background", "on src")), warped.shape, source.fit(out),
+                None if dst_in is None else dst_in.fit(out), None if bg_in is None else bg_in.fit(out))
+            warped = warps_knobs.with_background(warped, backdrop, p["background_mix"])
+        base = subject.fit(out) if choice == "destination warped" else source.fit(out)
+        pixels = Evaluator._apply_mask_mix(base, warped,
                                            None if mask is None else mask.fit(out), mix)
-        return Raster(pixels, out, source.display, source.layers, source.meta)
+        layers = source.layers
+        layer = warps_knobs.mask_layer_name(p) if kind == "SplineWarp" else None
+        if layer is not None:
+            layers = dict(layers or {})
+            layers[layer] = Raster(warps_knobs.moved_mask(field), out, source.display)
+        return Raster(pixels, out, source.display, layers, source.meta)
 
     @staticmethod
     def _stmap(source, u, v, p, out):

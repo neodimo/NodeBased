@@ -222,6 +222,7 @@ from . import filterbehaviour as _filterbehaviour
 from . import effectbehaviour as _effectbehaviour
 from . import raysbehaviour as _raysbehaviour
 from . import bilateralknobs as _bilateralknobs
+from . import warpknobs as _warpknobs
 from . import vectorcornerpinknobs as _vectorcornerpinknobs
 from . import transformbehaviour as _transformbehaviour
 from . import drawbehaviour as _drawbehaviour
@@ -581,10 +582,11 @@ SPECS = {
                             "filter": "bilinear", "blur": "none", "blur_scale": 1.0, "maskChannel": "rgba.alpha", "premultiplied": 1, "channels": "all", "invert_mask": 0, "mix": 1.0}},
     "SplineWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {"mix": 1.0, "curve_resolution": 12, "bbox": "source",
-                              "root_warp": "A", "filter": "bilinear", "output": "image"}},
-    "GridWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
+                              "root_warp": "A", "filter": "bilinear", "output": "image", **_warpknobs.new_params("SplineWarp")}},
+    # GridWarp's `dst` and `bg` follow the mask so a saved edge into the mask keeps its slot (lane 9 step H).
+    "GridWarp": {"inputs": ["image"], "optional_inputs": ["mask", "dst", "bg"],
                  "params": {"mix": 1.0, "rows": 5, "columns": 5, "bbox": "source",
-                            "filter": "bilinear"}},
+                            "filter": "bilinear", **_warpknobs.new_params("GridWarp")}},
     "GridWarpTracker": {"inputs": ["image"], "optional_inputs": ["mask", "vectors"],
                         "params": {"drive": "tracker", "tracker_id": "", "track_indices": "0,1,2,3", "reference_frame": 1,
                                    "forward_layer": "smartvector.forward", "backward_layer": "smartvector.backward",
@@ -2319,6 +2321,8 @@ CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)
 LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_PARAMS})
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)
+CHOICES.update(_warpknobs.CHOICES)
+LIMITS.update(_warpknobs.LIMITS)
 CHOICES["guide_channels"] = list(_bilateralknobs.GUIDE_CHANNELS)
 CHOICES["merge_bbox"] = list(_mergeknobs.BBOX_CHOICES)
 NODE_LIMITS["Sharpen"] = NODE_LIMITS["Soften"] = {"minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0)}

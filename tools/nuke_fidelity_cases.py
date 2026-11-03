@@ -437,10 +437,13 @@ def _run_plate_document(case):
     from nodebased.imaging import Evaluator
     knobs = dict(case.nb_params)
     plate, frame = knobs.pop("_plate"), int(knobs.pop("_frame", 1))
+    warp = knobs.pop("_warp", None)                   # GridWarp and SplineWarp: the grids or curve pairs of the node's payload (set_warp_data)
     d = Dispatcher(empty_document())
     d.execute({"op": "create", "id": "bg", "type": plate["type"], "params": {"width": W, "height": H, **plate.get("params", {})}})
     d.execute({"op": "create", "id": "n", "type": case.nb_kind, "params": knobs})
     d.execute({"op": "connect", "id": "n", "input": "image", "source": "bg"})
+    if warp is not None:
+        d.execute({"op": "set_warp_data", "id": "n", "data": warp})
     raster = Evaluator().evaluate_raster(dict(d.document, view="n"), target="n", frame=frame)
     shown, data = raster.display, raster.data
     canvas = np.zeros((shown.height, shown.width, raster.pixels.shape[2]), np.float64)

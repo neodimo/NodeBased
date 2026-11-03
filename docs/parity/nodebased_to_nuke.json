@@ -3418,9 +3418,19 @@
    "nodebased": "GridWarp",
    "inputs": [
     {"nodebased": "image", "nuke": "src", "kind": "mapped"},
-    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"},
+    {"nodebased": "dst", "nuke": "dst", "kind": "mapped"},
+    {"nodebased": "bg", "nuke": "bg", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
+    {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["grid_output"], "nuke": ["output"], "kind": "renamed", "reason": "`output` is already the shared image, stmap and channel choice in CHOICES; GridWarp's is source, source warped, destination or destination warped (morph is not offered)"},
+    {"nodebased": ["background"], "nuke": ["background"], "kind": "same"},
+    {"nodebased": ["background_mix"], "nuke": ["background_mix"], "kind": "same"},
     {"nodebased": ["bbox"], "nuke": ["boundary_box"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'set bbox to', scripting name `boundary_box`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
@@ -3435,6 +3445,15 @@
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
+    {"nodebased": ["premultiply"], "nuke": ["premultiply"], "kind": "same"},
+    {"nodebased": ["outputMask"], "nuke": ["outputMask"], "kind": "same"},
+    {"nodebased": ["crop_to_format"], "nuke": ["crop_to_format"], "kind": "same"},
+    {"nodebased": ["boundary_bbox"], "nuke": ["boundary_bbox"], "kind": "same"},
+    {"nodebased": ["layer_warp"], "nuke": ["layer_warp"], "kind": "same"},
+    {"nodebased": ["pair_warp"], "nuke": ["pair_warp"], "kind": "same"},
+    {"nodebased": [], "nuke": ["key"], "kind": "panel", "reason": "the spline keys are the animation keys of each curve point's scalars, per point in the node's payload (docs/SHAPES.md), not a node param"},
+    {"nodebased": [], "nuke": ["curves"], "kind": "panel", "reason": "the curves list is the node's payload `pairs` (a source and a destination curve per pair), edited in the viewer, not a node param"},
     {"nodebased": ["curve_resolution"], "nuke": ["curverez"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `curverez`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["root_warp"], "nuke": ["root_warp"], "kind": "same"},

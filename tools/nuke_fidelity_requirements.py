@@ -82,6 +82,9 @@ NOT_PROBED = {
     "Tracker": "tracks are solved across frames; a one-frame probe cannot move them",
     "Roto": "shapes live in the node's payload and the default node holds none",
     "RotoPaint": "strokes live in the node's payload and the default node holds none",
+    # Lane 9 step H (11/3): the grids and curves live in the node's payload; a default node holds none, so every knob leaves the picture alone (tests/test_2d_behaviour_warp_h.py moves each on a warp).
+    "GridWarp": "the grids live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)",
+    "SplineWarp": "the curve pairs live in the node's payload and the default node holds none (tests/test_2d_behaviour_warp_h.py moves each knob on a warp)",
 }
 
 
