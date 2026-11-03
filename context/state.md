@@ -1,5 +1,28 @@
 ## 2026-11-03 - lane 2 (2D behaviour), step K: IBKGizmo, MatchGrade, HueCorrect, GenerateLUT and the time and metadata layouts
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (4:35 AM on 2026-11-03 PDT)
+
+`main` moved `c198ea8a` -> `a6cf9dc7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a6cf9dc7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0416.log`, started 4:16 AM): **Ran 8787 tests in 587.057 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step K of 2: IBKGizmo, MatchGrade and HueCorrect get Nuke's missing main knobs, and Nuke's layout on the time and metadata panels.** Commits:
+  - `456b091c` docs: lane 2 step K note in TASKLOG and state
+  - `ad22299e` Time and metadata nodes follow Nuke's knob order: AddTimeCode, BurnIn, CurveTool, AppendClip, TimeBlur, ContactSheet and Precomp
+  - `ba23c9ad` GenerateLUT writes a .3dl as well as a .cube, with Nuke's file type, 1D preLUT size and style, bit depths and clamp output
+  - `c2cfdc27` MatchGrade gets Nuke's Task, Analysis, Mask, Apply Grade to Masked Region and Output knobs
+  - `62920aa2` IBKGizmo gets Nuke's color, screen range, luminance level enable, yellow, cyan, magenta and use bkg chroma knobs; HueCorrect gets mix luminance
+  Diff: 18 files changed, 780 insertions(+), 118 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Three code commits on openclaw/nb-2d-parity after 69aa0d36; see TASKLOG.md for the knobs, the legacy flags and the scores. No schema bump.
 
 ## 2026-11-03 - Lane 9 (2D behaviour), step K of 2: the thirteen knobs that change nothing, and Nuke's labels and order

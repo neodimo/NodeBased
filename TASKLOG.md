@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step K of 2: IBKGizmo, MatchGrade and HueCorrect get Nuke's missing main knobs, and Nuke's layout on the time and metadata panels (integrator tick)
+
+- **What was done:** `main` `c198ea8a` -> `a6cf9dc7` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a6cf9dc7`: Ran 8787 tests in 587.057 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 2 (2D behaviour), step K of 2: IBKGizmo, MatchGrade, HueCorrect and GenerateLUT get Nuke's missing main knobs; the time and metadata panels follow Nuke's order
 
 - **What was done (evidence):** three code commits, targeted gate green (the new `tests/test_2d_behaviour_knobs_k.py`, 29 tests, plus every module that greps for the changed kinds, audit, knowledge, tiles, bypass, knobs, tiers, core, split knobs and the properties-panel label tests).
