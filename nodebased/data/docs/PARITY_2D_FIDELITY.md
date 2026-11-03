@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 93.5 / 100** (167 nodes scored, rank-weighted; 95.9 counting only the nodes NodeBased has).
+**Overall fidelity: 93.6 / 100** (167 nodes scored, rank-weighted; 96.0 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.2 (95.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 93.3 (95.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -34,7 +34,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 86.7 | 90.6 | 86.0 | 6 |
 | Draw | 91.4 | 83.2 | 90.9 | 17 |
-| Time | 96.1 | 78.9 | 96.1 | 13 |
+| Time | 97.1 | 82.7 | 96.9 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 95.6 | 84.8 | 94.6 | 34 |
 | Filter | 93.5 | 80.9 | 93.2 | 32 |
@@ -44,7 +44,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 99.0 | 98.2 | 99.4 | 5 |
 | Other | 80.1 | 42.6 | 80.3 | 12 |
 
-Behaviour checked: 82 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 91 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 351 of the 364 paired knobs probed change the output pixels; 13 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
@@ -90,15 +90,15 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | TimeOffset | `TimeOffset` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 2 | FrameHold | `FrameHold` | supported | 100.0 | 100.0 | 100 (7/7) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 3 | Retime | `Retime` | supported | 98.3 | 97.7 | 97 (14/15) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 4 | TimeClip | `TimeClip` | supported | 100.0 | 100.0 | 100 (10/10) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 5 | FrameRange | `FrameRange` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 6 | AppendClip | `AppendClip` | supported | 96.7 | 100.0 | 100 (6/6) | - | 100 | 100 | - | - | 80 | - | no fixture |
-| 7 | TimeBlur | `TimeBlur` | supported | 89.6 | 91.7 | 100 (4/4) | - | 50 | 100 | - | - | 88 | - | no fixture |
-| 7 | TimeEcho | `TimeEcho` | supported | 54.2 | 61.1 | 67 (2/3) | - | 0 | 100 | - | - | 25 | - | no fixture |
-| 7 | TimeWarp | `TimeWarp` | supported | 75.0 | 69.4 | 67 (2/3) | - | 50 | 100 | - | - | 100 | - | no fixture |
+| 1 | TimeOffset | `TimeOffset` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (14/14) | 100 | - | unmeasured |
+| 2 | FrameHold | `FrameHold` | supported | 100.0 | 100.0 | 100 (7/7) | - | 100 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
+| 3 | Retime | `Retime` | supported | 98.8 | 98.4 | 97 (14/15) | - | 100 | 100 | - | 100 (47/47) | 100 | - | unmeasured |
+| 4 | TimeClip | `TimeClip` | supported | 100.0 | 100.0 | 100 (10/10) | - | 100 | 100 | - | 100 (33/33) | 100 | - | unmeasured |
+| 5 | FrameRange | `FrameRange` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
+| 6 | AppendClip | `AppendClip` | supported | 97.6 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 80 | - | unmeasured |
+| 7 | TimeBlur | `TimeBlur` | supported | 92.6 | 94.1 | 100 (4/4) | - | 50 | 100 | - | 100 (8/8) | 88 | - | unmeasured |
+| 7 | TimeEcho | `TimeEcho` | supported | 92.2 | 92.2 | 100 (3/3) | - | 33 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
+| 7 | TimeWarp | `TimeWarp` | supported | 82.4 | 78.4 | 67 (2/3) | - | 50 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
 | 8 | Kronos | `Kronos` | supported | 33.1 | 24.2 | 18 (4/26) | - | 50 | 25 | - | - | 71 | - | no fixture |
 | 8 | OFlow | `OFlow` | supported | 61.4 | 56.1 | 48 (9/21) | - | 43 | 100 | - | - | 80 | - | no fixture |
 | 8 | SmartVector | `SmartVector` | supported | 17.1 | 16.2 | 12 (1/11) | - | 0 | 50 | - | - | - | - | no fixture |
@@ -316,10 +316,10 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 24 | Text (Draw #2) | `Text` | 2.29 | 95.4 | 1 secondary knob missing: `group_animation`; knob order differs from Nuke's (27 of 40 in order); 1 label differs from Nuke's |
 | 25 | AddTimeCode (Metadata #4) | `AddTimeCode` | 2.22 | 91.1 | knob order differs from Nuke's (4 of 5 in order); 1 label differs from Nuke's |
 | 26 | BurnIn (Other #7) | `BurnIn` | 2.20 | 84.6 | knob order differs from Nuke's (10 of 18 in order) |
-| 27 | TimeEcho (Time #7) | `TimeEcho` | 2.18 | 54.2 | primary knobs missing: `framesfade`; knob order differs from Nuke's (1 of 2 in order); 2 labels differ from Nuke's |
-| 28 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
-| 29 | Kronos (Time #8) | `Kronos` | 2.09 | 33.1 | primary knobs missing: `input.first`, `input.last`, `resetInputRange`, `retimedChannels`, `timing2`, `timingInputSpeed`, `motionEstimation`, `vectorDetail` and 3 more; 11 secondary knobs missing: `shutterTime`, `autoShutterTime`, `output`, `matteChannel`, `flickerCompensation` ...; sockets missing: `FgVecs BgVecs`, `MoSrc`, `Matte`; knob order differs from Nuke's (3 of 4 in order); 1 label differs from Nuke's |
-| 30 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
+| 27 | Keyer (Keyer #1) | `Keyer` | 2.12 | 97.9 | nothing missing that the guide lists |
+| 28 | Kronos (Time #8) | `Kronos` | 2.09 | 33.1 | primary knobs missing: `input.first`, `input.last`, `resetInputRange`, `retimedChannels`, `timing2`, `timingInputSpeed`, `motionEstimation`, `vectorDetail` and 3 more; 11 secondary knobs missing: `shutterTime`, `autoShutterTime`, `output`, `matteChannel`, `flickerCompensation` ...; sockets missing: `FgVecs BgVecs`, `MoSrc`, `Matte`; knob order differs from Nuke's (3 of 4 in order); 1 label differs from Nuke's |
+| 29 | HueCorrect (Color #9) | `HueCorrect` | 1.96 | 82.4 | primary knobs missing: `mix_luminance` |
+| 30 | MatchGrade (Color #16) | `MatchGrade` | 1.73 | 44.5 | primary knobs missing: `matchGradeTask`, `analysisType`, `mask`, `applyToMask`, `output`, `alignTargetToSource`, `autoCrop`; 23 secondary knobs missing |
 
 ## Formula cases
 
@@ -950,6 +950,171 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `scannedgrain_saturation_zero_is_monochrome` | convention | pass | within tolerance | - |
 | `scannedgrain_low_clip_stops_subtracting` | guide | pass | within tolerance | - |
 | `scannedgrain_frame_selection` | convention | not scored: the guide says frames are 'selected from a loop' of about 50 scanned frames and that 'a different grain pattern is produced for each frame' without saying which frame a given frame number and seed pick; NodeBased has one plate image and translates it by seed + frame instead (a seed of minus the frame freezes it), so the pattern cannot be compared with Nuke's without guessing | - | - |
+| `timeoffset_offset_3_at_10` | guide | pass | within tolerance | - |
+| `timeoffset_offset_-3_at_10` | guide | pass | within tolerance | - |
+| `timeoffset_offset_10_at_25` | guide | pass | within tolerance | - |
+| `timeoffset_whole_frames_round_down_0.5` | guide | pass | within tolerance | - |
+| `timeoffset_whole_frames_round_down_-0.5` | guide | pass | within tolerance | - |
+| `timeoffset_whole_frames_round_down_0.25` | guide | pass | within tolerance | - |
+| `timeoffset_fractional_time_0.5` | guide | pass | within tolerance | - |
+| `timeoffset_fractional_time_-0.25` | guide | pass | within tolerance | - |
+| `timeoffset_reverse_input_at_1` | convention | pass | within tolerance | - |
+| `timeoffset_reverse_input_at_5` | convention | pass | within tolerance | - |
+| `timeoffset_reverse_input_at_20` | convention | pass | within tolerance | - |
+| `timeoffset_clip_edges_hold_5_at_3` | guide | pass | within tolerance | - |
+| `timeoffset_clip_edges_hold_-5_at_18` | guide | pass | within tolerance | - |
+| `timeoffset_clip_edges_hold_5_at_12` | guide | pass | within tolerance | - |
+| `timeoffset_reverse_with_offset` | convention | not scored: the guide does not say whether the offset or the reversal is applied first; the two orders pick different frames | - | - |
+| `framehold_first_frame_at_3` | guide | pass | within tolerance | - |
+| `framehold_first_frame_at_12` | guide | pass | within tolerance | - |
+| `framehold_first_frame_at_40` | guide | pass | within tolerance | - |
+| `framehold_increment_5_uses_frame_6` | guide | pass | within tolerance | - |
+| `framehold_increment_5_uses_frame_11` | guide | pass | within tolerance | - |
+| `framehold_increment_5_uses_frame_16` | guide | pass | within tolerance | - |
+| `framehold_increment_5_between_frame_2` | convention | not scored: the guide lists the frames used (1, 6, 11, 16) but not which of them an output frame between two of them shows; 'the latest listed frame at or before it' is the natural reading and no source states it | - | - |
+| `framehold_increment_5_between_frame_8` | convention | not scored: the guide lists the frames used (1, 6, 11, 16) but not which of them an output frame between two of them shows; 'the latest listed frame at or before it' is the natural reading and no source states it | - | - |
+| `framehold_increment_outside_3_first_10` | convention | not scored: the guide states nothing for frame 0, negative frames or frames before the first frame | - | - |
+| `framehold_increment_outside_0_first_10` | convention | not scored: the guide states nothing for frame 0, negative frames or frames before the first frame | - | - |
+| `framehold_increment_outside_-4_first_1` | convention | not scored: the guide states nothing for frame 0, negative frames or frames before the first frame | - | - |
+| `framehold_negative_increment` | convention | not scored: the guide gives no rule for a negative increment | - | - |
+| `framehold_whole_frames_round_down` | guide | pass | within tolerance | - |
+| `framehold_fractional_time` | guide | pass | within tolerance | - |
+| `retime_speed_2_none_at_4` | convention | pass | within tolerance | - |
+| `retime_speed_2_none_at_1` | convention | pass | within tolerance | - |
+| `retime_speed_0.5_none_at_4` | convention | pass | within tolerance | - |
+| `retime_speed_0.5_none_at_7` | convention | pass | within tolerance | - |
+| `retime_speed_1.5_none_at_3` | convention | pass | within tolerance | - |
+| `retime_speed_0.4_nearest_at_4` | convention | pass | within tolerance | - |
+| `retime_speed_0.7_nearest_at_4` | convention | pass | within tolerance | - |
+| `retime_speed_0.7_nearest_at_3` | convention | pass | within tolerance | - |
+| `retime_speed_0.9_nearest_at_5` | convention | pass | within tolerance | - |
+| `retime_nearest_half_way` | convention | not scored: the guide does not say which way a half rounds | - | - |
+| `retime_both_ranges_locked_ends_at_1` | guide | pass | within tolerance | - |
+| `retime_both_ranges_locked_ends_at_10` | guide | pass | within tolerance | - |
+| `retime_both_ranges_locked_middle` | convention | pass | within tolerance | - |
+| `retime_reverse_at_1` | guide | pass | within tolerance | - |
+| `retime_reverse_at_2` | guide | pass | within tolerance | - |
+| `retime_reverse_at_20` | guide | pass | within tolerance | - |
+| `retime_before_hold_at_1` | guide | pass | within tolerance | - |
+| `retime_before_hold_at_3` | guide | pass | within tolerance | - |
+| `retime_before_hold_at_5` | guide | pass | within tolerance | - |
+| `retime_before_hold_at_6` | guide | pass | within tolerance | - |
+| `retime_before_continue_at_1` | guide | pass | within tolerance | - |
+| `retime_before_continue_at_3` | guide | pass | within tolerance | - |
+| `retime_before_continue_at_5` | guide | pass | within tolerance | - |
+| `retime_before_continue_at_6` | guide | pass | within tolerance | - |
+| `retime_before_loop_at_1` | guide | pass | within tolerance | - |
+| `retime_before_loop_at_4` | guide | pass | within tolerance | - |
+| `retime_before_loop_at_5` | guide | pass | within tolerance | - |
+| `retime_before_loop_at_6` | guide | pass | within tolerance | - |
+| `retime_before_bounce_at_1` | guide | pass | within tolerance | - |
+| `retime_before_bounce_at_3` | guide | pass | within tolerance | - |
+| `retime_before_bounce_at_4` | guide | pass | within tolerance | - |
+| `retime_before_bounce_at_5` | guide | pass | within tolerance | - |
+| `retime_before_bounce_at_6` | guide | pass | within tolerance | - |
+| `retime_before_black_at_3` | guide | pass | within tolerance | - |
+| `retime_before_black_keeps_first_frame` | guide | pass | within tolerance | - |
+| `retime_after_hold_at_20` | guide | pass | within tolerance | - |
+| `retime_after_hold_at_21` | guide | pass | within tolerance | - |
+| `retime_after_hold_at_25` | guide | pass | within tolerance | - |
+| `retime_after_continue_at_21` | guide | pass | within tolerance | - |
+| `retime_after_continue_at_25` | guide | pass | within tolerance | - |
+| `retime_after_loop_at_20` | guide | pass | within tolerance | - |
+| `retime_after_loop_at_21` | guide | pass | within tolerance | - |
+| `retime_after_loop_at_25` | guide | pass | within tolerance | - |
+| `retime_after_bounce_at_20` | guide | pass | within tolerance | - |
+| `retime_after_bounce_at_21` | guide | pass | within tolerance | - |
+| `retime_after_bounce_at_22` | guide | pass | within tolerance | - |
+| `retime_after_bounce_at_25` | guide | pass | within tolerance | - |
+| `retime_after_black_at_23` | guide | pass | within tolerance | - |
+| `retime_filter_box` | convention | not scored: the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights | - | - |
+| `retime_shutter_blending` | convention | not scored: the guide gives no width or weights for the blend, only that a lower shutter blends less | - | - |
+| `framerange_inside_at_25` | guide | pass | within tolerance | - |
+| `framerange_inside_at_30` | guide | pass | within tolerance | - |
+| `framerange_inside_at_50` | guide | pass | within tolerance | - |
+| `framerange_outside_at_10` | convention | not scored: the guide says FrameRange sets which frames the Viewer and flipbook play and what AppendClip joins, and states nothing about the picture at a frame outside the range | - | - |
+| `framerange_outside_at_60` | convention | not scored: the guide says FrameRange sets which frames the Viewer and flipbook play and what AppendClip joins, and states nothing about the picture at a frame outside the range | - | - |
+| `timeclip_expression_frameplus49_at_1` | guide | pass | within tolerance | - |
+| `timeclip_expression_frameplus49_at_2` | guide | pass | within tolerance | - |
+| `timeclip_expression_frametimes2_at_3` | guide | pass | within tolerance | - |
+| `timeclip_expression_frametimes2_at_1` | guide | pass | within tolerance | - |
+| `timeclip_offset_49_at_1` | guide | pass | within tolerance | - |
+| `timeclip_offset_-10_at_20` | guide | pass | within tolerance | - |
+| `timeclip_offset_-10_at_21` | guide | pass | within tolerance | - |
+| `timeclip_start_at_1_shows_1` | guide | pass | within tolerance | - |
+| `timeclip_start_at_1_shows_4` | guide | pass | within tolerance | - |
+| `timeclip_start_at_20_shows_20` | guide | pass | within tolerance | - |
+| `timeclip_start_at_20_shows_25` | guide | pass | within tolerance | - |
+| `timeclip_before_hold_at_1` | guide | pass | within tolerance | - |
+| `timeclip_before_hold_at_4` | guide | pass | within tolerance | - |
+| `timeclip_before_loop_at_1` | guide | pass | within tolerance | - |
+| `timeclip_before_loop_at_4` | guide | pass | within tolerance | - |
+| `timeclip_before_loop_at_5` | guide | pass | within tolerance | - |
+| `timeclip_before_black_at_3` | guide | pass | within tolerance | - |
+| `timeclip_before_bounce` | convention | not scored: the guide's bounce example '5, 4, 3, 2, 1, 2, 3, 4' is the Retime example copied (it counts down from 5 to 1, not from the range's first frame), so it does not state what the frames before first show | - | - |
+| `timeclip_after_hold_at_20` | guide | pass | within tolerance | - |
+| `timeclip_after_hold_at_21` | guide | pass | within tolerance | - |
+| `timeclip_after_hold_at_30` | guide | pass | within tolerance | - |
+| `timeclip_after_loop_at_20` | guide | pass | within tolerance | - |
+| `timeclip_after_loop_at_21` | guide | pass | within tolerance | - |
+| `timeclip_after_loop_at_24` | guide | pass | within tolerance | - |
+| `timeclip_after_bounce_at_20` | guide | pass | within tolerance | - |
+| `timeclip_after_bounce_at_21` | guide | pass | within tolerance | - |
+| `timeclip_after_bounce_at_22` | guide | pass | within tolerance | - |
+| `timeclip_after_black_at_21` | guide | pass | within tolerance | - |
+| `timeclip_reverse_at_5` | guide | pass | within tolerance | - |
+| `timeclip_reverse_at_6` | guide | pass | within tolerance | - |
+| `timeclip_reverse_at_20` | guide | pass | within tolerance | - |
+| `timeclip_fade_leaves_the_middle_alone_at_6` | guide | pass | within tolerance | - |
+| `timeclip_fade_leaves_the_middle_alone_at_10` | guide | pass | within tolerance | - |
+| `timeclip_fade_leaves_the_middle_alone_at_15` | guide | pass | within tolerance | - |
+| `timeclip_fade_in_curve` | convention | not scored: the guide gives the length of the fade and no curve; (k + 1) / (fade + 1) is our reading | - | - |
+| `appendclip_head_to_tail_at_1` | guide | pass | within tolerance | - |
+| `appendclip_head_to_tail_at_3` | guide | pass | within tolerance | - |
+| `appendclip_head_to_tail_at_5` | guide | pass | within tolerance | - |
+| `appendclip_head_to_tail_at_6` | guide | pass | within tolerance | - |
+| `appendclip_head_to_tail_at_10` | guide | pass | within tolerance | - |
+| `appendclip_first_frame_5_at_5` | guide | pass | within tolerance | - |
+| `appendclip_first_frame_5_at_9` | guide | pass | within tolerance | - |
+| `appendclip_first_frame_5_at_10` | guide | pass | within tolerance | - |
+| `appendclip_fade_in_leaves_the_rest_alone_at_2` | guide | pass | within tolerance | - |
+| `appendclip_fade_in_leaves_the_rest_alone_at_4` | guide | pass | within tolerance | - |
+| `appendclip_fade_in_curve` | convention | not scored: the guide gives the number of frames and no curve; (k + 1) / (fade + 1) is our reading | - | - |
+| `appendclip_dissolve_before_the_overlap_at_1` | guide | pass | within tolerance | - |
+| `appendclip_dissolve_before_the_overlap_at_2` | guide | pass | within tolerance | - |
+| `appendclip_dissolve_weights` | convention | not scored: the guide gives only the number of frames: not whether they overlap the clips or lengthen the edit, nor the blend weights | - | - |
+| `timeecho_plus_4_frames_at_10` | guide | pass | within tolerance | - |
+| `timeecho_max_4_frames_at_10` | guide | pass | within tolerance | - |
+| `timeecho_average_4_frames_at_10` | guide | pass | within tolerance | - |
+| `timeecho_one_frame_at_4` | guide | pass | within tolerance | - |
+| `timeecho_one_frame_at_12` | guide | pass | within tolerance | - |
+| `timeecho_fade_5_plus_at_10` | guide | pass | within tolerance | - |
+| `timeecho_fade_5_max_at_10` | guide | pass | within tolerance | - |
+| `timeecho_fade_5_average_at_10` | guide | pass | within tolerance | - |
+| `timeecho_fade_shorter_than_the_frames` | guide | pass | within tolerance | - |
+| `timeecho_fade_longer_than_the_frames` | convention | not scored: the guide's fade example uses as many frames as the fade; with fewer frames the ramp is cut short and which part of it is used is not stated | - | - |
+| `timeblur_centred_shutter_1_custom_0` | convention | pass | within tolerance | - |
+| `timeblur_start_shutter_1_custom_0` | convention | pass | within tolerance | - |
+| `timeblur_end_shutter_1_custom_0` | convention | pass | within tolerance | - |
+| `timeblur_start_shutter_0.5_custom_0` | convention | pass | within tolerance | - |
+| `timeblur_end_shutter_0.5_custom_0` | convention | pass | within tolerance | - |
+| `timeblur_custom_shutter_1_custom_-0.5` | convention | pass | within tolerance | - |
+| `timeblur_custom_shutter_1_custom_2` | convention | pass | within tolerance | - |
+| `timeblur_custom_shutter_2_custom_0` | convention | pass | within tolerance | - |
+| `timewarp_lookup_key_at_5` | guide | pass | within tolerance | - |
+| `timewarp_lookup_key_at_1` | guide | pass | within tolerance | - |
+| `timewarp_straight_curve_none_at_3` | guide | pass | within tolerance | - |
+| `timewarp_straight_curve_none_at_2` | guide | pass | within tolerance | - |
+| `timewarp_straight_curve_none_at_4` | guide | pass | within tolerance | - |
+| `timewarp_straight_curve_nearest_at_4` | guide | pass | within tolerance | - |
+| `timewarp_straight_curve_nearest_at_2` | guide | pass | within tolerance | - |
+| `timewarp_nearest_half_way` | convention | not scored: the guide does not say which way a half rounds | - | - |
+| `timewarp_hold_curve_at_1` | guide | pass | within tolerance | - |
+| `timewarp_hold_curve_at_5` | guide | pass | within tolerance | - |
+| `timewarp_hold_curve_at_9` | guide | pass | within tolerance | - |
+| `timewarp_hold_curve_at_10` | guide | pass | within tolerance | - |
+| `timewarp_hold_curve_at_14` | guide | pass | within tolerance | - |
+| `timewarp_box_filter` | convention | not scored: the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights; NodeBased's blend of the two nearest frames is a unit-wide box and nothing states that is Nuke's | - | - |
 
 ## Requirements of 2026-11-02, per node
 
@@ -974,7 +1139,6 @@ Labels below are NodeBased's, then the guide's.
 - Text (`Text`): 27 of 40 paired knobs in Nuke's order; `premult` reads "Premult by", Nuke "premult"
 - AppendClip (`AppendClip`): 3 of 5 paired knobs in Nuke's order
 - TimeBlur (`TimeBlur`): 3 of 4 paired knobs in Nuke's order
-- TimeEcho (`TimeEcho`): 1 of 2 paired knobs in Nuke's order; `mode` reads "Method", Nuke "TimeEcho Method"; `framesbehind` reads "Frames", Nuke "Frames to look at"
 - Kronos (`Kronos`): 3 of 4 paired knobs in Nuke's order; `timingOutputSpeed` reads "Speed", Nuke "Output Speed"
 - OFlow (`OFlow`): `timingOutputSpeed` reads "Speed", Nuke "Output Speed"; `timingFrame2` reads "Speed", Nuke "Frame"
 - ZDefocus (`ZDefocus`): `center` reads "Focus plane", Nuke "focus plane (C)"
