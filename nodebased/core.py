@@ -221,6 +221,7 @@ from . import mergeknobs as _mergeknobs
 from . import blurknobs as _blurknobs
 from . import filterbehaviour as _filterbehaviour
 from . import effectbehaviour as _effectbehaviour
+from . import lightingbehaviour as _lightingbehaviour
 from . import raysbehaviour as _raysbehaviour
 from . import bilateralknobs as _bilateralknobs
 from . import denoiseknobs as _denoiseknobs
@@ -324,9 +325,9 @@ SPECS = {
     "EdgeDetect": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {"edge_type": "Sobel", "threshold": 0.0, "mix": 1.0, **_filterbehaviour.new_params("EdgeDetect")}},
     "Emboss": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"angle": 135.0, "width": 1.0, "mix": 1.0}},
+               "params": {"angle": 0.0, "width": 1.0, "mix": 1.0, **_lightingbehaviour.new_params("Emboss")}},
     "BumpBoss": {"inputs": ["image"], "optional_inputs": ["mask"],
-                 "params": {"height_channel": "rgba.red", "light_angle": 135.0, "mix": 1.0}},
+                 "params": {"height_channel": "rgba.red", "light_angle": 0.0, "mix": 1.0, **_lightingbehaviour.new_params("BumpBoss")}},
     "ErodeFilter": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {"filter_size": 1.0, "filter_type": "box", "mix": 1.0}},
     # Glow's tint reuses the "red"/"green"/"blue" names Light3D and Relight already use for a
@@ -2053,6 +2054,9 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                                **{f"point_{axis}": (-1000000.0, 1000000.0) for axis in "xyz"}},
                "VectorBlur": {"samples": (0, 64)},
                "MotionBlur": {"samples": (1, 64)},
+               "BumpBoss": {"lightposition_x": (-1000000.0, 1000000.0), "lightposition_y": (-1000000.0, 1000000.0), "center_x": (-1000000.0, 1000000.0),
+                            "center_y": (-1000000.0, 1000000.0), "bumpsize": (-1000.0, 1000.0), "light_height": (-1000.0, 1000.0),
+                            "intensity": (-1000.0, 1000.0), "minshadow": (0.0, 1000.0), "legacy_bumpboss": (0, 1)},
                "MotionBlur2D": {"samples": (1, 64)},
                "MotionBlur3D": {"samples": (1, 64)},
                "GridWarp": {"rows": (2, 15), "columns": (2, 15)},
@@ -2135,7 +2139,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"], "filter_bounds": ["shape", "format"],
-           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"],
+           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "emboss_type": ["traditional", "effect"], "edge_detector": ["simple", "sobel", "prewitt"], "depth_math": ["depth", "1/depth"],
            "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],
            "filter_type": ["box", "triangle", "quadratic", "gaussian"],
            "transform_direction": ["forward", "inverse"], "file_interpolation": ["nearest", "linear", "tetrahedral", "best"],

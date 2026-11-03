@@ -7096,19 +7096,16 @@ class Evaluator:
 
     @staticmethod
     def _emboss(image, p):
-        lum = image[..., :3].mean(axis=2)
-        a = np.pad(lum, 1, mode="edge")
-        angle = math.radians(float(p.get("angle", 135.0)))
-        dx = (a[1:-1, 2:] - a[1:-1, :-2]) * 0.5
-        dy = (a[2:, 1:-1] - a[:-2, 1:-1]) * 0.5
-        shade = np.clip(0.5 + float(p.get("width", 1.0)) * (np.cos(angle)*dx + np.sin(angle)*dy), 0, 1)
-        out = image.copy(); out[..., :3] = shade[..., None]
-        return out
+        from . import lightingbehaviour          # Emboss Type, traditional or effect only (lane 9 step O)
+        return lightingbehaviour.emboss(image, p)
 
     @staticmethod
     def _bump_boss(image, p):
         channel = p.get("height_channel", "rgba.red").split(".")[-1]
         index = {"red": 0, "green": 1, "blue": 2, "alpha": 3}.get(channel, 0)
+        if not int(p.get("legacy_bumpboss", 1)):         # the light between center and lightposition lights the picture (lane 9 step O)
+            from . import lightingbehaviour
+            return lightingbehaviour.bump_boss(image, p, index)
         h = image[..., index]; a = np.pad(h, 1, mode="edge")
         dx = (a[1:-1, 2:] - a[1:-1, :-2]) * 0.5
         dy = (a[2:, 1:-1] - a[:-2, 1:-1]) * 0.5

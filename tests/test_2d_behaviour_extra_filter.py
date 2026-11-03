@@ -431,22 +431,20 @@ class VolumeRaysTests(unittest.TestCase):
 
 # -------------------------------------------------------------------------------------------------------------- BumpBoss
 class BumpBossTests(unittest.TestCase):
-    def test_the_gap_is_recorded_with_a_reason_for_every_guide_knob_not_built(self):
+    def test_every_guide_knob_is_paired_since_lane_9_step_o(self):
         import json
         pairs = json.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "parity", "nodebased_to_nuke.json")))["pairs"]
-        gaps = {k["nuke"][0]: k["reason"] for k in pairs["BumpBoss"]["knobs"] if k["kind"] == "unsupported"}
-        self.assertEqual(set(gaps), {"lightposition", "bumpsize", "height", "intensity", "minshadow", "center"})
-        for name, reason in gaps.items():
-            self.assertGreater(len(reason), 40, name)
+        gaps = {k["nuke"][0] for k in pairs["BumpBoss"]["knobs"] if k["kind"] == "unsupported"}
+        self.assertEqual(gaps, set())
 
     def test_the_one_input_emboss_keeps_lighting_the_height_channel_from_the_angle(self):
         image = np.zeros((9, 9, 4), np.float32)
         image[..., 3] = 1.0
         image[:, 4:, 0] = 1.0                                    # a vertical step in red
-        out = kern("BumpBoss", image, height_channel="rgba.red", light_angle=0.0)
+        out = kern("BumpBoss", image, height_channel="rgba.red", light_angle=0.0, legacy_bumpboss=1)
         self.assertGreater(float(out[4, 4, 0]), 0.5)
         self.assertAlmostEqual(float(out[4, 1, 0]), 0.5, places=6)
-        self.assertTrue(differs(out, kern("BumpBoss", image, height_channel="rgba.red", light_angle=180.0)))
+        self.assertTrue(differs(out, kern("BumpBoss", image, height_channel="rgba.red", light_angle=180.0, legacy_bumpboss=1)))
 
 
 if __name__ == "__main__":

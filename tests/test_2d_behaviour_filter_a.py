@@ -804,15 +804,18 @@ class EdgeDetectTests(unittest.TestCase):
 
 
 # -------------------------------------------------------------------------------------------------------------- Emboss
+OLD_EMBOSS = {"emboss_type": "effect", "edge_detector": "simple"}      # the relief alone, read with the central difference (an older document's node)
+
+
 class EmbossTests(unittest.TestCase):
     """The guide gives no formula for Emboss; these are the properties of the directional relief NodeBased draws."""
 
     def relief(self, pixels, **knobs):
-        return kern("Emboss", pixels, **knobs)[..., 0] - 0.5
+        return kern("Emboss", pixels, **{**OLD_EMBOSS, **knobs})[..., 0] - 0.5
 
     def test_a_flat_picture_is_a_flat_grey_relief(self):
         flat = np.full((15, 15, 4), 0.37, np.float32)
-        np.testing.assert_allclose(kern("Emboss", flat)[..., :3], 0.5, atol=1e-6)
+        np.testing.assert_allclose(kern("Emboss", flat, **OLD_EMBOSS)[..., :3], 0.5, atol=1e-6)
 
     def test_turning_the_angle_by_180_degrees_flips_the_relief(self):
         pixels = np.clip(texture(), 0.0, 1.0)

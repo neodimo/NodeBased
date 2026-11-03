@@ -291,8 +291,20 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("edge_blur_quality",), label="Blur quality", soft_range=(1, 100),
                   help="The largest blur worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "Emboss": _groups(KnobGroup("float_slider", ("angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("width",), soft_range=(0, 20)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "BumpBoss": _groups(KnobGroup("enum", ("height_channel",)), KnobGroup("float_slider", ("light_angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Emboss": _groups(KnobGroup("enum", ("emboss_type",), label="Emboss type", help="Traditional adds the relief to the picture; effect outputs the relief alone, about mid grey."),
+                      KnobGroup("float_slider", ("angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("width",), soft_range=(0, 20)),
+                      KnobGroup("enum", ("edge_detector",), label="Edge detector", help="How the slope of the brightness is read: simple, sobel or prewitt."),
+                      KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "BumpBoss": _groups(KnobGroup("xy", ("lightposition_x", "lightposition_y"), label="Light position xy", help="Where the light sits; its offset from the image centre sets the side the light leans in."),
+                        KnobGroup("float", ("bumpsize",), label="Bump size", help="The size of the emboss."),
+                        KnobGroup("float", ("light_height",), label="Light height", help="Zero is level with the image and gives no emboss; negative puts the light behind it."),
+                        KnobGroup("float", ("intensity",), label="Light intensity", help="The intensity of the simulated light."),
+                        KnobGroup("float", ("minshadow",), label="Minimum shadow intensity", help="Raising it lowers the darkest the shadow may get."),
+                        KnobGroup("xy", ("center_x", "center_y"), label="Image center xy", help="The reference point the light position is measured from."),
+                        KnobGroup("enum", ("height_channel",)), KnobGroup("float_slider", ("light_angle",), soft_range=(-180, 180), help="Turns the light further round, in degrees."),
+                        KnobGroup("bool", ("legacy_bumpboss",), label="Legacy grey emboss",
+                                  help="On: the one-input grey emboss older documents had, lit from the light angle alone."),
+                        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ErodeFilter": _groups(KnobGroup("split", ("filter_size",), label="Size", soft_range=(0, 20), channels="wh", help="How far the erosion reaches; negative expands the brighter areas. ""The split button gives the width and the height their own size."), KnobGroup("enum", ("filter_type",), label="Filter"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Glow": _groups(
         KnobGroup("float_slider", ("glow_threshold",), label="Threshold", soft_range=(-2, 2)),
@@ -2429,6 +2441,9 @@ NUKE_LAYOUT_LANE9.update({
     "Laplacian": ("channels", "laplacian_size", "kernel_filter", "quality", "crop"),
     "ErodeFilter": ("channels", "filter_size", "filter_type"),
     "EdgeExtend": ("channels", "source_premultiplied", "erode", "premultiply"),
+    # Lane 9 step O: Emboss and BumpBoss in the guide's order.
+    "Emboss": ("channels", "emboss_type", "angle", "width", "edge_detector"),
+    "BumpBoss": ("channels", "lightposition_x", "bumpsize", "light_height", "intensity", "minshadow", "center_x"),
 })
 NUKE_LABELS.update({
     "Glow": {"glow_threshold": "Tolerance"},

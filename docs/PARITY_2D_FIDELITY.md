@@ -2,7 +2,7 @@
 
 **Overall fidelity: 95.6 / 100** (167 nodes scored, rank-weighted; 98.0 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.1 (97.5 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.2 (97.5 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -37,7 +37,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Time | 98.3 | 90.6 | 98.0 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 96.9 | 88.5 | 96.2 | 34 |
-| Filter | 95.8 | 88.1 | 95.1 | 32 |
+| Filter | 96.1 | 90.0 | 95.3 | 32 |
 | Keyer | 93.3 | 80.6 | 93.1 | 11 |
 | Merge | 99.5 | 98.7 | 99.5 | 12 |
 | Transform | 96.6 | 92.7 | 95.9 | 20 |
@@ -46,7 +46,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 Behaviour checked: 95 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 361 of the 361 paired knobs probed change the output pixels; 0 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 369 of the 369 paired knobs probed change the output pixels; 0 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -180,9 +180,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 16 | BumpBoss | `BumpBoss` | supported | 44.4 | 42.2 | 0 (0/6) | - | 100 | 67 | 100 | - | - | - | unmeasured |
+| 16 | BumpBoss | `BumpBoss` | supported | 96.3 | 95.6 | 100 (6/6) | 100 (6/6) | 100 | 67 | 100 | - | 100 | - | unmeasured |
 | 16 | EdgeDetect | `EdgeDetect` | supported | 87.9 | 80.6 | 64 (5/7) | 100 (4/4) | 100 | 100 | 100 | - | 100 | - | unmeasured |
-| 16 | Emboss | `Emboss` | supported | 71.1 | 54.5 | 18 (2/13) | 100 (2/2) | 86 | 100 | 100 | - | 100 | - | unmeasured |
+| 16 | Emboss | `Emboss` | supported | 78.8 | 66.1 | 36 (4/13) | 100 (4/4) | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 16 | Laplacian | `Laplacian` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 17 | Inpaint | `Inpaint` | supported | 98.7 | 98.8 | 100 (11/11) | - | 91 | 100 | 100 | - | 100 | - | no fixture |
 | 18 | GodRays | `GodRays` | supported | 98.9 | 98.8 | 100 (10/10) | 100 (10/10) | 88 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |

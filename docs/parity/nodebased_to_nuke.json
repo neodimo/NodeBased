@@ -2609,12 +2609,20 @@
    "knobs": [
     {"nodebased": ["angle"], "nuke": ["Angle"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Angle`"},
     {"nodebased": ["width"], "nuke": ["Width"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `Width`"},
+    {"nodebased": ["emboss_type"], "nuke": ["optype"], "kind": "renamed", "reason": "Emboss Type: traditional adds the relief to the input, effect outputs the relief alone (lane 9 step O); older documents read `effect`"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": ["edge_detector"], "nuke": ["edgedetector"], "kind": "renamed", "reason": "Edge Detector: simple, sobel or prewitt, how the slope of the brightness is read (lane 9 step O); older documents read simple"},
+    {"nodebased": [], "nuke": ["edgechannels"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
+    {"nodebased": [], "nuke": ["threshold"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
+    {"nodebased": [], "nuke": ["output"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
+    {"nodebased": [], "nuke": ["erodesize"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
+    {"nodebased": [], "nuke": ["blursize"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
+    {"nodebased": [], "nuke": ["blurquality"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"}
    ]
   },
   "BumpBoss": {
@@ -2632,12 +2640,13 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
-    {"nodebased": [], "nuke": ["lightposition"], "kind": "unsupported", "reason": "BumpBoss lights input B with the bump input A from the offset between lightposition and center; the guide says what the knobs do ('the position of this indicator in relation to the center indicator controls the shadow') and gives no lighting formula, while NodeBased's BumpBoss is a one-input emboss lit from an angle (`light_angle`)"},
-    {"nodebased": [], "nuke": ["bumpsize"], "kind": "unsupported", "reason": "Bump Size scales the emboss of input B by input A; the guide gives no formula (see `lightposition`)"},
-    {"nodebased": [], "nuke": ["height"], "kind": "unsupported", "reason": "Light Height: zero is level with the image and gives no emboss, negative puts the light behind; the guide gives no formula (see `lightposition`)"},
-    {"nodebased": [], "nuke": ["intensity"], "kind": "unsupported", "reason": "Light Intensity scales the simulated light; the guide gives no formula (see `lightposition`)"},
-    {"nodebased": [], "nuke": ["minshadow"], "kind": "unsupported", "reason": "Minimum Shadow Intensity limits how dark the shadow gets; the guide gives no formula (see `lightposition`)"},
-    {"nodebased": [], "nuke": ["center"], "kind": "unsupported", "reason": "Image Center xy is the reference point for lightposition; the guide gives no formula (see `lightposition`)"}
+    {"nodebased": ["lightposition_x", "lightposition_y"], "nuke": ["lightposition"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob. The guide gives no lighting formula; lightposition minus center is the direction the light leans (lightingbehaviour.py)"},
+    {"nodebased": ["bumpsize"], "nuke": ["bumpsize"], "kind": "same"},
+    {"nodebased": ["light_height"], "nuke": ["height"], "kind": "renamed", "reason": "Light Height; NodeBased's scripting name keeps `height` for pixel sizes elsewhere"},
+    {"nodebased": ["intensity"], "nuke": ["intensity"], "kind": "same"},
+    {"nodebased": ["minshadow"], "nuke": ["minshadow"], "kind": "same"},
+    {"nodebased": ["center_x", "center_y"], "nuke": ["center"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
+    {"nodebased": ["legacy_bumpboss"], "kind": "extra", "reason": "NodeBased-only: graphs saved before BumpBoss followed the guide keep the one-input grey emboss lit from light_angle"}
    ]
   },
   "Laplacian": {
