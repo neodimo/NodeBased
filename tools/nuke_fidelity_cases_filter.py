@@ -781,6 +781,7 @@ def cases():
     _dirblur_cases(Case, out)
     _lightwrap_cases(Case, out)
     _bilateral_cases(Case, out)
+    _denoise_cases(Case, out)
     _vectorcornerpin_cases(Case, out)
     _warp_cases(Case, out)
     _lens_cases(Case, out)
@@ -1780,6 +1781,33 @@ def _bilateral_cases(Case, out):
          "Bilateral: filter median, 'weighted according to the middle value pixel'",
          unscored="the guide does not say whether the middle value is a weighted median or a plain one; NodeBased takes the weighted median under the "
                   "gaussian weights")
+
+
+DENOISE_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/filter_nodes/denoise.html"
+
+
+def _denoise_cases(Case, out):
+    """Denoise: 'a value of 0 removes no noise' (Denoise Amount); Output Noise is 'the noise that was removed from the Source image', so with nothing
+    removed it is zero; Lift Blacks lifts the sub-blacks. The denoised picture itself comes from Foundry's trained model and is not scored; the
+    tests in tests/test_2d_behaviour_filter_l.py show the residual variance falling with the amount and Result plus Noise equal to the Source."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored=""):
+        out.append(Case(id=id, nuke="Denoise", nuke_class="Denoise", nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind="Denoise",
+                        nb_params=nb_params, nb_inputs=("A",), expected=expected, source=source, statement=statement, unscored=unscored))
+
+    same = lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool))
+    zero = lambda fx: (np.zeros(fx["A"].shape, np.float64), np.ones(fx["A"].shape, bool))
+    case("denoise_amount_0_removes_no_noise", (("amount", 0.0),), {"denoise_strength": 0.0}, same, "guide",
+         f"Denoise ({DENOISE_GUIDE}): Denoise Amount 'sets the overall amount of noise to remove ... A value of 0 removes no noise', so the picture is unchanged")
+    case("denoise_amount_0_noise_output_is_nothing", (("amount", 0.0), ("output", "Noise")), {"denoise_strength": 0.0, "denoise_output": "Noise"},
+         zero, "guide", "Denoise: Output Noise is 'the noise that was removed from the Source image'; with amount 0 nothing was removed")
+    case("denoise_lift_blacks_lifts_sub_blacks", (("amount", 0.0), ("lift_blacks", True)), {"denoise_strength": 0.0, "denoise_lift_blacks": 1},
+         lambda fx: (np.concatenate([np.maximum(fx["A"][..., :3].astype(np.float64), 0.0), fx["A"][..., 3:].astype(np.float64)], axis=-1),
+                     np.ones(fx["A"].shape, bool)),
+         "convention", "Denoise: Lift Blacks 'can be particularly useful if your image contains a lot of sub-blacks, areas of black with a value less than 0'; "
+                       "taken as the sub-blacks being lifted to 0")
+    case("denoise_default_result", (), {}, same, "convention", "Denoise at its defaults: the denoised picture",
+         unscored="the guide names no algorithm; Foundry's Denoise is a trained model (the node 'requires' its analysis). NodeBased uses an edge-preserving "
+                  "window average (nodebased/denoiseknobs.py); the step's tests show the residual variance falling with the amount")
 
 
 VECTORCORNERPIN_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/vectorcornerpin.html"

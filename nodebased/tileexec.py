@@ -508,6 +508,11 @@ class TileExecutor:
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
+            if node["type"] == "Denoise":
+                from . import denoiseknobs
+                # A noise level is measured on a whole picture (Automatic profile, or a Noise input wired): full frame.
+                if denoiseknobs.needs_full_frame(node["params"], bool(node["inputs"].get("noise"))):
+                    return False
             if node["type"] == "Tracker" and self._tracker_needs_full_frame(node["params"]):
                 # Shutter blur averages the node over other frames, and `clamp` and `black outside` fill the area beyond the picture,
                 # which the evaluator's data window limits and a tile has no notion of: they run on the full-frame evaluator.
@@ -1466,8 +1471,7 @@ class TileExecutor:
                 guide = inputs[2] if len(inputs) > 2 and inputs[2] is not None else None
                 filtered = imaging.Evaluator._bilateral(image, params, None if guide is None else _align_artifact_to(guide, image_artifact.region))
             elif kind == "Denoise":
-                strength = float(params.get("denoise_strength", 0.2))
-                filtered = imaging.Evaluator._bilateral(image, {"spatial_size": 2.0 + 5.0 * strength, "colour_sigma": max(0.01, strength)})
+                filtered = imaging.Evaluator._denoise(image, params)
             elif kind == "DegrainSimple":
                 filtered = imaging.Evaluator._degrain_simple(image, params)
             elif kind == "DirBlur":

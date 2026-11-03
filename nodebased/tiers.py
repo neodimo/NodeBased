@@ -339,7 +339,8 @@ def _bilateral_rule(params, region, arity):
 
 
 def _denoise_rule(params, region, arity):
-    support = int(math.ceil(2.0 + 5.0 * float(params.get("denoise_strength", 0.2))))
+    from . import denoiseknobs
+    support = denoiseknobs.radius(params)
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 

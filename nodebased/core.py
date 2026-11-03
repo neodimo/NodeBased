@@ -222,6 +222,7 @@ from . import filterbehaviour as _filterbehaviour
 from . import effectbehaviour as _effectbehaviour
 from . import raysbehaviour as _raysbehaviour
 from . import bilateralknobs as _bilateralknobs
+from . import denoiseknobs as _denoiseknobs
 from . import warpknobs as _warpknobs
 from . import vectorcornerpinknobs as _vectorcornerpinknobs
 from . import drawfxbehaviour as _drawfxbehaviour
@@ -385,8 +386,8 @@ SPECS = {
                 "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus")}},
     "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask", "guide"],
                   "params": {"spatial_size": 3.0, "colour_sigma": 0.4, "mix": 1.0, **_bilateralknobs.NEW}},
-    "Denoise": {"inputs": ["image"], "optional_inputs": ["mask"],
-                "params": {"denoise_strength": 0.2, "temporal": 0, "mix": 1.0}},
+    "Denoise": {"inputs": ["image"], "optional_inputs": ["mask", "noise"],
+                "params": {"denoise_strength": 0.2, "temporal": 0, "mix": 1.0, **_denoiseknobs.NEW}},
     "DegrainSimple": {"inputs": ["image"], "optional_inputs": ["mask"],
                        "params": {"red_amount": 1.0, "green_amount": 1.0, "blue_amount": 1.0, "mix": 1.0}},
     "ZDefocus": {"inputs": ["image"], "optional_inputs": ["depth", "kernel", "mask"],
@@ -2355,6 +2356,8 @@ CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)
 LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_PARAMS})
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)
+CHOICES.update(_denoiseknobs.CHOICES)
+LIMITS.update(_denoiseknobs.LIMITS)
 CHOICES.update(_warpknobs.CHOICES)
 LIMITS.update(_warpknobs.LIMITS)
 CHOICES["guide_channels"] = list(_bilateralknobs.GUIDE_CHANNELS)

@@ -3479,8 +3479,7 @@ class Evaluator:
                         if prev.data != source.data or nxt.data != source.data:
                             raise ValueError("Denoise temporal frames must have matching data windows")
                         average = (prev.pixels + source.pixels + nxt.pixels) / np.float32(3.0)
-                        denoised = self._bilateral(average, {"spatial_size": 2.0 + 5.0 * float(params.get("denoise_strength", 0.2)),
-                                                             "colour_sigma": max(0.01, float(params.get("denoise_strength", 0.2)))})
+                        denoised = self._denoise(average, params)
                         mask = images[1] if len(images) > 1 else None
                         pixels = self._apply_mask_mix(source.pixels, denoised,
                                                       None if mask is None else mask.fit(source.data), params.get("mix", 1.0))
@@ -4251,6 +4250,11 @@ class Evaluator:
                 pixels = Evaluator._merge_gated(str(p.get("operation", "over")), shadowed, bg.fit(box), mix,
                                                 None if mask is None else mask.fit(box))
                 return Raster(pixels, box, source.display)
+            if kind == "Denoise" and len(inputs) > 2 and inputs[2] is not None:
+                # The Noise input (lane 9 step L): the noise level is measured on that picture, then applied to the source.
+                cleaned = Evaluator._denoise(source.pixels, p, inputs[2].pixels)
+                pixels = Evaluator._apply_mask_mix(source.pixels, cleaned, None if mask is None else mask.fit(source.data), mix)
+                return Raster(pixels, source.data, source.display)
             if kind == "Bilateral" and len(inputs) > 2 and inputs[2] is not None:
                 # The guide input (lane 9 step G): the weights take their colours from the guide, fitted to the source's window.
                 guided = Evaluator._bilateral(source.pixels, p, inputs[2].fit(source.data))
@@ -5466,8 +5470,7 @@ class Evaluator:
         if kind == "Denoise":
             # Practical spatial bilateral denoising; temporal sampling is described separately
             # because the evaluator currently has no neighbouring-frame cache contract.
-            return Evaluator._bilateral(source.fit(out), {"spatial_size": 2.0 + 5.0 * float(p.get("denoise_strength", 0.2)),
-                                                          "colour_sigma": max(0.01, float(p.get("denoise_strength", 0.2)))})
+            return Evaluator._denoise(source.fit(out), p)
         if kind == "DegrainSimple":
             return Evaluator._degrain_simple(source.fit(out), p)
         if kind == "DropShadow":
@@ -7308,6 +7311,12 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             result[..., c] = out[..., c].astype(np.float32)
         return result
+
+    @staticmethod
+    def _denoise(image, p, noise=None):
+        """Denoise (nodebased/denoiseknobs.py); `noise` is the Noise input's pixels, None for the nominal noise level."""
+        from . import denoiseknobs
+        return denoiseknobs.denoise(image, p, noise)
 
     @staticmethod
     def _bilateral(image, p, guide=None):

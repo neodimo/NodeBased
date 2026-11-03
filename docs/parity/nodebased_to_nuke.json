@@ -2310,10 +2310,21 @@
    "nodebased": "Denoise",
    "inputs": [
     {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
-    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
+    {"nodebased": "noise", "nuke": "Noise", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["denoise_type"], "nuke": ["type"], "kind": "renamed", "reason": "Nuke's `type` is Film or Digital; the shared CHOICES key `type` is taken, so NodeBased prefixes it"},
+    {"nodebased": ["denoise_model"], "nuke": ["model"], "kind": "renamed", "reason": "Noise Model, Constant or Modulated; prefixed because `model` is the shared 3D name"},
+    {"nodebased": ["denoise_lift_blacks"], "nuke": ["lift_blacks"], "kind": "renamed", "reason": "Lift Blacks; prefixed to keep Denoise's parameters together"},
+    {"nodebased": ["denoise_profile"], "nuke": ["profile"], "kind": "renamed", "reason": "Profile, Constant or Automatic; prefixed because `profile` is a shared name"},
+    {"nodebased": ["denoise_output"], "nuke": ["output"], "kind": "renamed", "reason": "Output, Result or Noise; prefixed because `output` is a shared name"},
     {"nodebased": ["denoise_strength"], "nuke": ["amount"], "kind": "renamed", "reason": "Denoise Amount"},
+    {"nodebased": ["denoise_rolloff"], "nuke": ["rolloff"], "kind": "renamed", "reason": "Roll Off; prefixed to keep Denoise's parameters together"},
+    {"nodebased": ["denoise_smoothness"], "nuke": ["smoothness"], "kind": "renamed", "reason": "Smoothness; prefixed because `smoothness` is a shared name"},
+    {"nodebased": ["denoise_lumablend"], "nuke": ["lumablend"], "kind": "renamed", "reason": "Luminance Blend; prefixed to keep Denoise's parameters together"},
+    {"nodebased": ["denoise_preserve_edges"], "nuke": ["preserve_edges"], "kind": "renamed", "reason": "Preserve Edges; prefixed to keep Denoise's parameters together"},
+    {"nodebased": ["legacy_denoise"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Denoise page was followed keep their pictures; lane 9 step L"},
     {"nodebased": ["temporal"], "nuke": ["enable_temporal"], "kind": "renamed", "reason": "temporal processing switch"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
