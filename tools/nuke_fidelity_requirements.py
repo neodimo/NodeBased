@@ -48,6 +48,7 @@ NOT_PIXEL = {
     # to format acts on the bounding box only; Dither's static seed acts across frames.
     "Laplacian": {"quailty": "caps the filter's size and so acts only once the size passes it; the default size never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)",
                   "crop": "crop to format acts on the bounding box only"},
+    "Emboss": {"blurquality": "caps the pre-blur's size and so acts only once the blur size passes it; the default blur size 0 never does (tests/test_2d_behaviour_finish_o.py moves it at size 12)"},
     "EdgeDetect": {"blurquality": "caps the pre-blur's size and so acts only once the blur size passes it; the default blur size 0 never does (tests/test_2d_behaviour_filter_k.py moves it at size 60)"},
     "Dither": {"static_seed": "holds the seed across frames, so a one-frame probe cannot see it (tests/test_2d_behaviour_draw.py compares two frames)"},
     "LightWrap": {"shadows_gain": "grades only the darkest part of the wrap; the fixture's wrap has none (tests/test_2d_behaviour_filter_f.py moves it on a dark wrap)"},

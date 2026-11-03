@@ -327,7 +327,7 @@ SPECS = {
                    "params": {"edge_type": "Sobel", "threshold": 0.0, "mix": 1.0, **_filterbehaviour.new_params("EdgeDetect")}},
     "Emboss": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"angle": 0.0, "width": 1.0, "mix": 1.0, **_lightingbehaviour.new_params("Emboss")}},
-    "BumpBoss": {"inputs": ["image"], "optional_inputs": ["mask"],
+    "BumpBoss": {"inputs": ["image"], "optional_inputs": ["mask", "b"],
                  "params": {"height_channel": "rgba.red", "light_angle": 0.0, "mix": 1.0, **_lightingbehaviour.new_params("BumpBoss")}},
     "ErodeFilter": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {"filter_size": 1.0, "filter_type": "box", "mix": 1.0}},
@@ -446,7 +446,7 @@ SPECS = {
     # EdgeExtend (step 5a): dilates the unpremultiplied edge colour outward by `extend_size`
     # pixels from every pixel whose alpha is at least `extend_threshold`; alpha is unchanged and
     # the colour output is unpremultiplied (docs/PARITY_2D.md).
-    "EdgeExtend": {"inputs": ["image"], "optional_inputs": ["mask"],
+    "EdgeExtend": {"inputs": ["image"], "optional_inputs": ["mask", "matte"],
                    "params": {"extend_size": 3.0, "extend_threshold": 0.5, "mix": 1.0, **_drawbehaviour.new_params("EdgeExtend"),
                               **_edgedefocusknobs.new_params("EdgeExtend")}},
     # LightWrap (step 5a): Nuke's two-input finishing node. Inputs are named fg and bg as in Nuke,
@@ -817,7 +817,7 @@ SPECS = {
     "NoTimeBlur": {"inputs": ["image"], "params": {"rounding": "rint", "single": 1}},
     # Motion blur samples the animated upstream image across a shutter. MotionBlur3D can also use
     # an explicit camera plus depth pass to blur a still beauty through camera motion.
-    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask", "transf"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
     "Kronos": {"inputs": ["image"], "optional_inputs": ["matte", "mosrc", "fgvecs", "bgvecs"], "params": {"speed": 1.0, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
@@ -2057,6 +2057,7 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                                **{f"point_{axis}": (-1000000.0, 1000000.0) for axis in "xyz"}},
                "VectorBlur": {"samples": (0, 64)},
                "MotionBlur": {"samples": (1, 64)},
+               "Emboss": {"blur_size": (0.0, 500.0), "blur_quality": (1.0, 1000.0)},
                "BumpBoss": {"lightposition_x": (-1000000.0, 1000000.0), "lightposition_y": (-1000000.0, 1000000.0), "center_x": (-1000000.0, 1000000.0),
                             "center_y": (-1000000.0, 1000000.0), "bumpsize": (-1000.0, 1000.0), "light_height": (-1000.0, 1000.0),
                             "intensity": (-1000.0, 1000.0), "minshadow": (0.0, 1000.0), "legacy_bumpboss": (0, 1)},
@@ -2142,7 +2143,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"], "filter_bounds": ["shape", "format"],
-           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "emboss_type": ["traditional", "effect"], "matte": ["Source Alpha", "Source Inverted Alpha", "None"], "defocus_method": ["accelerated", "fullprecision"], "edge_detector": ["simple", "sobel", "prewitt"], "depth_math": ["depth", "1/depth"],
+           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "emboss_type": ["traditional", "effect"], "matte": list(_edgedefocusknobs.MATTES), "defocus_method": ["accelerated", "fullprecision"], "edge_detector": ["simple", "sobel", "prewitt"], "edge_channels": ["rgb", "rgba", "all", "alpha", "red", "green", "blue", "none"], "depth_math": ["depth", "1/depth"],
            "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],
            "filter_type": ["box", "triangle", "quadratic", "gaussian"],
            "transform_direction": ["forward", "inverse"], "file_interpolation": ["nearest", "linear", "tetrahedral", "best"],

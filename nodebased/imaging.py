@@ -2745,6 +2745,7 @@ class Evaluator:
             vectorgenerator_pair = None
             kronos_frames = None
             motion3d_camera_data = None
+            motion2d_transf = None
             reference_paint = None
             inpaint_samples = None
             contactsheet_sequence = None
@@ -2815,6 +2816,13 @@ class Evaluator:
                     else:
                         low, high = frame - shutter / 2, frame + shutter / 2
                     sample_frames = [low + (i + 0.5) * (high - low) / count for i in range(count)]
+                    transf_key = node["inputs"].get("transf") if kind == "MotionBlur2D" else None
+                    if transf_key is not None:
+                        # The 2D transf input (lane 9 finish): the picture is read once, at this frame, and blurred along the motion of the
+                        # Transform or CornerPin connected there; its matrix is read at this frame and at every shutter sample.
+                        motion2d_transf = (self._transf_matrix(doc, transf_key, frame, tier),
+                                           [self._transf_matrix(doc, transf_key, f, tier) for f in sample_frames])
+                        sample_frames = [frame]
                     if transform_blur:
                         samples = []
                         for sample_frame in sample_frames:
@@ -2836,6 +2844,8 @@ class Evaluator:
                                    for sample_frame in sample_frames]
                     temporal_samples = samples
                     fingerprint = ["time-blur", *(d for _, d in samples)]
+                    if motion2d_transf is not None:
+                        fingerprint.extend(["transform-motion", [round(float(v), 9) for m in [motion2d_transf[0], *motion2d_transf[1]] for v in np.ravel(m)]])
                     if kind == "MotionBlur3D" and node["inputs"].get("camera") is not None:
                         camera_key = node["inputs"]["camera"]
                         cameras = [values[camera_key]]
@@ -3494,6 +3504,8 @@ class Evaluator:
                                        "samples": int(params["samples"])}
                         pixels = self._vector_blur(base_raster.fit(output_data),
                                                    flow[..., 0], flow[..., 1], blur_params)
+                    if kind == "MotionBlur2D" and motion2d_transf is not None:
+                        pixels = self._transf_blur(frames[0], motion2d_transf[0], motion2d_transf[1], output_data)
                     raster = Raster(pixels.astype(np.float32), output_data, reference.display, reference.layers, reference.meta)
                     if kind in ("MotionBlur2D", "MotionBlur3D") or transform_blur:
                         mask_slot = "mask"
@@ -4422,6 +4434,17 @@ class Evaluator:
                 plate = Evaluator._ibk_color(source.pixels, p, inputs[2].fit(source.data))
                 pixels = Evaluator._apply_mask_mix(source.pixels, plate, None if mask is None else mask.fit(source.data), mix)
                 return Raster(pixels, source.data, source.display)
+            if kind == "BumpBoss" and len(inputs) > 2 and inputs[2] is not None:
+                # Input B (lane 9 finish): A's slope is lit onto B, which is also what the mix dissolves toward.
+                b = inputs[2].fit(source.data)
+                lit = Evaluator._bump_boss(source.pixels, p, b)
+                pixels = Evaluator._apply_mask_mix(b, lit, None if mask is None else mask.fit(source.data), mix)
+                return Raster(pixels, source.data, source.display)
+            if kind == "EdgeExtend" and len(inputs) > 2 and inputs[2] is not None:
+                # The Matte input (lane 9 finish): the four `Matte ...` choices read it, fitted to the source's window.
+                extended = Evaluator._edge_extend(source.pixels, p, inputs[2].fit(source.data))
+                pixels = Evaluator._apply_mask_mix(source.pixels, extended, None if mask is None else mask.fit(source.data), mix)
+                return Raster(pixels, source.data, source.display)
             if kind == "Bilateral" and len(inputs) > 2 and inputs[2] is not None:
                 # The guide input (lane 9 step G): the weights take their colours from the guide, fitted to the source's window.
                 guided = Evaluator._bilateral(source.pixels, p, inputs[2].fit(source.data))
@@ -5303,6 +5326,33 @@ class Evaluator:
                                backend=params.get("flow_backend", "auto"))
         return flow
 
+    def _transf_matrix(self, doc, key, frame, tier):
+        """The 3x3 forward matrix of the Transform or CornerPin node `key` at `frame`, in the units of `tier` (MotionBlur2D's 2D transf input)."""
+        from .core import SPECS as _SPECS, LIMITS as _LIMITS
+        from .animation import resolve_params as _resolve_params
+        node = doc["nodes"][key]
+        kind = node["type"]
+        if kind not in ("Transform", "CornerPin"):
+            raise ValueError(f"MotionBlur2D: the 2D transf input needs a Transform or CornerPin node, not {kind}")
+        params = _resolve_params(node, doc.get("animation", {}).get("curves", {}).get(key), frame, _SPECS[kind]["params"], _LIMITS)
+        params = tiers.scale_params(kind, params, tier)
+        return (Evaluator._transform_forward_matrix(params) if kind == "Transform" else Evaluator._cornerpin_forward_matrix(params)).astype(np.float64)
+
+    @staticmethod
+    def _transf_blur(picture, current, samples, data):
+        """The average of `picture` carried along the motion of a transform: at each sample the content sits where the transform puts it then,
+        which is the picture moved by `sample @ inverse(current)`. Outside the picture is transparent black."""
+        gx, gy = np.meshgrid(np.arange(data.width, dtype=np.float64) + data.x + 0.5, np.arange(data.height, dtype=np.float64) + data.y + 0.5)
+        total = np.zeros(picture.shape, np.float64)
+        base = np.linalg.inv(current)
+        for matrix in samples:
+            inverse = np.linalg.inv(matrix @ base)
+            w = inverse[2, 0] * gx + inverse[2, 1] * gy + inverse[2, 2]
+            sx = (inverse[0, 0] * gx + inverse[0, 1] * gy + inverse[0, 2]) / w
+            sy = (inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2]) / w
+            total += Evaluator._resample(picture, (sx - 0.5 - data.x).astype(np.float32), (sy - 0.5 - data.y).astype(np.float32), "bilinear")
+        return (total / max(len(samples), 1)).astype(np.float32)
+
     @staticmethod
     def _camera_depth_flow(depth, camera, camera_start, camera_end, display, data):
         """Project a depth plate through two shutter cameras to get a per-pixel screen-space flow."""
@@ -5654,7 +5704,7 @@ class Evaluator:
         if kind in ("Matrix", "Laplacian"):
             return Evaluator._matrix(source.fit(out), p, laplacian=kind == "Laplacian", origin=(out.x, out.y))
         if kind == "EdgeDetect": return Evaluator._edge_detect(source.fit(out), p, (out.x, out.y))
-        if kind == "Emboss": return Evaluator._emboss(source.fit(out), p)
+        if kind == "Emboss": return Evaluator._emboss(source.fit(out), p, (out.x, out.y))
         if kind == "BumpBoss": return Evaluator._bump_boss(source.fit(out), p)
         if kind == "ErodeFilter": return Evaluator._erode_filter(source.fit(out), p)
         if kind == "Glow":
@@ -5922,7 +5972,12 @@ class Evaluator:
         if kind in ("EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter"):
             op = {"EdgeDetect": Evaluator._edge_detect, "Emboss": Evaluator._emboss,
                   "BumpBoss": Evaluator._bump_boss, "ErodeFilter": Evaluator._erode_filter}[kind]
-            filtered = Evaluator._edge_detect(inputs[0], p, origin) if kind == "EdgeDetect" else op(inputs[0], p)
+            if kind == "BumpBoss" and len(inputs) > 2 and inputs[2] is not None:
+                filtered = op(inputs[0], p, inputs[2])
+                return Evaluator._apply_mask_mix(inputs[2], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                                 mix=p.get("mix", 1.0))
+            filtered = (Evaluator._edge_detect(inputs[0], p, origin) if kind == "EdgeDetect"
+                        else op(inputs[0], p, origin) if kind == "Emboss" else op(inputs[0], p))
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Glow":
@@ -5966,7 +6021,8 @@ class Evaluator:
             if kind == "Dither":
                 filtered = Evaluator._dither(inputs[0], p, frame=frame)
             else:
-                filtered = Evaluator._edge_blur(inputs[0], p, origin) if kind == "EdgeBlur" else Evaluator._edge_extend(inputs[0], p)
+                filtered = (Evaluator._edge_blur(inputs[0], p, origin) if kind == "EdgeBlur"
+                            else Evaluator._edge_extend(inputs[0], p, inputs[2] if len(inputs) > 2 else None))
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind in ("Grain", "Posterize", "SoftClip", "HSVTool", "Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain"):
@@ -7132,17 +7188,17 @@ class Evaluator:
         return out
 
     @staticmethod
-    def _emboss(image, p):
+    def _emboss(image, p, origin=(0, 0)):
         from . import lightingbehaviour          # Emboss Type, traditional or effect only (lane 9 step O)
-        return lightingbehaviour.emboss(image, p)
+        return lightingbehaviour.emboss(image, p, origin)
 
     @staticmethod
-    def _bump_boss(image, p):
+    def _bump_boss(image, p, b=None):
         channel = p.get("height_channel", "rgba.red").split(".")[-1]
         index = {"red": 0, "green": 1, "blue": 2, "alpha": 3}.get(channel, 0)
         if not int(p.get("legacy_bumpboss", 1)):         # the light between center and lightposition lights the picture (lane 9 step O)
             from . import lightingbehaviour
-            return lightingbehaviour.bump_boss(image, p, index)
+            return lightingbehaviour.bump_boss(image, p, index, b)
         h = image[..., index]; a = np.pad(h, 1, mode="edge")
         dx = (a[1:-1, 2:] - a[1:-1, :-2]) * 0.5
         dy = (a[2:, 1:-1] - a[:-2, 1:-1]) * 0.5
@@ -7719,7 +7775,7 @@ class Evaluator:
         return effectbehaviour.edge_blur(image, p, origin)
 
     @staticmethod
-    def _edge_extend(image, p):
+    def _edge_extend(image, p, matte_input=None):
         # Pushes edge colour outward past the matte to kill dark fringes; alpha is untouched. Pixels with alpha at or above
         # `extend_threshold` are trusted sources, after the matte is eroded (positive `erode`) or dilated (negative) by that many
         # pixels: dilated, the soft pixels just outside the matte (alpha above 0) are trusted too, with their own colour. Every other
@@ -7739,7 +7795,7 @@ class Evaluator:
             straight = image[..., :3].astype(np.float32)
         erode = float(p.get("erode", 0.0))
         from . import edgedefocusknobs          # matte, detail amount and edge mask (lane 9 step O); a saved node reads its alpha as the matte
-        matte = alpha if legacy else edgedefocusknobs.matte_plane(image, p)
+        matte = alpha if legacy else edgedefocusknobs.matte_plane(image, p, matte_input)
         known = drawbehaviour.edge_extend_known(matte >= threshold, erode)
         if erode < 0:
             known = (known & (matte > 0)) | (matte >= threshold)

@@ -294,6 +294,9 @@ KNOB_LAYOUT = {
     "Emboss": _groups(KnobGroup("enum", ("emboss_type",), label="Emboss type", help="Traditional adds the relief to the picture; effect outputs the relief alone, about mid grey."),
                       KnobGroup("float_slider", ("angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("width",), soft_range=(0, 20)),
                       KnobGroup("enum", ("edge_detector",), label="Edge detector", help="How the slope of the brightness is read: simple, sobel or prewitt."),
+                      KnobGroup("enum", ("edge_channels",), label="Edge channels", help="The channels whose brightness the slope is read from; none gives no relief."),
+                      KnobGroup("float_slider", ("blur_size",), label="Blur size", soft_range=(0, 20), help="Blur the brightness this much before the slope is read."),
+                      KnobGroup("float_slider", ("blur_quality",), label="Blur quality", soft_range=(1, 100), help="The largest blur worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
                       KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "BumpBoss": _groups(KnobGroup("xy", ("lightposition_x", "lightposition_y"), label="Light position xy", help="Where the light sits; its offset from the image centre sets the side the light leans in."),
                         KnobGroup("float", ("bumpsize",), label="Bump size", help="The size of the emboss."),
@@ -2463,7 +2466,7 @@ NUKE_LAYOUT_LANE9.update({
     "EdgeExtend": ("channels", "matte", "source_premultiplied", "erode", "detail_amount", "edge_mask", "premultiply"),
     "Defocus": ("channels", "defocus", "aspect", "scale", "quality", "defocus_method"),
     # Lane 9 step O: Emboss and BumpBoss in the guide's order.
-    "Emboss": ("channels", "emboss_type", "angle", "width", "edge_detector"),
+    "Emboss": ("channels", "emboss_type", "angle", "width", "edge_detector", "edge_channels", "blur_size", "blur_quality"),
     "BumpBoss": ("channels", "lightposition_x", "bumpsize", "light_height", "intensity", "minshadow", "center_x"),
 })
 NUKE_LABELS.update({

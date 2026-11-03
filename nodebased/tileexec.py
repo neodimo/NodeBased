@@ -1460,8 +1460,15 @@ class TileExecutor:
                                                      origin=(image_artifact.region.x, image_artifact.region.y))
             elif kind == "EdgeDetect":
                 filtered = imaging.Evaluator._edge_detect(image, params, (image_artifact.region.x, image_artifact.region.y))
-            elif kind == "Emboss": filtered = imaging.Evaluator._emboss(image, params)
-            elif kind == "BumpBoss": filtered = imaging.Evaluator._bump_boss(image, params)
+            elif kind == "Emboss": filtered = imaging.Evaluator._emboss(image, params, (image_artifact.region.x, image_artifact.region.y))
+            elif kind == "BumpBoss":
+                b_input = inputs[2] if len(inputs) > 2 and inputs[2] is not None else None
+                if b_input is None:
+                    filtered = imaging.Evaluator._bump_boss(image, params)
+                else:
+                    b = _align_artifact_to(b_input, image_artifact.region)
+                    filtered = imaging.Evaluator._bump_boss(image, params, b)
+                    image = b                                   # the mix dissolves toward B, the picture being embossed
             elif kind == "ErodeFilter": filtered = imaging.Evaluator._erode_filter(image, params)
             elif kind == "Glow":
                 token = str(params.get("width_channel", "none")).strip()
@@ -1496,7 +1503,8 @@ class TileExecutor:
             elif kind == "EdgeBlur":
                 filtered = imaging.Evaluator._edge_blur(image, params, origin=(image_artifact.region.x, image_artifact.region.y))
             elif kind == "EdgeExtend":
-                filtered = imaging.Evaluator._edge_extend(image, params)
+                matte_input = inputs[2] if len(inputs) > 2 and inputs[2] is not None else None
+                filtered = imaging.Evaluator._edge_extend(image, params, None if matte_input is None else _align_artifact_to(matte_input, image_artifact.region))
             elif kind == "Dither":
                 # Noise is hashed from the absolute pixel position, so hand the kernel where this
                 # array sits on the canvas (Dither's halo is zero: the artifact IS the region).

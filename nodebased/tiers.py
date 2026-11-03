@@ -224,6 +224,18 @@ def _edge_detect_rule(params, region, arity):
 def _one_pixel_rule(params, region, arity):
     return [region.expand(1, 1)] + [region] * (arity - 1)
 
+def _emboss_rule(params, region, arity):
+    from . import lightingbehaviour
+    support = 1 + lightingbehaviour.blur_reach(params)           # the slope operator and the pre-blur (lane 9 finish)
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
+def _bump_boss_rule(params, region, arity):
+    # Slots: A, mask, B. A is read a pixel past the region for its slope; B is the picture the light shades, read where A is.
+    padded = region.expand(1, 1)
+    return [padded] + [region] * (arity - 1) if arity < 3 else [padded, region, padded] + [region] * (arity - 3)
+
+
 def _erode_filter_rule(params, region, arity):
     from .blurknobs import size_value, _largest
     size = _largest(size_value(params, "filter_size", 0.0))
@@ -255,7 +267,9 @@ def _edge_extend_rule(params, region, arity):
     support = 0 if size < 0.5 else int(math.ceil(size))
     if not int(params.get("legacy_edge_extend", 1)) and float(params.get("detail_amount", 1.0)) != 1.0:
         support += 1
-    return [region.expand(support, support)] + [region] * (arity - 1)
+    padded = region.expand(support, support)
+    # Slots: image, mask, matte. The Matte input limits which pixels are trusted, so it is read as far out as the image is.
+    return [padded] + [region] * (arity - 1) if arity < 3 else [padded, region, padded] + [region] * (arity - 3)
 
 
 def _light_wrap_support(params):
@@ -589,8 +603,8 @@ REGION_RULES = {
     "Laplacian": _laplacian_rule,
     "Convolve": _convolve_rule,
     "EdgeDetect": _edge_detect_rule,
-    "Emboss": _one_pixel_rule,
-    "BumpBoss": _one_pixel_rule,
+    "Emboss": _emboss_rule,
+    "BumpBoss": _bump_boss_rule,
     "ErodeFilter": _erode_filter_rule,
     "Glow": _glow_rule,
     "Soften": _soften_rule,
@@ -771,7 +785,7 @@ PIXEL_UNIT_PARAMS = {
              "translate_x", "translate_y", "center_x", "center_y", "p0_x", "p0_y", "p1_x", "p1_y", "shadow_distance", "shadow_softness",
              "shadow_expand"),
     "BurnIn": ("font_size", "margin", "y_padding", "bar_x_border", "bar_y_border"),
-    "Blur": ("radius",), "Laplacian": ("laplacian_size",), "EdgeDetect": ("edge_blur_size", "edge_erode_size"), "ErodeFilter": ("filter_size",), "Emboss": ("width",),
+    "Blur": ("radius",), "Laplacian": ("laplacian_size",), "EdgeDetect": ("edge_blur_size", "edge_erode_size"), "ErodeFilter": ("filter_size",), "Emboss": ("width", "blur_size"),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size", "size"), "DirBlur": ("length", "center_x", "center_y"),
     "VectorDistort": ("blur_size",), "Inpaint": ("translate_x", "translate_y", "center_x", "center_y"),

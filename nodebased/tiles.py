@@ -480,7 +480,11 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         from . import filterbehaviour
         support = filterbehaviour.edge_halo(params)
         return (support, support)
-    if kind in ("Emboss", "BumpBoss"):
+    if kind == "Emboss":
+        from . import lightingbehaviour
+        support = 1 + lightingbehaviour.blur_reach(params)
+        return (support, support)
+    if kind == "BumpBoss":
         return (1, 1)
     if kind == "ErodeFilter":
         import math

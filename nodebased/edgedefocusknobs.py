@@ -1,9 +1,10 @@
 """EdgeExtend's matte, detail amount and edge mask, and Defocus's quality and method (lane 9, 2D behaviour step O).
 
 EdgeExtend (the Reference Guide's page):
-* `matte`: "where the foreground matte is taken from to limit the effect": None, Source Alpha (the default) or Source Inverted Alpha.
-  The four choices that read the Matte input (luminance, alpha, and their inversions) need that input, which NodeBased's node does not
-  have; they are not offered.
+* `matte`: "where the foreground matte is taken from to limit the effect": None, Source Alpha (the default), Source Inverted Alpha, and the
+  four choices that read the node's Matte input: its luminance (Rec. 709 weights), its alpha, and their inversions. The Matte input is the
+  third slot, after the mask, and is read on the source's pixel grid. The guide does not say what an unconnected Matte input gives; it
+  reads as black, the empty matte (convention).
 * `detail_amount`: "how much of the original high frequency detail and noise is recovered after eroding or dilating the matte
   region". The colour the extension produces is smoothed by a 3 x 3 average, and `detail_amount` of the difference between the colour and
   that average is put back: 1 (the default) keeps the colour as it was, 0 leaves the smooth colour.
@@ -32,7 +33,7 @@ UPGRADE = {
     "EdgeExtend": {"matte": "Source Alpha", "detail_amount": 1.0, "edge_mask": 0},
     "Defocus": {"quality": 20.0, "defocus_method": "accelerated", "legacy_defocus_disc": 1},
 }
-MATTES = ("Source Alpha", "Source Inverted Alpha", "None")
+MATTES = ("Source Alpha", "Source Inverted Alpha", "None", "Matte Luminance", "Matte Inverted Luminance", "Matte Alpha", "Matte Inverted Alpha")
 
 
 def new_params(kind):
@@ -43,9 +44,19 @@ def upgrade_params(kind):
     return dict(UPGRADE.get(kind, {}))
 
 
-def matte_plane(image, p):
+def matte_plane(image, p, matte=None):
+    """The plane that limits the extension. The four `Matte ...` choices read the Matte input (`matte`, a picture on the source's pixel grid);
+    with nothing connected it reads as black, the empty matte, so a choice that reads it extends nothing (and an inverted one everything)."""
     alpha = image[..., 3]
     choice = str(p.get("matte", "Source Alpha"))
+    if choice.startswith("Matte "):
+        if matte is None:
+            plane = np.zeros_like(alpha)
+        elif "Luminance" in choice:
+            plane = 0.2126 * matte[..., 0] + 0.7152 * matte[..., 1] + 0.0722 * matte[..., 2]
+        else:
+            plane = matte[..., 3]
+        return (1.0 - plane if "Inverted" in choice else plane).astype(np.float32)
     if choice == "Source Inverted Alpha":
         return 1.0 - alpha
     if choice == "None":

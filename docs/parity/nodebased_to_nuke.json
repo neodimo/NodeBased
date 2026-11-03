@@ -2364,6 +2364,7 @@
    "nodebased": "EdgeExtend",
    "inputs": [
     {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
+    {"nodebased": "matte", "nuke": "Matte", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
@@ -2375,7 +2376,7 @@
     {"nodebased": ["premultiply"], "nuke": ["premultiply"], "kind": "same"},
     {"nodebased": ["erode"], "nuke": ["erode"], "kind": "same"},
     {"nodebased": ["legacy_edge_extend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before EdgeExtend followed the guide read the input as premultiplied and write straight colour; lane 9 step C"},
-    {"nodebased": ["matte"], "nuke": ["matte"], "kind": "same", "reason": "None, Source Alpha and Source Inverted Alpha; the four choices that read the Matte input are not offered because NodeBased's node has no Matte input (lane 9 step O)"},
+    {"nodebased": ["matte"], "nuke": ["matte"], "kind": "same", "reason": "None, Source Alpha, Source Inverted Alpha and the four choices that read the Matte input: its luminance, its alpha and their inversions (lane 9 step O and finish)"},
     {"nodebased": ["detail_amount"], "nuke": ["detailAmount"], "kind": "renamed", "reason": "Detail Amount (lane 9 step O)"},
     {"nodebased": ["edge_mask"], "nuke": ["edgeMaskChannel"], "kind": "renamed", "reason": "Edge Mask: on, the alpha channel carries the filled-in edge as a mask (lane 9 step O)"}
    ]
@@ -2495,6 +2496,7 @@
    "nodebased": "MotionBlur2D",
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
+    {"nodebased": "transf", "nuke": "2D transf", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
@@ -2659,18 +2661,19 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["edge_detector"], "nuke": ["edgedetector"], "kind": "renamed", "reason": "Edge Detector: simple, sobel or prewitt, how the slope of the brightness is read (lane 9 step O); older documents read simple"},
-    {"nodebased": [], "nuke": ["edgechannels"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
+    {"nodebased": ["edge_channels"], "nuke": ["edgechannels"], "kind": "renamed", "reason": "Edge Channels: the channels whose brightness the slope is read from (lane 9 finish)"},
     {"nodebased": [], "nuke": ["threshold"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
     {"nodebased": [], "nuke": ["output"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
     {"nodebased": [], "nuke": ["erodesize"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
-    {"nodebased": [], "nuke": ["blursize"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
-    {"nodebased": [], "nuke": ["blurquality"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"}
+    {"nodebased": ["blur_size"], "nuke": ["blursize"], "kind": "renamed", "reason": "Blur size: the brightness is blurred this much before the slope is read (lane 9 finish)"},
+    {"nodebased": ["blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "Blur quality: the largest blur worked at full size (lane 9 finish)"}
    ]
   },
   "BumpBoss": {
    "nodebased": "BumpBoss",
    "inputs": [
     {"nodebased": "image", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "b", "nuke": "B", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
    "knobs": [

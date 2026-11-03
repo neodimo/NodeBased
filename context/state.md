@@ -1,3 +1,7 @@
+## 2026-11-03 - Lane 9 (2D behaviour), step O finish
+
+Branch openclaw/nb-2d-behaviour on main b0df0d96. No schema bump. BumpBoss gets input B, EdgeExtend its Matte input, MotionBlur2D its 2D transf input (a Transform or CornerPin; `Evaluator._transf_matrix` / `_transf_blur`), Emboss Edge Channels, Blur size and Blur quality. Output UV, Z, distance, Emboss Threshold/Output/Erode size stay unsupported with reasons. Audit overall 95.7, knobs that change no pixels 0. Details in TASKLOG.md.
+
 ## 2026-11-03 - Lane 2 (2D behaviour), step N (partial): Kronos, OFlow and TimeWarp
 
 Branch `openclaw/nb-2d-parity`. See the TASKLOG note of the same date. TimeWarp `lookup_length`; Kronos `shutter_time`, `auto_shutter_time`,
