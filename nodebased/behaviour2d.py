@@ -35,6 +35,9 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
     OCIOColorspace, OCIOLogConvert, OCIOLookTransform, OCIODisplay, OCIOFileTransform
                   divide_by_alpha     1: divide the colour by alpha before the OpenColorIO transform and multiply it back after; Nuke transforms the
                                       stored colour (its own (un)premult by does the dividing when asked). Set on graphs saved before.
+    IBKGizmo      luminance_level_enable
+                                      1: `luminance_level` sets how far the plate follows the luminance match whenever the match is on. Nuke's
+                                      "luminance level" has its own enable box (off by default), and with it off the match is whole.
     Log2Lin       older_log_maths     1: the file value is a code value on its own scale (no division by 1023), a pure power of
                                       (value - black) / (white - black) with gamma as the exponent.
     PLogLin       older_log_maths     1: the file value is a raw code value, density per code value alone sets the slope (no division
@@ -67,6 +70,7 @@ NEW = {
     "OCIOLookTransform": {"divide_by_alpha": 0},
     "OCIODisplay": {"divide_by_alpha": 0},
     "OCIOFileTransform": {"divide_by_alpha": 0},
+    "IBKGizmo": {"luminance_level_enable": 0},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1},
@@ -87,6 +91,7 @@ OLD = {
     "OCIOLookTransform": {"divide_by_alpha": 1},
     "OCIODisplay": {"divide_by_alpha": 1},
     "OCIOFileTransform": {"divide_by_alpha": 1},
+    "IBKGizmo": {"luminance_level_enable": 1},
 }
 LIMITS = {"divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_channel_operations": (0, 1)}
 # The operations the Reference Guide lists for ChannelMerge, in its order (the guide's names; "b if not a" is its `A?A:B`).

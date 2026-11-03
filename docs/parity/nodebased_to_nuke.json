@@ -1495,6 +1495,7 @@
     {"nodebased": ["lum_cyan"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["lum_blue"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["lum_magenta"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["mix_luminance"], "nuke": ["mix_luminance"], "kind": "same"},
     {"nodebased": ["sat_thrsh"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["hue_shift"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
@@ -2851,6 +2852,14 @@
     {"nodebased": ["screen_subtraction"], "nuke": ["ss"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `ss`"},
     {"nodebased": ["red_weight"], "nuke": ["red_weight"], "kind": "same"},
     {"nodebased": ["blue_green_weight"], "nuke": ["blue_green_weight"], "kind": "same"},
+    {"nodebased": ["color_r", "color_g", "color_b"], "nuke": ["color"], "kind": "components", "reason": "the screen colour read when the screen type is pick"},
+    {"nodebased": ["screen_range"], "nuke": ["level"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'screen range', scripting name `level`"},
+    {"nodebased": ["luminance_level_enable"], "nuke": ["ll_enable"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'enable' (beside the luminance level), scripting name `ll_enable`"},
+    {"nodebased": ["yellow"], "nuke": ["yellow"], "kind": "same"},
+    {"nodebased": ["cyan"], "nuke": ["cyan"], "kind": "same"},
+    {"nodebased": ["magenta"], "nuke": ["magenta"], "kind": "same"},
+    {"nodebased": ["use_bg_chroma"], "nuke": ["ubcr"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'use bkg chroma', scripting name `ubcr`"},
+    {"nodebased": [], "nuke": ["autolevels"], "kind": "unsupported", "reason": "autolevels stretches the matte by statistics of the whole frame (its darkest and brightest value), which a tile cannot see; the tile path runs this node pointwise and equal to the whole frame, so the knob has nothing to act on (tests/test_2d_behaviour_knobs_k.py)"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
   },

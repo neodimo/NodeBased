@@ -342,7 +342,7 @@ SPECS = {
                  "params": {"exposure_mode": "stops", "blackpoint": 0.0, "gang": 1, "red": 0.0,
                             "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0}},
     "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,1],[360,1]]}' for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix": 1.0, **_behaviour2d.new_params("HueCorrect")}},
+                   "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,1],[360,1]]}' for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix_luminance": 0.0, "mix": 1.0, **_behaviour2d.new_params("HueCorrect")}},
     "ColorLookup": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "use_precomputed": 1, "range": 1.0, "source": 0.0, "target": 0.0, "mix": 1.0, **_behaviour2d.new_params("ColorLookup")}},
     # ColorMatrix (step 4a): a 3x3 RGB matrix as nine knobs, matrix_RC = row R, column C, so
@@ -888,9 +888,11 @@ SPECS = {
     # IBKGizmo (step K1): keys the foreground `fg` against the clean plate `c` (an IBKColor output
     # or any plate of the screen); `bg` is optional and only feeds the luminance match.
     "IBKGizmo": {"inputs": ["fg", "c"], "optional_inputs": ["bg", "mask"],
-                 "params": {"screen_type": "green", "red_weight": 0.5, "blue_green_weight": 0.5,
-                           "luminance_match": 0, "luminance_level": 1.0, "use_bg_luminance": 0,
-                           "screen_subtraction": 1, "mix": 1.0}},
+                 "params": {"screen_type": "green", "color_r": 0.0, "color_g": 0.0, "color_b": 1.0, "red_weight": 0.5, "blue_green_weight": 0.5,
+                           "luminance_match": 0, "screen_range": 1.0, "luminance_level": 1.0, "luminance_level_enable": 0,
+                           "yellow": 0, "cyan": 0, "magenta": 0,
+                           "screen_subtraction": 1, "use_bg_luminance": 0, "use_bg_chroma": 0, "mix": 1.0,
+                           **_behaviour2d.new_params("IBKGizmo")}},
     # ScreenKeyer (step K2): a screen-difference keyer with Keylight's user-facing knobs (docs/PARITY_2D.md).
     # The screen colour picks the dominant channel; `screen_balance` weights the other two in the
     # matte, `despill_bias` in the despill; `alpha_bias` is subtracted from the screen saturation
@@ -1757,7 +1759,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # HueCorrect (step 4a): per-band multipliers and a hue rotation in degrees; ColorMatrix's
           # nine matrix entries are unbounded in practice, so the range is only a sanity fence.
           "sat_red": (0.0, 10.0), "lum_red": (0.0, 10.0), "sat_yellow": (0.0, 10.0), "lum_yellow": (0.0, 10.0), "sat_green": (0.0, 10.0), "lum_green": (0.0, 10.0), "sat_cyan": (0.0, 10.0), "lum_cyan": (0.0, 10.0), "sat_blue": (0.0, 10.0), "lum_blue": (0.0, 10.0), "sat_magenta": (0.0, 10.0), "lum_magenta": (0.0, 10.0),
-          "hue_shift": (-360.0, 360.0), "sat_thrsh": (0.0, 1.0),
+          "hue_shift": (-360.0, 360.0), "sat_thrsh": (0.0, 1.0), "mix_luminance": (0.0, 1.0),
           "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0), "black": (-1023.0, 1023.0), "white": (-1023.0, 1023.0), "black_out": (-1023.0, 1023.0), "white_out": (-1023.0, 1023.0), "linear_reference": (0.000001, 1000.0), "log_reference": (-1000000.0, 1000000.0), "density_per_code_value": (0.0000001, 1.0), "negative_gamma": (0.001, 10.0), "toe": (0.000001, 0.999999), "toe_lift": (-1.0, 1.0),
 
           # ChromaKeyer and IBKColor/IBKGizmo (step K1).
@@ -1768,7 +1770,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "fill_size": (0, 100), "screen_erode": (0.0, 50.0), "darks": (0.0, 1.0), "lights": (0.0, 1000.0),
           "patch_black": (0, 1), "red_weight": (0.0, 1.0), "blue_green_weight": (0.0, 1.0),
           "luminance_match": (0, 1), "luminance_level": (0.0, 1.0), "use_bg_luminance": (0, 1),
-          "screen_subtraction": (0, 1),
+          "screen_subtraction": (0, 1), "screen_range": (0.0, 4.0), "color_r": (0.0, 1000.0), "color_g": (0.0, 1000.0), "color_b": (0.0, 1000.0),
+          "luminance_level_enable": (0, 1), "yellow": (0, 1), "cyan": (0, 1), "magenta": (0, 1), "use_bg_chroma": (0, 1),
           # ScreenKeyer (step K2).
           "screen_red": (0.0, 1000.0), "screen_green": (0.0, 1000.0), "screen_blue": (0.0, 1000.0),
           "screen_gain": (0.0, 10.0), "screen_balance": (0.0, 1.0), "alpha_bias": (-1.0, 1.0),
@@ -2177,7 +2180,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "a_channel": ["A.r", "A.g", "A.b", "A.a"], "b_channel": ["B.r", "B.g", "B.b", "B.a"],
            "out_channel": ["R", "G", "B", "A"],
            # IBKColor and IBKGizmo (step K1).
-           "screen_type": ["green", "blue"],
+           "screen_type": ["green", "blue", "pick"],
            # ScreenKeyer's output view (step K2).
            "keyer_view": list(_keyerknobs.KEYER_VIEWS),
            "screen_replace": list(_keyerknobs.REPLACE_METHODS), "inside_replace": list(_keyerknobs.REPLACE_METHODS),

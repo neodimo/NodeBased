@@ -72,7 +72,12 @@ NOT_PIXEL = {
                  "SourceXMethod": "acts only with the source cropped, which is another knob moved", "SourceYMethod": "acts only with the source cropped, which is another knob moved"},
     "IBKColor": {"Size": "acts on a plate with a keyed-out patch to fill (screen erode and patch black set, as in tests/test_2d_behaviour_knobs_color.py); the fixture is not such a plate",
                  "mult": "acts on a plate with a keyed-out patch to fill, as above"},
-    "IBKGizmo": {"ublu": "acts only with a background wired and luminance matching on"},
+    "HueCorrect": {"mix_luminance": "restores the luminance the hue curves changed, so it acts only once a curve has changed it; the default curves are flat (tests/test_2d_behaviour_knobs_k.py moves it on a lum curve)"},
+    "IBKGizmo": {"ublu": "acts only with a background wired and luminance matching on",
+                 "luma": "acts only with luminance matching and the luminance level's enable box on, which is two other knobs moved (tests/test_2d_behaviour_knobs_k.py)",
+                 "ll_enable": "acts only with luminance matching on (tests/test_2d_behaviour_knobs_k.py)",
+                 "ubcr": "acts only with a background wired (tests/test_2d_behaviour_knobs_k.py)",
+                 "color": "acts only with the screen type pick (tests/test_2d_behaviour_knobs_k.py)"},
     "Merge": {"screen_alpha": "acts only for operations that do not already composite by alpha (plus, minus, multiply and the like), not the default over"},
     # Lane 2 step E (11/2): TimeDissolve's kernel is a Dissolve at one `which`; the frame range and the curve turn the frame into that `which` in the graph walk.
     "TimeDissolve": {k: "acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)"

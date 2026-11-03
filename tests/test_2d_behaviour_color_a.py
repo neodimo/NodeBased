@@ -324,6 +324,7 @@ _HC_CHANGES = {
     "fringe": CHROME["fringe"], "unpremult": CHROME["unpremult"], "mix": CHROME["mix"], "inject": {"inject": 1},
     "invert_unpremult": ({"unpremult": "rgba.alpha"}, {"invert_unpremult": 1}),
     "hue": {"curve_sat": '{"interpolation":"linear","points":[[0,1.2],[360,1.2]]}'},
+    "mix_luminance": {"mix_luminance": 1.0},
 }
 
 

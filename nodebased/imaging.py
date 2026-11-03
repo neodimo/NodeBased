@@ -6659,25 +6659,48 @@ class Evaluator:
         with `screen_subtraction` the plate is subtracted from the foreground by the transparent
         share (1 - alpha), otherwise the foreground is scaled by alpha."""
         fg_rgb, plate_rgb = fg[..., :3], plate[..., :3]
-        dominant = 2 if p.get("screen_type", "green") == "blue" else 1
+        screen_type = p.get("screen_type", "green")
+        if screen_type == "pick":
+            # "pick" takes the screen from the `color` knob: its largest channel is the screen channel (a tie reads as green).
+            picked = [float(p.get(f"color_{c}", d)) for c, d in (("r", 0.0), ("g", 0.0), ("b", 1.0))]
+            dominant = 2 if picked[2] > max(picked[0], picked[1]) else (1 if picked[1] >= picked[0] else 0)
+        else:
+            dominant = 2 if screen_type == "blue" else 1
         rw, bgw = float(p.get("red_weight", 0.5)), float(p.get("blue_green_weight", 0.5))
-        # The weights apply to red and to the remaining (blue for green screens, green for blue).
-        other = 2 if dominant == 1 else 1
+        # The weights apply to red and to the remaining (blue for green screens, green for blue); a red picked screen weighs green and blue.
+        first, second = {0: (1, 2), 1: (0, 2), 2: (0, 1)}[dominant]
 
         def difference(rgb):
-            return rgb[..., dominant:dominant + 1] - (rw * rgb[..., 0:1] + bgw * rgb[..., other:other + 1])
+            return rgb[..., dominant:dominant + 1] - (rw * rgb[..., first:first + 1] + bgw * rgb[..., second:second + 1])
 
         if p.get("luminance_match"):
             reference = bg[..., :3] if (p.get("use_bg_luminance") and bg is not None) else fg_rgb
             gain = np.clip(Evaluator._luma(reference) / np.maximum(Evaluator._luma(plate_rgb), 1e-4), 0.0, 4.0)
-            plate_rgb = plate_rgb * (1.0 + float(p.get("luminance_level", 1.0)) * (gain - 1.0))
+            # The luminance level has its own enable (Nuke's `ll_enable`); with it off the plate follows the match whole.
+            strength = float(p.get("luminance_level", 1.0)) if p.get("luminance_level_enable", 0) else 1.0
+            plate_rgb = plate_rgb * (1.0 + strength * (gain - 1.0))
         plate_d = difference(plate_rgb)
+        # Screen range scales the plate's difference the matte is measured against: a wider range keys more of the picture (1 is the range the node always used).
+        reach = plate_d / max(float(p.get("screen_range", 1.0)), 1e-4)
         alpha = np.where(plate_d > 1e-4,
-                         np.clip(1.0 - difference(fg_rgb) / np.maximum(plate_d, 1e-4), 0.0, 1.0), 1.0)
+                         np.clip(1.0 - difference(fg_rgb) / np.maximum(reach, 1e-4), 0.0, 1.0), 1.0)
         if p.get("screen_subtraction", 1):
             rgb = np.maximum(fg_rgb - (1.0 - alpha) * plate_rgb, 0.0)
         else:
             rgb = fg_rgb * alpha
+        if p.get("use_bg_chroma") and bg is not None:
+            # The screen taken out of a semi-transparent edge is replaced by the background's chroma at the plate's own luminance, so the edge
+            # carries the background's colour and not a dark fringe. It weighs alpha * (1 - alpha): nothing in a pixel that is wholly foreground or wholly screen.
+            chroma = bg[..., :3] / np.maximum(Evaluator._luma(bg[..., :3]), 1e-4) * Evaluator._luma(plate_rgb)
+            rgb = rgb + alpha * (1.0 - alpha) * chroma
+        # Yellow, cyan and magenta take the excess of that secondary colour out of the result (the amount by which the two channels that make it
+        # stand over the third): yellow is red and green over blue, cyan is green and blue over red, magenta is red and blue over green.
+        for flag, pair, third in (("yellow", (0, 1), 2), ("cyan", (1, 2), 0), ("magenta", (0, 2), 1)):
+            if p.get(flag):
+                excess = np.maximum(np.minimum(rgb[..., pair[0]], rgb[..., pair[1]]) - rgb[..., third], 0.0)[..., None]
+                rgb = rgb.copy()
+                for channel in pair:
+                    rgb[..., channel:channel + 1] = rgb[..., channel:channel + 1] - excess
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
 
     @staticmethod
@@ -7172,6 +7195,15 @@ class Evaluator:
                           [(1-c)/3+s*k, c + (1-c)/3, (1-c)/3-s*k],
                           [(1-c)/3-s*k, (1-c)/3+s*k, c + (1-c)/3]], np.float32)
             out = out @ m.T
+        mixed = float(p.get("mix_luminance", 0.0))
+        if mixed != 0.0:
+            # Mix luminance puts the luminance the pixel came in with back: 1 gives the output the input's luminance (the hue curves change the
+            # colour only), 0 leaves the corrected luminance.
+            if older:
+                grey = lambda c: 0.2126 * c[..., 0:1] + 0.7152 * c[..., 1:2] + 0.0722 * c[..., 2:3]
+            else:
+                grey = lambda c: 0.2125 * c[..., 0:1] + 0.7154 * c[..., 1:2] + 0.0721 * c[..., 2:3]
+            out = out + mixed * (grey(rgb) - grey(out))
         return np.concatenate([out, image[..., 3:4]], axis=2).astype(np.float32)
     @staticmethod
     def _color_lookup(image, p):

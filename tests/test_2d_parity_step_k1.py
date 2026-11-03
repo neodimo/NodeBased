@@ -288,7 +288,7 @@ class GraphTests(unittest.TestCase):
                 with self.subTest(kind=kind, param=name):
                     self.assertTrue(name in LIMITS or name in CHOICES or name == "mix" or name == "invert",
                                     f"{name} has neither LIMITS nor CHOICES")
-        self.assertEqual(CHOICES["screen_type"], ["green", "blue"])
+        self.assertEqual(CHOICES["screen_type"], ["green", "blue", "pick"])
 
     def test_evaluator_graph_end_to_end(self):
         g = Graph()

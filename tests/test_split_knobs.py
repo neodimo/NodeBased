@@ -656,8 +656,8 @@ LAYOUTS = {
     ],
     'Saturation': ['Channels', 'Saturation', 'Luminance math', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
     'HueCorrect': [
-        'Channels', 'Sat', 'Lum', 'Red', 'Green', 'Blue', 'R Sup', 'G Sup', 'B Sup', 'Saturation threshold', 'Hue shift',
-        'Older curve maths', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Channels', 'Sat', 'Lum', 'Red', 'Green', 'Blue', 'R Sup', 'G Sup', 'B Sup', 'Saturation threshold', 'Hue shift', 'Older curve maths', 'Mask', 'Inject', 'Invert', 'Fringe',
+        '(Un)premult by', 'Invert', 'Mix luminance', 'Mix'
     ],
     'HSVTool': [
         'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Hue rolloff', 'Saturation range',
@@ -707,7 +707,8 @@ LAYOUTS = {
     'Difference': ['Offset', 'Gain', 'Output', 'Output channel', 'Mix'],
     'IBKColor': ['Screen type', 'Size', 'Darks', 'Lights', 'Erode', 'Patch black', 'Mix'],
     'IBKGizmo': [
-        'Screen type', 'Red weight', 'Blue/green weight', 'Luminance match', 'Luminance level', 'Screen subtraction', 'Use bkg luminnance', 'Mix'
+        'Screen type', 'Color', 'Red weight', 'Blue/green weight', 'Luminance match', 'Screen range', 'Luminance level', 'Enable', 'Yellow', 'Cyan',
+        'Magenta', 'Screen subtraction', 'Use bkg luminnance', 'Use bkg chroma', 'Mix'
     ],
     'Copy': [
         'Copy Red', 'Copy Green', 'Copy Blue', 'Copy Alpha', 'Layer copy', 'Metadata from', 'Range from', 'Mask', 'Inject',
@@ -763,7 +764,7 @@ class LayoutTests(unittest.TestCase):
         for kind in ("Grade", "ColorCorrect", "Saturation", "HueCorrect", "Toe", "Posterize", "Log2Lin", "PLogLin", "Colorspace",
                      "ColorLookup", "Expression", "Copy"):
             with self.subTest(kind=kind):
-                labels = displayed(kind)
+                labels = [label for label in displayed(kind) if label != "Mix luminance"]      # the guide lists it between the strip and mix, on HueCorrect
                 self.assertEqual(labels[-len(tail):], tail if "(Un)premult by" in labels else labels[-len(tail):])
                 self.assertEqual(labels[-1], "Mix")
                 self.assertEqual(labels[-7:-1], tail[:-1])

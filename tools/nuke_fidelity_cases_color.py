@@ -1327,9 +1327,10 @@ def _ibk_cases():
             ("ibkgizmo_red_blue_green_weights", "IBKGizmo", "IBKGizmo", "red weight and blue/green weight", "no page of the guide or the tutorial defines the weights beyond their names"),
             ("ibkgizmo_luminance_match_level", "IBKGizmo", "IBKGizmo", "luminance match, luminance level, use bkg luminance and use bkg chroma", "no page of the guide or the tutorial describes any of the four knobs"),
             ("ibkgizmo_screen_subtraction_despill", "IBKGizmo", "IBKGizmo", "screen subtraction (the despill)", "no page of the guide or the tutorial describes this knob"),
-            ("ibkgizmo_unimplemented_knobs", "IBKGizmo", "IBKGizmo", "color, screen range, autolevels, yellow, cyan and magenta",
-             "eight of the gizmo's fifteen knobs (color, screen range, enable for the luminance level, autolevels, yellow, cyan, magenta, use bkg chroma) have no NodeBased param, and no page "
-             "says what they do; they stay unpaired until the gizmo's own definition can be read")):
+            ("ibkgizmo_unimplemented_knobs", "IBKGizmo", "IBKGizmo", "color, screen range, enable for the luminance level, yellow, cyan, magenta and use bkg chroma",
+             "step K (11/3) gave the gizmo these seven knobs from their names (color picks the screen under screen type pick, a wider screen range keys more, the enable box lets the "
+             "luminance level act, yellow / cyan / magenta take that secondary colour's excess out, use bkg chroma puts the background's chroma in a semi-transparent edge), and no page "
+             "says what they compute, so they stay not scored (tests/test_2d_behaviour_knobs_k.py checks each as a property of the pixels). autolevels stays unpaired: it reads the whole frame, which a tile cannot see")):
         out.append(_unscored_case(case_id, nuke, kind, f"{guide}: {what}", reason, fixture="C"))
     return out
 

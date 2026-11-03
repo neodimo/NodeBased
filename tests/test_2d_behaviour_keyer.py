@@ -619,7 +619,9 @@ class IBKColorTilesTests(unittest.TestCase):
 
 
 class IBKGizmoKnobsActTests(unittest.TestCase):
-    CHANGES = {"st": {"screen_type": "blue"}, "lm_enable": {"luminance_match": 1}, "luma": ({"luminance_match": 1, "luminance_level": 0.2}, {"luminance_level": 1.0}),
+    CHANGES = {"st": {"screen_type": "blue"}, "lm_enable": {"luminance_match": 1}, "luma": ({"luminance_match": 1, "luminance_level_enable": 1, "luminance_level": 0.2}, {"luminance_level": 1.0}),
+               "level": {"screen_range": 2.0}, "ll_enable": ({"luminance_match": 1, "luminance_level": 0.2}, {"luminance_level_enable": 1}), "yellow": {"yellow": 1}, "cyan": {"cyan": 1},
+               "magenta": {"magenta": 1}, "color": ({"screen_type": "pick"}, {"color_r": 0.1, "color_g": 0.8, "color_b": 0.2}), "ubcr": ({}, {"use_bg_chroma": 1}),
                "ublu": ({"luminance_match": 1}, {"use_bg_luminance": 1}), "ss": {"screen_subtraction": 0}, "red_weight": {"red_weight": 0.9}, "blue_green_weight": {"blue_green_weight": 0.1}}
 
     def test_every_paired_knob_acts(self):
