@@ -46,6 +46,9 @@ Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not re
 real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
 
 Bilateral: guide input, Guide channels, Size as the window, Positional sigma, Filter (gaussian or median); `legacy_bilateral` keeps the older picture. Sharpen: `quailty` implemented, listed in `NOT_PIXEL` (acts above the size). VectorCornerPin: user, To and From pins, Output (warped src, st-map, st-map inverse), `use_baked`; `legacy_vectorcornerpin` keeps the corner points and the SmartVector requirement. Tests: `tests/test_2d_behaviour_filter_g.py`. Report: `docs/PARITY_2D_FIDELITY.md` (overall 93.0).
+## 2026-11-03 - Lane 2 (2D behaviour), step H: ScannedGrain, Flare, Glint, Sparkles
+
+New kernels in `nodebased/drawfxbehaviour.py` behind `legacy_flare`, `legacy_glint`, `legacy_sparkles`, `legacy_scannedgrain` (a saved node keeps its older kernel; `ops2d_chrome.upgrade_nodes` sets the flag). Cases in `tools/nuke_fidelity_cases_extra.py` (34 scored, 10 not scored), tests in `tests/test_2d_behaviour_extra_draw.py`, frozen older kernels in `tests/legacy_behaviour_d.py`. Fidelity 93.0 -> 93.2 (Draw 88.7 -> 91.4). Details in the TASKLOG note of the same date.
 
 ## 2026-11-02 - Lane 2 (2D behaviour), step G: EdgeBlur, GodRays, VolumeRays, BumpBoss
 
