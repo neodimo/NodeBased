@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step M of 2: new Read, Write, BurnIn, IBKColor and Keyer nodes start with Nuke's defaults, and IBKColor gets its second input (finish 1) (integrator tick)
+
+- **What was done:** `main` `a139936d` -> `5c9b9a24` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `5c9b9a24`: Ran 9070 tests in 601.391 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step O of 2: BumpBoss, Emboss, the motion blurs, EdgeExtend and Defocus get Nuke's missing knobs and defaults (integrator tick)
 
 - **What was done:** `main` `16feae1a` -> `b121495d` plus this docs commit. Evidence and per-lane commit

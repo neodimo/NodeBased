@@ -1,5 +1,24 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step O: Emboss, BumpBoss, EdgeExtend, Defocus and the motion blurs
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:15 AM on 2026-11-03 PDT)
+
+`main` moved `a139936d` -> `5c9b9a24` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `5c9b9a24` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0856.log`, started 8:56 AM): **Ran 9070 tests in 601.391 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step M of 2: new Read, Write, BurnIn, IBKColor and Keyer nodes start with Nuke's defaults, and IBKColor gets its second input (finish 1).** Commits:
+  - `ea362e84` 2D behaviour step M finish (lane 2): a new Read starts with auto alpha off and a new Write on rgb; saved nodes keep the value of before; fidelity 95.4 -> 95.5
+  Diff: 13 files changed, 170 insertions(+), 57 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (8:25 AM on 2026-11-03 PDT)
 
 `main` moved `16feae1a` -> `b121495d` (lane commits cherry-picked onto main in lane order) and then to this
