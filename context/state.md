@@ -1,3 +1,7 @@
+## 2026-11-03 - lane 9 (2D behaviour), step J: LensDistortion's lens models
+
+See the TASKLOG entry of the same date: Undistort and Redistort read NukeX Classic and Custom radial models, Mode with STMap, BBox, Output Format and Distortion Scaling; the Brown-Conrady lens is a third preset that saved graphs keep. LensDistortion fidelity 21.0 -> 77.6; overall 93.5 -> 93.6.
+
 ## 2026-11-03 - lane 2 (2D behaviour), step J of 2: Kronos and OFlow retime with Nuke's timing knobs
 
 See the TASKLOG entry of the same title for what landed, the legacy flag (`legacy_retime`, Kronos only; no schema bump: the new params get their values from `retimeknobs.upgrade_params` on load) and what is open. Retime frame rules live in `nodebased/retimeknobs.py`; the cases are in `tools/nuke_fidelity_cases_time.py` and the tests in `tests/test_2d_behaviour_retime_vectors.py`.
