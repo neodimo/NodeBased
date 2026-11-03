@@ -637,7 +637,7 @@ def cases():
 
     shifted = tuple((x + 3.0, y + 2.0) for x, y in FRAME_QUAD)
     doubled = tuple((2 * x, 2 * y) for x, y in FRAME_QUAD)
-    skewed = ((1.0, 1.0), (14.0, 2.0), (2.0, 11.0), (15.0, 9.7))
+    skewed = ((1.0, 1.0), (14.0, 2.6), (2.0, 11.0), (15.0, 9.7))   # no output pixel centre sits on a source pixel boundary (least margin 0.006 px)
     pin("cornerpin_identity", FRAME_QUAD, lambda fx: _pinned(fx, FRAME_QUAD, FRAME_QUAD), "convention",
         "CornerPin2D with the to points on the from points leaves the picture as it is (the default)")
     pin("cornerpin_translation", shifted, lambda fx: _pinned(fx, FRAME_QUAD, shifted), "guide",
