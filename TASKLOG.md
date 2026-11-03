@@ -1,3 +1,19 @@
+## 2026-11-03 - Lane 2 (2D parity), 2D behaviour step N (partial): Kronos, OFlow and TimeWarp retime knobs and inputs
+
+- **What was done (evidence: tests and the audit, both run):** TimeWarp's Input length (`lookup_length`, the box filter's window width) with four
+  scored cases; Kronos's Shutter Time, Automatic Shutter Time, Output, Matte Channel, Flicker Compensation, Vector Detail and Smoothness (paired,
+  tested on a moving plate and a stamped plate) and its Matte, MoSrc, FgVecs and BgVecs inputs (paired, tested); OFlow's Automatic Shutter Time and
+  Flicker Compensation. Kernel changed: a Kronos saved before this step keeps the output-speed-wide shutter (`legacy_shutter`, set by the load
+  migration); TimeWarp's box with length 1 is the old blend, bit for bit. Fidelity: TimeWarp 82.4 -> 96.1, Kronos 65.8 -> 83.4, OFlow 82.4 -> 85.5,
+  Time group 98.3 -> 98.8, overall 95.7 -> 95.8 (previous formula 95.3 unchanged). "Knobs that change no pixels": none listed (0).
+  Unpaired with a reason in the mapping: Kronos `resetInputRange`, `motionEstimation`, `strength`, `resampleType`, `legacymodeNuke9`, `weightRed`,
+  `weightGreen`, `weightBlue`, `vectorSpacing`, `showVectors`; OFlow `resetInputRange`, `resampleType`, the weights, `vectorSpacing`, `showVectors`.
+- **Not done:** part 2 (Root: `format`, `proxy_type`, `proxy_format`/`proxySetting`, `Script_directory`, and `is_live`/`render_mode` listed unsupported);
+  no schema bump was needed so far (SCHEMA_VERSION stays 29). Kronos matte/vector inputs have unit tests but no audit cases (the case harness feeds one
+  input); the shutter, vector detail and smoothness cases stay "not scored" (the guide gives no numbers).
+- **Next owner:** Lane 2 finish step: Root fields, with `RootPairingTests` in tests/test_2d_parity_notimeblur.py as the model.
+- **Failure mode:** a Kronos saved before this step with `shutter_samples` above 1 and the motion method averages a shutter as wide as its output speed; the migration sets `legacy_shutter` so that stays.
+
 ## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step M of 2: new Read, Write, BurnIn, IBKColor and Keyer nodes start with Nuke's defaults, and IBKColor gets its second input (finish 1) (integrator tick)
 
 - **What was done:** `main` `a139936d` -> `5c9b9a24` plus this docs commit. Evidence and per-lane commit

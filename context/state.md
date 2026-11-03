@@ -1,3 +1,9 @@
+## 2026-11-03 - Lane 2 (2D behaviour), step N (partial): Kronos, OFlow and TimeWarp
+
+Branch `openclaw/nb-2d-parity`. See the TASKLOG note of the same date. TimeWarp `lookup_length`; Kronos `shutter_time`, `auto_shutter_time`,
+`retime_output`, `motion_matte_channel`, `flicker_compensation`, `vector_detail`, `smoothness`, `legacy_shutter`, inputs `matte`, `mosrc`,
+`fgvecs`, `bgvecs`; OFlow `auto_shutter_time`, `flicker_compensation`. Left: Root's project format, proxy and script directory.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step O: Emboss, BumpBoss, EdgeExtend, Defocus and the motion blurs
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:15 AM on 2026-11-03 PDT)
