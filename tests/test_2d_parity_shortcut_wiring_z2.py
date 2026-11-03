@@ -163,7 +163,13 @@ class ShortcutWiringTests(unittest.TestCase):
         out = evaluator.evaluate_raster(w.dispatcher.document, roto).pixels
         self.assertEqual(out.shape, plate.shape)
         np.testing.assert_array_equal(out[..., :3], plate[..., :3])
-        coverage = out[..., 3]
+        # Replace is off (Nuke's default): the shape is drawn into the plate's alpha, which stays where the shape does not reach
+        # (lane 9 step E, the Roto guide's `replace`). With Replace on, the alpha is the shape's coverage alone.
+        np.testing.assert_array_equal(out[..., 3], np.maximum(out[..., 3], plate[..., 3]))
+        self.assertEqual(out[20, 20, 3], 1.0)
+        self.assertEqual(out[2, 2, 3], plate[2, 2, 3])
+        self.assertIsNotNone(w.command({"op": "set", "id": roto, "param": "replace", "value": 1}))
+        coverage = evaluator.evaluate_raster(w.dispatcher.document, roto).pixels[..., 3]
         self.assertEqual(coverage[20, 20], 1.0)
         self.assertEqual(coverage[2, 2], 0.0)
         self.assertEqual(coverage[40, 60], 0.0)
