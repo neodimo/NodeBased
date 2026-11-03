@@ -8,8 +8,10 @@ test_timeline.py rather than being Qt-free like most color-pipeline tests would 
 import os
 import threading
 import unittest
+import unittest.mock
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+from PySide6.QtGui import QOffscreenSurface
 from PySide6.QtWidgets import QApplication
 import numpy as np
 
@@ -194,6 +196,72 @@ class GpuDisplayOwnershipTests(unittest.TestCase):
         finally:
             gpudisplay.configure_surface(*previous)
             gpudisplay.reset_for_testing()
+
+
+class GpuDisplayWorkerSurfaceTests(unittest.TestCase):
+    """11/2: a preview worker built its own QOffscreenSurface (create() waits for the GUI thread) while the GUI thread was blocked in
+    agentloop.request waiting for that worker, and the full suite sat 40 minutes. A worker never waits on the GUI thread for a surface."""
+
+    def _call_from_worker(self, name, getter, seconds=4):
+        """Run `getter` on a thread called `name` while this (GUI) thread blocks without processing events. Qt's own
+        QOffscreenSurface.create() waits for the GUI thread on some platforms and not on this offscreen one, so a stand-in
+        surface that blocks off the GUI thread (until released) makes the wait reproducible anywhere."""
+        gui = threading.current_thread()
+        release = threading.Event()
+        real = QOffscreenSurface
+
+        class WaitingSurface(real):
+            def create(self):
+                if threading.current_thread() is not gui:
+                    release.wait(30)
+                return super().create()
+
+        out = []
+        worker = threading.Thread(target=lambda: out.append(getter()), name=name, daemon=True)
+        with unittest.mock.patch('PySide6.QtGui.QOffscreenSurface', WaitingSurface):
+            worker.start()
+            worker.join(seconds)         # no event processing here: the GUI thread is "busy"
+            returned = not worker.is_alive()
+            release.set()
+            worker.join(10)
+        return returned, out
+
+    def setUp(self):
+        self._previous = (gpudisplay._surface, gpudisplay._owner_prefix, getattr(gpudisplay, '_convert_surface', None))
+        gpudisplay.reset_for_testing()
+
+    def tearDown(self):
+        gpudisplay._surface, gpudisplay._owner_prefix = self._previous[:2]
+        gpudisplay._convert_surface = self._previous[2]
+        gpudisplay.reset_for_testing()
+
+    def test_worker_without_a_premade_surface_returns_while_the_gui_thread_is_blocked(self):
+        gpudisplay._surface = gpudisplay._owner_prefix = None
+        returned, out = self._call_from_worker('worker-no-surface', gpudisplay.get_display)
+        self.assertTrue(returned, 'get_display waited on the blocked GUI thread')
+        self.assertEqual(out, [None])
+        self.assertIsNone(gpudisplay._failed_reason, 'the card was not at fault: later GUI-thread calls must still work')
+
+    def test_convert_thread_without_a_premade_surface_returns_while_the_gui_thread_is_blocked(self):
+        gpudisplay._surface, gpudisplay._owner_prefix = None, 'nodebased-preview'
+        gpudisplay._convert_surface = None
+        returned, out = self._call_from_worker(gpudisplay.CONVERT_THREAD_PREFIX + '-test', gpudisplay.get_display)
+        self.assertTrue(returned, 'the conversion thread waited on the blocked GUI thread')
+        self.assertEqual(out, [None])
+
+    def test_worker_with_a_premade_surface_still_gets_the_card(self):
+        surface = QOffscreenSurface()
+        surface.setFormat(gpudisplay.context_format())
+        surface.create()
+        if not surface.isValid():
+            self.skipTest('no offscreen GL surface on this platform')
+        gpudisplay._surface, gpudisplay._owner_prefix = surface, 'worker-premade'
+        returned, out = self._call_from_worker('worker-premade', gpudisplay.get_display)
+        self.assertTrue(returned)
+        if out == [None]:
+            self.skipTest(f'no GL context on this platform: {gpudisplay._failed_reason}')
+        self.assertIsNotNone(out[0])
+        gpudisplay.reset_for_testing()
 
 
 if __name__ == '__main__':

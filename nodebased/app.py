@@ -8918,8 +8918,13 @@ class Window(QMainWindow):
         gpu_surface = QOffscreenSurface(parent=self)
         gpu_surface.setFormat(gpudisplay.context_format())
         gpu_surface.create()
-        gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview")
+        # The playback conversion thread builds a context of its own and so needs a surface of its own, also made here.
+        gpu_convert_surface = QOffscreenSurface(parent=self)
+        gpu_convert_surface.setFormat(gpudisplay.context_format())
+        gpu_convert_surface.create()
+        gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview", convert_surface=gpu_convert_surface)
         self._gpu_surface = gpu_surface
+        self._gpu_convert_surface = gpu_convert_surface
         self._tracker_future = None
         self._tracker_cancel = None
         self._tracker_index = None
