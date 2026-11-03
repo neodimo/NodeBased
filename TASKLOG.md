@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step J of 2: Kronos and OFlow retime with Nuke's timing knobs, Lane 9 (2D behaviour B, Claude Sonnet 5.5) step J of 2: LensDistortion's lens models, checked against a stated distortion (integrator tick)
+
+- **What was done:** `main` `de38d3b9` -> `e054f5cd` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `e054f5cd`: Ran 8741 tests in 578.171 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step J of 2: LensDistortion's lens models checked against a stated distortion
 
 - **What was done (evidence):** one code commit plus a docs commit, targeted gate green (lens modules, audit, knowledge, tiles, bypass, knobs, tiers, core, split knobs, nodecatalog, the properties-panel tests). Undistort and Redistort read Nuke's Model Preset: NukeX Classic (guide: xu = xd / (1 + k0 rd^2 + k1 rd^4), k0 and k1 the two Denominator s) and Custom (adds Numerator s and the Direction; Backward is used directly, Forward is inverted), Lens Type (Anamorphic reads the squeeze, Spherical ignores it), Centre, Mode (Undistort, Redistort, STMap into `vector.forward` and `vector.backward`), Filter (default now cubic), BBox (Auto, Input, Manual), Output Format and Distortion Scaling. The math is `lensmodel.RationalLens`, which shares the squeeze, centre, window growth and sampling code of the Brown-Conrady lens. Units: r in half the longer side (the guide gives no factor); Centre in pixels from the format middle, y up (also a reading).

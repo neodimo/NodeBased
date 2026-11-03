@@ -1,5 +1,31 @@
 ## 2026-11-03 - lane 9 (2D behaviour), step J: LensDistortion's lens models
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:35 AM on 2026-11-03 PDT)
+
+`main` moved `de38d3b9` -> `e054f5cd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e054f5cd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0325.log`, started 3:25 AM): **Ran 8741 tests in 578.171 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step J of 2: Kronos and OFlow retime with Nuke's timing knobs.** Commits:
+  - `5e7e852b` Kronos and OFlow: Nuke's timing knobs (input range, timing, input speed, channels, method) with scored retime cases
+  Diff: 17 files changed, 907 insertions(+), 63 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step J of 2: LensDistortion's lens models, checked against a stated distortion.** Commits:
+  - `c8346f8f` tests: the demo-plate lens test pins bilinear (the demo plate's resampling); new Redistort nodes default to Nuke's cubic (lane 9 step J follow-up)
+  - `19fc99b5` docs: correct the test count in the step J note
+  - `f2c0d968` docs: LensDistortion row, TASKLOG and state notes for lane 9 step J
+  - `da3a49a4` LensDistortion: Undistort and Redistort read Nuke's NukeX Classic and Custom radial models (denominators and numerators, direction, centre, squeeze for an anamorphic lens), Mode with STMap output, BBox, Output Format and Distortion Scaling; graphs saved before keep the Brown-Conrady lens; pixel cases and tests against the stated equation; the fidelity report is rebuilt (2D behaviour, lane 9 step J)
+  Diff: 18 files changed, 874 insertions(+), 93 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 See the TASKLOG entry of the same date: Undistort and Redistort read NukeX Classic and Custom radial models, Mode with STMap, BBox, Output Format and Distortion Scaling; the Brown-Conrady lens is a third preset that saved graphs keep. LensDistortion fidelity 21.0 -> 77.6; overall 93.5 -> 93.6.
 
 ## 2026-11-03 - lane 2 (2D behaviour), step J of 2: Kronos and OFlow retime with Nuke's timing knobs
