@@ -1,5 +1,30 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step O finish
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:45 AM on 2026-11-03 PDT)
+
+`main` moved `b0df0d96` -> `fb67e53d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `fb67e53d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-1035.log`, started 10:35 AM): **Ran 9119 tests in 582.833 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step N of 2: Kronos, OFlow and TimeWarp get Nuke's remaining retime knobs and inputs, and the project settings' proxy and format.** Commits:
+  - `9aef7632` 2D behaviour step N (lane 2): TASKLOG and state notes for the retime knobs and inputs (Root left for the finish step)
+  - `f15fe012` 2D behaviour step N (lane 2): Kronos gets Shutter Time, Automatic Shutter Time, Output, Matte Channel, Flicker Compensation, vector detail and smoothness plus Matte, MoSrc, FgVecs and BgVecs inputs; OFlow gets the automatic shutter and flicker compensation; TimeWarp's length is renamed lookup_length; older Kronos documents keep their shutter
+  - `5f9cd91d` 2D behaviour step N (lane 2): TimeWarp gets Input length, the width of the box filter's window; length 1 and every older document show the same picture
+  Diff: 12 files changed, 580 insertions(+), 68 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step O of 2: BumpBoss, Emboss, the motion blurs, EdgeExtend and Defocus get Nuke's missing knobs and defaults (finish 1).** Commits:
+  - `430ef951` BumpBoss gets input B, EdgeExtend its Matte input and MotionBlur2D its 2D transf input; Emboss gets Edge Channels, Blur size and Blur quality (saved nodes unchanged; fidelity 95.7)
+  Diff: 15 files changed, 520 insertions(+), 54 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch openclaw/nb-2d-behaviour on main b0df0d96. No schema bump. BumpBoss gets input B, EdgeExtend its Matte input, MotionBlur2D its 2D transf input (a Transform or CornerPin; `Evaluator._transf_matrix` / `_transf_blur`), Emboss Edge Channels, Blur size and Blur quality. Output UV, Z, distance, Emboss Threshold/Output/Erode size stay unsupported with reasons. Audit overall 95.7, knobs that change no pixels 0. Details in TASKLOG.md.
 
 ## 2026-11-03 - Lane 2 (2D behaviour), step N (partial): Kronos, OFlow and TimeWarp
