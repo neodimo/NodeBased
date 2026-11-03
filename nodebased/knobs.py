@@ -2010,6 +2010,41 @@ NUKE_LABELS = {
 }
 
 
+STEP_D_NEW_KINDS = ("Clamp", "Exposure", "ShuffleCopy", "MatchGrade", "OCIOColorspace", "OCIOLookTransform", "OCIODisplay", "OCIOFileTransform", "AddMix", "Vectorfield")
+# Step D (11/2): the main tab of the nodes the audit still found out of Nuke's order or label (docs/PARITY_2D_FIDELITY.md, "Layout differences").
+# Where the guide shows no order for a knob NodeBased added, it keeps its place after these (config, the older-behaviour flags).
+NUKE_LAYOUT.update({
+    "Clamp": ("channels", "minimum", "clamp_min", "maximum", "clamp_max", "MinClampTo", "MinClampTo_enable", "MaxClampTo", "MaxClampTo_enable"),
+    "AddMix": ("Achannels", "Bchannels", "merge_output", "premultiplied", "nonlinear", "lut_a", "lut_b"),
+    "Vectorfield": ("cube_path", "interpolation"),
+    "Exposure": ("channels", "blackpoint", "exposure_mode", "gang", "red", "green", "blue"),
+    "ShuffleCopy": ("layer1", "layer2", *[f"out{o}_{c}" for o in (1, 2) for c in "rgba"]),
+    "MatchGrade": tuple(f"grade_{axis}_{channel}" for axis in ("gain", "offset", "gamma", "lift") for channel in "rgb"),
+    "OCIOColorspace": ("channels", "src", "dst"),
+    "OCIOLookTransform": ("channels", "src", "look", "transform_direction", "dst"),
+    "OCIODisplay": ("display", "view", "look", "transform_direction"),
+    "OCIOFileTransform": ("channels", "path", "transform_direction", "file_interpolation"),
+    "Keyer": ("key_input", "key_output", "key_combine", "invert", "keyer_operation", "range_a", "range_b", "range_c", "range_d"),
+    "ScreenKeyer": ("keyer_view", "unpremultiply_result", "screen_red", "screen_gain", "screen_balance", "alpha_bias_red", "despill_bias_red",
+                    "use_alpha_bias_for_despill", "screen_preblur", "clip_black", "clip_white", "clip_rollback", "screen_shrink", "screen_softness",
+                    "screen_despot_black", "screen_despot_white", "screen_replace", "screen_replace_red", "mid_point", "shadow_gain", "midtone_gain",
+                    "highlight_gain", "source_alpha", "inside_replace", "inside_replace_red", "source_x_method", "source_y_method", "source_edge_red",
+                    "source_crop_left", "source_crop_right", "source_crop_bottom", "source_crop_top", "inside_component", "outside_component"),
+})
+NUKE_LABELS.update({
+    "ShuffleCopy": {"layer1": "1 in", "layer2": "2 in"},
+    "OCIOColorspace": {"src": "Input", "dst": "Output"},
+    "OCIOLookTransform": {"src": "Input", "dst": "Output", "transform_direction": "Invert direction"},
+    "OCIODisplay": {"transform_direction": "Invert direction"},
+    "OCIOFileTransform": {"path": "File", "transform_direction": "Invert direction"},
+    "AddMix": {"Achannels": "A", "Bchannels": "B"},
+    # The reference guide spells this knob's label "use bkg luminnance" (a typo for luminance, in the guide's table for IBKGizmo's `ublu`); the
+    # label keeps the guide's text so the panel and the table read the same.
+    "IBKGizmo": {"use_bg_luminance": "Use bkg luminnance"},
+    "Vectorfield": {"cube_path": "Vectorfield file"},
+})
+
+
 def _nuke_layouts():
     for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9}.items():
         groups = [group for group in KNOB_LAYOUT[kind] if group.kind != "legacy"]

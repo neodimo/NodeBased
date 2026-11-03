@@ -693,7 +693,7 @@ LAYOUTS = {
         'G expression', 'B channels', 'B expression', 'A channels', 'A expression', 'Older expression syntax', 'Mask', 'Inject',
         'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
-    'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'Range', 'Mix'],
+    'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'A', 'B', 'C', 'D', 'Mix'],
     'HueKeyer': [
         'Channels', 'Amount', 'Saturation threshold', 'Output', 'Output channel', 'Invert', 'Older hue window', 'Hue center',
         'Hue width', 'Hue softness', 'Saturation min', 'Saturation max', 'Mix'
@@ -707,8 +707,7 @@ LAYOUTS = {
     'Difference': ['Offset', 'Gain', 'Output', 'Output channel', 'Mix'],
     'IBKColor': ['Screen type', 'Size', 'Darks', 'Lights', 'Erode', 'Patch black', 'Mix'],
     'IBKGizmo': [
-        'Screen type', 'Red weight', 'Blue/green weight', 'Luminance match', 'Luminance level', 'Screen subtraction',
-        'Use BG luminance', 'Mix'
+        'Screen type', 'Red weight', 'Blue/green weight', 'Luminance match', 'Luminance level', 'Screen subtraction', 'Use bkg luminnance', 'Mix'
     ],
     'Copy': [
         'Copy Red', 'Copy Green', 'Copy Blue', 'Copy Alpha', 'Layer copy', 'Metadata from', 'Range from', 'Mask', 'Inject',
@@ -725,13 +724,7 @@ LAYOUTS = {
     'HistEQ': ['Histogram entries', 'Equalise', 'Mix'],
     'MinColor': ['Channels', 'Modify', 'Target', 'Direction', 'Delta', 'Frame start', 'Frame end', 'Find', 'Box origin', 'Box size', 'Result R', 'Result G', 'Result B', 'Result A'],
     'ScreenKeyer': [
-        'Screen colour', 'Screen gain', 'Screen balance', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Alpha bias colour',
-        'Despill bias colour', 'Clip black', 'Clip white', 'Clip rollback', 'Screen shrink/grow', 'Screen softness',
-        'Screen pre-blur', 'Edge grade gain', 'Edge grade gamma', 'Edge grade saturation', 'Edge width', 'View',
-        'Unpremultiply result', 'Use alpha bias for despill', 'Screen despot black', 'Screen despot white', 'Screen replace',
-        'Screen replace colour', 'Midtones at', 'Shadow gain', 'Midtone gain', 'Highlight gain', 'Source alpha',
-        'Inside replace', 'Inside replace colour', 'Inside component', 'Outside component', 'Crop x method', 'Crop y method',
-        'Crop edge colour', 'Crop left', 'Crop right', 'Crop bottom', 'Crop top', 'Mix'
+        'View', 'Unpremultiply result', 'Screen colour', 'Screen gain', 'Screen balance', 'Alpha bias colour', 'Despill bias colour', 'Use alpha bias for despill', 'Screen pre-blur', 'Clip black', 'Clip white', 'Clip rollback', 'Screen shrink/grow', 'Screen softness', 'Screen despot black', 'Screen despot white', 'Screen replace', 'Screen replace colour', 'Midtones at', 'Shadow gain', 'Midtone gain', 'Highlight gain', 'Source alpha', 'Inside replace', 'Inside replace colour', 'Crop x method', 'Crop y method', 'Crop edge colour', 'Crop left', 'Crop right', 'Crop bottom', 'Crop top', 'Inside component', 'Outside component', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Edge grade gain', 'Edge grade gamma', 'Edge grade saturation', 'Edge width', 'Mix'
     ],
 }
 
@@ -762,7 +755,7 @@ def displayed(kind):
 
 class LayoutTests(unittest.TestCase):
     def test_every_node_of_the_step_has_a_layout_test(self):
-        self.assertEqual(sorted(LAYOUTS), sorted([*knobs.NUKE_LAYOUT, "HistEQ", "MinColor", "ScreenKeyer"]))
+        self.assertEqual(sorted(LAYOUTS), sorted([*(k for k in knobs.NUKE_LAYOUT if k not in knobs.STEP_D_NEW_KINDS), "HistEQ", "MinColor"]))
         self.assertEqual(len(LAYOUTS), 26)      # Grade, step A's seven, step B's eight and step C's ten
 
     def test_the_mask_strip_and_mix_close_every_node_that_has_them(self):
@@ -788,9 +781,9 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(displayed("Grade")[10:14], ["White clamp", "Exposure", "Offset follows alpha", "Mask"])
         self.assertEqual(displayed("ColorCorrect")[21:25], ["Shadows curve", "Highlights curve", "Divide by alpha", "Mask"])
 
-    def test_keyer_range_and_the_hsv_ranges_are_one_row_each(self):
-        keyer = [g for g in knobs.knob_layout("Keyer") if g.label == "Range"][0]
-        self.assertEqual((keyer.kind, keyer.params, keyer.captions), ("xy", ("range_a", "range_b", "range_c", "range_d"), ("A", "B", "C", "D")))
+    def test_keyer_range_handles_read_a_b_c_d_and_the_hsv_ranges_are_one_row_each(self):
+        labels = {g.params: g.label for g in knobs.knob_layout("Keyer")}
+        self.assertEqual([labels[(name,)] for name in ("range_a", "range_b", "range_c", "range_d")], ["A", "B", "C", "D"])
         for label, params in (("Hue range", ("hue_range_min", "hue_range_max")), ("Saturation range", ("saturation_range_min", "saturation_range_max")),
                               ("Brightness range", ("brightness_range_min", "brightness_range_max"))):
             group = [g for g in knobs.knob_layout("HSVTool") if g.label == label][0]

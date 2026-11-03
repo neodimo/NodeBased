@@ -305,5 +305,84 @@ class OcioDirectionAndInterpolationTests(unittest.TestCase):
         self.assertTrue(any(e["kind"] == "extra" and e["nodebased"] == ["file_interpolation"] for e in entries))
 
 
+# ----------------------------------------------------------------------------------------------------------- layout
+def main_labels(kind):
+    """The main tab's labels in panel order, for the groups that hold a param (the order the user sees)."""
+    return [g.label for g in knobs.knob_layout(kind) if g.kind != "legacy"]
+
+
+def assert_in_order(test, kind, wanted):
+    """The labels in `wanted` appear in the main tab in that order (other knobs may sit between them)."""
+    labels = main_labels(kind)
+    at = []
+    for label in wanted:
+        test.assertIn(label, labels, f"{kind}: no knob reads {label!r}")
+        at.append(labels.index(label))
+    test.assertEqual(at, sorted(at), f"{kind}: {wanted} are not in this order in {labels}")
+
+
+class LayoutTests(unittest.TestCase):
+    def test_clamp(self):
+        assert_in_order(self, "Clamp", ["Channels", "Minimum", "Clamp Min", "Maximum", "Clamp Max", "Minimum clamp to", "Replace minimum", "Maximum clamp to",
+                                        "Replace maximum"])
+
+    def test_color_lookup(self):
+        assert_in_order(self, "ColorLookup", ["Channels", "Use precomputed table", "Range", "Master", "Red", "Green", "Blue", "Alpha", "Source", "Target"])
+        paired = {n for e in MAPPING["pairs"]["ColorLookup"]["knobs"] if e["kind"] in requirements.PAIRED for n in e["nuke"]}
+        self.assertFalse(paired & {"setRGB", "setRGBA", "setA"}, "the Set buttons are panel buttons, not params")
+
+    def test_exposure(self):
+        assert_in_order(self, "Exposure", ["Channels", "Black point", "Adjust in", "Gang", "Red", "Green", "Blue"])
+
+    def test_shuffle_copy(self):
+        assert_in_order(self, "ShuffleCopy", ["1 in", "2 in", "Out1 R", "Out2 R"])
+
+    def test_match_grade(self):
+        assert_in_order(self, "MatchGrade", ["Gain R", "Offset R", "Gamma R"])
+
+    def test_keyer(self):
+        assert_in_order(self, "Keyer", ["Input", "Output", "Combine", "Invert", "Operation", "A", "B", "C", "D"])
+
+    def test_keylight(self):
+        assert_in_order(self, "ScreenKeyer", ["View", "Unpremultiply result", "Screen colour", "Screen gain", "Screen balance", "Alpha bias colour",
+                                              "Despill bias colour", "Use alpha bias for despill", "Screen pre-blur", "Clip black", "Clip white",
+                                              "Clip rollback", "Screen shrink/grow", "Screen softness", "Screen despot black", "Screen despot white",
+                                              "Screen replace", "Screen replace colour", "Midtones at", "Shadow gain", "Midtone gain", "Highlight gain",
+                                              "Source alpha", "Inside replace", "Inside replace colour", "Crop x method", "Crop y method",
+                                              "Crop edge colour", "Crop left", "Crop right", "Crop bottom", "Crop top", "Inside component",
+                                              "Outside component"])
+
+    def test_ibk_gizmo_uses_the_guides_text_for_ublu(self):
+        self.assertIn("Use bkg luminnance", main_labels("IBKGizmo"))
+        assert_in_order(self, "IBKGizmo", ["Screen type", "Red weight", "Blue/green weight", "Luminance match", "Luminance level", "Screen subtraction",
+                                           "Use bkg luminnance"])
+        self.assertEqual(NUKE["IBKGizmo"]["knobs"][[k["name"] for k in NUKE["IBKGizmo"]["knobs"]].index("ublu")]["label"], "use bkg luminnance")
+
+    def test_add_mix(self):
+        assert_in_order(self, "AddMix", ["A", "B", "Output", "Premultiplied", "Nonlinear"])
+
+    def test_the_ocio_family_reads_as_nukes_labels(self):
+        assert_in_order(self, "OCIOColorspace", ["Channels", "Input", "Output"])
+        assert_in_order(self, "OCIOLookTransform", ["Channels", "Input", "Look", "Invert direction", "Output"])
+        assert_in_order(self, "OCIODisplay", ["Display", "View", "Invert direction"])
+        assert_in_order(self, "OCIOFileTransform", ["Channels", "File", "Invert direction"])
+
+    def test_vectorfield_file(self):
+        self.assertIn("Vectorfield file", main_labels("Vectorfield"))
+
+    def test_the_audit_finds_no_order_or_label_difference_left_in_these_nodes(self):
+        fx_nodes = ("Clamp", "ColorLookup", "Exposure", "ShuffleCopy", "MatchGrade", "Keyer", "Keylight", "IBKGizmo", "AddMix", "OCIOColorspace",
+                    "OCIOLookTransform", "OCIODisplay", "OCIOFileTransform", "Vectorfield")
+        for key in fx_nodes:
+            with self.subTest(node=key):
+                pair = MAPPING["pairs"][key]
+                frac, detail = requirements.layout_component(pair["nodebased"], pair["knobs"], NUKE[key]["knobs"])
+                if frac is None:
+                    continue
+                kept, total = detail["layout_order"]
+                self.assertEqual(kept, total, f"{key}: only {kept} of {total} paired knobs in Nuke's order")
+                self.assertEqual(detail["label_mismatches"], [], f"{key}: labels differ")
+
+
 if __name__ == "__main__":
     unittest.main()
