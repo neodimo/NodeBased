@@ -1484,6 +1484,86 @@ def _shuffle_cases():
     return out
 
 
+# --------------------------------------------------------------------------------------------------------------------- OCIO nodes
+# The five OCIO nodes run OpenColorIO itself, so these cases check the request NodeBased hands it: the right spaces, direction, look, display, view and file.
+# The config is the small one of `tools/nuke_fidelity_ocio_fixture.py`, whose transforms are stated there by hand (a 2x gain matrix, a power of 2.2, a bent
+# three-point LUT), and every expected pixel below is computed from those statements, never from OpenColorIO. Nuke converts the stored colour and leaves
+# alpha alone (its own (un)premult by does any dividing). OpenColorIO evaluates a power law with a fast approximation (relative error up to about 2e-5),
+# so the power-law cases compare only where the expected value is at most 0.9 (the `valid` mask), where that error is inside the audit's tolerance
+# (OpenColorIO returns 1.0000223 for 1.0 raised to 2.2).
+_OCIO_DIR = []
+
+
+def _ocio_files():
+    """(config path, cube path) of the fixture, written once into a fresh scratch directory."""
+    if not _OCIO_DIR:
+        import tempfile
+        import nuke_fidelity_ocio_fixture as fixture
+        _OCIO_DIR.append(fixture.write(tempfile.mkdtemp(prefix="nb-ocio-fixture-")))
+    return _OCIO_DIR[0]
+
+
+def _ocio_case(case_id, nuke, nuke_class, nuke_knobs, nb_kind, nb_params, fn, statement, accurate_below=False):
+    import nuke_fidelity_ocio_fixture as fixture
+    config, cube = _ocio_files()
+    params = {"config": config, **{k: (cube if v == "$cube" else v) for k, v in nb_params.items()}}
+
+    def expected(fx):
+        src = fx["A"].astype(np.float64)
+        out = src.copy()
+        out[..., :3] = fn(fixture, src[..., :3])
+        valid = np.ones(src.shape, bool)
+        if accurate_below:
+            valid[..., :3] = (np.abs(out[..., :3]) <= 0.9) & (src[..., :3] >= 0.0)
+        return out, valid
+    return Case(case_id, nuke, nuke_class, nuke_knobs, ("A",), nb_kind, params, ("A",), expected, "convention",
+                statement + " (the config is tools/nuke_fidelity_ocio_fixture.py; the reference pack must point OCIO at it)")
+
+
+def _ocio_cases():
+    out = []
+    cs = ("OCIOColorspace", "OCIOColorSpace")
+    out.append(_ocio_case("ocio_colorspace_gain", *cs, (("in_colorspace", "lin"), ("out_colorspace", "gain2")), "OCIOColorspace",
+                          {"src": "lin", "dst": "gain2"}, lambda f, x: f.gain(x), "OCIOColorspace converts from the input space to the output space: lin to gain2 doubles the colour, alpha untouched"))
+    out.append(_ocio_case("ocio_colorspace_encode", *cs, (("in_colorspace", "lin"), ("out_colorspace", "encoded")), "OCIOColorspace",
+                          {"src": "lin", "dst": "encoded"}, lambda f, x: f.encode(x), "lin to encoded takes the 2.2th root of the colour", True))
+    out.append(_ocio_case("ocio_colorspace_decode", *cs, (("in_colorspace", "encoded"), ("out_colorspace", "lin")), "OCIOColorspace",
+                          {"src": "encoded", "dst": "lin"}, lambda f, x: f.decode(x), "encoded to lin raises the colour to 2.2", True))
+    out.append(_ocio_case("ocio_logconvert_log_to_lin", "OCIOLogConvert", "OCIOLogConvert", (("operation", "log to lin"),), "OCIOLogConvert",
+                          {"ocio_log_operation": "log to lin"}, lambda f, x: f.decode(x),
+                          "log to lin goes from the config's compositing_log role (cmplog) to its scene_linear role: raise to 2.2", True))
+    out.append(_ocio_case("ocio_logconvert_lin_to_log", "OCIOLogConvert", "OCIOLogConvert", (("operation", "lin to log"),), "OCIOLogConvert",
+                          {"ocio_log_operation": "lin to log"}, lambda f, x: f.encode(x), "lin to log goes from scene_linear to compositing_log: the 2.2th root", True))
+    look = ("OCIOLookTransform", "OCIOLookTransform")
+    out.append(_ocio_case("ocio_look_off", *look, (("in_colorspace", "lin"), ("out_colorspace", "encoded"), ("look", "")), "OCIOLookTransform",
+                          {"src": "lin", "dst": "encoded", "look": ""}, lambda f, x: f.encode(x), "no look: the plain conversion lin to encoded", True))
+    out.append(_ocio_case("ocio_look_on", *look, (("in_colorspace", "lin"), ("out_colorspace", "encoded"), ("look", "double")), "OCIOLookTransform",
+                          {"src": "lin", "dst": "encoded", "look": "double"}, lambda f, x: f.encode(f.gain(x)),
+                          "the look `double` (2x in lin) is applied before the conversion to encoded", True))
+    out.append(_ocio_case("ocio_look_invert", *look, (("in_colorspace", "lin"), ("out_colorspace", "encoded"), ("look", "double"), ("invert", True)), "OCIOLookTransform",
+                          {"src": "lin", "dst": "encoded", "look": "double", "transform_direction": "inverse"}, lambda f, x: f.decode(x) / f.GAIN,
+                          "invert direction runs it backwards: from encoded to lin with the look taken off (raise to 2.2, then halve)", True))
+    disp = ("OCIODisplay", "OCIODisplay")
+    out.append(_ocio_case("ocio_display_mon_plain", *disp, (("colorspace", "lin"), ("display", "Mon"), ("view", "Plain")), "OCIODisplay",
+                          {"display": "Mon", "view": "Plain", "look": ""}, lambda f, x: f.encode(x), "display Mon, view Plain is the encoded space: the 2.2th root", True))
+    out.append(_ocio_case("ocio_display_mon_bright", *disp, (("colorspace", "lin"), ("display", "Mon"), ("view", "Bright")), "OCIODisplay",
+                          {"display": "Mon", "view": "Bright", "look": ""}, lambda f, x: f.gain(x), "display Mon, view Bright is the gain2 space: doubled"))
+    out.append(_ocio_case("ocio_display_alt_plain", *disp, (("colorspace", "lin"), ("display", "Alt"), ("view", "Plain")), "OCIODisplay",
+                          {"display": "Alt", "view": "Plain", "look": ""}, lambda f, x: f.gain(x), "display Alt, view Plain is the gain2 space: doubled (the display chosen picks the view's space)"))
+    out.append(_ocio_case("ocio_display_input_space", *disp, (("colorspace", "gain2"), ("display", "Mon"), ("view", "Plain")), "OCIODisplay",
+                          {"src": "gain2", "display": "Mon", "view": "Plain", "look": ""}, lambda f, x: f.encode(x / f.GAIN),
+                          "input colorspace gain2 is a picture in the doubled space: halve it to lin, then the Plain view's 2.2th root", True))
+    out.append(_ocio_case("ocio_display_invert", *disp, (("colorspace", "lin"), ("display", "Mon"), ("view", "Plain"), ("invert", True)), "OCIODisplay",
+                          {"display": "Mon", "view": "Plain", "look": "", "transform_direction": "inverse"}, lambda f, x: f.decode(x),
+                          "invert direction takes the displayed colour back to lin: raise to 2.2", True))
+    ft = ("OCIOFileTransform", "OCIOFileTransform")
+    out.append(_ocio_case("ocio_file_forward", *ft, (("file", "bent.cube"),), "OCIOFileTransform", {"path": "$cube"}, lambda f, x: f.lut(x),
+                          "the file `bent.cube` is a 1D LUT with entries 0, M, 1 per channel (M = 0.75, 0.25, 0.5 for R, G, B), straight between the entries and clamped to 0..1"))
+    out.append(_ocio_case("ocio_file_invert", *ft, (("file", "bent.cube"), ("invert", True)), "OCIOFileTransform",
+                          {"path": "$cube", "transform_direction": "inverse"}, lambda f, x: f.lut_inverse(x), "invert direction runs the LUT backwards"))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
@@ -1492,4 +1572,4 @@ def cases():
     return (_color_correct_cases() + _saturation_cases() + _hue_correct_cases() + _hsv_tool_cases() + _toe_cases() + _softclip_cases()
             + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
             + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases()
-            + _copy_cases() + _channel_merge_cases() + _shuffle_cases())
+            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases())

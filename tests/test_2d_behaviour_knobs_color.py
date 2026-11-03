@@ -43,8 +43,7 @@ class NotPixelEntriesTests(unittest.TestCase):
         "Toe": ("invert",), "ChromaKeyer": ("_replaceAlphaDiff", "_replaceColor", "_replaceAmount"),
         "Keylight": ("despillBias", "insideReplaceMethod", "insideReplaceColour", "SourceXMethod", "SourceYMethod", "insideComponent", "outsideComponent"),
         "IBKColor": ("Size", "mult"), "IBKGizmo": ("ublu",), "Merge": ("screen_alpha",), "KeyMix": ("invertMask",),
-        "OCIOLookTransform": ("invert",), "OCIOFileTransform": ("invert",),
-    }
+    }       # OCIOLookTransform and OCIOFileTransform `invert` left this list in step F: the probe now runs them against the fixture config with a look and a file named
 
     def test_each_listed_knob_has_a_reason(self):
         for node, names in self.LISTED.items():

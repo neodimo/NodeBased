@@ -1,4 +1,4 @@
-"""Per-node OpenColorIO transforms. All operators preserve premultiplied alpha."""
+"""Per-node OpenColorIO transforms. Alpha is left alone; the colour is the stored colour (the older `divide_by_alpha` behaviour divides it by alpha first)."""
 from pathlib import Path
 
 import numpy as np
@@ -123,7 +123,12 @@ def transform(kind, p, pixels):
         op = ocio.LookTransform(src=str(p["src"]), dst=str(p["dst"]), looks=str(p["look"]))
         op.setDirection(direction)
     elif kind == "OCIODisplay":
-        op = ocio.DisplayViewTransform(src="ACEScg", display=str(p["display"]), view=str(p["view"]))
+        # The display transform starts from the input colorspace: a space of the config by that name, otherwise the config's scene-linear role
+        # (Nuke's default input is "linear"; the built-in config's role is ACEScg, which is also what the node always used).
+        wanted = str(p.get("src") or "")
+        scene = cfg.getRoleColorSpace(ocio.ROLE_SCENE_LINEAR)
+        start = wanted if cfg.getColorSpace(wanted) is not None and wanted else (scene or "ACEScg")
+        op = ocio.DisplayViewTransform(src=start, display=str(p["display"]), view=str(p["view"]))
         op.setDirection(direction)
     elif kind == "OCIOFileTransform":
         path = Path(str(p.get("path", ""))).expanduser()
@@ -157,7 +162,9 @@ def transform(kind, p, pixels):
         raise ValueError(f"{kind}: cannot build transform: {error}") from None
     src = np.asarray(pixels, dtype=np.float32)
     alpha = src[..., 3:4]
-    rgb = np.divide(src[..., :3], alpha, out=np.zeros_like(src[..., :3]), where=alpha != 0).copy()
+    # Nuke transforms the stored colour (its own (un)premult by does any dividing); `divide_by_alpha` is the older behaviour of dividing first.
+    divide = bool(p.get("divide_by_alpha", 0))
+    rgb = (np.divide(src[..., :3], alpha, out=np.zeros_like(src[..., :3]), where=alpha != 0) if divide else src[..., :3]).copy()
     shape = rgb.shape
     flat = rgb.reshape((-1, 3))
     try:
@@ -165,7 +172,7 @@ def transform(kind, p, pixels):
     except Exception as error:
         raise ValueError(f"{kind}: transform failed: {error}") from None
     out = src.copy()
-    out[..., :3] = flat.reshape(shape) * alpha
+    out[..., :3] = flat.reshape(shape) * alpha if divide else flat.reshape(shape)
     if kind == "OCIOLogConvert":
         channels = p.get("channels", "rgb")
         selected = {"rgb": (0, 1, 2), "rgba": (0, 1, 2, 3), "alpha": (3,),

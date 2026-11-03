@@ -56,8 +56,6 @@ NOT_PIXEL = {
                  "mult": "acts on a plate with a keyed-out patch to fill, as above"},
     "IBKGizmo": {"ublu": "acts only with a background wired and luminance matching on"},
     "Merge": {"screen_alpha": "acts only for operations that do not already composite by alpha (plus, minus, multiply and the like), not the default over"},
-    "OCIOLookTransform": {"invert": "runs a look backwards, so it acts only with a look named"},
-    "OCIOFileTransform": {"invert": "runs a file backwards, so it acts only with a file named"},
     # Lane 2 step E (11/2): TimeDissolve's kernel is a Dissolve at one `which`; the frame range and the curve turn the frame into that `which` in the graph walk.
     "TimeDissolve": {k: "acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)"
                      for k in ("in", "out", "lut")},
@@ -97,9 +95,48 @@ PROBE_BASE = {
 }
 
 
+# The OCIO nodes are probed against the small config of tools/nuke_fidelity_ocio_fixture.py (the built-in ACES config has hundreds of spaces and no
+# fixed answer): the probe starts from a plain pass-through of that config (or, for a look and a file, from the look and the file named) and moves each
+# space, look, display, view, file and direction to another of the config's.
+_OCIO_FILES = []
+
+
+def _ocio_files():
+    if not _OCIO_FILES:
+        import tempfile
+        import nuke_fidelity_ocio_fixture as fixture
+        _OCIO_FILES.append(fixture.write(tempfile.mkdtemp(prefix="nb-ocio-probe-")))
+    return _OCIO_FILES[0]
+
+
+def probe_base(kind):
+    """The probe's starting values for `kind`: PROBE_BASE, and for the OCIO nodes the fixture config and a pass-through request."""
+    if kind not in OCIO_PROBE:
+        return dict(PROBE_BASE.get(kind, {}))
+    config, cube = _ocio_files()
+    return {"config": config, **{k: (cube if v == "$cube" else v) for k, v in OCIO_PROBE[kind][0].items()}}
+
+
+OCIO_PROBE = {
+    "OCIOColorspace": ({"src": "lin", "dst": "lin"}, {"src": ["gain2"], "dst": ["gain2"], "transform_direction": ["inverse"]}),
+    "OCIOLookTransform": ({"src": "lin", "dst": "lin", "look": "double"}, {"src": ["gain2"], "dst": ["gain2"], "look": [""], "transform_direction": ["inverse"]}),
+    "OCIODisplay": ({"display": "Mon", "view": "Plain"}, {"src": ["gain2"], "display": ["Alt"], "view": ["Bright"], "transform_direction": ["inverse"]}),
+    "OCIOFileTransform": ({"path": "$cube"}, {"path": [""], "transform_direction": ["inverse"]}),
+    "OCIOLogConvert": ({}, {}),
+}
+
+
+def probe_moves(kind, name, value):
+    """Values to move a string or choice param of an OCIO node to (the config's own spaces and names), else the generic candidates."""
+    if kind in OCIO_PROBE and name in OCIO_PROBE[kind][1]:
+        config, cube = _ocio_files()
+        return [cube if v == "$cube" else v for v in OCIO_PROBE[kind][1][name] if v != value]
+    return candidates(name, value)
+
+
 def _base_params(kind, size):
     from nodebased import core
-    p = dict(core.SPECS[kind]["params"], **PROBE_BASE.get(kind, {}))
+    p = dict(core.SPECS[kind]["params"], **probe_base(kind))
     h, w = size
     for name, value in (("width", w), ("height", h)):          # generators render at the fixture's size, not 1920 x 1080
         if name in p and isinstance(p[name], (int, float)) and not isinstance(p[name], bool):
@@ -146,7 +183,7 @@ def candidates(name, value):
 
 
 def _moves(kind, base, slots, ref, name):
-    for v in candidates(name, base[name]):
+    for v in probe_moves(kind, name, base[name]):
         try:
             out = _run(kind, dict(base, **{name: v}), slots)
         except Exception:  # noqa: BLE001 - a value the kernel refuses is not evidence either way
@@ -172,13 +209,13 @@ def probe_acts(kind, params, fx):
     except Exception:  # noqa: BLE001
         _PROBES[key] = None
         return None
-    names = [n for n in params if n in base and candidates(n, base[n])]
+    names = [n for n in params if n in base and probe_moves(kind, n, base[n])]
     acts = {n: _moves(kind, base, slots, ref, n) for n in names}
     for n in [n for n, ok in acts.items() if not ok]:
         for other in names:
             if other == n:
                 continue
-            ctx = dict(base, **{other: candidates(other, base[other])[0]})
+            ctx = dict(base, **{other: probe_moves(kind, other, base[other])[0]})
             try:
                 ctx_ref = _run(kind, ctx, slots)
             except Exception:  # noqa: BLE001

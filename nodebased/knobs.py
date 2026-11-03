@@ -561,11 +561,11 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Vectorfield": _groups(KnobGroup("file_read", ("cube_path",), label="3D LUT (.cube, .3dl)"), KnobGroup("enum", ("interpolation",)), KnobGroup("enum", ("colorspace_in",), label="Input space"), KnobGroup("enum", ("colorspace_out",), label="Output space"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "GenerateLUT": _groups(KnobGroup("file_write", ("lut_path",), label="3D LUT (.cube)"), KnobGroup("int", ("lut_size",), label="Size"), KnobGroup("enum", ("colorspace_in",), label="Input space"), KnobGroup("enum", ("colorspace_out",), label="Output space")),
-    "OCIOColorspace": _groups(KnobGroup("string", ("src",)), KnobGroup("string", ("dst",)), KnobGroup("string", ("config",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "OCIODisplay": _groups(KnobGroup("string", ("display",)), KnobGroup("string", ("view",)), KnobGroup("string", ("look",)), KnobGroup("string", ("config",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "OCIOFileTransform": _groups(KnobGroup("file_read", ("path",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("enum", ("file_interpolation",)), KnobGroup("string", ("config",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "OCIOLookTransform": _groups(KnobGroup("string", ("src",)), KnobGroup("string", ("dst",)), KnobGroup("string", ("look",)), KnobGroup("string", ("config",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "OCIOLogConvert": _groups(KnobGroup("enum", ("ocio_log_operation",), label="Operation"), KnobGroup("enum", ("channels",)), KnobGroup("string", ("config",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "OCIOColorspace": _groups(KnobGroup("string", ("src",)), KnobGroup("string", ("dst",)), KnobGroup("string", ("config",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", help="Divide the colour by its alpha before the transform and multiply it back after, as these nodes did before. Off is Nuke's: the stored colour is transformed, and (un)premult by does the dividing when you want it."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "OCIODisplay": _groups(KnobGroup("string", ("src",), label="Input colorspace", help="The space the picture is in. A space of the config by that name, otherwise the config's scene-linear space (Nuke's default is linear)."), KnobGroup("string", ("display",)), KnobGroup("string", ("view",)), KnobGroup("string", ("look",)), KnobGroup("string", ("config",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", help="Divide the colour by its alpha before the transform and multiply it back after, as these nodes did before. Off is Nuke's: the stored colour is transformed, and (un)premult by does the dividing when you want it."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "OCIOFileTransform": _groups(KnobGroup("file_read", ("path",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("enum", ("file_interpolation",)), KnobGroup("string", ("config",)), KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", help="Divide the colour by its alpha before the transform and multiply it back after, as these nodes did before. Off is Nuke's: the stored colour is transformed, and (un)premult by does the dividing when you want it."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "OCIOLookTransform": _groups(KnobGroup("string", ("src",)), KnobGroup("string", ("dst",)), KnobGroup("string", ("look",)), KnobGroup("string", ("config",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", help="Divide the colour by its alpha before the transform and multiply it back after, as these nodes did before. Off is Nuke's: the stored colour is transformed, and (un)premult by does the dividing when you want it."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "OCIOLogConvert": _groups(KnobGroup("enum", ("ocio_log_operation",), label="Operation"), KnobGroup("enum", ("channels",)), KnobGroup("string", ("config",)), KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", help="Divide the colour by its alpha before the transform and multiply it back after, as these nodes did before. Off is Nuke's: the stored colour is transformed, and (un)premult by does the dividing when you want it."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Colorspace": _groups(KnobGroup("enum", ("primaries_in",)), KnobGroup("enum", ("primaries_out",)), KnobGroup("enum", ("transfer_in",)), KnobGroup("enum", ("transfer_out",)), KnobGroup("enum", ("whitepoint_in",)), KnobGroup("enum", ("whitepoint_out",)), KnobGroup("bool", ("bradford_matrix",), label="Bradford matrix",
         help="When the input and output illuminants differ, adapt the colours so they appear the same (the Bradford matrix). Off keeps the CIE XYZ values equal, so the RGB values change."),
         KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha",
@@ -2042,7 +2042,7 @@ NUKE_LAYOUT.update({
     "MatchGrade": tuple(f"grade_{axis}_{channel}" for axis in ("gain", "offset", "gamma", "lift") for channel in "rgb"),
     "OCIOColorspace": ("channels", "src", "dst"),
     "OCIOLookTransform": ("channels", "src", "look", "transform_direction", "dst"),
-    "OCIODisplay": ("display", "view", "look", "transform_direction"),
+    "OCIODisplay": ("src", "display", "view", "look", "transform_direction"),
     "OCIOFileTransform": ("channels", "path", "transform_direction", "file_interpolation"),
     "Keyer": ("key_input", "key_output", "key_combine", "invert", "keyer_operation", "range_a", "range_b", "range_c", "range_d"),
     "ScreenKeyer": ("keyer_view", "unpremultiply_result", "screen_red", "screen_gain", "screen_balance", "alpha_bias_red", "despill_bias_red",
@@ -2065,10 +2065,12 @@ NUKE_LABELS.update({
 })
 
 
-# Lane 2 step F (11/2): Cryptomatte and Encryptomatte in the guide's order; NodeBased's own knobs follow.
-NUKE_LAYOUT.update({
+# Lane 2 step F (11/2): Cryptomatte, Encryptomatte and OCIOLogConvert in the guide's order; NodeBased's own knobs follow. Kept apart from NUKE_LAYOUT,
+# which tests/test_split_knobs.py pins to lane 2's step A to C nodes.
+NUKE_LAYOUT_LANE2F = ({
     "Cryptomatte": ("crypto_layer", "manifest_source", "sidecar_filepath", "preview_enabled", "matte_list"),
     "Encryptomatte": ("matte_name_type", "id0", "merge_operation", "layer_name"),
+    "OCIOLogConvert": ("channels", "ocio_log_operation"),
 })
 
 
@@ -2092,7 +2094,7 @@ NUKE_LABELS.update({
 
 
 def _nuke_layouts():
-    for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9}.items():
+    for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9, **NUKE_LAYOUT_LANE2F}.items():
         groups = [group for group in KNOB_LAYOUT[kind] if group.kind != "legacy"]
         legacy = [group for group in KNOB_LAYOUT[kind] if group.kind == "legacy"]
         by_first = {group.params[0]: group for group in groups}
