@@ -7453,6 +7453,13 @@ class Evaluator:
         rx, ry = Evaluator._disc_radii(p)
         if max(rx, ry) < 0.5:
             return image.copy()
+        if not int(p.get("legacy_defocus_disc", 1)):        # the disc's edge pixels carry the share the disc covers (lane 9 step O)
+            from . import edgedefocusknobs
+            smooth = edgedefocusknobs.convolve(image, edgedefocusknobs.disc_weights(rx, ry, p.get("quality", 20.0)))
+            result = image.copy()
+            for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+                result[..., c] = smooth[..., c].astype(np.float32)
+            return result
         rows = int(math.floor(ry + 1e-9))
         half_widths = {}
         for dy in range(-rows, rows + 1):
@@ -7694,9 +7701,12 @@ class Evaluator:
         else:
             straight = image[..., :3].astype(np.float32)
         erode = float(p.get("erode", 0.0))
-        known = drawbehaviour.edge_extend_known(alpha >= threshold, erode)
+        from . import edgedefocusknobs          # matte, detail amount and edge mask (lane 9 step O); a saved node reads its alpha as the matte
+        matte = alpha if legacy else edgedefocusknobs.matte_plane(image, p)
+        known = drawbehaviour.edge_extend_known(matte >= threshold, erode)
         if erode < 0:
-            known = (known & (alpha > 0)) | (alpha >= threshold)
+            known = (known & (matte > 0)) | (matte >= threshold)
+        trusted = known.copy()
         colour = np.where(known[..., None], straight, 0.0).astype(np.float32)
         height, width = alpha.shape
         reach = Evaluator._reach(p.get("extend_size", 3.0))
@@ -7715,9 +7725,14 @@ class Evaluator:
             colour = np.where(fresh[..., None], total / np.maximum(count, 1.0)[..., None], colour)
             known = known | fresh
         rgb = np.where(known[..., None], colour, straight)
+        if not legacy:
+            rgb = edgedefocusknobs.add_detail(rgb, p)
         if not legacy and int(p.get("premultiply", 1)):
             rgb = rgb * alpha[..., None]
-        return np.concatenate([rgb, image[..., 3:4]], axis=2).astype(np.float32)
+        out_alpha = image[..., 3:4]
+        if not legacy and int(p.get("edge_mask", 0)):
+            out_alpha = (known & ~trusted)[..., None].astype(np.float32)
+        return np.concatenate([rgb, out_alpha], axis=2).astype(np.float32)
 
     @staticmethod
     def _light_reach(p):

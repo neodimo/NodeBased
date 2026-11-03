@@ -249,7 +249,13 @@ def _edge_blur_rule(params, region, arity):
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 
-_edge_extend_rule = _support_rule("extend_size")
+def _edge_extend_rule(params, region, arity):
+    # ceil(extend_size) rings of neighbours, and a 3 x 3 average of the extended colour when the detail amount is not 1 (lane 9 step O).
+    size = abs(float(params.get("extend_size", 0.0)))
+    support = 0 if size < 0.5 else int(math.ceil(size))
+    if not int(params.get("legacy_edge_extend", 1)) and float(params.get("detail_amount", 1.0)) != 1.0:
+        support += 1
+    return [region.expand(support, support)] + [region] * (arity - 1)
 
 
 def _light_wrap_support(params):
@@ -366,6 +372,8 @@ def _defocus_rule(params, region, arity):
     from . import drawbehaviour
     reach = max(drawbehaviour.defocus_radii(params))
     support = 0 if reach < 0.5 else int(math.ceil(reach))
+    if support and not int(params.get("legacy_defocus_disc", 1)):
+        support = max(support, int(math.ceil(reach + 0.5)))       # the soft edge samples reach half a pixel past the semi-axis
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 

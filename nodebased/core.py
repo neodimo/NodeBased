@@ -222,6 +222,7 @@ from . import blurknobs as _blurknobs
 from . import filterbehaviour as _filterbehaviour
 from . import effectbehaviour as _effectbehaviour
 from . import lightingbehaviour as _lightingbehaviour
+from . import edgedefocusknobs as _edgedefocusknobs
 from . import raysbehaviour as _raysbehaviour
 from . import bilateralknobs as _bilateralknobs
 from . import denoiseknobs as _denoiseknobs
@@ -394,7 +395,8 @@ SPECS = {
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
-                "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus")}},
+                "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus"),
+                           **_edgedefocusknobs.new_params("Defocus")}},
     "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask", "guide"],
                   "params": {"spatial_size": 3.0, "colour_sigma": 0.4, "mix": 1.0, **_bilateralknobs.NEW}},
     "Denoise": {"inputs": ["image"], "optional_inputs": ["mask", "noise", "motion"],
@@ -445,7 +447,8 @@ SPECS = {
     # pixels from every pixel whose alpha is at least `extend_threshold`; alpha is unchanged and
     # the colour output is unpremultiplied (docs/PARITY_2D.md).
     "EdgeExtend": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {"extend_size": 3.0, "extend_threshold": 0.5, "mix": 1.0, **_drawbehaviour.new_params("EdgeExtend")}},
+                   "params": {"extend_size": 3.0, "extend_threshold": 0.5, "mix": 1.0, **_drawbehaviour.new_params("EdgeExtend"),
+                              **_edgedefocusknobs.new_params("EdgeExtend")}},
     # LightWrap (step 5a): Nuke's two-input finishing node. Inputs are named fg and bg as in Nuke,
     # so a bypass passes the foreground (the first slot). "wrap_diffuse" is Nuke's `diffuse`,
     # renamed because "diffuse" is a 0..1 LIMITS key on Relight. red/green/blue are the constant
@@ -814,8 +817,8 @@ SPECS = {
     "NoTimeBlur": {"inputs": ["image"], "params": {"rounding": "rint", "single": 1}},
     # Motion blur samples the animated upstream image across a shutter. MotionBlur3D can also use
     # an explicit camera plus depth pass to blur a still beauty through camera motion.
-    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
-    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
     "Kronos": {"inputs": ["image"], "params": {"speed": 1.0, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
               **_retimeknobs.new_params("Kronos")}},
@@ -2139,7 +2142,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"], "filter_bounds": ["shape", "format"],
-           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "emboss_type": ["traditional", "effect"], "edge_detector": ["simple", "sobel", "prewitt"], "depth_math": ["depth", "1/depth"],
+           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "emboss_type": ["traditional", "effect"], "matte": ["Source Alpha", "Source Inverted Alpha", "None"], "defocus_method": ["accelerated", "fullprecision"], "edge_detector": ["simple", "sobel", "prewitt"], "depth_math": ["depth", "1/depth"],
            "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],
            "filter_type": ["box", "triangle", "quadratic", "gaussian"],
            "transform_direction": ["forward", "inverse"], "file_interpolation": ["nearest", "linear", "tetrahedral", "best"],
@@ -2378,7 +2381,7 @@ LIMITS.update(_drawfxbehaviour.LIMITS)
 LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES.update(_behaviour2d.CHOICES)
-LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0)})
+LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0), "detail_amount": (0.0, 1.0), "edge_mask": (0, 1), "legacy_defocus_disc": (0, 1)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
 CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric Creation: the two styles the guide describes plainly
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)

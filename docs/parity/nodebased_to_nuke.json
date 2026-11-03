@@ -2224,7 +2224,10 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["scale"], "nuke": ["scale"], "kind": "same"},
-    {"nodebased": ["legacy_defocus"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Defocus followed the guide keep a disc narrowed in height by the aspect; lane 9 step C"}
+    {"nodebased": ["legacy_defocus"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Defocus followed the guide keep a disc narrowed in height by the aspect; lane 9 step C"},
+    {"nodebased": ["quality"], "nuke": ["quality"], "kind": "same"},
+    {"nodebased": ["defocus_method"], "nuke": ["method"], "kind": "renamed", "reason": "Method: accelerated or fullprecision, two ways to the same picture (the guide puts the difference below 0.00001); NodeBased has one algorithm, so the knob changes no pixels"},
+    {"nodebased": ["legacy_defocus_disc"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Defocus smoothed the disc's edge by quality keep the hard-edged disc; lane 9 step O"}
    ]
   },
   "ZDefocus": {
@@ -2339,7 +2342,10 @@
     {"nodebased": ["source_premultiplied"], "nuke": ["sourceIsPremultiplied"], "kind": "renamed", "reason": "Source Is Premultiplied"},
     {"nodebased": ["premultiply"], "nuke": ["premultiply"], "kind": "same"},
     {"nodebased": ["erode"], "nuke": ["erode"], "kind": "same"},
-    {"nodebased": ["legacy_edge_extend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before EdgeExtend followed the guide read the input as premultiplied and write straight colour; lane 9 step C"}
+    {"nodebased": ["legacy_edge_extend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before EdgeExtend followed the guide read the input as premultiplied and write straight colour; lane 9 step C"},
+    {"nodebased": ["matte"], "nuke": ["matte"], "kind": "same", "reason": "None, Source Alpha and Source Inverted Alpha; the four choices that read the Matte input are not offered because NodeBased's node has no Matte input (lane 9 step O)"},
+    {"nodebased": ["detail_amount"], "nuke": ["detailAmount"], "kind": "renamed", "reason": "Detail Amount (lane 9 step O)"},
+    {"nodebased": ["edge_mask"], "nuke": ["edgeMaskChannel"], "kind": "renamed", "reason": "Edge Mask: on, the alpha channel carries the filled-in edge as a mask (lane 9 step O)"}
    ]
   },
   "Erode (fast)": {
@@ -2464,7 +2470,8 @@
     {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": [], "nuke": ["uv"], "kind": "unsupported", "reason": "Output UV names the channel the node writes the motion vectors to; the guide's page for this node describes only the shutter, and NodeBased's node writes no vector channel, so the knob would change nothing (lane 9 step O)"}
    ]
   },
   "MotionBlur3D": {
@@ -2480,7 +2487,10 @@
     {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": [], "nuke": ["uv"], "kind": "unsupported", "reason": "Output UV names the channel the node writes the motion vectors to; the guide's page for this node describes only the shutter, and NodeBased's node writes no vector channel, so the knob would change nothing (lane 9 step O)"},
+    {"nodebased": [], "nuke": ["Z"], "kind": "unsupported", "reason": "Z input names the depth channel; NodeBased reads depth from its own depth socket, and the guide's page gives the knob no description (lane 9 step O)"},
+    {"nodebased": [], "nuke": ["distance"], "kind": "unsupported", "reason": "the guide's page for this node gives distance no description and no formula, so what it scales cannot be written down without guessing (lane 9 step O)"}
    ]
   },
   "VectorBlur": {

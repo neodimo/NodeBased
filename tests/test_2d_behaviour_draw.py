@@ -798,7 +798,7 @@ class DefocusTests(unittest.TestCase):
         np.testing.assert_allclose(kernel("Defocus", impulse(), defocus=2.0, scale=[3.0, 3.0]), kernel("Defocus", impulse(), defocus=6.0), atol=1e-7)
 
     def test_the_disc_is_flat_and_its_weights_sum_to_one(self):
-        out = kernel("Defocus", impulse(), defocus=3.0)[..., 0]
+        out = kernel("Defocus", impulse(), defocus=3.0, legacy_defocus_disc=1)[..., 0]       # the hard disc; quality smooths its edge (test_2d_behaviour_edge_defocus_o.py)
         weights = out[out > 0]
         self.assertTrue(np.allclose(weights, weights[0]))
         self.assertAlmostEqual(float(out.sum()), 1.0, places=5)
@@ -820,11 +820,11 @@ class DefocusTests(unittest.TestCase):
     def test_an_older_node_narrows_the_height_by_the_aspect(self):
         old = old_document("Defocus", dict(defocus=4.0, aspect=2.0), ("legacy_defocus", "scale"))["nodes"]["n"]["params"]
         self.assertEqual(old["legacy_defocus"], 1)
-        out = kernel("Defocus", impulse(), **{k: v for k, v in old.items() if k in ("defocus", "aspect", "legacy_defocus", "scale")})[..., 0]
+        out = kernel("Defocus", impulse(), **{k: v for k, v in old.items() if k in ("defocus", "aspect", "legacy_defocus", "scale", "legacy_defocus_disc")})[..., 0]
         self.assertEqual(extent(out), (9, 5))                    # the older reading: width 4, height 4 / 2
         picture = background()
         reference = flt.ellipse_mean(picture, 4.0, 2.0)
-        np.testing.assert_allclose(kernel("Defocus", picture, defocus=4.0, aspect=2.0, legacy_defocus=1)[4:-4, 4:-4], reference[4:-4, 4:-4], atol=1e-6)
+        np.testing.assert_allclose(kernel("Defocus", picture, defocus=4.0, aspect=2.0, legacy_defocus=1, legacy_defocus_disc=1)[4:-4, 4:-4], reference[4:-4, 4:-4], atol=1e-6)
         self.assertEqual(SPECS["Defocus"]["params"]["legacy_defocus"], 0)
 
 
@@ -957,7 +957,7 @@ class EdgeExtendTests(unittest.TestCase):
 
     def test_the_main_tab_lays_its_knobs_out_in_nuke_order(self):
         # The guide's Channels row leads (step D found the hook that orders the shared rows); the knobs NodeBased added follow the guide's.
-        self.assertEqual(labels("EdgeExtend")[:6], ["Channels", "Source Is Premultiplied", "Erode", "Premultiply", "Size", "Alpha threshold"])
+        self.assertEqual(labels("EdgeExtend")[:9], ["Channels", "Matte", "Source Is Premultiplied", "Erode", "Detail amount", "Edge mask", "Premultiply", "Size", "Alpha threshold"])
 
     def test_every_paired_knob_acts(self):
         picture = self.matte()

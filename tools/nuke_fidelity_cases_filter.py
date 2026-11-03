@@ -1074,22 +1074,22 @@ def _defocus_cases(Case, out):
     note = ("the page calls the node a 'disc filter' that 'simulates the defocusing effect of a circular lens' and gives defocus as 'the size of "
             "the defocus disc'; taken as the plain average of the pixels whose centres lie inside a disc of that radius (a convention: the page "
             "does not give the weights at the disc's rim). Edge pixels are not compared")
-    case("defocus_disc_average", "Defocus", (("defocus", 2.0),), {"defocus": 2.0, "aspect": 1.0, "channels": "rgba"}, disc(2.0, 2.0),
+    case("defocus_disc_average", "Defocus", (("defocus", 2.0), ("quality", 1)), {"defocus": 2.0, "aspect": 1.0, "channels": "rgba", "quality": 1.0}, disc(2.0, 2.0),
          "convention", f"Defocus at size 2: {note}")
-    case("defocus_aspect_ratio_widens_the_disc", "Defocus", (("defocus", 2.0), ("ratio", 2.0)), {"defocus": 2.0, "aspect": 2.0, "channels": "rgba"},
+    case("defocus_aspect_ratio_widens_the_disc", "Defocus", (("defocus", 2.0), ("ratio", 2.0), ("quality", 1)), {"defocus": 2.0, "aspect": 2.0, "channels": "rgba", "quality": 1.0},
          disc(4.0, 2.0), "guide", f"Defocus: aspect ratio 'adjusts the width of the defocus disc without altering its height' ({page}): "
          "at size 2 and ratio 2 the disc is 4 pixels in radius across and 2 up (compared where the whole disc is in the frame)")
-    case("defocus_scaling_scales_both_axes", "Defocus", (("defocus", 1.0), ("scale", 3.0)), {"defocus": 1.0, "aspect": 1.0, "scale": 3.0, "channels": "rgba"},
+    case("defocus_scaling_scales_both_axes", "Defocus", (("defocus", 1.0), ("scale", 3.0), ("quality", 1)), {"defocus": 1.0, "aspect": 1.0, "scale": 3.0, "channels": "rgba", "quality": 1.0},
          disc(3.0, 3.0), "guide", f"Defocus: scaling 'scales the defocus disc simultaneously on the x and y axes' ({page}): size 1 at scale 3 is a disc of radius 3")
-    case("defocus_scaling_split_into_width_and_height", "Defocus", (("defocus", 1.0), ("scale", "3 2")),
-         {"defocus": 1.0, "aspect": 1.0, "scale": [3.0, 2.0], "channels": "rgba"}, disc(3.0, 2.0), "guide",
+    case("defocus_scaling_split_into_width_and_height", "Defocus", (("defocus", 1.0), ("scale", "3 2"), ("quality", 1)),
+         {"defocus": 1.0, "aspect": 1.0, "scale": [3.0, 2.0], "channels": "rgba", "quality": 1.0}, disc(3.0, 2.0), "guide",
          "Defocus: scaling can be 'split into separate width and height controls': size 1 at scale 3 wide and 2 high is a disc 3 across and 2 up")
-    case("defocus_channels_limit_the_effect", "Defocus", (("defocus", 2.0), ("channels", "rgb")), {"defocus": 2.0, "aspect": 1.0, "channels": "rgb"},
+    case("defocus_channels_limit_the_effect", "Defocus", (("defocus", 2.0), ("channels", "rgb"), ("quality", 1)), {"defocus": 2.0, "aspect": 1.0, "channels": "rgb", "quality": 1.0},
          disc(2.0, 2.0, channels=(0, 1, 2)), "guide", f"Defocus: 'the defocus effect is only applied to these channels' ({page}): with rgb the alpha is the input's")
     case("defocus_quality_and_method", "Defocus", (("quality", 20), ("method", "fullprecision")), None,
          lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "guide",
          "Defocus: quality 'sets the interpolation used to smooth out the discs'; method accelerated or fullprecision",
-         unscored="NodeBased has no quality or method knob: its disc is always summed exactly, which is what fullprecision means; the page gives no "
+         unscored="the quality and method knobs are in (tests/test_2d_behaviour_edge_defocus_o.py checks the soft edge and that both methods give one picture); the page gives no "
                   "interpolation to compare, so a quality below the default cannot be scored")
 
     page = FILTER_GUIDE + "zdefocus.html"

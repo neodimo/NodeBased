@@ -60,7 +60,7 @@ def dot(size=41, at=None, value=1.0):
 
 class DefocusPixelTests(unittest.TestCase):
     def test_single_pixel_becomes_a_flat_disc_of_the_expected_radius(self):
-        out = kernel("Defocus", dot(), defocus=5.0)
+        out = kernel("Defocus", dot(), defocus=5.0, legacy_defocus_disc=1)
         plane = out[..., 0]
         ys, xs = np.mgrid[-20:21, -20:21]
         inside = (xs ** 2 + ys ** 2) <= 25
@@ -81,7 +81,7 @@ class DefocusPixelTests(unittest.TestCase):
             np.testing.assert_allclose(plane, plane.T, atol=1e-7)
 
     def test_aspect_stretches_the_disc_along_x(self):
-        out = kernel("Defocus", dot(), defocus=6.0, aspect=2.0, legacy_defocus=1)[..., 0]
+        out = kernel("Defocus", dot(), defocus=6.0, aspect=2.0, legacy_defocus=1, legacy_defocus_disc=1)[..., 0]
         ys, xs = np.nonzero(out)
         # rx = 6, ry = 3
         self.assertEqual((int(xs.min()), int(xs.max())), (14, 26))

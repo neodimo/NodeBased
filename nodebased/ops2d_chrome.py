@@ -296,8 +296,9 @@ def upgrade_nodes(nodes):
         added.update(drawbehaviour.upgrade_params(node.get("type")))           # the Draw group (lane 9 step C)
         from . import effectbehaviour
         added.update(effectbehaviour.upgrade_params(node.get("type")))         # EdgeBlur, GodRays, BumpBoss (lane 2 step G)
-        from . import lightingbehaviour
+        from . import lightingbehaviour, edgedefocusknobs
         added.update(lightingbehaviour.upgrade_params(node.get("type")))       # Emboss and BumpBoss (lane 9 step O)
+        added.update(edgedefocusknobs.upgrade_params(node.get("type")))        # EdgeExtend and Defocus (lane 9 step O)
         from . import raysbehaviour
         added.update(raysbehaviour.upgrade_params(node.get("type")))
         from . import lensdistortion

@@ -167,7 +167,7 @@ MAIN_TAB = {
     "EdgeDetect": ["Edge Detector", "Channels", "Threshold", "Erode size", "Blur size", "Blur quality"],
     "Laplacian": ["Channels", "Size", "Filter", "Quality", "Crop to format"],
     "ErodeFilter": ["Channels", "Size", "Filter"],
-    "EdgeExtend": ["Channels", "Source Is Premultiplied", "Erode", "Premultiply"],
+    "EdgeExtend": ["Channels", "Matte", "Source Is Premultiplied", "Erode", "Detail amount", "Edge mask", "Premultiply"],
 }
 
 

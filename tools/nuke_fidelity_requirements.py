@@ -52,6 +52,8 @@ NOT_PIXEL = {
     "Dither": {"static_seed": "holds the seed across frames, so a one-frame probe cannot see it (tests/test_2d_behaviour_draw.py compares two frames)"},
     "LightWrap": {"shadows_gain": "grades only the darkest part of the wrap; the fixture's wrap has none (tests/test_2d_behaviour_filter_f.py moves it on a dark wrap)"},
     "Blur": {"crop": "crop to format acts on the bounding box only"},
+    # Lane 9 step O (11/3): Defocus's two methods give the same picture (the guide puts the difference below 0.00001); EdgeExtend's edge mask is on a path the probe does reach.
+    "Defocus": {"method": "accelerated and fullprecision are two ways to the same picture (the guide puts the difference below 0.00001); NodeBased has one algorithm (tests/test_2d_behaviour_edge_defocus_o.py)"},
     "Sharpen": {"crop": "crop to format acts on the bounding box only",
                 "quailty": "caps the filter's size and so acts only once the size passes it; the default size 1 never does (tests/test_2d_behaviour_filter_g.py moves it at size 40)"},
     "Soften": {"crop": "crop to format acts on the bounding box only",

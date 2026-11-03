@@ -521,7 +521,11 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         radius = abs(float(params.get("defocus", 0.0)))
         aspect = float(params.get("aspect", 1.0))
         reach = max(radius, radius / aspect if aspect > 0 else radius)
+        from . import drawbehaviour
+        reach = max(reach, *drawbehaviour.defocus_radii(params))
         support = 0 if reach < 0.5 else int(math.ceil(reach))
+        if support and not int(params.get("legacy_defocus_disc", 1)):
+            support = max(support, int(math.ceil(reach + 0.5)))
         return (support, support)
     if kind == "DropShadow":
         import math
@@ -542,6 +546,8 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         import math
         size = abs(float(params.get("extend_size", 0.0)))
         support = 0 if size < 0.5 else int(math.ceil(size))
+        if not int(params.get("legacy_edge_extend", 1)) and float(params.get("detail_amount", 1.0)) != 1.0:
+            support += 1
         return (support, support)
     if kind == "ScreenKeyer":
         from .tiers import _screen_keyer_support
