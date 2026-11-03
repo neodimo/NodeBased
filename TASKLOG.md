@@ -1,3 +1,29 @@
+## 2026-11-02 - lane 2 (2D behaviour), step E of 2: the Merge and Image nodes compute what the guide says, and their panels read like Nuke's
+
+- **What was done (evidence):** two commits, targeted gate green (336 tests). (1) Merge group: `tools/nuke_fidelity_cases_merge.py` (registered at the tuple in `tools/nuke_fidelity_cases.py`) holds
+  27 cases for Switch (2 scored, 2 not scored), Dissolve (4), TimeDissolve (3), AddMix (3 scored, nonlinear not scored), Blend (3 scored, all-zero weights not scored), CopyRectangle (2 scored, softness
+  not scored) and Constant (4 scored, colour with alpha below 1 not scored); every unscored one carries its reason. The kernels already agreed with the guide; one changed: Switch used to raise
+  for `which` past either end and now shows the nearest input (`core.switch_index`, used by the kernel, the raster path, `tiers._switch_rule` and the tile executor's source walks; no legacy flag
+  because the old behaviour was an error, so no document rendered differently; `tests/test_phase_b.py` pinned the error and now pins the clamp). The guide does not say what Nuke shows there, so the
+  case is `not scored`. CopyRectangle's five "inert" knobs were never inert: Nuke's default box (512 389 1536 1167) lies off a 16 x 12 picture, so the probe saw nothing. `PROBE_BASE` in
+  `tools/nuke_fidelity_requirements.py` starts the probe with a box inside the fixture; the defaults are unchanged. TimeDissolve's `in`, `out` and `lut` act across frames (a graph-walk turn of the frame into
+  `which`): `NOT_PIXEL` entries, and `tests/test_2d_behaviour_merge.py::TimeDissolveTests` shows the mix at the start, middle and end, a moved range, the smooth curve and an animated curve.
+  (2) Image group: Read, Write and Constant main tabs in the guide's order and wording (`nodebased/knobs.py`; Read "File", "Proxy", "Reload", "Missing frames", "Input transform"; Write File, Proxy,
+  Reload; Constant colour before size; TimeDissolve's ease reads "Curves"); the format-specific Write knobs sit between File type and Create directories; NodeBased-only knobs follow Nuke's.
+  `tests/test_2d_behaviour_image.py` asserts the label order of each.
+- **Not changed:** Viewer: the mapping pairs none of its controls (viewer state), so there is no panel order to compare. No schema bump. Merge, Premult, Unpremult, KeyMix, ZMerge kernels untouched.
+- **Numbers (from main `b98a80d9`):** Merge group 91.7 -> 99.4 rank-weighted, Image group 80.9 -> 86.7. Nodes with behaviour checked 54 -> 61 (Switch, Dissolve, TimeDissolve, AddMix, Blend,
+  CopyRectangle, Constant); nodes whose kernel runs and have no case 26 -> 19. Inert knobs on the fixture 42 -> 34 (all eight were in this step: CopyRectangle 5, TimeDissolve 3). Layout difference lines
+  43 -> 39 (Read, Write, Constant, TimeDissolve cleared). Overall 89.0 -> 90.2 (NodeBased's own nodes only 91.2 -> 92.4); previous formula 92.0 -> 92.1.
+- **Still open, Merge:** Switch and Dissolve take two inputs (the guide: any number, 0 to 9999); Switch past the end and fractional `which`, Blend all-zero weights, AddMix `nonlinear` and CopyRectangle
+  `softness` are `not scored` for want of a stated form; the guide names Blend's checkbox `weight1`, so `normalize` cannot be written as a Nuke knob in a case (checked in the test instead);
+  CopyRectangle's `area` counts rows from the top like Crop, and whether Nuke's y runs up is not in the guide (lane 9's Crop decision); Blend defaults 83 and chrome 80; ContactSheet layout (8 of 11),
+  defaults 45; ZMerge label "Depth layer" vs "Z channel".
+- **Still open, Image:** Constant stores the colour times its alpha (not scored: the guide does not say how Nuke stores it), defaults 75; Read defaults 35; Write 29 knobs missing, all on the Metadata
+  Export tab; the five to take first: the QuickTime `mov64` Color Primaries and Transfer Function (first pair; 11 more codec copies follow) and MXF Codec, Pattern (OP pattern), FPS; CurveTool layout (8 of 11);
+  UDIM Import is missing.
+- **Next owner:** the integrator rebuilds `docs/PARITY_2D_FIDELITY.md` once on the stacked tree (lane 9 may also regenerate it).
+
 ## 2026-11-02 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step D of 4: Nuke's layout and width/height splits for the step A filter nodes (integrator tick)
 
 - **What was done:** `main` `b98a80d9` -> `1b98bf85` plus this docs commit. Evidence and per-lane commit

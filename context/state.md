@@ -1,3 +1,8 @@
+## 2026-11-02 - Lane 2 (2D behaviour), step E: Merge and Image groups
+
+Merge group 91.7 -> 99.4, Image group 80.9 -> 86.7 (rank-weighted); overall 89.0 -> 90.2. Cases in `tools/nuke_fidelity_cases_merge.py`; tests `tests/test_2d_behaviour_merge.py` and
+`tests/test_2d_behaviour_image.py`; Switch holds the nearest input past either end (`core.switch_index`); `PROBE_BASE` in `tools/nuke_fidelity_requirements.py`. Details in TASKLOG.md.
+
 ## 2026-11-02 - Lane 9 (2D behaviour), step D: filter size splits and step A layouts
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:15 PM on 2026-11-02 PDT)
