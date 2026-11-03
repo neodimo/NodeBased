@@ -461,7 +461,15 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("decay",), label="Decay", soft_range=(0, 1), help="Legacy rays only: how fast each step of the older smear fades."),
         KnobGroup("float", ("translate",), label="Reach", help="Legacy rays only: how far toward the centre the older smear reaches."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "VolumeRays": _groups(KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "VolumeRays": _groups(
+        KnobGroup("float", ("luma_tol",), label="Luma Tolerance", help="The luminance below which rays are not generated."),
+        KnobGroup("xy", ("center_x", "center_y"), label="Volumetrics Center", help="Where the rays radiate from."),
+        KnobGroup("bool", ("comp_me",), label="Add on Top", help="On, the rays and the input image are passed; off, only the rays."),
+        KnobGroup("bool", ("chk_desat",), label="Desaturate before Coloring", help="Desaturate the input so the rays do not pick up its colour."),
+        KnobGroup("float", ("CCorrect1_gamma",), label="Volume Gamma", help="The gamma applied to the generated rays."),
+        KnobGroup("float", ("CCorrect1_gain",), label="Volume Gain", help="The gain applied to the generated rays."),
+        KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ScannedGrain": _groups(KnobGroup("float_slider", ("amount",), soft_range=(0, 4)), KnobGroup("float_slider", ("response",), soft_range=(0.1, 4)), KnobGroup("enum", ("preset",)), KnobGroup("float_slider", ("irregularity",), soft_range=(0, 1)), KnobGroup("float_slider", ("minimum",), soft_range=(0, 1)), KnobGroup("bool", ("apply_through_alpha",), label="Apply through alpha"), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Posterize": _groups(
         KnobGroup("int", ("colors",), label="Colors"),
@@ -2149,6 +2157,7 @@ NUKE_LABELS.setdefault("Roto", {})["invert"] = "Invert matte"       # the mask r
 NUKE_LAYOUT_LANE9.update({
     "GodRays": ("channels", "rays_translate_x", "rays_rotate", "rays_scale", "rays_skew", "center_x", "rays_from_color", "rays_to_color", "rays_gamma",
                 "steps", "rays_max", "legacy_godrays", "decay", "translate"),
+    "VolumeRays": ("luma_tol", "center_x", "comp_me", "chk_desat", "CCorrect1_gamma", "CCorrect1_gain"),
     "EdgeBlur": ("channels", "edge_matte", "edgeblur_size", "kernel_filter", "quality", "crop", "edge_mult", "edgeblur_tint", "edgeblur_brightness"),
 })
 

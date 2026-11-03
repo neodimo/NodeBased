@@ -2448,7 +2448,13 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
+    {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": [], "nuke": ["lightposition"], "kind": "unsupported", "reason": "BumpBoss lights input B with the bump input A from the offset between lightposition and center; the guide says what the knobs do ('the position of this indicator in relation to the center indicator controls the shadow') and gives no lighting formula, while NodeBased's BumpBoss is a one-input emboss lit from an angle (`light_angle`)"},
+    {"nodebased": [], "nuke": ["bumpsize"], "kind": "unsupported", "reason": "Bump Size scales the emboss of input B by input A; the guide gives no formula (see `lightposition`)"},
+    {"nodebased": [], "nuke": ["height"], "kind": "unsupported", "reason": "Light Height: zero is level with the image and gives no emboss, negative puts the light behind; the guide gives no formula (see `lightposition`)"},
+    {"nodebased": [], "nuke": ["intensity"], "kind": "unsupported", "reason": "Light Intensity scales the simulated light; the guide gives no formula (see `lightposition`)"},
+    {"nodebased": [], "nuke": ["minshadow"], "kind": "unsupported", "reason": "Minimum Shadow Intensity limits how dark the shadow gets; the guide gives no formula (see `lightposition`)"},
+    {"nodebased": [], "nuke": ["center"], "kind": "unsupported", "reason": "Image Center xy is the reference point for lightposition; the guide gives no formula (see `lightposition`)"}
    ]
   },
   "Laplacian": {
@@ -2537,7 +2543,30 @@
     {"nodebased": ["steps"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["decay"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["translate"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["luma_tol"], "nuke": ["luma_tol"], "kind": "same"},
+    {"nodebased": ["comp_me"], "nuke": ["comp_me"], "kind": "same"},
+    {"nodebased": ["chk_desat"], "nuke": ["chk_desat"], "kind": "same"},
+    {"nodebased": ["CCorrect1_gamma"], "nuke": ["CCorrect1_gamma"], "kind": "same"},
+    {"nodebased": ["CCorrect1_gain"], "nuke": ["CCorrect1_gain"], "kind": "same"},
+    {"nodebased": [], "nuke": ["style"], "kind": "unsupported", "reason": "Volumetric Creation picks luminance, alpha edges, solid alpha or a shadow cast from the alpha; the guide gives the four one line each and no formula (the gizmo is a group of nodes), and NodeBased's rays come from the image's colour weighted by the wired matte"},
+    {"nodebased": [], "nuke": ["edge_size"], "kind": "unsupported", "reason": "Edge Size belongs to the Alpha Edges style, which is not built (see `style`); the guide says only that positive values let fewer rays past the edges"},
+    {"nodebased": [], "nuke": ["blur_size"], "kind": "unsupported", "reason": "Edge Blur belongs to the alpha styles, which are not built (see `style`)"},
+    {"nodebased": [], "nuke": ["raylength"], "kind": "unsupported", "reason": "Ray Length is in the units of the gizmo's inner transform (default 20), which the guide does not state; NodeBased's `translate` is a fraction of the way to the far edge, so the two cannot be matched without guessing"},
+    {"nodebased": [], "nuke": ["pre_blur"], "kind": "unsupported", "reason": "Pre-Ray Blur is the gizmo's blur before the rays; the guide says 'amount of blurring applied to the rays' and gives no size convention"},
+    {"nodebased": [], "nuke": ["quality"], "kind": "unsupported", "reason": "Quality picks Low to Very High, the gizmo's number of samples; the guide gives no counts (NodeBased's `steps` is the count)"},
+    {"nodebased": [], "nuke": ["chk_flicker"], "kind": "unsupported", "reason": "Flickering is noise driven by the gizmo's noise node; the guide states no noise form, so the flicker knobs (Use Flickering, Flicker Speed, Flicker Size, Transform Noise with Volume Center) are not built and the rays are steady"},
+    {"nodebased": [], "nuke": ["flicker_speed"], "kind": "unsupported", "reason": "see `chk_flicker`: no noise form is stated"},
+    {"nodebased": [], "nuke": ["flicker_size"], "kind": "unsupported", "reason": "see `chk_flicker`: no noise form is stated"},
+    {"nodebased": [], "nuke": ["xform_flicker"], "kind": "unsupported", "reason": "see `chk_flicker`: no noise form is stated"},
+    {"nodebased": [], "nuke": ["initcolor"], "kind": "unsupported", "reason": "Initial Volume Color has no description in the guide, and the ramp from it to the end colour is not stated"},
+    {"nodebased": [], "nuke": ["volume_end_color"], "kind": "unsupported", "reason": "End Volume Color has no description in the guide (see `initcolor`)"},
+    {"nodebased": [], "nuke": ["chk_radial"], "kind": "unsupported", "reason": "Radial Falloff fades the rays with distance from the volume centre; the guide states no falloff curve (NodeBased's `decay` fades them per step)"},
+    {"nodebased": [], "nuke": ["radial_size"], "kind": "unsupported", "reason": "see `chk_radial`: no falloff curve is stated"},
+    {"nodebased": [], "nuke": ["rad_softness"], "kind": "unsupported", "reason": "see `chk_radial`: no falloff curve is stated"},
+    {"nodebased": [], "nuke": ["chk_use_mask"], "kind": "unsupported", "reason": "Mask Options use the mask input's alpha as a matte for the rays with their own blur and transform; NodeBased's mask input gates the result, and the guide states no matte arithmetic"},
+    {"nodebased": [], "nuke": ["mask_blur"], "kind": "unsupported", "reason": "see `chk_use_mask`"},
+    {"nodebased": [], "nuke": ["chk_xform_mask"], "kind": "unsupported", "reason": "see `chk_use_mask`"}
    ],
    "skip_default": ["vol_pos"]
   },

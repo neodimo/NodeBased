@@ -27,7 +27,7 @@ import audit_nuke_fidelity as audit  # noqa: E402
 import nuke_fidelity_cases as ruler  # noqa: E402
 
 STEP_NODES = ("EdgeBlur", "GodRays", "VolumeRays", "BumpBoss")
-CASED_NODES = ("EdgeBlur", "GodRays")
+CASED_NODES = STEP_NODES
 
 
 def render(document, target):
@@ -301,6 +301,115 @@ class GodRaysTests(unittest.TestCase):
         labels = [group.label for group in knobs.knob_layout("GodRays")]
         self.assertEqual(labels[:11], ["Channels", "Translate xy", "Rotate", "Scale", "Skew", "Center", "From color", "To color", "Gamma", "Steps", "Max"])
         self.assertEqual(labels[-1], "Mix")
+
+
+# ------------------------------------------------------------------------------------------------------------ VolumeRays
+def volume(image, matte=None, **knobs):
+    spec = SPECS["VolumeRays"]
+    slots = [image, np.ones_like(image) if matte is None else matte, None]
+    return np.asarray(Evaluator._kernel("VolumeRays", {**spec["params"], "center_x": 8.0, "center_y": 6.0, "steps": 8, **knobs}, slots), np.float64)
+
+
+class VolumeRaysTests(unittest.TestCase):
+    def test_a_new_node_passes_the_rays_alone_as_the_guide_says(self):
+        p = SPECS["VolumeRays"]["params"]
+        self.assertEqual((p["comp_me"], p["luma_tol"], p["chk_desat"], p["CCorrect1_gamma"], p["CCorrect1_gain"]), (0, 0.0, 0, 1.0, 1.0))
+
+    def test_add_on_top_passes_the_input_with_the_rays(self):
+        image = texture(12, 16)
+        rays, top = volume(image, comp_me=0), volume(image, comp_me=1)
+        np.testing.assert_allclose(top[..., :3], image[..., :3] + rays[..., :3], atol=1e-5)
+        np.testing.assert_array_equal(top[..., 3], image[..., 3])
+
+    def test_the_rays_lie_on_the_line_through_the_volume_centre(self):
+        image = np.zeros((12, 16, 4), np.float32)
+        image[:, :, 3] = 1.0
+        image[6, 12, :3] = 1.0                                  # the centre is at x 8, y 6: the pixel is 4 to its right
+        rays = volume(image, comp_me=0)
+        lit = np.argwhere(rays[..., 0] > 1e-6)
+        self.assertTrue(len(lit))
+        self.assertTrue((lit[:, 0] == 6).all())                 # every ray pixel sits on the centre's row, the line through the source
+
+    def test_luma_tolerance_drops_the_rays_of_dim_pixels(self):
+        image = np.zeros((12, 16, 4), np.float32)
+        image[:, :, 3] = 1.0
+        image[6, 12, :3] = 0.3
+        self.assertTrue(volume(image, comp_me=0, luma_tol=0.0)[..., :3].max() > 1e-6)
+        np.testing.assert_array_equal(volume(image, comp_me=0, luma_tol=0.5)[..., :3], 0.0)
+        bright = image.copy()
+        bright[6, 12, :3] = 0.9
+        self.assertGreater(volume(bright, comp_me=0, luma_tol=0.5)[..., :3].max(), 1e-6)
+
+    def test_desaturate_before_colouring_gives_grey_rays(self):
+        image = np.zeros((12, 16, 4), np.float32)
+        image[:, :, 3] = 1.0
+        image[6, 12, :3] = (1.0, 0.2, 0.0)
+        coloured, grey = volume(image, comp_me=0), volume(image, comp_me=0, chk_desat=1)
+        self.assertGreater(float(np.abs(coloured[..., 0] - coloured[..., 2]).max()), 1e-4)
+        np.testing.assert_allclose(grey[..., 0], grey[..., 1], atol=1e-6)
+        np.testing.assert_allclose(grey[..., 1], grey[..., 2], atol=1e-6)
+
+    def test_volume_gain_and_gamma_grade_the_rays(self):
+        image = texture(12, 16)
+        base = volume(image, comp_me=0)[..., :3]
+        np.testing.assert_allclose(volume(image, comp_me=0, CCorrect1_gain=2.0)[..., :3], 2.0 * base, atol=1e-5)
+        np.testing.assert_allclose(volume(image, comp_me=0, CCorrect1_gamma=2.0)[..., :3], np.power(base, 0.5), atol=1e-5)
+
+    def test_every_paired_knob_changes_the_pixels(self):
+        image = texture(12, 16)
+        base = volume(image, comp_me=0)
+        for name, value in {"luma_tol": 0.6, "comp_me": 1, "chk_desat": 1, "CCorrect1_gamma": 2.0, "CCorrect1_gain": 3.0, "center_x": 3.0}.items():
+            with self.subTest(knob=name):
+                self.assertTrue(differs(volume(image, **{"comp_me": 0, name: value}), base), name)
+
+    def test_a_document_saved_before_the_step_renders_as_it_did(self):
+        g = Graph()
+        g.add("plate", "Checker", dict(width=45, height=37, size=5))
+        g.add("matte", "Constant", dict(width=45, height=37, red=1, green=1, blue=1, alpha=0.7))
+        g.add("node", "VolumeRays", dict(center_x=20.0, center_y=15.0, steps=8, decay=0.8, translate=0.9), image="plate", matte="matte")
+        old = copy.deepcopy(g.doc)
+        for name in ("comp_me", "luma_tol", "chk_desat", "CCorrect1_gamma", "CCorrect1_gain"):
+            old["nodes"]["node"]["params"].pop(name, None)
+        loaded = upgrade_document(old)
+        validate(loaded)
+        self.assertEqual(loaded["nodes"]["node"]["params"]["comp_me"], 1)
+        image = render(loaded, "plate")
+        h, w = image.shape[:2]
+        yy, xx = np.mgrid[:h, :w].astype(np.float32)
+        bright = np.maximum(image[..., :3], 0.0) * 0.7
+        acc = np.zeros_like(bright)
+        for i in range(1, 9):
+            t = 0.9 * i / 8
+            sx = np.clip(np.rint(xx + (xx - 20.0) * t).astype(int), 0, w - 1)
+            sy = np.clip(np.rint(yy + (yy - 15.0) * t).astype(int), 0, h - 1)
+            acc += bright[sy, sx] * (0.8 ** i)
+        expected = image.copy()
+        expected[..., :3] += acc / 8
+        np.testing.assert_allclose(render(loaded, "node"), expected, atol=1e-6)
+
+    def test_the_main_tab_reads_in_the_guides_order(self):
+        labels = [group.label for group in knobs.knob_layout("VolumeRays")]
+        self.assertEqual(labels[:6], ["Luma Tolerance", "Volumetrics Center", "Add on Top", "Desaturate before Coloring", "Volume Gamma", "Volume Gain"])
+
+
+# -------------------------------------------------------------------------------------------------------------- BumpBoss
+class BumpBossTests(unittest.TestCase):
+    def test_the_gap_is_recorded_with_a_reason_for_every_guide_knob_not_built(self):
+        import json
+        pairs = json.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "parity", "nodebased_to_nuke.json")))["pairs"]
+        gaps = {k["nuke"][0]: k["reason"] for k in pairs["BumpBoss"]["knobs"] if k["kind"] == "unsupported"}
+        self.assertEqual(set(gaps), {"lightposition", "bumpsize", "height", "intensity", "minshadow", "center"})
+        for name, reason in gaps.items():
+            self.assertGreater(len(reason), 40, name)
+
+    def test_the_one_input_emboss_keeps_lighting_the_height_channel_from_the_angle(self):
+        image = np.zeros((9, 9, 4), np.float32)
+        image[..., 3] = 1.0
+        image[:, 4:, 0] = 1.0                                    # a vertical step in red
+        out = kern("BumpBoss", image, height_channel="rgba.red", light_angle=0.0)
+        self.assertGreater(float(out[4, 4, 0]), 0.5)
+        self.assertAlmostEqual(float(out[4, 1, 0]), 0.5, places=6)
+        self.assertTrue(differs(out, kern("BumpBoss", image, height_channel="rgba.red", light_angle=180.0)))
 
 
 if __name__ == "__main__":

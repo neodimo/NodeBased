@@ -1,3 +1,7 @@
+## 2026-11-02 - Lane 2 (2D behaviour), step G: EdgeBlur, GodRays, VolumeRays, BumpBoss
+
+Branch `openclaw/nb-2d-parity`. New `nodebased/effectbehaviour.py` (EdgeBlur) and `nodebased/raysbehaviour.py` (GodRays and VolumeRays' plain knobs); cases in `tools/nuke_fidelity_cases_extra.py` (registered in the tuple in `tools/nuke_fidelity_cases.py`, which also gained fixtures E, a hard matte on a textured plate, and P, one white pixel); tests in `tests/test_2d_behaviour_extra_filter.py`. EdgeBlur: Nuke's filter, quality, crop, matte channel, tint and brightness, defaults size 3 and edge mult 2 for a new node (saved nodes keep 4 and 1 and the Gaussian). GodRays: Nuke's transform average (translate, rotate, scale, skew, colours, gamma, max, 5 steps) and the channels and mask strip; a saved node keeps the older smear (`legacy_godrays` 1). VolumeRays: Luma Tolerance, Add on Top (off for a new node, on for a saved one), Desaturate before Coloring, Volume Gamma and Gain; its other 18 secondary knobs are listed unsupported with reasons. BumpBoss: no lighting formula in the guide; the six guide knobs are listed unsupported, nothing invented. No schema bump (old nodes get their values through `ops2d_chrome.upgrade_nodes`).
+
 ## 2026-11-02 - Lane 9 (2D behaviour), step F: Tracker, DropShadow, DirBlur and LightWrap behaviour and layout
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:45 PM on 2026-11-02 PDT)

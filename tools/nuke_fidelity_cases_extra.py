@@ -198,4 +198,22 @@ def cases():
          "which colors are interpolated') and no formula; the ends are unchanged by it and the middle sample is not scored",
          nuke_inputs=("P",), nb_inputs=("P",))
 
+
+    # ---------------------------------------------------------------------------------------------------- VolumeRays
+    case("volumerays_rays_radiate_from_the_volume_centre", "VolumeRays", "VolumeRays", (("vol_pos", "4 6"),), "VolumeRays",
+         {"center_x": 4.0, "center_y": 6.0, "comp_me": 0}, lambda fx: (np.zeros(fx["P"].shape, np.float64), np.ones(fx["P"].shape, bool)), "guide",
+         "VolumeRays: 'ray lighting effects radiating from the vol_pos indicator'", unscored="the node is a gizmo (a group of nodes) whose rays are "
+         "built from the image's luminance or alpha through a style, a noise flicker, a radial falloff and a ray length in the gizmo's own units, none "
+         "of which the guide states as a formula; NodeBased's rays come from the image colour weighted by a wired matte, so a pixel reference for "
+         "either cannot be written down without guessing (tests/test_2d_behaviour_extra_filter.py checks that the rays lie on the line through the "
+         "volume centre)", nuke_inputs=("P",), nb_inputs=("P", "P"))
+
+    # ------------------------------------------------------------------------------------------------------ BumpBoss
+    case("bumpboss_emboss_of_b_by_a", "BumpBoss", "BumpBoss", (("lightposition", "480 360"), ("center", "320 240")), "BumpBoss",
+         {"light_angle": 135.0}, lambda fx: (fx["B"].astype(np.float64), np.zeros(fx["B"].shape, bool)), "guide",
+         "BumpBoss: 'an emboss effect by overlaying input A over input B'; height zero 'is level with the image, producing no emboss'",
+         unscored="the guide states what each knob does and no lighting formula (how A's slope, the light's offset from the centre, height, "
+                  "intensity and the minimum shadow combine into B's pixels), and NodeBased's BumpBoss is a one-input emboss lit from an angle; the "
+                  "node's remaining gap is recorded as unsupported knobs in docs/parity/nodebased_to_nuke.json", nuke_inputs=("A", "B"), nb_inputs=("A",))
+
     return out

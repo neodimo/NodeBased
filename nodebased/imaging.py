@@ -7607,12 +7607,18 @@ class Evaluator:
         if matte is None and not raysbehaviour.is_legacy(p):
             return raysbehaviour.godrays(image, p, origin)
         decay = max(0.0, float(p.get("decay", .9)))
-        if decay == 0.0: return image.copy()
+        add_on_top = bool(int(p.get("comp_me", 1)))
+        if decay == 0.0 and add_on_top: return image.copy()
         steps = max(1, min(256, int(p.get("steps", 32))))
         h, w = image.shape[:2]
         yy, xx = np.mgrid[:h, :w].astype(np.float32)
         cx, cy = float(p.get("center_x", w/2))-origin[0], float(p.get("center_y", h/2))-origin[1]
         bright = np.maximum(image[..., :3], 0.0)
+        # VolumeRays' plain colour knobs (guide: Luma Tolerance, Desaturate before Coloring); an older node has none, and 0 / off change nothing.
+        luma = 0.2126 * bright[..., 0:1] + 0.7152 * bright[..., 1:2] + 0.0722 * bright[..., 2:3]
+        luma_tol = float(p.get("luma_tol", 0.0))
+        if luma_tol > 0.0: bright = np.where(luma > luma_tol, bright, 0.0)
+        if int(p.get("chk_desat", 0)): bright = np.repeat(np.where(luma > luma_tol, luma, 0.0) if luma_tol > 0.0 else luma, 3, axis=2)
         if matte is not None: bright = bright * np.clip(matte[..., 3:4], 0, 1)
         out = image.copy(); acc = np.zeros_like(bright)
         translate = float(p.get("translate", 1.0))
@@ -7621,8 +7627,13 @@ class Evaluator:
             sx = np.clip(np.rint(xx + (xx-cx)*t).astype(int), 0, w-1)
             sy = np.clip(np.rint(yy + (yy-cy)*t).astype(int), 0, h-1)
             acc += bright[sy, sx] * (decay ** i)
-        out[..., :3] += acc / steps
-        return out
+        rays = acc / steps
+        gain, gamma = float(p.get("CCorrect1_gain", 1.0)), float(p.get("CCorrect1_gamma", 1.0))
+        if gain != 1.0: rays = rays * gain
+        if gamma != 1.0: rays = np.power(rays, 1.0 / max(gamma, 1e-6))
+        if add_on_top: out[..., :3] += rays
+        else: out[..., :3] = rays
+        return out.astype(np.float32)
 
     @staticmethod
     def _scanned_grain(image, plate, p, frame=None):
