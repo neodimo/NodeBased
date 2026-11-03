@@ -53,7 +53,7 @@ from . import shapes
 from . import tiers
 from .animation import resolve_document
 from .cancellation import Cancelled
-from .core import DRAW_KINDS, SPECS, bypass_slot
+from .core import DRAW_KINDS, SPECS, bypass_slot, switch_index
 from .imaging import Evaluator
 from .tiles import (DEFAULT_TILE_EDGE, SUPPORTED_TILED_KINDS, TileArtifact, TileCache, TileKey,
                     TileRegion, fits_in_budget, grid_for, is_tile_source_kind, iter_tiles,
@@ -244,12 +244,10 @@ def _all_ancestors(document, target, include_optional=False):
                 stack.append(src)
             continue
         if kind == "Switch":
-            which = int(node["params"].get("which", 0))
             slots = list(SPECS[kind]["inputs"])
-            if 0 <= which < len(slots):
-                src = node["inputs"].get(slots[which])
-                if src is not None:
-                    stack.append(src)
+            src = node["inputs"].get(slots[switch_index(node["params"].get("which", 0), len(slots))])
+            if src is not None:
+                stack.append(src)
             continue
         slots = list(SPECS[kind]["inputs"])
         if include_optional:
@@ -1909,9 +1907,8 @@ def _canvas_size_for_chain(document, target, frame, tier):
             cursor = _bypass_source(node)
             continue
         if node["type"] == "Switch":
-            which = int(node["params"].get("which", 0))
             slots = list(SPECS["Switch"]["inputs"])
-            cursor = node["inputs"].get(slots[which]) if 0 <= which < len(slots) else None
+            cursor = node["inputs"].get(slots[switch_index(node["params"].get("which", 0), len(slots))])
             continue
         if node["type"] == "AppendClip":
             cursor = _append_clip_active_source(nodes, node, frame)
@@ -1935,8 +1932,7 @@ def _no_source_error(document, dead_end_id, what):
     slots = list(SPECS.get(node["type"], {}).get("inputs", []))
     slot = None
     if node["type"] == "Switch":
-        which = int(node["params"].get("which", 0))
-        slot = slots[which] if 0 <= which < len(slots) else None
+        slot = slots[switch_index(node["params"].get("which", 0), len(slots))] if slots else None
     elif node["disabled"] and not tile_bypass_self_resolves(node["type"]):
         slot = bypass_slot(node)
     elif slots:

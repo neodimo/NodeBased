@@ -1519,6 +1519,12 @@ def _edit_format(doc, cmd):
     return copy.deepcopy(settings["formats"])
 
 
+def switch_index(which, count):
+    """The input a Switch shows: input `which`, held to the first and last of its `count` inputs. The guide says only that input N shows at
+    which = N; a value past either end shows the nearest input (tests/test_2d_behaviour_merge.py), where it used to be an error."""
+    return max(0, min(int(which), count - 1))
+
+
 def bypass_slot(node):
     """The one input slot a bypassed (disabled) node passes through, or None.
 

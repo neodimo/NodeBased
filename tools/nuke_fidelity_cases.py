@@ -343,7 +343,7 @@ def _cases():
 
 CASES = _cases()
 # Behaviour cases from the 2D behaviour lanes (lanes 2 and 9), each in its own module.
-for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter"):
+for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter", "nuke_fidelity_cases_merge"):
     try:
         CASES += __import__(_mod).cases()
     except ModuleNotFoundError as _exc:

@@ -510,7 +510,8 @@ def _merge_rule(params, region, arity):
 def _switch_rule(params, region, arity):
     # Only the selected branch is evaluated. Returning None for the other is what keeps an
     # expensive unselected branch — a generative operator, later — from being scheduled at all.
-    which = int(params.get("which", 0))
+    from .core import switch_index
+    which = switch_index(params.get("which", 0), arity)
     return [region if index == which else None for index in range(arity)]
 
 

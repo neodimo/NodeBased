@@ -296,13 +296,12 @@ class SwitchNodeTests(unittest.TestCase):
         out = Evaluator._kernel("Switch", {"which": 1}, [a, b])
         np.testing.assert_array_equal(out, b)
 
-    def test_switch_out_of_range_raises(self):
+    def test_switch_out_of_range_holds_the_nearest_input(self):
+        # Lane 2 step E: a value past either end shows the nearest input (it raised before).
         a = _full_alpha((1.0, 0.0, 0.0))
         b = _full_alpha((0.0, 0.0, 1.0))
-        with self.assertRaisesRegex(ValueError, "out of range"):
-            Evaluator._kernel("Switch", {"which": 5}, [a, b])
-        with self.assertRaisesRegex(ValueError, "out of range"):
-            Evaluator._kernel("Switch", {"which": -1}, [a, b])
+        np.testing.assert_array_equal(Evaluator._kernel("Switch", {"which": 5}, [a, b]), b)
+        np.testing.assert_array_equal(Evaluator._kernel("Switch", {"which": -1}, [a, b]), a)
 
     def test_switch_passes_through_pixel_data_unchanged(self):
         # HDR + negative premultiplied pass through verbatim — no resampling, no clamping.

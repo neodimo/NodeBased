@@ -58,6 +58,9 @@ NOT_PIXEL = {
     "Merge": {"screen_alpha": "acts only for operations that do not already composite by alpha (plus, minus, multiply and the like), not the default over"},
     "OCIOLookTransform": {"invert": "runs a look backwards, so it acts only with a look named"},
     "OCIOFileTransform": {"invert": "runs a file backwards, so it acts only with a file named"},
+    # Lane 2 step E (11/2): TimeDissolve's kernel is a Dissolve at one `which`; the frame range and the curve turn the frame into that `which` in the graph walk.
+    "TimeDissolve": {k: "acts across frames (the dissolve range and curve turn a frame number into the mix; tests/test_2d_behaviour_merge.py shows the start, middle and end)"
+                     for k in ("in", "out", "lut")},
     "Crop": {"reformat": "makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)",
              "crop": "black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)"},
 }
@@ -87,9 +90,16 @@ def _inputs_for(kind, fx, size):
     return slots
 
 
+# Starting values the probe uses in place of a kind's defaults where the defaults put the effect outside the 16 x 12 fixture. Nuke's own defaults stay
+# the defaults the `defaults` component compares; only the probe's starting point moves.
+PROBE_BASE = {
+    "CopyRectangle": {"area_x": 3.0, "area_y": 2.0, "area_r": 11.0, "area_t": 9.0},     # Nuke's 512 389 1536 1167 lies off a 16 x 12 picture
+}
+
+
 def _base_params(kind, size):
     from nodebased import core
-    p = dict(core.SPECS[kind]["params"])
+    p = dict(core.SPECS[kind]["params"], **PROBE_BASE.get(kind, {}))
     h, w = size
     for name, value in (("width", w), ("height", h)):          # generators render at the fixture's size, not 1920 x 1080
         if name in p and isinstance(p[name], (int, float)) and not isinstance(p[name], bool):

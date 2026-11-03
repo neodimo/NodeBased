@@ -3923,9 +3923,10 @@ class Evaluator:
                     p = {**p, "maskChannelInput": "rgba.alpha"}
             return Raster(Evaluator._kernel(kind, p, layers, frame, origin=(out.x, out.y)), out, b.display)
         if kind == "Switch":
+            from .core import switch_index
             chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
                                                      for r in inputs[:2]], frame)
-            return inputs[int(p["which"])].with_pixels(chosen)
+            return inputs[switch_index(p["which"], 2)].with_pixels(chosen)
         if kind == "Reformat":
             # Unlike every other MASK_MIX_KINDS member, Reformat's own output *display* window is
             # not `source.display` -- it is the chosen format (docs/PARITY_2D.md) -- so it cannot
@@ -5802,11 +5803,9 @@ class Evaluator:
             # contract does not apply; Dot is intentionally neutral.
             return inputs[0].copy()
         if kind == "Switch":
-            which = int(p["which"])
+            from .core import switch_index
             choices = inputs[:2]  # only the two declared inputs ("0" and "1") are selectable
-            if which < 0 or which >= len(choices):
-                raise ValueError(f"Switch 'which'={which} is out of range for {len(choices)} wired inputs")
-            return choices[which].copy()
+            return choices[switch_index(p["which"], len(choices))].copy()
         raise ValueError(f"No kernel for {kind}")
 
     @staticmethod

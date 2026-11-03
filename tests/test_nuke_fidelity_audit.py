@@ -331,7 +331,8 @@ class FormulaCaseTests(unittest.TestCase):
             for knob, _ in c.nuke_knobs:
                 self.assertIn(knob, knobs, (c.id, knob))
             sockets = {i["name"] for i in NUKE["nodes"][c.nuke]["inputs"]}
-            self.assertTrue(c.nuke_inputs)
+            if sockets:                                       # a generator (Constant) has no input to feed
+                self.assertTrue(c.nuke_inputs)
             for name in c.nb_inputs:
                 self.assertIn(name, cases.make_fixtures())
 
