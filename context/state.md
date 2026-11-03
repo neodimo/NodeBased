@@ -1,3 +1,7 @@
+## 2026-11-03 - Lane 9 (2D behaviour), step O: Emboss, BumpBoss, EdgeExtend, Defocus and the motion blurs
+
+Branch openclaw/nb-2d-behaviour: two code commits on main 16feae1a. No schema bump. New modules: nodebased/lightingbehaviour.py (Emboss type and detector, BumpBoss lighting), nodebased/edgedefocusknobs.py (EdgeExtend matte, detail amount, edge mask; Defocus soft disc). Legacy flags: legacy_bumpboss, legacy_defocus_disc; saved Emboss and EdgeExtend nodes get explicit emboss_type=effect / matte=Source Alpha on load. Audit 95.6 -> 95.7. Details in TASKLOG.md.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step N: VectorDistort, PointsTo3D and Reconcile3D get Nuke's inputs and main knobs
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (7:55 AM on 2026-11-03 PDT)
