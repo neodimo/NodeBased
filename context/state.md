@@ -1,3 +1,7 @@
+## 2026-11-02 - Lane 9 (2D behaviour), step D: filter size splits and step A layouts
+
+Blur `radius`, Sharpen `sharpen_size`, Soften `soften_size`, Glow `glow_size` and Erode (filter) `filter_size` are splittable (`wh`); read through `blurknobs.size_value`. Main tabs of Blur, Sharpen, Soften, Glow, EdgeDetect, Laplacian, Erode (filter) and EdgeExtend follow the guide. Overall fidelity 89.0 -> 89.7. Branch `openclaw/nb-2d-behaviour`.
+
 ## 2026-11-02 - Lane 9 (2D behaviour), hangfix-1102: queue panel close, GPU display surface, CornerPin case
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (9:45 PM on 2026-11-02 PDT)
