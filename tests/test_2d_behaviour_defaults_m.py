@@ -4,11 +4,14 @@ The defaults of a saved node are the values it was saved with; an older document
 (readknobs.DEFAULTS, writenode.DEFAULTS), so none of them renders differently.
 """
 import copy
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
-from nodebased import core
+from nodebased import core, readknobs, writenode
+from nodebased.tileexec import TileExecutor
 from nodebased.core import SPECS, Dispatcher, upgrade_document
 from nodebased.imaging import Evaluator
 from tests.test_2d_behaviour_color_a import tiled
@@ -22,12 +25,9 @@ def new_params(kind):
 
 
 class NewNodeDefaults(unittest.TestCase):
-    def test_read_and_write_keep_the_start_they_had(self):
-        # Nuke starts Read with auto alpha off and Write on rgb. Both stay as before for now: `readknobs.active` and `writenode.active`
-        # take "the default" to be the Read and Write of before (tests/test_2d_fidelity_c_read.py, _c_write.py, _f_readwrite.py pin
-        # that), so changing them is a step of its own; the report lists it as open.
-        self.assertEqual(new_params("Read")["auto_alpha"], 1)
-        self.assertEqual(new_params("Write")["channels"], "all")
+    def test_read_starts_with_auto_alpha_off_and_write_on_rgb(self):
+        self.assertEqual(new_params("Read")["auto_alpha"], 0)
+        self.assertEqual(new_params("Write")["channels"], "rgb")
 
     def test_burnin_starts_with_no_background_and_an_opaque_one_when_turned_on(self):
         p = new_params("BurnIn")
@@ -143,3 +143,97 @@ class IBKColorPick(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def rgb_exr(path, colour=(0.2, 0.4, 0.6), size=(24, 16)):
+    """An EXR with three channels and no alpha."""
+    import OpenImageIO as oiio
+    width, height = size
+    spec = oiio.ImageSpec(width, height, 3, oiio.FLOAT)
+    spec.channelnames = ("R", "G", "B")
+    out = oiio.ImageOutput.create(str(path))
+    out.open(str(path), spec)
+    out.write_image(np.broadcast_to(np.array(colour, np.float32), (height, width, 3)).copy())
+    out.close()
+
+
+class ReadAutoAlpha(unittest.TestCase):
+    """Nuke's Read starts with auto alpha off: a file with no alpha channel reads as alpha 0. A saved Read keeps what it was saved with."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = tempfile.TemporaryDirectory()
+        cls.path = str(Path(cls.directory.name) / "rgb.exr")
+        rgb_exr(cls.path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.directory.cleanup()
+
+    def document(self, **knobs):
+        d = Dispatcher()
+        d.execute(dict(op="create", id="node", type="Read", params={"path": self.path, **knobs}))
+        return dict(d.document, view="node")
+
+    def evaluated(self, document):
+        return np.asarray(Evaluator().evaluate(document, "node", frame=1))
+
+    def tile(self, document, edge):
+        executor = TileExecutor(evaluator=Evaluator(), tile_edge=edge)
+        region = executor.canvas_region(document, "node", frame=1, tier=1)
+        return executor.compose_region(document, "node", region, frame=1, tier=1).pixels
+
+    def test_a_new_read_of_a_file_without_alpha_has_alpha_zero_and_the_colour_of_the_file(self):
+        pixels = self.evaluated(self.document())
+        self.assertEqual(float(pixels[..., 3].max()), 0.0)
+        self.assertGreater(float(pixels[..., 0].max()), 0.0)
+
+    def test_a_saved_read_with_auto_alpha_on_or_a_read_saved_before_the_knob_has_alpha_one(self):
+        on = self.document(auto_alpha=1)
+        self.assertEqual(float(self.evaluated(on)[..., 3].min()), 1.0)
+        old = self.document()
+        old["nodes"]["node"]["params"].pop("auto_alpha")
+        self.assertEqual(float(self.evaluated(old)[..., 3].min()), 1.0)
+        np.testing.assert_array_equal(self.evaluated(old), self.evaluated(on))
+
+    def test_the_knob_alone_does_not_force_a_whole_decode(self):
+        self.assertFalse(readknobs.active({"auto_alpha": 0}))
+        self.assertTrue(readknobs.active({"auto_alpha": 0, "raw": 1}))
+
+    def test_tiles_equal_the_frame_for_both_settings(self):
+        for knobs in ({}, {"auto_alpha": 1}):
+            document = self.document(**knobs)
+            frame = self.evaluated(document)
+            for edge in (7, 16, 32):
+                np.testing.assert_array_equal(self.tile(document, edge), frame)
+
+
+class WriteChannelsDefault(unittest.TestCase):
+    """Nuke's Write starts on rgb: the file holds no alpha. A saved Write keeps its channels; an older one without the knob writes all."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+
+    def channels_of(self, name, params, file_type="exr"):
+        import OpenImageIO as oiio
+        from tests.test_2d_fidelity_c_write import make_raster
+        target = str(Path(self.directory.name) / name)
+        writenode.write_raster(make_raster(), target, file_type, "half", params)
+        return oiio.ImageBuf(target).nchannels
+
+    def test_a_new_write_writes_three_channels_and_all_writes_four(self):
+        new = new_params("Write")
+        for file_type in ("exr", "png"):
+            self.assertEqual(self.channels_of(f"new.{file_type}", new, file_type), 3, file_type)
+            self.assertEqual(self.channels_of(f"all.{file_type}", {**new, "channels": "all"}, file_type), 4, file_type)
+
+    def test_a_write_saved_without_channels_writes_all_of_them_as_before(self):
+        d = Dispatcher()
+        d.execute(dict(op="create", id="n", type="Write", params={}))
+        doc = copy.deepcopy(d.document)
+        doc["version"] = 28
+        doc["nodes"]["n"]["params"].pop("channels")
+        old = upgrade_document(doc)["nodes"]["n"]["params"]
+        self.assertEqual(self.channels_of("old.exr", old), 4)
+        self.assertEqual(self.channels_of("old.png", old, "png"), 4)

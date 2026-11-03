@@ -23,7 +23,8 @@ H, W = 24, 40
 
 
 def params(**knobs):
-    return {**SPECS["Write"]["params"], **knobs}
+    # The Write of before (every channel): a new Write starts on Nuke's rgb (writenode.NEW_NODE_DEFAULTS).
+    return {**SPECS["Write"]["params"], "channels": "all", **knobs}
 
 
 def make_raster(alpha=0.5, with_layers=False, meta=None):
@@ -587,7 +588,7 @@ class OldDocumentTests(Folder):
         document = Dispatcher(empty_document())
         document.execute({"op": "create", "id": "w", "type": "Write", "params": {"path": self.path("out.exr")}})
         old = copy.deepcopy(document.document)
-        for key in (*writeformats.DEFAULTS, *writenode.EXR_DEFAULTS):
+        for key in ("channels", *writeformats.DEFAULTS, *writenode.EXR_DEFAULTS):       # an older Write has no `channels` either
             old["nodes"]["w"]["params"].pop(key, None)
         loaded = upgrade_document(old)
         validate(loaded)
@@ -607,7 +608,7 @@ class OldDocumentTests(Folder):
         writenode.write_raster(raster, a, "png", "half", params(exr_autocrop=1, tiff_compression="LZW", dpx_fill=1))
         write_png(b, raster.to_display())
         self.assertEqual(Path(a).read_bytes(), Path(b).read_bytes())        # another format's knobs do not touch a PNG
-        self.assertFalse(writenode.active(SPECS["Write"]["params"]))
+        self.assertFalse(writenode.active(params()))
 
 
 class WindowTests(unittest.TestCase):
@@ -620,6 +621,7 @@ class WindowTests(unittest.TestCase):
         self.dir = Path(tempfile.mkdtemp(prefix="nb-m-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(self.dir, ignore_errors=True))
         self.window.set_time(first=1, last=3, current=2)
+        self.set(channels="all")        # these tests are about the file formats and their alpha; a new Write starts on rgb
 
     def set(self, **knobs):
         for name, value in knobs.items():

@@ -97,7 +97,7 @@ class DefaultsTests(unittest.TestCase):
         for name in pathcontext.PARAMS:
             self.assertEqual((read[name], write[name]), ("", ""))
         self.assertFalse(readknobs.active(read))
-        self.assertFalse(writenode.active(write))
+        self.assertFalse(writenode.active({**write, "channels": writenode.DEFAULTS["channels"]}))
 
     def test_an_old_read_and_write_load_with_the_defaults_and_read_the_same(self):
         d = Dispatcher(empty_document())
@@ -394,6 +394,7 @@ class ReadBackTests(FolderCase):
         self.addCleanup(close_window, self)
         window.set_time(first=1, last=3, current=2)
         window.command({"op": "set", "id": "writer", "param": "path", "value": str(self.dir / "round.%04d.exr")})
+        window.command({"op": "set", "id": "writer", "param": "channels", "value": "all"})       # the file keeps the picture's alpha
         window.render_write("writer", single=False)
         rendered = [red_of(window.dispatcher.document, frame=f, target="writer")[1].pixels for f in (1, 2, 3)]
         window.command({"op": "set", "id": "writer", "param": "reading", "value": 1})

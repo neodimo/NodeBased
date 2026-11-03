@@ -72,7 +72,9 @@ def space_of(path):
 
 
 def params(**knobs):
-    return {**SPECS["Write"]["params"], **knobs}
+    # The Write of before: a new Write now starts at Nuke's `channels` rgb (writenode.NEW_NODE_DEFAULTS); these tests are about
+    # the knobs, so they start from the every-channel Write.
+    return {**SPECS["Write"]["params"], "channels": "all", **knobs}
 
 
 class Folder(unittest.TestCase):
@@ -87,9 +89,10 @@ class Folder(unittest.TestCase):
 
 class DefaultsTests(Folder):
     def test_the_specs_carry_the_defaults(self):
-        for key, default in writenode.DEFAULTS.items():
+        for key, default in {**writenode.DEFAULTS, **writenode.NEW_NODE_DEFAULTS}.items():
             self.assertEqual(SPECS["Write"]["params"][key], default)
-        self.assertFalse(writenode.active(SPECS["Write"]["params"]))
+        self.assertFalse(writenode.active(params()))
+        self.assertTrue(writenode.active(SPECS["Write"]["params"]))      # rgb is a channel choice: the file holds no alpha
 
     def test_default_knobs_write_the_same_bytes_as_before(self):
         raster = make_raster(with_layers=True)

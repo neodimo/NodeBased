@@ -28,6 +28,11 @@ DEFAULTS = {"read_format": "file", "first": 0, "last": 0, "before": "hold", "aft
             # the context variables (nodebased/pathcontext.py).
             "localizationPolicy": "from auto-localize path", "reload": 0, "proxy": "", "proxy_format": "file", **pathcontext.PARAMS}
 KEYS = tuple(DEFAULTS)
+# What a NEW Read starts with where Nuke's default differs from the Read of before. `DEFAULTS` stays the value a saved Read that
+# lacks the knob reads with (the legacy behaviour), so old documents render exactly as they did.
+NEW_NODE_DEFAULTS = {"auto_alpha": 0}
+# Knobs that change the pixels but not which part of the file is decoded: a partial-region read honours them itself.
+REGION_SAFE = ("auto_alpha",)
 RANGE_BEHAVIOURS = ("hold", "loop", "bounce", "black")
 FRAME_MODES = ("expression", "start at", "offset")
 _SIZE = re.compile(r"^\s*(\d+)\s*[x×]\s*(\d+)\s*$")
@@ -62,7 +67,8 @@ def extras(params):
 def active(params):
     """True when any of these knobs differs from the value that leaves Read as it was."""
     from . import localize
-    return any(params.get(key, default) != default for key, default in DEFAULTS.items()) or localize.applies(params)
+    return any(params.get(key, default) != default for key, default in DEFAULTS.items() if key not in REGION_SAFE) \
+        or localize.applies(params)
 
 
 def time_active(params):

@@ -41,6 +41,9 @@ DEFAULTS = {"channels": "all", "colorspace": "Auto", "premultiplied": 0, "raw": 
             # (`render_order`), and the context variables of the path (nodebased/pathcontext.py).
             "reading": 0, "on_error": "error", "reload": 0, "render_order": 1, **pathcontext.PARAMS,
             **EXR_DEFAULTS, **writeformats.DEFAULTS}
+# What a NEW Write starts with where Nuke's default differs from the Write of before: it writes rgb, not every channel. `DEFAULTS`
+# stays the value a saved Write that lacks the knob reads with, so old documents write exactly what they did.
+NEW_NODE_DEFAULTS = {"channels": "rgb"}
 # These change what a Write shows or when it renders, not the bytes it writes.
 NOT_BYTES = ("create_directories", "first", "last", "use_limit", "frame_mode", "frame_expr", "views", "proxy", "read_all_lines",
              "reading", "on_error", "reload", "render_order", *pathcontext.PARAMS,

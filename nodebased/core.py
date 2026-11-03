@@ -210,7 +210,7 @@ VIEWER_EXTRA_KEYS = ("look", "roi", "proxy", "masks", "knobs")
 _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p2": 0.0,
          "lens_cx": 0.0, "lens_cy": 0.0}
 
-from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
+from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, NEW_NODE_DEFAULTS as _WRITE_NEW_NODE_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from . import projectsettings as _projectsettings
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
@@ -250,7 +250,7 @@ from . import metaknobs as _metaknobs
 from . import curvetoolknobs as _curvetoolknobs
 from . import addmixknobs as _addmixknobs
 from . import keymixknobs as _keymixknobs
-from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
+from .readknobs import DEFAULTS as _READ_KNOB_DEFAULTS, NEW_NODE_DEFAULTS as _READ_NEW_NODE_DEFAULTS, FRAME_MODES as _READ_FRAME_MODES, RANGE_BEHAVIOURS as _READ_RANGE_BEHAVIOURS
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
@@ -258,7 +258,7 @@ SPECS = {
     "Read": {"inputs": [], "params": {"path": "", "colorspace": "Auto", "alpha_mode": "Auto", "layer": "", "subimage": 0,
                                       "frame_offset": 0, "missing": "error",
                                       # Nuke's Read knobs that change what is read (nodebased/readknobs.py); every default is the Read of before.
-                                      **{key: value for key, value in _READ_KNOB_DEFAULTS.items()}}},
+                                      **{key: value for key, value in {**_READ_KNOB_DEFAULTS, **_READ_NEW_NODE_DEFAULTS}.items()}}},
     # Constant's Nuke knobs (fidelity step D, nodebased/smallnodes.py): `channels` it contains and the `first` / `last` frame range
     # it states to the nodes downstream (Retime and TimeOffset read it when it spans more than one frame).
     "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0,
@@ -1043,7 +1043,7 @@ SPECS = {
     # comp downstream of it. "file_type" Auto takes the extension on "path" at its word.
     "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half", "bundle": 0,
                                               # Nuke's Write knobs (nodebased/writenode.py); every default is the Write of before.
-                                              **_WRITE_KNOB_DEFAULTS}},
+                                              **_WRITE_KNOB_DEFAULTS, **_WRITE_NEW_NODE_DEFAULTS}},
     # ReadBundle (step 5c): reads a diffusion or transform model's output image for the graph's
     # frame and refuses it unless the bundle manifest Write wrote for that frame agrees on frame and
     # size (nodebased/bundle.py). `path` and `bundle` may be padded patterns (render.%04d.png,
@@ -2548,7 +2548,9 @@ def upgrade_document(document):
     if isinstance(doc, dict) and doc.get("version") == 1:
         for node in doc.get("nodes", {}).values():
             if node.get("type") == "Read":
-                node["params"] = {**SPECS["Read"]["params"], **node["params"]}
+                # A Read of that time has the Read of before: the knobs a new Read starts differently on read as they did.
+                node["params"] = {**SPECS["Read"]["params"], **{key: _READ_KNOB_DEFAULTS[key] for key in _READ_NEW_NODE_DEFAULTS},
+                                  **node["params"]}
         doc["version"] = 2
     if isinstance(doc, dict) and doc.get("version") == 2:
         # v2 -> v3: rename Transform x/y to translate_x/translate_y (int -> float) and add the

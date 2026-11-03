@@ -41,7 +41,7 @@ def graph(**render):
                               ('camera', 'Camera3D', {}), ('scene', 'Scene3D', {}),
                               ('render', 'Render3D', dict(width=32, height=24, samples=1,
                                                           render_output='multichannel', **render)),
-                              ('write', 'Write', dict(bit_depth='float'))):
+                              ('write', 'Write', dict(bit_depth='float', channels='all'))):
         d.execute(dict(op='create', id=key, type=kind, params=params))
     for slot, source in (('object0', 'card'), ('object1', 'cube'), ('object2', 'light'), ('object3', 'light2')):
         d.execute(dict(op='connect', id='scene', input=slot, source=source))
@@ -170,7 +170,7 @@ class MultichannelFileTests(unittest.TestCase):
 
     def render_document(self, window, target, bits, passes='beauty,normals,depth'):
         window.command({'op': 'batch', 'commands': [
-            {'op': 'create', 'id': 'writer3d', 'type': 'Write'},
+            {'op': 'create', 'id': 'writer3d', 'type': 'Write', 'params': {'channels': 'all'}},
             {'op': 'connect', 'id': 'writer3d', 'input': 'image', 'source': 'render'},
             {'op': 'set', 'id': 'writer3d', 'param': 'path', 'value': str(target)},
             {'op': 'set', 'id': 'writer3d', 'param': 'bit_depth', 'value': bits}]})

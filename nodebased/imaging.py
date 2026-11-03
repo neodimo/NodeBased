@@ -344,7 +344,8 @@ def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer=
             raise ValueError(f'No frames found for sequence {path}')
         display = read_media_raster(reference, colorspace, alpha_mode, layer, subimage).display
         return Raster(np.zeros((region.height, region.width, 4), np.float32), region, display)
-    return read_media_region(resolved, region, colorspace, alpha_mode, layer, subimage)
+    return read_media_region(resolved, region, colorspace, alpha_mode, layer, subimage,
+                             auto_alpha=bool(nuke_knobs.get("auto_alpha", 1)))
 
 
 def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=None, **nuke_knobs):
