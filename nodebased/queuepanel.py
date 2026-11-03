@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -33,6 +34,7 @@ class QueuePanel(QWidget):
         super().__init__(parent)
         self.queue = queue
         self.runner = ThreadPoolExecutor(max_workers=1, thread_name_prefix="conditioning-queue")
+        self._stop = threading.Event()
         self.loop_runs = LoopRun(queue.path.parent / "conditioning-loops.sqlite", queue)
         self.selected_loop = ""
         self.use_result_callback = None
@@ -172,7 +174,7 @@ class QueuePanel(QWidget):
                 estimated_spend_per_attempt=self.spend_per_attempt.value(), spend_unit=options["spend_unit"],
                 feedback_controls=controls)
             self.selected_loop = loop_id
-            self.runner.submit(self.loop_runs.run, loop_id)
+            self.runner.submit(self.loop_runs.run, loop_id, self._stop)
             self.status.setText(f"Loop running · {loop_id[:8]}")
         except (LoopError, OSError, ValueError, TypeError) as error:
             QMessageBox.warning(self, "Cannot start conditioning loop", str(error))
@@ -288,10 +290,13 @@ class QueuePanel(QWidget):
         self.status.setText(f"Queued {data['name']} · {chain_id[:8]}")
 
     def run_queue(self):
-        self.runner.submit(self.queue.run_until_idle)
+        self.runner.submit(self.queue.run_until_idle, stop=self._stop)
         self.status.setText("Queue worker started")
 
     def closeEvent(self, event):
         self.timer.stop()
+        # The runner thread sits in Queue.run_until_idle until the queue is idle; ask it to end the work in hand, else the wait below
+        # has nothing to wake it (it hung the full suite for 40 minutes).
+        self._stop.set()
         self.runner.shutdown(wait=True, cancel_futures=True)
         super().closeEvent(event)

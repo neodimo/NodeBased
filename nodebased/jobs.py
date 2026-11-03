@@ -185,18 +185,33 @@ class Queue:
         value = _call(effective, input_ids, progress, cancelled)
         return _save_result(self.store, value, task, input_ids)
 
-    def run_until_idle(self, *, poll_interval=.02):
-        """Run ready links on local slots and configured remote workers until no work remains."""
+    def run_until_idle(self, *, poll_interval=.02, stop=None, stop_grace=2.0):
+        """Run ready links on local slots and configured remote workers until no work remains.
+
+        `stop` (an Event) ends the run: nothing new starts, running links get their cancel event, and after `stop_grace` seconds a link
+        that has not yet returned is abandoned as cancelled, so a caller closing a window never waits on work that ignores cancellation.
+        """
         active = {}
+        stop_seen = None
         while True:
-            if not self._paused.is_set():
+            stopping = stop is not None and stop.is_set()
+            if stopping and stop_seen is None:
+                stop_seen = time.monotonic()
+            if stopping:
+                for events in list(self._running.values()):
+                    for event in list(events): event.set()
+            if not self._paused.is_set() and not stopping:
                 with self._db() as db:
                     ready = db.execute("""SELECT l.*,c.priority AS chain_priority FROM links l
                         JOIN chains c ON c.id=l.chain_id WHERE l.state IN ('queued','retry')
                         ORDER BY l.priority DESC,c.priority DESC,l.rowid""").fetchall()
                     for row in ready:
                         if len(active) >= self.max_workers: break
-                        if row["chain_id"] in self._cancelled: continue
+                        if row["chain_id"] in self._cancelled:
+                            # A chain cancelled before its links were added (or before they started) ends here; skipping it
+                            # would leave the run polling for links nothing will ever start.
+                            db.execute("UPDATE links SET state='cancelled',finished=? WHERE id=?", (time.time(), row["id"]))
+                            continue
                         deps = json.loads(row["dependencies"])
                         dep_rows = [db.execute("SELECT state,artifact_id,error FROM links WHERE id=?", (d,)).fetchone() for d in deps]
                         if any(d is None or d["state"] in ("failed", "cancelled") for d in dep_rows):
@@ -249,11 +264,24 @@ class Queue:
                         else:
                             db.execute("UPDATE links SET state='done',progress=1,artifact_id=?,error='',finished=? WHERE id=?",
                                        (aid, time.time(), link_id))
+            if stopping and active and time.monotonic() - stop_seen > stop_grace:
+                for future, (link_id, chain_id, _attempt, _cap, _cancel) in list(active.items()):
+                    _cancel.set()
+                    with self._db() as db:
+                        row = db.execute("SELECT worker FROM links WHERE id=?", (link_id,)).fetchone()
+                        db.execute("UPDATE links SET state='cancelled',error='queue closed',finished=? WHERE id=?",
+                                   (time.time(), link_id))
+                    if row and row[0] in self._worker_loads:
+                        self._worker_loads[row[0]] = max(0, self._worker_loads[row[0]] - 1)
+                    events = self._running.get(chain_id, [])
+                    if _cancel in events: events.remove(_cancel)
+                    if not events: self._running.pop(chain_id, None)
+                    active.pop(future)
             self._refresh_chain_states()
             snap = self.snapshot()
             unfinished = any(link["state"] in ("queued", "retry", "running") for link in snap["links"])
             if not active and not unfinished: break
-            if not active and unfinished and (self._paused.is_set() or all(self._pick(l["locality"]) is None for l in snap["links"] if l["state"] in ("queued", "retry"))): break
+            if not active and unfinished and (stopping or self._paused.is_set() or all(self._pick(l["locality"]) is None for l in snap["links"] if l["state"] in ("queued", "retry"))): break
             time.sleep(poll_interval)
         return self.snapshot()
 
