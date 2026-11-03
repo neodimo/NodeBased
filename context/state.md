@@ -1,5 +1,25 @@
 ## 2026-11-03 - Lane 9 (2D behaviour), step L finish: the rest of Denoise, MotionBlur and VectorBlur
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (6:15 AM on 2026-11-03 PDT)
+
+`main` moved `3d05b2d2` -> `5474baa4` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `5474baa4` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0555.log`, started 5:55 AM): **Ran 8922 tests in 611.245 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs (finish 1).** Commits:
+  - `73d52ebe` TASKLOG and state: lane 9 step L finish
+  - `21a6d677` Denoise, MotionBlur and VectorBlur: the rest of the guide's knobs and inputs. MotionBlur gets Method, Vector Detail, Resampling, Matte Channel and the BgVecs and Matte inputs; VectorBlur gets UV offset, Blur UV, Blur type, Motion falloff, Expand blur bbox, Soft lines and Blur inside; Denoise gets Tune Channels, Tune Frequencies, the Profile tab, Noise Analysis (box, frame, lock, Analyze, Export, Import), Temporal Processing and the Motion input. Graphs saved before keep their pictures; the audit report is rebuilt (2D behaviour, lane 9 step L finish)
+  Diff: 18 files changed, 1769 insertions(+), 88 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step L finish.** Commit `21a6d677`. Full notes in TASKLOG.md (same date, same title).
 - **Verified:** the targeted modules named in the TASKLOG entry, each run alone, all OK; `tools/audit_nuke_fidelity.py --check` clean; the bundled `PARITY_2D_FIDELITY.md` is byte-identical.
 - **Not done:** VectorBlur `mv_presets` and `normalize` (unsupported in the mapping, reasons there). No visual QA, no Windows run, full suite not run (the integrator runs it).

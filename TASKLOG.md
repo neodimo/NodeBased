@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step L of 2: Denoise, MotionBlur and VectorBlur get Nuke's main knobs and inputs (finish 1) (integrator tick)
+
+- **What was done:** `main` `3d05b2d2` -> `5474baa4` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `5474baa4`: Ran 8922 tests in 611.245 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step L finish: the rest of Denoise, MotionBlur and VectorBlur
 
 - **What was done (evidence):** one code commit (`21a6d677`); targeted gate green: tests.test_2d_behaviour_filter_k, _l (35), _m (32, new), _n (36, new), _a, _f, _g, _layout, extra_filter, extra_draw, image, retime_vectors, 2d_parity_notimeblur, split_knobs, 2d_parity_step_5c, step_f2, time_d2, flow2_f1, flow2_f1_finish, flow_node_accuracy, flow_nodes_v1, nuke_fidelity_audit, knowledge, tiles, knobs, tiers, core, nodecatalog, 2d_fidelity_e_filters, h_filters, 2d_parity_group_3a_filters, cache_correctness, bypass, desktop PropertiesLabelTests and FluidPropertiesPanelTests. Each module was run alone.
