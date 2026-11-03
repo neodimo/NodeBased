@@ -1,5 +1,24 @@
 ## 2026-11-02 - Lane 2 (2D behaviour), step G: EdgeBlur, GodRays, VolumeRays, BumpBoss
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:35 AM on 2026-11-03 PDT)
+
+`main` moved `b7dcb7c5` -> `40183c86` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `40183c86` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1103-0025.log`, started 12:25 AM): **Ran 8501 tests in 581.018 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step G of 2: EdgeBlur, GodRays, VolumeRays and BumpBoss compute what Nuke computes (finish 1).** Commits:
+  - `1595c706` VolumeRays gains Volumetric Creation (luminance, alpha solid), Pre-Ray Blur and radial falloff; fidelity report regenerated
+  Diff: 9 files changed, 86 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:15 AM on 2026-11-03 PDT)
 
 `main` moved `5ff5eb05` -> `8d2a2633` (lane commits cherry-picked onto main in lane order) and then to this

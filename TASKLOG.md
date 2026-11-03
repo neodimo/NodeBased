@@ -1,3 +1,9 @@
+## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step G of 2: EdgeBlur, GodRays, VolumeRays and BumpBoss compute what Nuke computes (finish 1) (integrator tick)
+
+- **What was done:** `main` `b7dcb7c5` -> `40183c86` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `40183c86`: Ran 8501 tests in 581.018 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step G of 2: EdgeBlur, GodRays, VolumeRays and BumpBoss compute what Nuke computes (integrator tick)
 
 - **What was done:** `main` `5ff5eb05` -> `8d2a2633` plus this docs commit. Evidence and per-lane commit
