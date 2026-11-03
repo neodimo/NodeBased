@@ -1,3 +1,9 @@
+## 2026-11-02 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step E of 2: the Merge and Image nodes compute what Nuke computes, and their panels read like Nuke's (integrator tick)
+
+- **What was done:** `main` `c34bf1f0` -> `2a83922b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `2a83922b`: Ran 8351 tests in 587.370 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-02 - lane 2 (2D behaviour), step E of 2: the Merge and Image nodes compute what the guide says, and their panels read like Nuke's
 
 - **What was done (evidence):** two commits, targeted gate green (336 tests). (1) Merge group: `tools/nuke_fidelity_cases_merge.py` (registered at the tuple in `tools/nuke_fidelity_cases.py`) holds

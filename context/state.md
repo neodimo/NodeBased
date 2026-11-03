@@ -1,5 +1,26 @@
 ## 2026-11-02 - Lane 2 (2D behaviour), step E: Merge and Image groups
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:35 PM on 2026-11-02 PDT)
+
+`main` moved `c34bf1f0` -> `2a83922b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `2a83922b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1102-2225.log`, started 10:25 PM): **Ran 8351 tests in 587.370 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step E of 2: the Merge and Image nodes compute what Nuke computes, and their panels read like Nuke's.** Commits:
+  - `0ed43548` TASKLOG and state: lane 2 step E note
+  - `5a23ec49` Image group layout: Read, Write and Constant main tabs follow the Nuke 17.0 guide's knob order and labels
+  - `dd30d562` Merge group behaviour: Switch, Dissolve, AddMix, Blend, CopyRectangle, TimeDissolve and Constant get pixel cases; Switch holds the nearest input past either end; CopyRectangle's box knobs are shown acting; TimeDissolve's curve reads Curves
+  Diff: 16 files changed, 758 insertions(+), 143 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Merge group 91.7 -> 99.4, Image group 80.9 -> 86.7 (rank-weighted); overall 89.0 -> 90.2. Cases in `tools/nuke_fidelity_cases_merge.py`; tests `tests/test_2d_behaviour_merge.py` and
 `tests/test_2d_behaviour_image.py`; Switch holds the nearest input past either end (`core.switch_index`); `PROBE_BASE` in `tools/nuke_fidelity_requirements.py`. Details in TASKLOG.md.
 
