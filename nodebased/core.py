@@ -2461,6 +2461,8 @@ LIMITS.update({"global_font_scale": (0.01, 100.0), "font_width": (1.0, 1000.0), 
                "shadow_softness": (0.0, 1000.0), "shadow_expand": (-1000.0, 1000.0)})
 LIMITS.update({"shape_motionblur_on": (0, 1), "global_motionblur_on": (0, 1), "global_motionblur": (1, 64),
                "global_motionblur_shutter": (0.0, 8.0), "global_motionblur_shutter_offset": (-8.0, 8.0)})
+_ROTO_TRACKING_PARAMS = (*_trackerknobs.new_params("Roto"), "reference_frame", "export_menu", "link_output",
+                         *(f"{prefix}{i}_{axis}" for prefix in ("pt", "of") for i in range(1, 5) for axis in ("x", "y")))
 LIMITS.update({"link_output": (0, 1),
                **{f"{prefix}{i}_{axis}": (-1000000.0, 1000000.0)
                   for prefix in ("pt", "of") for i in range(1, 5) for axis in ("x", "y")}})
@@ -3101,6 +3103,11 @@ def upgrade_document(document):
                     if isinstance(params, dict) and current.get("type") == "Encryptomatte":
                         params.setdefault("matte_name_type", "manual")
                         params.setdefault("merge_operation", "replace")
+                    if isinstance(params, dict) and current.get("type") == "Roto":
+                        # Roto's Tracking tab (lane 9 step U) is additive: a Roto saved before it has no track,
+                        # so the settings, corners and offsets take their defaults and render nothing differently.
+                        for name in _ROTO_TRACKING_PARAMS:
+                            params.setdefault(name, SPECS["Roto"]["params"][name])
                     graph = current.get("graph")
                     if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
                         _crypto_legacy(graph["nodes"])
