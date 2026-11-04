@@ -233,7 +233,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Transform | `Transform` | supported | 99.8 | 100.0 | 100 (15/15) | 100 (10/10) | 100 | 100 | - | 100 (12/12) | 98 | 100 (1/1) | unmeasured |
 | 2 | Crop | `Crop` | supported | 97.6 | 97.1 | 100 (5/5) | 100 (2/2) | 75 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 3 | Tracker | `Tracker` | supported | 93.1 | 92.3 | 84 (45/54) | - | 85 | 100 | 100 | 100 (5/5) | 97 | - | unmeasured |
+| 3 | Tracker | `Tracker` | supported | 93.3 | 92.3 | 84 (45/54) | - | 85 | 100 | 100 | 100 (5/5) | 98 | - | unmeasured |
 | 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
 | 6 | CornerPin2D | `CornerPin` | supported | 99.8 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 98 | - | unmeasured |
@@ -503,7 +503,7 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 15 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 16 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
 | 17 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
-| 18 | Tracker (Transform #3) | `Tracker` | 2.29 | 93.1 | 9 secondary knobs missing: `zoom_window_behavior`, `zoom_window_size`, `zoom_magnification_size`, `zoom_window_filter_behaviour`, `regrab_when_offset` ...; knob order differs from Nuke's (37 of 39 in order) |
+| 18 | Tracker (Transform #3) | `Tracker` | 2.23 | 93.3 | 9 secondary knobs missing: `zoom_window_behavior`, `zoom_window_size`, `zoom_magnification_size`, `zoom_window_filter_behaviour`, `regrab_when_offset` ... |
 | 19 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
 | 20 | LensDistortion (Transform #20) | `Undistort` | 1.29 | 74.2 | 38 secondary knobs missing |
 | 21 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
@@ -1438,7 +1438,6 @@ Labels below are NodeBased's, then the guide's.
 
 - GenerateLUT (`GenerateLUT`): `file` reads "3D LUT (.cube or .3dl)", Nuke "output file"
 - ZMerge (`ZMerge`): `z_channel` reads "Depth layer", Nuke "Z channel"
-- Tracker (`Tracker`): 37 of 39 paired knobs in Nuke's order
 
 ### Split knobs
 
