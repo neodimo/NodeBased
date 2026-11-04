@@ -1,3 +1,11 @@
+## 2026-11-04 — Lane 9, step T (Roto shape source; partial)
+
+- **What was done:** Roto shapes now validate and retain `source`, expose Color/Foreground/Background in the shape panel, and pair Nuke's `shape_source` as a panel control. The wired `bg` plate is the available background source; without a picture input, picture-source modes render black. Older shapes without `source` keep their prior pixels.
+- **Evidence:** Roto score 86.9 -> 87.3 and paired knobs 49/75 -> 50/75. Overall score 95.2 -> 95.2. Roto behaviour cases remain 9/39 (the new source behavior is covered by four targeted pixel/tile checks; no cases were added to the scored audit). No knobs were unpaired. The evaluator and tile paths handle the no-picture source result.
+- **Artifacts:** source changes and audit are committed in this worktree; `docs/PARITY_2D_FIDELITY.md` is copied byte-identically to `nodebased/data/docs/PARITY_2D_FIDELITY.md`. Test logs are deliberate scratch under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`.
+- **State:** partial; Clone-tab translate/transform/round/filter/black-outside and time-offset sampling remain unimplemented. Multi-view and Tracking/key controls remain unsupported as directed.
+- **Next owner + concrete artifact:** Gonzo; continue from `nodebased/paintknobs.py`, `nodebased/paint.py`, `nodebased/tileexec.py`, and `tests/test_2d_behaviour_roto_shapes.py` using the brief `scratch/nb-lanes/auto/briefs/L9-roto-source-T-1104.md`.
+
 ## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step Q: Flare's and Sparkles' remaining controls (finish 1) (integrator tick)
 
 - **What was done:** `main` `e3700d8b` -> `32e237d2` plus this docs commit. Evidence and per-lane commit

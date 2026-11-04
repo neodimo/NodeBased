@@ -1110,6 +1110,8 @@ class TileExecutor:
                                flattened_cache=self._roto_geometry_cache)
         source_id = node["inputs"].get("bg")
         if source_id is None:
+            if any(shape.get("source", "color") != "color" for shape in resolved):
+                matte[..., :3] = 0.0
             return matte
         source = self._render_tile(document, source_id, frame, tier,
                                    dataclasses.replace(region, halo_x=0, halo_y=0),

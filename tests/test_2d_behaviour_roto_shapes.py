@@ -112,6 +112,31 @@ class BlendingTests(unittest.TestCase):
 
 
 class ColourVisibleInvertTests(unittest.TestCase):
+    def test_shape_background_source_uses_the_roto_bg_plate(self):
+        from tests.test_2d_behaviour_roto import document, render
+        shape = box(4, 4, 16, 16, source="background")
+        pixels = render(document([shape], plate=(0.17, 0.38, 0.72, 1.0), output="rgba"))
+        np.testing.assert_allclose(pixels[10, 10, :3], [0.17, 0.38, 0.72], atol=1e-6)
+        np.testing.assert_allclose(pixels[1, 1, :3], [0.17, 0.38, 0.72], atol=1e-6)
+
+    def test_explicit_colour_source_is_bit_identical_to_legacy_shape_source(self):
+        from tests.test_2d_behaviour_roto import document, render
+        old = render(document([box(4, 4, 16, 16)], output="rgba"))
+        explicit = render(document([box(4, 4, 16, 16, source="color")], output="rgba"))
+        np.testing.assert_array_equal(explicit, old)
+
+    def test_background_source_without_a_bg_input_has_no_picture_to_reveal(self):
+        pixels = draw(build([box(4, 4, 16, 16, source="background")], output="rgba"))
+        np.testing.assert_array_equal(pixels[10, 10, :3], [0.0, 0.0, 0.0])
+        self.assertEqual(float(pixels[10, 10, 3]), 1.0)
+
+    def test_shape_source_tiles_equal_full_frame(self):
+        from tests.test_2d_behaviour_roto import document, render, tiled
+        doc = document([box(4, 4, 16, 16, source="background")], output="rgba")
+        expected = render(doc)
+        for edge in (7, 16, 32):
+            np.testing.assert_allclose(tiled(doc, edge), expected, atol=1e-6)
+
     def test_a_shapes_colour_is_the_colour_it_draws(self):
         pixels = draw(build([box(4, 4, 16, 16, color=[0.9, 0.3, 0.1, 1.0])], output="rgba"))
         np.testing.assert_allclose(pixels[10, 10, :3], [0.9, 0.3, 0.1], atol=1e-6)

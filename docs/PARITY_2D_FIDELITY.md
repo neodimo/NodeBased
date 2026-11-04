@@ -35,7 +35,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
 | Image | 97.1 | 96.9 | 98.1 | 6 |
-| Draw | 91.5 | 85.5 | 91.4 | 17 |
+| Draw | 91.6 | 85.5 | 91.6 | 17 |
 | Time | 99.4 | 96.7 | 99.2 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 97.4 | 90.8 | 97.1 | 34 |
@@ -70,7 +70,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 86.9 | 86.8 | 67 (49/75) | - | 100 | 100 | 100 | 100 (36/36) | 75 | - | unmeasured |
+| 1 | Roto | `Roto` | supported | 87.3 | 87.3 | 68 (50/75) | - | 100 | 100 | 100 | 100 (36/36) | 74 | - | unmeasured |
 | 2 | Text | `Text` | supported | 98.3 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 100 | - | no fixture |
 | 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
@@ -298,7 +298,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | UDIM Import | — | — | 0 |
 | CurveTool | — | 100.0% (9/9) | 3 |
 | Profile | — | — | 2 |
-| Roto | — | 23.7% (9/38) | 18 |
+| Roto | — | 23.1% (9/39) | 18 |
 | Text | 100.0% (4/4) | 100.0% (36/36) | 5 |
 | Rectangle | — | 100.0% (10/10) | 3 |
 | Ramp | — | 100.0% (8/8) | 2 |
@@ -488,7 +488,7 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 |---|---|---|---|---|---|
 | 1 | ViewMetaData (Metadata #1) | `ViewMetaData` | 20.00 | 80.0 | nothing missing that the guide lists |
 | 2 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 3 | Roto (Draw #1) | `Roto` | 13.07 | 86.9 | 26 secondary knobs missing |
+| 3 | Roto (Draw #1) | `Roto` | 12.69 | 87.3 | 25 secondary knobs missing |
 | 4 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 5 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 6 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |

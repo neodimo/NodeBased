@@ -213,6 +213,12 @@ def build_panel(window, key):
         layout.addWidget(follow_mode)
         for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
             cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
+        source = QComboBox(); source.setObjectName("roto-shape-source")
+        for label, value in (("Colour", "color"), ("Foreground", "foreground"), ("Background", "background")):
+            source.addItem(label, value)
+        source.setCurrentIndex(max(0, source.findData(shape.get("source", "color"))))
+        source.currentIndexChanged.connect(lambda index, box=source: edit("source", box.itemData(index)))
+        layout.addWidget(QLabel("Shape source")); layout.addWidget(source)
         for field, label, lo, hi, step in (("stroke_width", "Stroke width", 0, 4096, 0.5),
                                           ("feather", "Feather", -500, 500, 0.5),
                                           ("opacity", "Opacity", 0, 1, 0.05)):

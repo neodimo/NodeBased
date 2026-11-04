@@ -3963,8 +3963,15 @@ class Evaluator:
             plate = inputs[0] if inputs else None
             def render_matte(params):
                 if roto_rasterizer is not None:
-                    return roto_rasterizer(params, data)
-                return Evaluator._kernel(kind, params, [], frame, data)
+                    raster = roto_rasterizer(params, data)
+                else:
+                    raster = Evaluator._kernel(kind, params, [], frame, data)
+                # With no source input, Nuke's picture-source modes have no picture to reveal.
+                # Preserve the shape matte while the unavailable colour source is transparent black.
+                if any(shape.get("source", "color") != "color" for shape in (data or [])):
+                    raster = raster.copy()
+                    raster[..., :3] = 0.0
+                return raster
             if plate is None:
                 return Raster.of(render_matte(p))
             # Wired bg (Nuke's Roto default output): the plate's colour with the shape's coverage
