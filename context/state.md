@@ -1,5 +1,27 @@
 ## 2026-11-04 - Lane 9, step Q (Flare and Sparkles remaining controls)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (1:55 PM on 2026-11-04 PDT)
+
+`main` moved `90f1f61b` -> `447ac256` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `447ac256` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-1335.log`, started 1:36 PM): **Ran 9342 tests in 625.701 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step V: the Tracker's warp types and auto-tracking controls.** Commits:
+  - `3b354fea` Tracker: warp type before pattern grab behaviour and the stop re-grab after the error thresholds, as Nuke orders them (layout order 37/39 -> 39/39); report regenerated
+  - `9b74186a` Tracker main-tab order test: max iterations, epsilon, warp type and the stop behaviour in Nuke's places (step V)
+  - `3f0308e2` Test adaptive Tracker pattern re-grab
+  - `028421d2` Implement Tracker pattern warp matching
+  Diff: 14 files changed, 293 insertions(+), 37 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (11:55 AM on 2026-11-04 PDT)
 
 `main` moved `8d068048` -> `05df96ac` (lane commits cherry-picked onto main in lane order) and then to this
