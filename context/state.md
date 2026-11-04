@@ -1,5 +1,25 @@
 ## 2026-11-04 - Lane 9, step Q (Flare and Sparkles remaining controls)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (11:55 AM on 2026-11-04 PDT)
+
+`main` moved `8d068048` -> `05df96ac` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `05df96ac` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-1135.log`, started 11:35 AM): **Ran 9337 tests in 619.410 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step U: Roto's Tracking tab, built on PlanarTracker.** Commits:
+  - `0b78848e` Roto tracking: documents saved before the Tracking tab load (its settings, corners and offsets take their defaults); the main-tab order test names the track channels knob
+  - `0a2c6b21` Implement Roto planar tracking and exports
+  Diff: 12 files changed, 452 insertions(+), 61 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (10:15 AM on 2026-11-04 PDT)
 
 `main` moved `061b642e` -> `501b7d06` (lane commits cherry-picked onto main in lane order) and then to this
