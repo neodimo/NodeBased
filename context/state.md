@@ -1,5 +1,25 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step P: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on four time and metadata nodes
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:15 AM on 2026-11-04 PDT)
+
+`main` moved `403df01b` -> `7ef94d46` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7ef94d46` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0605.log`, started 6:05 AM): **Ran 9281 tests in 589.220 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step S2: Nuke's rows and knob types on the next eight most-used nodes.** Commits:
+  - `a6a6155b` Panel sweep S2 test: Tracker's shutter offset and custom offset share Nuke's one 'shutter offset' row
+  - `e570791b` Panel sweep S2: shared rows and measured widget types for Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, Keylight and Reformat (layout 79.8 to 98.0, 0 to 82.3, 0 to 100, 75.0 to 100, 66.7 to 100, 96.3 to 100, 99.0 to 100, 96.4 to 100)
+  Diff: 7 files changed, 270 insertions(+), 127 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:35 AM on 2026-11-04 PDT)
 
 `main` moved `57403f7a` -> `86a43d6f` (lane commits cherry-picked onto main in lane order) and then to this

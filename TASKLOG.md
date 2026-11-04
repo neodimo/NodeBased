@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S2: Nuke's rows and knob types on the next eight most-used nodes (integrator tick)
+
+- **What was done:** `main` `403df01b` -> `7ef94d46` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7ef94d46`: Ran 9281 tests in 589.220 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step P of 2: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on the time and metadata nodes (integrator tick)
 
 - **What was done:** `main` `57403f7a` -> `86a43d6f` plus this docs commit. Evidence and per-lane commit
