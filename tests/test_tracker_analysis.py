@@ -167,6 +167,31 @@ class TrackerAnalysisTests(unittest.TestCase):
         self.assertGreater(abs(old_pattern[2][0] - 60.5), 0.5)
         self.assertAlmostEqual(new_pattern[2][0], 60.5, delta=0.51)
 
+    def test_moving_an_endpoint_retracks_only_when_enabled(self):
+        rng = np.random.default_rng(23)
+        patches = (rng.random((12, 12), dtype=np.float32), rng.random((12, 12), dtype=np.float32))
+        frames = {}
+        for frame in range(1, 11):
+            image = np.zeros((96, 160, 4), np.float32); image[..., 3] = 1
+            for patch, left in ((patches[0], 20 + frame - 1), (patches[1], 100 - frame + 1)):
+                image[34:46, left:left+12, :3] = patch[..., None]
+            frames[frame] = image
+        before = analyse(frames, 1, (26.5, 40.5), 5, 12, last_frame=10)
+        original = [{"frame": frame, "value": point[0]} for frame, point in sorted(before.items())]
+        moved_key = (97.5, 40.5)
+        hand_edited = [{**key, "value": moved_key[0] if key["frame"] == 10 else key["value"]} for key in original]
+        retracked = analyse(frames, 10, moved_key, 5, 80, first_frame=1, last_frame=10,
+                            direction="backward", pattern_point=(35.5, 40.5), regrab_when_offset=True)
+        retracked_keys = [{"frame": frame, "value": point[0]} for frame, point in sorted(retracked.items())]
+        from nodebased.trackerknobs import merged_keys
+        enabled = merged_keys(hand_edited, retracked_keys, replace_range=True)
+        before_middle = {key["frame"]: key["value"] for key in original if 2 <= key["frame"] <= 9}
+        disabled_middle = {key["frame"]: key["value"] for key in hand_edited if 2 <= key["frame"] <= 9}
+        enabled_middle = {key["frame"]: key["value"] for key in enabled if 2 <= key["frame"] <= 9}
+        self.assertEqual(set(before_middle), set(enabled_middle))
+        self.assertTrue(any(abs(before_middle[frame] - enabled_middle[frame]) > 1 for frame in before_middle))
+        self.assertEqual(before_middle, disabled_middle)
+
     def test_negative_data_window_origin_is_preserved(self):
         from nodebased.raster import Raster
         from nodebased.tiers import Region
