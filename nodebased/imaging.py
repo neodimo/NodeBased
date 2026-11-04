@@ -22,6 +22,7 @@ from . import groups
 from . import metadata
 from . import pathmask as _pathmask
 from . import readproxy as _readproxy
+from .projectsettings import project as _project_fields
 from . import ops2d_chrome as _chrome
 from . import keyerknobs as _keyerknobs
 from . import paintknobs
@@ -1663,7 +1664,7 @@ class Evaluator:
             # value this frame actually uses, or an animated blur radius would proxy at its base.
             params = tiers.scale_params(kind, params, tier)
             proxy_original = None
-            if kind == "Read" and _readproxy.active(params, tier):
+            if kind == "Read" and _readproxy.active(params, tier, _project_fields(doc)["read_proxy_files"], frame):
                 # The proxy stands in for the file while a proxy tier is on (nodebased/readproxy.py).
                 proxy_original, params = params, _readproxy.proxy_params(params)
             if kind == "Encryptomatte":

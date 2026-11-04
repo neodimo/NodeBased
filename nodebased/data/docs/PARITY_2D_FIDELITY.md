@@ -42,7 +42,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Merge | 99.5 | 98.7 | 99.5 | 12 |
 | Transform | 96.6 | 92.7 | 95.9 | 20 |
 | Metadata | 99.4 | 98.9 | 99.4 | 5 |
-| Other | 81.0 | 44.3 | 81.0 | 12 |
+| Other | 81.5 | 45.2 | 81.5 | 12 |
 
 Behaviour checked: 95 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
@@ -280,7 +280,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | no fixture |
 | 8 | VariableGroup | - | missing | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
 | 10 | Precomp | `Precomp` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | - | - | - | 100 | - | no fixture |
-| 11 | Root | `time and settings` | partial | 40.0 | 39.3 | 37 (12/43) | - | 50 | - | - | - | - | - | no fixture |
+| 11 | Root | `time and settings` | partial | 50.7 | 51.2 | 53 (17/43) | - | 43 | - | - | - | - | - | no fixture |
 | 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | no fixture |
 
@@ -295,10 +295,10 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 3 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 4 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 5 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 6 | Root (Other #11) | `time and settings` | 5.45 | 40.0 | primary knobs missing: `Script_directory`, `format`, `proxy_type`, `proxy_format`, `proxySetting`, `is_live`, `render_mode`; 24 secondary knobs missing |
-| 7 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 8 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 9 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 6 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 7 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 8 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 9 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
 | 10 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
 | 11 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 12 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |

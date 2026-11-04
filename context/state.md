@@ -1,3 +1,8 @@
+## 2026-11-04 - Lane 2 (2D behaviour), step N finish
+
+Root's project fields `script_directory`, `format`, `proxy_type`, `proxy_format` and `read_proxy_files` are in `settings.project` (no schema bump;
+`SCHEMA_VERSION` stays what main holds). Fidelity: Root 50.7, overall 95.8. Targeted tests green, list in TASKLOG.md.
+
 ## 2026-11-03 - Lane 9 (2D behaviour), step O finish
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (12:25 AM on 2026-11-04 PDT)

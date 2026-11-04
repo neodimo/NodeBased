@@ -82,7 +82,8 @@ class ProjectSettingsTests(unittest.TestCase):
     def test_each_root_knob_the_mapping_pairs_with_a_project_field_names_a_field_with_a_default(self):
         pair = json.loads((Path(__file__).resolve().parent.parent / "docs/parity/nodebased_to_nuke.json").read_text())["pairs"]["Root"]
         fields = [f for e in pair["knobs"] for f in e["nodebased"] if f.startswith("settings.project.")]
-        self.assertEqual(sorted(f.split(".")[2] for f in fields), ["label", "lock_connections", "lock_range", "name", "project_directory"])
+        self.assertEqual(sorted(f.split(".")[2] for f in fields), ["format", "label", "lock_connections", "lock_range", "name", "project_directory",
+                                                                 "proxy_format", "proxy_type", "read_proxy_files", "script_directory"])
         for f in fields:
             self.assertIn(f.split(".")[2], projectsettings.DEFAULTS)
 

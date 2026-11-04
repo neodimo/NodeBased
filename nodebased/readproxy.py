@@ -16,8 +16,25 @@ import numpy as np
 from .tiers import Region
 
 
-def active(params, tier):
-    return int(tier) != 1 and bool(str(params.get("proxy", "") or "").strip())
+def active(params, tier, setting="always", frame=1):
+    """True when the Read reads its proxy file at `tier`. `setting` is the project's `read_proxy_files` (Nuke's proxySetting):
+    never skips the file; always uses it whenever a proxy tier is on; if larger uses it when the file is at least as wide as the
+    picture the tier needs; if nearest uses it when its width is no further from that picture than the main file's is. A main
+    file that cannot be found leaves the proxy file in use."""
+    if int(tier) == 1 or not str(params.get("proxy", "") or "").strip() or setting == "never":
+        return False
+    if setting == "always":
+        return True
+    main = main_display(params, frame)
+    if main is None:
+        return True
+    proxy = main_display(proxy_params(params), frame)
+    if proxy is None:
+        return False
+    need = target_size(main, params, tier)[0]
+    if setting == "if larger":
+        return proxy.width >= need
+    return abs(proxy.width - need) <= abs(main.width - need)
 
 
 def proxy_params(params):

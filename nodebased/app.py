@@ -11280,6 +11280,10 @@ class Window(QMainWindow):
         if tier != 1:
             self._last_proxy = tier
         self.command({"op": "viewer_proxy", "tier": tier}, render=False)
+        stored = viewer_proxy(self.dispatcher.document)
+        if stored != tier and self.proxy.findData(stored) >= 0:
+            # A project proxy format decides the tier: the combo follows the document, which queues the render at it.
+            self.proxy.setCurrentIndex(self.proxy.findData(stored))
         # The proxy is in the document's settings, which the identity check hashes, but the request
         # already queued by the combo carries the tier: it is not stale.
         self.rendered_identity = self.render_identity()

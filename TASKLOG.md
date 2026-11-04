@@ -1,3 +1,23 @@
+## 2026-11-04 - Lane 2 (2D parity), 2D behaviour step N finish: Root's project format, proxy type and format, read-proxy-files setting and script directory
+
+- **What was done (evidence: tests and the audit, both run):** `settings.project` gained `script_directory`, `format`, `proxy_type`, `proxy_format`
+  and `read_proxy_files` (`nodebased/projectsettings.py`; additive, stored only when off its default, so no schema bump and older documents load
+  unchanged, `tests/test_2d_parity_root_n.py`). Script directory: a Read's relative path resolves against it when the project directory is empty.
+  Format: a Constant, Checker, Draw generator or Reformat created without a size takes the project format (`core._apply_project_format`); a
+  registry rename follows and a delete clears it. Proxy type `format`: the `viewer_proxy` operation stores the tier nearest the project format's
+  width over the proxy format's width (HD_1080 is the full size when no project format is set); the window combo follows the stored tier.
+  `read_proxy_files` (Nuke's `proxySetting`): never, if larger, if nearest, always, decided in `readproxy.active` on the evaluator and the tile
+  path (tile result equals the evaluator for each setting). Kernel changed: none beyond that decision; the default `always` is the old behaviour.
+  Fidelity: Root 40.0 -> 50.7 (17 of 43 knobs paired), Other group 81.0 -> 81.5, overall 95.8 (unchanged to one decimal). "Knobs that change
+  no pixels": 0. Unpaired with a reason: `is_live` (no live groups), `render_mode` (one evaluator).
+- **Not done:** the project settings have no dialog in the window; the fields are set with the `settings` operation. The proxy format's
+  stored tier loses the proxy-on flag when the proxy format is not smaller than the project format (tier 1). Nuke's default for proxySetting is
+  if larger; NodeBased's is always, to keep old documents rendering as before.
+- **Tests run:** tests.test_2d_parity_root_n, test_2d_parity_notimeblur, test_2d_behaviour_root_l, test_2d_fidelity_f_readwrite, test_proxy,
+  test_nuke_fidelity_audit, test_knowledge, test_tiles, test_bypass, test_knobs, test_tiers, test_core, test_viewer_frame,
+  test_new_look_viewer_strip_nl5, test_desktop.PropertiesLabelTests and FluidPropertiesPanelTests: all OK.
+- **Next owner:** the integrator, to rebuild once on the stacked tree.
+
 ## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step P of 2: GridWarp and SplineWarp's remaining knobs, Flare, Sparkles and VolumeRays' secondary knobs, and VectorDistort's blur (integrator tick)
 
 - **What was done:** `main` `de6037a0` -> `6aa0dfa1` plus this docs commit. Evidence and per-lane commit

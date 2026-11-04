@@ -1506,6 +1506,27 @@ def _resolve_reformat_format(params, doc=None):
         params["width"], params["height"], params["pixel_aspect"] = preset
 
 
+# The nodes a new project format sizes: generators with a window of their own (Nuke makes a Constant, a Ramp or a
+# Radial at the project format, a Reformat "to format" at it too).
+PROJECT_FORMAT_KINDS = ("Constant", "Checker") + DRAW_KINDS
+
+
+def _apply_project_format(doc, kind, params, given):
+    """A node created without a size of its own takes the project format's window (`settings.project.format`, Nuke's
+    Root `format`). A Reformat takes it as its named format; a generator as width and height. A size or format the
+    caller named is left alone, and with no project format nothing changes."""
+    name = _projectsettings.project(doc)["format"]
+    if not name:
+        return
+    if kind == "Reformat" and not {"format", "width", "height", "pixel_aspect"} & set(given):
+        params["format"] = name
+        _resolve_reformat_format(params, doc)
+    elif kind in PROJECT_FORMAT_KINDS and not {"width", "height"} & set(given):
+        window = _projectsettings.format_window(doc, name)
+        if window is not None:
+            params["width"], params["height"] = window[0], window[1]
+
+
 FORMAT_NAME_LIMIT = 64
 FORMAT_COUNT_LIMIT = 256
 
@@ -1526,6 +1547,29 @@ def _validate_format_entry(name, entry):
         lo, hi = LIMITS[field]
         if not lo <= value <= hi:
             raise ValueError(f"format {name!r}: {field} must be between {lo} and {hi}")
+
+
+def _check_project_formats(doc):
+    """The project's format and proxy format must name registry formats; a proxy on `format` keeps its tier in step."""
+    fields = _projectsettings.project(doc)
+    for field in ("format", "proxy_format"):
+        if fields[field] and fields[field] not in document_formats(doc):
+            raise ValueError(f"settings.project.{field}: unknown format {fields[field]!r}")
+    viewer = doc["settings"]["viewer"]
+    if viewer.get("proxy", 1) != 1 and fields["proxy_type"] == "format":
+        tier = _projectsettings.proxy_tier(doc, viewer["proxy"])
+        if tier == 1:
+            viewer.pop("proxy")
+        else:
+            viewer["proxy"] = tier
+
+
+def _project_format_renamed(settings, name, new_name):
+    """The project's format and proxy format follow a registry rename; a delete (new_name "") clears them."""
+    fields = _projectsettings.project({"settings": settings})
+    changes = {field: new_name for field in ("format", "proxy_format") if fields[field] == name}
+    if changes:
+        _projectsettings.merge(settings, changes)
 
 
 def _edit_format(doc, cmd):
@@ -1559,6 +1603,7 @@ def _edit_format(doc, cmd):
         if new_name in formats and new_name != name:
             raise ValueError(f"format {new_name!r} already exists")
         settings["formats"] = {(new_name if key == name else key): value for key, value in formats.items()}
+        _project_format_renamed(settings, name, new_name)
         for node in nodes:
             if node["params"]["format"] == name:
                 node["params"]["format"] = new_name
@@ -1566,6 +1611,7 @@ def _edit_format(doc, cmd):
         if name not in formats:
             raise ValueError(f"unknown format {name!r}")
         del formats[name]
+        _project_format_renamed(settings, name, "")
         for node in nodes:
             if node["params"]["format"] == name:
                 node["params"]["format"] = "Custom"
@@ -3609,6 +3655,7 @@ class Dispatcher:
                 # Only when the caller actually named a format: an explicit width/height passed
                 # alongside a default, unmentioned "format" must not be clobbered back to preset.
                 _resolve_reformat_format(params, doc)
+            _apply_project_format(doc, kind, params, cmd.get("params", {}))
             nodes[key] = {"type": kind, "name": cmd.get("name", kind), "params": params,
                           "inputs": {slot: None for slot in
                                      list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))},
@@ -3688,6 +3735,7 @@ class Dispatcher:
             tier = cmd.get("tier")
             if type(tier) is not int or tier not in VIEWER_PROXY_TIERS:
                 raise ValueError(f"viewer_proxy: tier must be one of {list(VIEWER_PROXY_TIERS)}")
+            tier = _projectsettings.proxy_tier(doc, tier)
             if tier == 1:
                 doc["settings"]["viewer"].pop("proxy", None)
             else:
@@ -3763,6 +3811,7 @@ class Dispatcher:
                     raise ValueError(f"settings.{group} must be an object")
                 if group == "project":
                     _projectsettings.merge(doc["settings"], values)
+                    _check_project_formats(doc)
                     continue
                 unknown_fields = set(values) - set(doc["settings"][group])
                 if unknown_fields:
