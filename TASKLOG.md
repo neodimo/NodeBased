@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step T: Roto shapes take a fill source and Nuke's Clone tab (finish 1) (integrator tick)
+
+- **What was done:** `main` `061b642e` -> `501b7d06` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `501b7d06`: Ran 9332 tests in 588.069 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step T: Roto shapes take a fill source and Nuke's Clone tab (integrator tick)
 
 - **What was done:** `main` `0c48f44c` -> `f8daf865` plus this docs commit. Evidence and per-lane commit
