@@ -57,8 +57,11 @@ def _normalise_integer_lut(values, bit_depth):
     return np.asarray(values, dtype=np.float32) / scale
 
 
-def read_3dl(path):
+def read_3dl(path, output_depth=0, normalize=False):
     """Read Flame/Lustre .3dl integer shaper + blue-fastest 3D mesh data.
+
+    `output_depth` (8, 10, 12 or 16) overrides the mesh bit depth otherwise read from the header or guessed from the largest code; `normalize`
+    divides the mesh by its largest code instead of by the depth's full scale (Vectorfield's "output bit depth" and "normalize output").
 
     Header text is intentionally permissive for both common variants (`3DMESH`/`Mesh n depth`
     and Flame's bare numeric body), while malformed numeric rows identify their source line.
@@ -106,7 +109,7 @@ def read_3dl(path):
         raise ValueError(f"Malformed .3dl file at line {rows[-1][1]}: mesh entry count is not a complete cube")
     raw_mesh = [values for values, _line in rows]
     mesh_max = max(max(values) for values in raw_mesh)
-    depth = declared_output_depth or _integer_bit_depth(mesh_max)
+    depth = int(output_depth or 0) or declared_output_depth or _integer_bit_depth(mesh_max)
     if depth not in (8, 10, 12, 16):
         raise ValueError(f"Malformed .3dl file at line {rows[0][1]}: unsupported output bit depth {depth}")
     if mesh_max > 2 * ((1 << depth) - 1):
@@ -115,10 +118,12 @@ def read_3dl(path):
     # with red fastest, hence reverse the outer/inner axes once at load time.
     scale = float((1 << depth) - 1)
     mesh = _normalise_integer_lut(raw_mesh, depth).reshape((edge, edge, edge, 3)).transpose(2, 1, 0, 3)
+    if normalize and mesh_max > 0:
+        mesh = mesh * np.float32(scale / mesh_max)
     axis = np.linspace(0.0, 1.0, edge, dtype=np.float32)
     b, g, r = np.meshgrid(axis, axis, axis, indexing="ij")
     identity_mesh = np.stack((r, g, b), axis=-1)
-    if np.max(np.abs(mesh - identity_mesh)) < 2.0 / scale:
+    if not normalize and np.max(np.abs(mesh - identity_mesh)) < 2.0 / scale:
         # Integer identity tables are rounded to their code depth. Removing that quantisation
         # avoids needlessly perturbing an image passed through an identity LUT.
         mesh = identity_mesh

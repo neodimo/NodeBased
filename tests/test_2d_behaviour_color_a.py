@@ -402,6 +402,15 @@ _HSV_CHANGES = {
     "brightness": {"brt_adjust": 0.1},
     "setbrightness": {"set_brightness": 1},
     "output": {"output_alpha": "combined_weight"},
+    # Lane 2 step P (11/4): the per-range masks pick a channel of the input, so each acts with an adjustment made; the inverts act with the mask chosen.
+    "Conversion": {"output_alpha": "hue_weight"},
+    "invert_alpha_mask": ({"output_alpha": "combined_weight"}, {"invert_alpha_mask": 1}),
+    "HMask": ({"hue_rotation": 90.0}, {"HMask": "rgba.red"}),
+    "invert_hue_mask": ({"hue_rotation": 90.0, "HMask": "rgba.red"}, {"invert_hue_mask": 1}),
+    "SMask": ({"sat_adjust": -0.5}, {"SMask": "rgba.red"}),
+    "invert_sat_mask": ({"sat_adjust": -0.5, "SMask": "rgba.red"}, {"invert_sat_mask": 1}),
+    "BMask": ({"brt_adjust": 0.3}, {"BMask": "rgba.red"}),
+    "invert_bright_mask": ({"brt_adjust": 0.3, "BMask": "rgba.red"}, {"invert_bright_mask": 1}),
 }
 
 

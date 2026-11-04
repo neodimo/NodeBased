@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -301,6 +301,9 @@ from . import projectsettings as _projectsettings
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
 from . import behaviour2d as _behaviour2d
+from . import ocioknobs as _ocioknobs
+from . import hsvtoolknobs as _hsvtoolknobs
+from . import olderdefaults as _olderdefaults
 from . import rotoknobs as _rotoknobs
 from . import textknobs as _textknobs
 from . import mergeknobs as _mergeknobs
@@ -455,16 +458,16 @@ SPECS = {
         "expr_channels_r": "red", "expr_channels_g": "green", "expr_channels_b": "blue", "expr_channels_a": "alpha",
         "expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0, **_behaviour2d.new_params("Expression")}},
     # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
-    "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0}},
+    "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0, **_hsvtoolknobs.VECTORFIELD}},
     "GenerateLUT": {"inputs": ["source"], "params": {"lut_path": "", "lut_size": 33, "colorspace_in": "ACEScg", "colorspace_out": "ACEScg",
                                                   "lut_file_type": "cube", "prelut_size": 1024, "prelut_style": "logarithmic", "lut_input_bit_depth": "10 bit",
                                                   "lut_output_bit_depth": "input bit depth", **_behaviour2d.new_params("GenerateLUT")}},
-    "OCIOColorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIOColorspace")}},
-    "OCIODisplay": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "linear", "display": "sRGB - Display", "view": "ACES 2.0 - SDR 100 nits (Rec.709)", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIODisplay")}},
-    "OCIOFileTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"path": "", "transform_direction": "forward", "file_interpolation": "linear", "config": "", "mix": 1.0, **_behaviour2d.new_params("OCIOFileTransform")}},
-    "OCIOLookTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIOLookTransform")}},
+    "OCIOColorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIOColorspace"), **_ocioknobs.NEW["OCIOColorspace"]}},
+    "OCIODisplay": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "linear", "display": "sRGB - Display", "view": "ACES 2.0 - SDR 100 nits (Rec.709)", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIODisplay"), **_ocioknobs.NEW["OCIODisplay"]}},
+    "OCIOFileTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"path": "", "transform_direction": "forward", "file_interpolation": "linear", "config": "", "mix": 1.0, **_behaviour2d.new_params("OCIOFileTransform"), **_ocioknobs.NEW["OCIOFileTransform"]}},
+    "OCIOLookTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0, **_behaviour2d.new_params("OCIOLookTransform"), **_ocioknobs.NEW["OCIOLookTransform"]}},
     "OCIOLogConvert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"ocio_log_operation": "log to lin", "channels": "rgb", "config": "", "mix": 1.0, **_behaviour2d.new_params("OCIOLogConvert")}},
-    "Colorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"primaries_in": "Rec.709", "primaries_out": "Rec.709", "transfer_in": "Linear", "transfer_out": "Linear", "whitepoint_in": "D65", "whitepoint_out": "D65", "mix": 1.0, **_behaviour2d.new_params("Colorspace")}},
+    "Colorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"primaries_in": "Rec.709", "primaries_out": "Rec.709", "transfer_in": "Linear", "transfer_out": "Linear", "whitepoint_in": "D65", "whitepoint_out": "D65", "mix": 1.0, **_behaviour2d.new_params("Colorspace"), **_ocioknobs.NEW["Colorspace"]}},
     "Tile": {"inputs": ["image"], "params": {"rows": 1, "columns": 1, "mirror_x": 0, "mirror_y": 0, "filter": "cubic", "mix": 1.0}},
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0, **_behaviour2d.new_params("HistEQ")}},
@@ -593,7 +596,7 @@ SPECS = {
                            "brightness_range_min": 0.0, "brightness_range_max": 1.0, "brightness_rolloff": 0.0,
                            "brt_adjust": 0.0, "set_brightness": 0, "output_alpha": "preserve",
                            "color_replace": 0, "srccolor_r": 0.0, "srccolor_g": 0.0, "srccolor_b": 0.0,
-                           "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0, **_behaviour2d.new_params("HSVTool")}},
+                           "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0, **_behaviour2d.new_params("HSVTool"), **_hsvtoolknobs.NEW}},
     # AddMix (step 5b): A is premultiplied, then merged `over` B (MERGE_LIKE_KINDS: bypass passes B).
     "AddMix": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                "params": {"mix": 1.0, **_addmixknobs.new_params("AddMix")}},
@@ -892,9 +895,9 @@ SPECS = {
     "Dissolve": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"which": 0.0, "mix": 1.0}},
     "TimeDissolve": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                      "params": {"in": 1, "out": 10, "ease": "linear", "which": 0.0, "mix": 1.0}},
-    "TimeBlur": {"inputs": ["image"], "params": {"shutter": 1.0, "divisions": 10,
-                  "shutter_offset": "centred", "custom_offset": 0.0, **_timeknobs.new_params("TimeBlur")}},
-    "TimeEcho": {"inputs": ["image"], "params": {"frames": 3, "method": "average", "falloff": 1.0, **_timeknobs.new_params("TimeEcho")}},
+    "TimeBlur": {"inputs": ["image"], "params": {"shutter": 0.5, "divisions": 10,
+                  "shutter_offset": "start", "custom_offset": 0.0, **_timeknobs.new_params("TimeBlur")}},
+    "TimeEcho": {"inputs": ["image"], "params": {"frames": 1, "method": "max", "falloff": 1.0, **_timeknobs.new_params("TimeEcho")}},
     # NoTimeBlur (fidelity step N): Nuke's own node for cutting a time blur short. Every frame request that reaches it
     # from below is rounded (`rounding`: rint, floor, ceil, or `none` to pass the fractional frame straight through) and
     # its one input is evaluated at that whole frame, so a TimeBlur or motion blur downstream averages whole-frame
@@ -944,8 +947,8 @@ SPECS = {
     # clamped so endframe never precedes startframe) instead of the separate numbered clip inputs,
     # Nuke's own "one input, many frames" contact-sheet mode.
     "ContactSheet": {"inputs": ["clip0"], "optional_inputs": [*[f"clip{i}" for i in range(1, 32)]],
-                      "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit",
-                                "width": 1920, "height": 1080, "roworder": "BottomTop", "colorder": "LeftRight",
+                      "params": {"rows": 3, "columns": 4, "gap": 0, "labels": "name", "fit": "fit",
+                                "width": 3072, "height": 2048, "roworder": "BottomTop", "colorder": "LeftRight",
                                 "center": 0, "splitinputs": 0, "startframe": 1, "endframe": 1}},
     "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                "params": {"invert_mask": 0, "mix": 1.0, **_keymixknobs.new_params("Keymix")}},
@@ -1056,7 +1059,7 @@ SPECS = {
     "ModifyMetaData": {"inputs": ["image"], "params": {"edits": ""}},
     "CopyMetaData": {"inputs": ["image"], "optional_inputs": ["meta"], "params": {"keys": "", **_smallnodes.new_params("CopyMetaData")}},
     "CompareMetaData": {"inputs": ["image"], "optional_inputs": ["other"], "params": {}},
-    "AddTimeCode": {"inputs": ["image"], "params": {"timecode": "00:00:00:00", "fps": 24.0, "start_frame": 1,
+    "AddTimeCode": {"inputs": ["image"], "params": {"timecode": "01:00:00:00", "fps": 24.0, "start_frame": 1,
                                                     "drop_frame": 0, **_metaknobs.new_params("AddTimeCode")}},
     "BurnIn": {"inputs": ["image"],
                "params": {"top_left": "[metadata input/filename]", "top_right": "[frame]", "bottom_left": "",
@@ -2283,8 +2286,8 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "transform_direction": ["forward", "inverse"], "file_interpolation": ["nearest", "linear", "tetrahedral", "best"],
            "ocio_log_operation": ["log to lin", "lin to log"],
            "primaries_in": ["Rec.709", "Rec.2020", "P3-D65", "ACEScg"], "primaries_out": ["Rec.709", "Rec.2020", "P3-D65", "ACEScg"],
-           "transfer_in": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"], "transfer_out": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"],
-           "whitepoint_in": ["D65", "D60", "DCI"], "whitepoint_out": ["D65", "D60", "DCI"],
+           "transfer_in": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4", "Rec.709", "Cineon"], "transfer_out": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4", "Rec.709", "Cineon"],
+           "whitepoint_in": ["D65", "D60", "DCI", "A", "B", "C", "D50", "D55", "D75", "E"], "whitepoint_out": ["D65", "D60", "DCI", "A", "B", "C", "D50", "D55", "D75", "E"],
            "height_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "edge_matte": ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue"],
            "filter": list(TRANSFORM_FILTERS),
@@ -2519,6 +2522,12 @@ LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_len
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["retime_output"] = list(_retimeknobs.OUTPUTS)
 CHOICES.update(_behaviour2d.CHOICES)
+LIMITS.update(_hsvtoolknobs.LIMITS)      # HSVTool's per-range masks (nodebased/hsvtoolknobs.py)
+CHOICES.update(_hsvtoolknobs.CHOICES)
+LIMITS.update(_hsvtoolknobs.VECTORFIELD_LIMITS)
+CHOICES.update(_hsvtoolknobs.VECTORFIELD_CHOICES)
+LIMITS.update(_ocioknobs.LIMITS)      # the OCIO nodes' and Colorspace's remaining knobs (nodebased/ocioknobs.py)
+CHOICES.update(_ocioknobs.CHOICES)
 LIMITS.update({"match_strength": (0.1, 10.0), "inpainting": (0, 1), "matte_dilation": (0, 1000), "weight_red": (0.0, 1.0), "weight_green": (0.0, 1.0), "weight_blue": (0.0, 1.0)})      # SmartVector (nodebased/smartvectorknobs.py)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0), "detail_amount": (0.0, 1.0), "edge_mask": (0, 1), "legacy_defocus_disc": (0, 1)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
@@ -3024,6 +3033,23 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _smartvector_weights(doc["nodes"])
         doc["version"] = 31
+    if isinstance(doc, dict) and doc.get("version") == 31:
+        # v31 -> v32 gives AddTimeCode, TimeEcho, TimeBlur and ContactSheet the defaults the guide lists. A node saved before keeps the
+        # defaults it had: a param it does not store takes the older value, so the pixels and metadata it produced do not change.
+        def _older_defaults(scope):
+            for node in scope.values():
+                if not isinstance(node, dict):
+                    continue
+                if node.get("type") in _olderdefaults.OLD:
+                    params = node.setdefault("params", {})
+                    for name, value in _olderdefaults.OLD[node["type"]].items():
+                        params.setdefault(name, value)
+                graph = node.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _older_defaults(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _older_defaults(doc["nodes"])
+        doc["version"] = 32
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

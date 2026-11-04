@@ -660,9 +660,10 @@ LAYOUTS = {
         '(Un)premult by', 'Invert', 'Mix luminance', 'Mix'
     ],
     'HSVTool': [
-        'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Hue rolloff', 'Saturation range',
-        'Saturation adjustment', 'Saturation rolloff', 'Force saturation', 'Brightness range', 'Brightness adjustment',
-        'Brightness rolloff', 'Force brightness', 'Output to alpha', 'Adjust by scaling', 'Mix'
+        'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Hue rolloff', 'HMask', 'Invert hue mask',
+        'Saturation range', 'Saturation adjustment', 'Saturation rolloff', 'Force saturation', 'SMask', 'Invert saturation mask',
+        'Brightness range', 'Brightness adjustment', 'Brightness rolloff', 'Force brightness', 'BMask', 'Invert brightness mask',
+        'Output to alpha', 'Invert output matte', 'Adjust by scaling', 'Mix'
     ],
     'Toe': ['Channels', 'Lift', 'Toe width', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
     'SoftClip': ['Conversion', 'Softclip min', 'Softclip max', 'Older grey', 'Mix'],
@@ -677,7 +678,7 @@ LAYOUTS = {
     ],
     'Colorspace': [
         'Channels', 'Transfer In', 'Whitepoint In', 'Primaries In', 'Transfer Out', 'Whitepoint Out', 'Primaries Out',
-        'Bradford matrix', 'Divide by alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Swap input/output', 'Bradford matrix', 'Divide by alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'ColorLookup': [
         'Channels', 'Use precomputed table', 'Range', 'Master', 'Red', 'Green', 'Blue', 'Alpha', 'Source', 'Target',

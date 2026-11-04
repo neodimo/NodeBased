@@ -285,23 +285,22 @@ class OcioDirectionAndInterpolationTests(unittest.TestCase):
         round_trip = Evaluator._kernel("OCIOFileTransform", dict(SPECS["OCIOFileTransform"]["params"], **base, transform_direction="inverse"), [fwd])
         np.testing.assert_allclose(round_trip[..., :3], img[..., :3], atol=2e-3)
 
-    def test_file_transform_interpolation_is_unpaired_because_opencolorio_ignores_it(self):
-        """OpenColorIO 2.5.2 returns the same pixels for every interpolation on a .cube, so the mapping lists the knob as unsupported and the param as extra."""
+    def test_file_transform_interpolation_acts_on_a_3d_lut_where_the_corners_are_coupled(self):
+        """OpenColorIO 2.5.2 renders nearest as linear and interpolates a LUT whose axes are independent the same way every time, so the knob is
+        paired (Nuke's `interpolation`) and acts through tetrahedral and best on a 3D LUT with coupled corners (tests/test_2d_behaviour_ocio_p.py)."""
         import tempfile
-        size = 3
-        rows = [f"{(r / 2) ** 2:.6f} {(g / 2) ** 3:.6f} {(b / 2):.6f}" for b in range(size) for g in range(size) for r in range(size)]
+        rng = np.random.default_rng(1)
         with tempfile.TemporaryDirectory() as tmp:
-            cube = Path(tmp) / "bend.cube"
-            cube.write_text(f"LUT_3D_SIZE {size}\n" + "\n".join(rows) + "\n", encoding="utf-8")
+            cube = Path(tmp) / "corners.cube"
+            cube.write_text("LUT_3D_SIZE 2\n" + "\n".join(" ".join(f"{v:.3f}" for v in rng.random(3)) for _ in range(8)) + "\n", encoding="utf-8")
             img = np.zeros((3, 3, 4), np.float32)
-            img[..., :] = [0.3, 0.7, 0.45, 1.0]
-            out = [Evaluator._kernel("OCIOFileTransform", dict(SPECS["OCIOFileTransform"]["params"], path=str(cube), file_interpolation=m), [img])
-                   for m in ("nearest", "linear", "tetrahedral")]
-        np.testing.assert_array_equal(out[0], out[1])
-        np.testing.assert_array_equal(out[1], out[2])
+            img[..., :] = [0.3, 0.6, 0.45, 1.0]
+            out = {m: Evaluator._kernel("OCIOFileTransform", dict(SPECS["OCIOFileTransform"]["params"], path=str(cube), file_interpolation=m), [img])
+                   for m in ("nearest", "linear", "tetrahedral")}
+        np.testing.assert_array_equal(out["nearest"], out["linear"])
+        differs(self, out["linear"], out["tetrahedral"], "OCIOFileTransform: tetrahedral interpolation left a coupled 3D LUT alone")
         entries = MAPPING["pairs"]["OCIOFileTransform"]["knobs"]
-        self.assertTrue(any(e["kind"] == "unsupported" and e["nuke"] == ["interpolation"] for e in entries))
-        self.assertTrue(any(e["kind"] == "extra" and e["nodebased"] == ["file_interpolation"] for e in entries))
+        self.assertTrue(any(e["kind"] == "renamed" and e["nuke"] == ["interpolation"] and e["nodebased"] == ["file_interpolation"] for e in entries))
 
 
 # ------------------------------------------------------------------------------------------------------------ Clamp split

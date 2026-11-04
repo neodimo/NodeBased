@@ -701,7 +701,9 @@ _CS_GUIDE = "Colorspace (Nuke 17.0 Reference Guide)"
 _SRGB_SOURCE = "IEC 61966-2-1, the sRGB transfer function (linear below 0.04045 / 12.92, otherwise ((v + 0.055) / 1.055) ** 2.4)"
 _PRIMARIES_SOURCE = ("the published matrices between linear RGB spaces with a D65 white: ITU-R BT.2087-0 for Rec.709 to Rec.2020 and the P3-D65 matrix of "
                      "SMPTE RP 431-2 / EG 432-1")
-_WHITES = {"D65": (0.3127, 0.3290), "D60": (0.32168, 0.33767), "DCI": (0.314, 0.351)}
+_WHITES = {"D65": (0.3127, 0.3290), "D60": (0.32168, 0.33767), "DCI": (0.314, 0.351),
+           # CIE standard illuminants as published by the CIE (2 degree observer)
+           "A": (0.44757, 0.40745), "D50": (0.34567, 0.35850), "D55": (0.33242, 0.34743), "D75": (0.29902, 0.31485)}
 _PRIMARIES = {"Rec.709": ((0.64, 0.33), (0.30, 0.60), (0.15, 0.06)), "Rec.2020": ((0.708, 0.292), (0.170, 0.797), (0.131, 0.046)),
               "P3-D65": ((0.680, 0.320), (0.265, 0.690), (0.150, 0.060))}
 # Rec.709 to Rec.2020 and to P3-D65 on linear light, as published (six digits).
@@ -801,6 +803,24 @@ def _colorspace_cases():
     out.append(Case("colorspace_does_not_divide_by_alpha", "Colorspace", "Colorspace", (("colorspace_in", "sRGB"),), ("C",), "Colorspace",
                     {"transfer_in": "sRGB"}, ("C",), premultiplied_colour, "guide",
                     f"{_CS_GUIDE}: only '(un)premult by' divides the image by a channel 'before it is processed', so the stored colour is converted as it is, whatever the alpha"))
+    def rec709_decode(v):
+        return np.where(v < 0.081, v / 4.5, ((np.abs(v) + 0.099) / 1.099) ** (1 / 0.45))
+    out.append(_cs_case("colorspace_rec709_curve", {"transfer_in": "Rec.709"}, (("colorspace_in", "rec709"),),
+                        "input rec709: ITU-R BT.709's camera transfer function undone (V = 4.5 L below 0.018, 1.099 L ** 0.45 - 0.099 above), a different curve from sRGB's",
+                        rec709_decode, note_source="ITU-R BT.709-6, section 1.2 (opto-electronic transfer characteristics); the Foundry Reference Guide lists the choice and gives no formula"))
+    out.append(_cs_case("colorspace_rec709_curve_out", {"transfer_out": "Rec.709"}, (("colorspace_out", "rec709"),),
+                        "output rec709: the camera transfer function applied (4.5 L below 0.018, 1.099 L ** 0.45 - 0.099 above)",
+                        lambda v: np.where(v < 0.018, 4.5 * v, 1.099 * np.maximum(v, 0.0) ** 0.45 - 0.099),
+                        note_source="ITU-R BT.709-6, section 1.2; the Foundry Reference Guide lists the choice and gives no formula"))
+    out.append(_cs_case("colorspace_cineon", {"transfer_in": "Cineon"}, (("colorspace_in", "Cineon"),),
+                        "input Cineon: Kodak's 10-bit printing density curve with black at code 95, white at code 685, 0.002 density per code value and gamma 0.6",
+                        lambda v: (10.0 ** ((v * 1023.0 - 685.0) * 0.002 / 0.6) - 10.0 ** ((95.0 - 685.0) * 0.002 / 0.6)) / (1.0 - 10.0 ** ((95.0 - 685.0) * 0.002 / 0.6)),
+                        note_source="Kodak's Cineon Digital Film System specification, the constants of Nuke's own Log2Lin defaults; the Foundry Reference Guide lists the choice and gives no formula"))
+    for name in ("A", "D50", "D55", "D75"):
+        out.append(_cs_case(f"colorspace_illuminant_{name.lower()}_keeps_xyz", {"whitepoint_out": name}, (("illuninant_out", name),),
+                            f"with Bradford matrix off, an output illuminant {name} keeps the XYZ values (Rec.709 primaries on a D65 white to the same primaries on a {name} white)",
+                            same_xyz("D65", name), source="guide",
+                            note_source="the CIE standard illuminant's chromaticity as published by the CIE; the guide names illuminant A as 'a household tungsten filament light bulb'"))
     # The in/out choices the page lists and NodeBased has no equivalent for.
     missing = (
         ("colorspace_hsv", "HSV, HSL and the other hue-based spaces", (("colorspace_out", "HSV"),),
@@ -809,17 +829,12 @@ def _colorspace_cases():
          "the page lists YUV-type formats; NodeBased has no YCbCr, YPbPr or YUV choice"),
         ("colorspace_cie", "CIE XYZ, Yxy, Lab and LCh", (("colorspace_out", "CIE-XYZ"),),
          "the page lists CIE formats; NodeBased converts through XYZ internally but cannot output XYZ, Yxy, Lab or LCh"),
-        ("colorspace_cineon", "Cineon and the other log encodings", (("colorspace_in", "Cineon"),),
-         "Nuke's colorspace list holds Cineon, Panalog, REDLog, ViperLog, AlexaV3LogC and the vendor logs; NodeBased's Colorspace has linear, sRGB, Gamma 2.2 and Gamma 2.4 only (Log2Lin and PLogLin do Cineon separately)"),
-        ("colorspace_rec709_curve", "the Rec.709 camera curve", (("colorspace_in", "rec709"),),
-         "Nuke's rec709 input is ITU-R BT.709's camera transfer function, a different curve from sRGB's; NodeBased has no such choice"),
-        ("colorspace_other_illuminants", "the other illuminants (A, B, C, D50 and so on)", (("illuninant_out", "A"),),
-         "the page names illuminant A (a household tungsten bulb) and D65 as examples; NodeBased offers D65, D60 and DCI"),
     )
     for case_id, what, nuke_knobs, reason in missing:
         out.append(Case(case_id, "Colorspace", "Colorspace", nuke_knobs, ("C",), "Colorspace", None, ("C",),
                         lambda fx: (fx["C"].astype(np.float64), np.zeros(fx["C"].shape, bool)), "guide",
-                        f"{_CS_GUIDE}: conversion to or from {what}", inexpressible=reason))
+                        f"{_CS_GUIDE}: conversion to or from {what}", inexpressible=reason,
+                        unscored="the guide lists the format and gives no formula or constants for it, so writing one down would be a guess"))
     return out
 
 

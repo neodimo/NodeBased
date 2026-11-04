@@ -180,7 +180,8 @@ class KnobActionTests(Config):
                             & set(core.SPECS[kind]["params"]))
             acts = requirements.probe_acts(kind, paired, fx)
             for name in paired:
-                if name in ("config", "mix", "channels", "divide_by_alpha", "file_interpolation", *core_chrome):
+                # key1..value4 name config variables the fixture config does not read, and reload re-reads files; both act in tests/test_2d_behaviour_ocio_p.py
+                if name in ("config", "mix", "channels", "divide_by_alpha", "file_interpolation", "reload", "ignore_errors", "working_space", *core_chrome) or name.startswith(("key", "value")):
                     continue
                 with self.subTest(kind=kind, knob=name):
                     self.assertTrue(acts.get(name), f"{kind}.{name} did not change the pixels with the fixture config")
@@ -191,9 +192,9 @@ class LayoutTests(unittest.TestCase):
         want = {
             "OCIOColorspace": [("channels", "Channels"), ("src", "Input"), ("dst", "Output")],
             "OCIOLogConvert": [("channels", "Channels"), ("ocio_log_operation", "Operation")],
-            "OCIOLookTransform": [("channels", "Channels"), ("src", "Input"), ("look", "Look"), ("transform_direction", "Invert direction"), ("dst", "Output")],
-            "OCIODisplay": [("src", "Input colorspace"), ("display", "Display"), ("view", "View"), ("look", "Look"), ("transform_direction", "Invert direction")],
-            "OCIOFileTransform": [("channels", "Channels"), ("path", "File"), ("transform_direction", "Invert direction"), ("file_interpolation", "File Interpolation")],
+            "OCIOLookTransform": [("channels", "Channels"), ("src", "Input"), ("look", "Look"), ("reload", "Reload"), ("transform_direction", "Invert direction"), ("dst", "Output")],
+            "OCIODisplay": [("src", "Input colorspace"), ("display", "Display"), ("view", "View"), ("transform_direction", "Invert direction"), ("gain", "Gain")],
+            "OCIOFileTransform": [("channels", "Channels"), ("path", "File"), ("transform_direction", "Invert direction"), ("file_interpolation", "Interpolation")],
         }
         for kind, rows in want.items():
             with self.subTest(kind=kind):

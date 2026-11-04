@@ -256,7 +256,7 @@ class CopyCompareTests(FileCase):
 class TimeCodeTests(FileCase):
     def stamped(self, frame, **params):
         g = self.read_graph()
-        g.add("t", "AddTimeCode", params, image="r")
+        g.add("t", "AddTimeCode", {"timecode": "00:00:00:00", **params}, image="r")
         return self.meta(g, "t", frame).get("timecode")
 
     def test_24_fps_frame_24_from_zero_is_one_second(self):
@@ -291,7 +291,7 @@ class TimeCodeTests(FileCase):
 
     def test_timecode_reaches_the_file_and_the_frame_is_in_the_cache_key(self):
         g = self.read_graph()
-        g.add("t", "AddTimeCode", {"start_frame": 0}, image="r")
+        g.add("t", "AddTimeCode", {"start_frame": 0, "timecode": "00:00:00:00"}, image="r")
         e = Evaluator()
         self.assertEqual(self.meta(g, "t", 24, e)["timecode"], "00:00:01:00")
         self.assertEqual(self.meta(g, "t", 48, e)["timecode"], "00:00:02:00")
@@ -401,7 +401,7 @@ class BurnInTests(FileCase):
 
     def test_a_timecode_key_can_be_burned_in(self):
         g = self.read_graph()
-        g.add("tc", "AddTimeCode", {"start_frame": 0}, image="r")
+        g.add("tc", "AddTimeCode", {"start_frame": 0, "timecode": "00:00:00:00"}, image="r")
         g.add("burn", "BurnIn", {"top_right": "", "bottom_right": "[metadata timecode]", "bar": 0,
                                  "top_left": "", "font_size": self.FONT}, image="tc")
         g.add("text", "Text", {"width": W, "height": H, "message": "00:00:01:00", "font_size": self.FONT,

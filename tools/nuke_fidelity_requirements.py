@@ -68,7 +68,8 @@ NOT_PIXEL = {
     "Shuffle": {k: "routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph" for k in ("fromInput1", "fromInput2", "out2")},
     "ColorLookup": {k: "feeds the Set RGB, Set RGBA and Set A buttons, which add curve points; the kernel reads the curves, not these two" for k in ("source", "target")},
     "HSVTool": {k: "acts only with Color Replacement on (source and destination colour)" for k in ("srccolor", "dstcolor")}
-    | {k: "acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved" for k in ("huerolloffrange", "satrolloffrange", "brtrolloffrange")},
+    | {k: "acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved" for k in ("huerolloffrange", "satrolloffrange", "brtrolloffrange")}
+    | {k: "inverts the range's mask, which acts only once the matching mask channel (or socket) is chosen and an adjustment is made (tests/test_2d_behaviour_hsv_vf_p.py)" for k in ("invert_hue_mask", "invert_sat_mask", "invert_bright_mask")},
     "SoftClip": {"softclip_min": "acts only with a conversion chosen; the default conversion is none"},
     "Toe": {"invert": "inverts the mask channel, so it acts only with the mask channel on"},
     "KeyMix": {"invertMask": "inverts the mask channel, so it acts only with a mask wired"},
@@ -105,6 +106,10 @@ NOT_PIXEL = {
                  "edge_mult": "sets the width of the edge band; the fixture's alpha changes at every pixel, so the band is full at every value the probe tries (tests/test_2d_behaviour_extra_filter.py shows the band narrow)",
                  "quality": "acts only when size exceeds quality, which is the size knob moved too (tests/test_2d_behaviour_filter_a.py shows the scaling for Blur; the cases here do the same for EdgeBlur)",
                  "crop": "crop to format acts on the bounding box only (tests/test_2d_behaviour_extra_filter.py shows the window grow)"},
+    # Lane 2 step P (11/4): the Look transform's reload re-reads look files that NodeBased reads on every render, and ignore errors acts only when the named look is missing.
+    "OCIOLookTransform": {"reload": "re-reads the look files, which NodeBased reads on every render (tests/test_2d_behaviour_ocio_p.py)",
+                          "ignore_errors": "acts only when the named look is missing from the config; the probe names none (tests/test_2d_behaviour_ocio_p.py)"},
+    "OCIOFileTransform": {"interpolation": "tetrahedral and best differ from linear only on a 3D LUT whose corners are coupled, and OpenColorIO renders nearest as linear; the probe's file is a 1D LUT (tests/test_2d_behaviour_ocio_p.py)"},
     "Crop": {"reformat": "makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)",
              "crop": "black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)"},
 }

@@ -239,6 +239,7 @@ _CS_CHANGES = {
     "illuninant_in": {"whitepoint_in": "DCI"}, "illuninant_out": {"whitepoint_out": "DCI"},
     "primary_in": {"primaries_in": "P3-D65"}, "primary_out": {"primaries_out": "P3-D65"},
     "bradford_matrix": {"bradford_matrix": 1},
+    "swap": ({"transfer_out": "sRGB"}, {"swap": 1}),
 }
 
 
@@ -287,10 +288,9 @@ class ColorspaceOlderDocumentTests(OlderDocumentTests):
 
     def test_the_choices_nodebased_lacks_are_listed_in_the_cases(self):
         lacking = {c.id for c in fidelity.CASES if c.nuke == "Colorspace" and c.inexpressible}
-        self.assertEqual(lacking, {"colorspace_hsv", "colorspace_ycbcr", "colorspace_cie", "colorspace_cineon", "colorspace_rec709_curve",
-                                   "colorspace_other_illuminants"})
+        self.assertEqual(lacking, {"colorspace_hsv", "colorspace_ycbcr", "colorspace_cie"})      # the guide gives no formula for them (cases unscored, step P)
         from nodebased.core import CHOICES
-        self.assertEqual(CHOICES["transfer_in"], ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"])
+        self.assertEqual(CHOICES["transfer_in"][:4], ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"])     # the older choices keep their place; step P adds Rec.709 and Cineon
 
 
 # ================================================================================================================ ColorLookup

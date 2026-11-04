@@ -3827,10 +3827,14 @@ class Evaluator:
                 raise ValueError("Vectorfield: choose a .cube or .3dl file")
             try:
                 suffix = Path(p["cube_path"]).suffix.lower()
+                forced = str(p.get("vector_file_type", "auto"))      # Nuke's file type: auto reads the suffix, cube and 3dl force the reader
+                if forced in ("cube", "3dl"):
+                    suffix = "." + forced
                 if suffix == ".cube":
                     lut, shaper = lutio.read_cube(p["cube_path"]), None
                 elif suffix == ".3dl":
-                    lut, shaper = lutio.read_3dl(p["cube_path"])
+                    depth = 0 if str(p.get("vector_output_bitdepth", "auto")) == "auto" else int(p["vector_output_bitdepth"])
+                    lut, shaper = lutio.read_3dl(p["cube_path"], output_depth=depth, normalize=bool(p.get("vector_normalize_output", 0)))
                 else:
                     raise ValueError("choose a .cube or .3dl LUT file")
                 alpha = source.pixels[..., 3:4]
@@ -8441,6 +8445,10 @@ class Evaluator:
             arr = np.asarray(value)
             return arr[..., 3] if arr.ndim == 3 else arr
         general, hm, sm, bm = (range_masks or (None, None, None, None))
+        from . import hsvtoolknobs as _hsvknobs
+        hm = _hsvknobs.range_mask(image, p, hm, "HMask", "invert_hue_mask", mask_alpha)
+        sm = _hsvknobs.range_mask(image, p, sm, "SMask", "invert_sat_mask", mask_alpha)
+        bm = _hsvknobs.range_mask(image, p, bm, "BMask", "invert_bright_mask", mask_alpha)
         shared = mask_alpha(general)
         base_weights = (hue_weight, sat_weight, brt_weight)
         independent_masks = any(mask is not None for mask in (hm, sm, bm))
@@ -8488,6 +8496,8 @@ class Evaluator:
                         "hue": hue, "saturation": sat, "value": val}
         alpha = (alpha_values[output_alpha][..., None] if output_alpha in alpha_values
                  else image[..., 3:4])
+        if output_alpha in alpha_values and int(p.get("invert_alpha_mask", 0)):
+            alpha = 1.0 - alpha        # Nuke's "invert mask" beside the output channel flips the matte written there
         return np.concatenate([out_rgb, alpha], axis=2).astype(np.float32)
 
     @staticmethod
