@@ -106,6 +106,43 @@ class GridWarpTests(unittest.TestCase):
         np.testing.assert_allclose(two_thirds, expected, atol=1e-6)
         np.testing.assert_array_equal(run_grid(grid_params(warp=0.0), src, moved_grid()).pixels, src)
 
+    def test_source_and_destination_transform_translation_moves_the_known_grid(self):
+        src = ramp()
+        data = moved_grid()
+        source_transform = run_grid(grid_params(source_grid_transform_translate_x=2.0), src, data).pixels
+        np.testing.assert_allclose(source_transform[7, 14], src[7, 11], atol=1e-5)
+        destination_transform = run_grid(grid_params(use_source_transform=0, destination_grid_transform_translate_x=2.0), src, data).pixels
+        np.testing.assert_allclose(destination_transform[7, 14], src[7, 9], atol=1e-5)
+
+    def test_each_source_and_destination_transform_control_changes_grid_pixels(self):
+        src, data = ramp(), moved_grid()
+        base = run_grid(grid_params(), src, data).pixels
+        variants = (
+            {"translate_x": 1.0}, {"translate_y": 1.0}, {"rotate": 12.0}, {"scale": 1.15},
+            {"skew_x": 0.2}, {"skew_y": 0.2}, {"skew_x": 0.2, "skew_y": 0.35, "skew_order": "YX"},
+            {"center_x": 4.0, "rotate": 12.0}, {"center_y": 4.0, "rotate": 12.0},
+        )
+        for grid in ("source", "destination"):
+            for variant in variants:
+                params = {f"{grid}_grid_transform_{name}": value for name, value in variant.items()}
+                if grid == "destination":
+                    params["use_source_transform"] = 0
+                with self.subTest(grid=grid, transform=variant):
+                    changed = run_grid(grid_params(**params), src, data).pixels
+                    self.assertGreater(float(np.abs(changed - base).max()), 1e-4)
+
+    def test_use_source_transform_couples_the_destination_transform(self):
+        src, data = ramp(), moved_grid()
+        inherited = run_grid(grid_params(source_grid_transform_translate_x=2.0, use_source_transform=1), src, data).pixels
+        independent = run_grid(grid_params(source_grid_transform_translate_x=2.0, use_source_transform=0), src, data).pixels
+        self.assertGreater(float(np.abs(inherited - independent).max()), 1e-4)
+
+    def test_submesh_resolution_changes_warp_interpolation(self):
+        src, data = ramp(), moved_grid()
+        regular = run_grid(grid_params(render_res=10.0), src, data).pixels
+        smoother = run_grid(grid_params(render_res=40.0), src, data).pixels
+        self.assertGreater(float(np.abs(smoother - regular).max()), 1e-4)
+
     def test_output_choices(self):
         src, dst = ramp(), ramp(0.3)
         data = moved_grid()

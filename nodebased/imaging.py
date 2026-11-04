@@ -5160,9 +5160,14 @@ class Evaluator:
                                              p["rows"], p["columns"])
                 grids = {"source": default, "destination": default}
             src, dst = warps.grid_controls(grids["source"], grids["destination"])
+            if kind == "GridWarp":
+                src = warps_knobs.transform_grid(src, p, "source")
+                dst = warps_knobs.transform_grid(dst, p, "source" if int(p.get("use_source_transform", 1)) else "destination")
             dst = warps_knobs.scaled_destination(src, dst, float(p.get("warp", 1.0)))
             sigma = max(1.0, min(source.display.width / max(1, p["columns"] - 1),
                                  source.display.height / max(1, p["rows"] - 1)) * 0.55)
+            if kind == "GridWarp":
+                sigma *= max(float(p.get("render_res", 10.0)), 1.0) ** 0.5 / 10.0 ** 0.5
         else:
             src_parts, dst_parts = [], []
             for pair in data or []:

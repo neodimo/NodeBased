@@ -423,6 +423,8 @@ def number_knob_kind(name, default):
     """The widget a guide `number` knob needs: `int` (an integer field, no slider) when the guide default is an integer and the knob
     counts, indexes or names a frame; `float` (a slider with a value field, Nuke's Double_Knob) when the default is a fraction or the
     name is no count; `unknown` (left unmeasured, still counted) when the guide gives no numeric default."""
+    if name in ("render_res",):
+        return "int"  # the guide's whole-number render resolutions are Int_Knobs (plain integer fields)
     if isinstance(default, bool) or not isinstance(default, (int, float)):
         return "unknown"
     if isinstance(default, float) and not default.is_integer():

@@ -34,16 +34,31 @@ import numpy as np
 
 GRID_OUTPUTS = ["source", "source warped", "destination", "destination warped"]
 BACKGROUNDS = ["on black", "on src", "on dst", "on bg"]
-GRIDWARP = {"grid_output": "source warped", "warp": 1.0, "background": "on src", "background_mix": 0.0}
+_GRID_TRANSFORM = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0,
+                   "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "center_x": 0.0, "center_y": 0.0}
+GRIDWARP = {"grid_output": "source warped", "warp": 1.0, "background": "on src", "background_mix": 0.0,
+            **{f"source_grid_transform_{key}": value for key, value in _GRID_TRANSFORM.items()},
+            "use_source_transform": 1,
+            **{f"destination_grid_transform_{key}": value for key, value in _GRID_TRANSFORM.items()},
+            "render_res": 10}
 SPLINEWARP = {"premultiply": 0, "outputMask": "mask_splinwarp.a", "crop_to_format": 1, "boundary_bbox": 1,
               "layer_warp": 1.0, "pair_warp": 1.0,
               "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0,
               "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "center_x": 0.0, "center_y": 0.0}
 # A saved SplineWarp had no mask layer and no crop, so it keeps both off.
 SPLINEWARP_SAVED = {**SPLINEWARP, "outputMask": "none", "crop_to_format": 0}
-LIMITS = {"background_mix": (0.0, 1.0), "warp": (0.0, 10.0), "premultiply": (0, 1), "crop_to_format": (0, 1), "boundary_bbox": (0, 1),
-          "layer_warp": (0.0, 1.0), "pair_warp": (0.0, 1.0)}
-CHOICES = {"grid_output": GRID_OUTPUTS, "background": BACKGROUNDS, "skew_order": ("XY", "YX")}
+LIMITS = {"background_mix": (0.0, 1.0), "warp": (0.0, 10.0), "use_source_transform": (0, 1),
+          "premultiply": (0, 1), "crop_to_format": (0, 1), "boundary_bbox": (0, 1),
+          "layer_warp": (0.0, 1.0), "pair_warp": (0.0, 1.0), "render_res": (1.0, 100.0),
+          **{f"{grid}_grid_transform_{name}": bounds
+             for grid in ("source", "destination")
+             for name, bounds in (("translate_x", (-1000000.0, 1000000.0)), ("translate_y", (-1000000.0, 1000000.0)),
+                                  ("rotate", (-360.0, 360.0)), ("scale", (-1000.0, 1000.0)),
+                                  ("skew_x", (-1000.0, 1000.0)), ("skew_y", (-1000.0, 1000.0)),
+                                  ("center_x", (-1000000.0, 1000000.0)), ("center_y", (-1000000.0, 1000000.0)))}}
+CHOICES = {"grid_output": GRID_OUTPUTS, "background": BACKGROUNDS, "skew_order": ("XY", "YX"),
+           "source_grid_transform_skew_order": ("XY", "YX"),
+           "destination_grid_transform_skew_order": ("XY", "YX")}
 OPEN_CHOICES = ("outputMask",)
 
 
@@ -91,6 +106,13 @@ def transform_points(points, p):
     pivot = np.array([cx, cy])
     offset = pivot + np.array([tx, -ty]) - linear @ pivot
     return np.asarray(points) @ linear.T + offset
+
+
+def transform_grid(points, p, grid):
+    """Apply a GridWarp source or destination transform to its grid control points."""
+    prefix = f"{grid}_grid_transform_"
+    params = {name: p.get(prefix + name, default) for name, default in _GRID_TRANSFORM.items()}
+    return transform_points(points, params)
 
 
 def over(top, under):
