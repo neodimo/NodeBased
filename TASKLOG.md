@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step Q: Flare's and Sparkles' remaining controls (integrator tick)
+
+- **What was done:** `main` `890114cd` -> `408cdade` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `408cdade`: Ran 9304 tests in 607.204 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 - Lane 9, step Q (Flare and Sparkles remaining controls)
 
 - **What was done:** recorded the guide's value-unspecified Flare preset buttons and the `all` action as NOT_PIXEL reasons in `tools/nuke_fidelity_requirements.py`; regenerated `docs/PARITY_2D_FIDELITY.md` and copied it byte-identically to `nodebased/data/docs/`.

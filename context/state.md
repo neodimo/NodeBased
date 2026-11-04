@@ -1,5 +1,24 @@
 ## 2026-11-04 - Lane 9, step Q (Flare and Sparkles remaining controls)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (8:05 AM on 2026-11-04 PDT)
+
+`main` moved `890114cd` -> `408cdade` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `408cdade` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0745.log`, started 7:45 AM): **Ran 9304 tests in 607.204 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step Q: Flare's and Sparkles' remaining controls.** Commits:
+  - `d901d4ba` Document Flare preset controls without known values
+  Diff: 5 files changed, 25 insertions(+), 3 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done:** recorded the guide's value-unspecified Flare preset buttons and the `all` action as NOT_PIXEL reasons in `tools/nuke_fidelity_requirements.py`; regenerated `docs/PARITY_2D_FIDELITY.md` and copied it byte-identically to `nodebased/data/docs/`.
 - **Evidence:** audit is unchanged: overall 95.1, Flare 79.7 (14/50 paired knobs), Sparkles 87.0 (14/32). `tests.test_nuke_fidelity_audit`, `tests.test_2d_behaviour_extra_draw`, `tests.test_knowledge`, `tests.test_knobs`, `tests.test_core`, `tests.test_tiles`, `tests.test_bypass`, `tests.test_tiers`, `tests.test_desktop.PropertiesLabelTests`, and `tests.test_desktop.FluidPropertiesPanelTests` passed.
 - **Artifacts:** source and report changes are in this worktree and will be committed; test/audit logs are deliberate scratch under `scratch/nb-lanes/run/`.
