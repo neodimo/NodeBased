@@ -168,7 +168,8 @@ class TrackerTests(unittest.TestCase):
             "Pattern grab behaviour", "Every n frames", "When error above", "When error below", "Update the pattern every frame",
             "Create new key when track is moved", "Auto-tracks delete keyframes", "Transform", "Reference Frame", "Jitter period", "Smoothing",
             "Apply Translate", "Apply Rotate", "Apply Scale", "Live-link transform", "Translate", "Rotate", "Scale", "Skew X", "Skew Y",
-            "Skew order", "Center", "Filter", "Clamp", "Black outside", "Motion blur", "Shutter", "Shutter Offset", "Custom shutter offset",
+            "Skew order", "Center", "Filter", "Clamp", "Black outside", "Motion blur", "Shutter", "Shutter offset",  # Nuke gives both shutter-offset knobs one label: one shared row (S2)
+           
             "Samples"])
         kept, total = layout_order("Tracker")[0]
         self.assertEqual(kept, total)
