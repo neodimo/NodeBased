@@ -1,5 +1,28 @@
 ## 2026-11-04 — Lane 9, step W: the Tracker's last controls
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (3:35 PM on 2026-11-04 PDT)
+
+`main` moved `a9f4fb1f` -> `40788b33` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `40788b33` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-1516.log`, started 3:16 PM): **Ran 9345 tests in 628.347 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step W: the Tracker's last controls.** Commits:
+  - `69770c7c` Tracker: regrab when offset, retrack on move and auto regrab are on/off switches in the shared limits too (the cache test picked 2 for a switch whose default is on)
+  - `274d682c` Document Lane 9 Tracker controls step W
+  - `498941c4` Test Tracker key-move retracking intervals
+  - `6558ec2f` Tracker: classify viewer-only controls as non-pixel
+  - `1e120360` Tracker: regrab offset patterns and retrack moved keys
+  Diff: 16 files changed, 216 insertions(+), 76 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** Added Tracker `regrab_when_offset` (default on) using the moved point as the next pattern origin, with an off path that keeps the previous pattern origin. Added `retrack_on_move` (default on): moving/creating a key launches backward/forward analysis to adjacent keyed frames and queues both sides when present. Classified the seven zoom-window/keyframe-display controls as panel-only, NOT_PIXEL controls, citing the Nuke 17 Tracker guide. Audit measured Tracker 93.3 -> 98.3 and 45/54 -> 54/54 knobs paired; overall remained 95.5.
 - **Artifacts:** `nodebased/tracker.py`, `nodebased/trackerknobs.py`, `nodebased/app.py`, `nodebased/core.py`, `nodebased/shapes.py`, `nodebased/knobs.py`; tests in `tests/test_tracker_analysis.py`, `tests/test_tracker_completion.py`, `tests/test_2d_behaviour_filter_f.py`; mapping/audit in `docs/parity/nodebased_to_nuke.json`, `tools/nuke_fidelity_requirements.py`, `tools/audit_nuke_fidelity.py`; report in `docs/PARITY_2D_FIDELITY.md` and byte-identical bundled copy. Commits: `1e120360`, `6558ec2f`, `498941c4`. All repository artifacts committed; logs are local scratch in `scratch/nb-lanes/run/`.
 - **State:** Done. Targeted tracker, audit, knowledge, core, source-pool, GPU2D, knob/panel and related modules passed. `tests.test_directviewer_hit_order` ran over five minutes without output; stopped and not retried. `tests.test_transform_handle_ui` passed. No full suite, Windows run, CI review or real-display QA in this lane.

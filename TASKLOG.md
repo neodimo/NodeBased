@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step W: the Tracker's last controls (integrator tick)
+
+- **What was done:** `main` `a9f4fb1f` -> `40788b33` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `40788b33`: Ran 9345 tests in 628.347 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — Lane 9, step W: the Tracker's last controls
 
 - **What was done (evidence):** Added Tracker `regrab_when_offset` (default on) using the moved point as the next pattern origin, with an off path that keeps the previous pattern origin. Added `retrack_on_move` (default on): moving/creating a key launches backward/forward analysis to adjacent keyed frames and queues both sides when present. Classified the seven zoom-window/keyframe-display controls as panel-only, NOT_PIXEL controls, citing the Nuke 17 Tracker guide. Audit measured Tracker 93.3 -> 98.3 and 45/54 -> 54/54 knobs paired; overall remained 95.5.
