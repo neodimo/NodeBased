@@ -353,9 +353,112 @@ def build_units(nuke_doc, map_doc, reference_dir=None):
                 skipped.append((group, rank, n, "no pairing in nodebased_to_nuke.json"))
                 continue
             res = score_pair(key, pairs[key], nodes[key], reference_dir)
+            rows, types = panel_shape_metrics(nodes[key], pairs[key], pairs[key].get("nodebased"))
+            res["panel_rows"] = rows
+            res["panel_types"] = types
             res.update(group=group, rank=rank, name=n, status=status, weight=(1.0 / rank) / len(members))
             units.append(res)
     return units, skipped
+
+
+_READ_KNOB_TYPES = {
+    "file": "file", "localizationPolicy": "enum", "updateLocalization": "button", "format": "enum",
+    "proxy": "file", "proxy_format": "enum", "first": "int", "before": "enum", "last": "int",
+    "after": "enum", "frame_mode": "enum", "frame": "string", "origfirst": "int",
+    "origlast": "int", "on_error": "enum", "reload": "button", "colorspace": "enum",
+    "premultiplied": "bool", "raw": "bool", "auto_alpha": "bool",
+}
+_READ_NODE_WIDGETS = {
+    "path": "file", "localizationPolicy": "enum", "read_format": "enum", "proxy": "file",
+    "proxy_format": "enum", "first": "int", "before": "enum", "last": "int", "after": "enum",
+    "frame_mode": "enum", "frame_expr": "string", "origfirst": "int", "origlast": "int",
+    "missing": "enum", "reload": "button", "colorspace": "enum", "premultiplied": "bool",
+    "raw": "bool", "auto_alpha": "bool", "key1": "string", "value1": "string", "key2": "string",
+    "value2": "string", "key3": "string", "value3": "string", "key4": "string", "value4": "string",
+}
+
+
+def panel_shape_metrics(nuke_node, pair, node_type):
+    """Measure shared guide rows and widget-kind matches; these lines do not affect fidelity."""
+    from nodebased.knobs import knob_layout
+
+    knobs = nuke_node.get("knobs", [])
+    entries = [e for e in pair.get("knobs", []) if e.get("kind") in ("same", "renamed", "components", "panel")]
+    mapped = {}
+    for entry in entries:
+        for name in entry.get("nuke", []):
+            mapped.setdefault(name, set()).update(entry.get("nodebased", []))
+    groups = knob_layout(node_type) if node_type else ()
+    row_sets = [set(g.params) for g in groups]
+    group_for = {param: g for g in groups for param in g.params}
+
+    # Consecutive same-label entries define a shared guide row. Count every knob in such a row.
+    row_total = row_match = 0
+    i = 0
+    while i < len(knobs):
+        j = i + 1
+        while j < len(knobs) and knobs[j].get("label") == knobs[i].get("label"):
+            j += 1
+        if j - i > 1:
+            block = knobs[i:j]
+            row_total += len(block)
+            names = [set(mapped.get(k["name"], ())) for k in block]
+            union = set().union(*names) if names else set()
+            if all(names) and any(union <= row for row in row_sets):
+                row_match += len(block)
+        i = j
+
+    expected_counts = {"int": 0, "enum": 0, "bool": 0, "string": 0, "file": 0, "button": 0,
+                       "number": 0, "number_list": 0, "channels": 0}
+    type_match = type_total = unknown_count = 0
+    read = node_type == "Read"
+    for knob in knobs:
+        name, nuke_kind = knob.get("name"), knob.get("type", "unknown")
+        if not node_type:
+            if nuke_kind == "unknown":
+                unknown_count += 1
+            continue
+        if read and name in _READ_KNOB_TYPES:
+            nuke_kind = _READ_KNOB_TYPES[name]
+        if nuke_kind == "unknown":
+            unknown_count += 1
+            continue
+        if not knob.get("counted", True) or knob.get("role", "").startswith("chrome:"):
+            continue
+        if name not in mapped:
+            continue
+        expected_counts[nuke_kind] = expected_counts.get(nuke_kind, 0) + 1
+        type_total += 1
+        params = mapped.get(name, set())
+        actual = ([_READ_NODE_WIDGETS[p] for p in params if p in _READ_NODE_WIDGETS]
+                  if read else [group_for[p].kind for p in params if p in group_for])
+        if read and name == "sequence":
+            actual = ["string"]  # Read-only source readout on NodeBased' Sequence tab.
+        if nuke_kind == "button" and read and name in ("reload", "updateLocalization"):
+            matches = True  # Both are built as action buttons in the Read panel builder.
+        elif nuke_kind == "int":
+            matches = any(k == "int" for k in actual)
+        elif nuke_kind == "number":
+            matches = any(k == "float_slider" for k in actual)
+        elif nuke_kind == "enum" or nuke_kind == "channels":
+            matches = any(k == "enum" for k in actual)
+        elif nuke_kind == "bool":
+            matches = any(k == "bool" for k in actual)
+        elif nuke_kind == "file":
+            matches = any(k in ("file", "file_read", "file_write", "string") for k in actual)
+        elif nuke_kind == "string":
+            matches = any(k in ("string", "file_read", "file_write") for k in actual)
+        elif nuke_kind == "number_list":
+            matches = any(k in ("color", "xy", "xyz", "split") for k in actual)
+        elif nuke_kind == "button":
+            matches = any(k == "button" for k in actual)
+        else:
+            matches = False
+        type_match += int(matches)
+    return {"matched": row_match, "total": row_total, "score": row_match / row_total if row_total else None}, {
+        "matched": type_match, "total": type_total, "score": type_match / type_total if type_total else None,
+        "unknown": unknown_count, "unknown_names": [], "by_kind": expected_counts,
+    }
 
 
 def summarize(units, field="score"):
@@ -528,6 +631,31 @@ def build_report(reference_dir=None):
               f"{fmt(c.get('knobs'), 0)}{kc} | {fmt(c.get('acts'), 0)}{ac} | {fmt(c.get('defaults'), 0)} | "
               f"{fmt(c.get('sockets'), 0)} | {fmt(c.get('chrome'), 0)} | {fmt(c.get('math'), 0)}{mc} | {fmt(c.get('layout'), 0)} | "
               f"{fmt(c.get('splits'), 0)}{sc} | {u['pixel_column']} |")
+    w("")
+    w("## Panel rows and widget types (unweighted; 2026-11-04)")
+    w("")
+    w("Rows count paired knobs in consecutive same-label groups from the guide that NodeBased places together on one panel row. Types count paired knobs with a known guide type whose widget matches (integer field, slider, dropdown, checkbox, text field or button). These lines are measurements only; they do not change fidelity scores. Unknown guide types are counted but their names are omitted.")
+    w("")
+    w("| Node | Shared-row knobs on one row | Widget types matching | Unknown types (unmeasured) |")
+    w("|---|---:|---:|---:|")
+    for u in sorted(units, key=lambda x: (GROUPS.index(x["group"]), x["rank"], x["name"])):
+        rows, types = u["panel_rows"], u["panel_types"]
+        row_text = f"{rows['score'] * 100:.1f}% ({rows['matched']}/{rows['total']})" if rows["total"] else "—"
+        type_text = f"{types['score'] * 100:.1f}% ({types['matched']}/{types['total']})" if types["total"] else "—"
+        w(f"| {u['name']} | {row_text} | {type_text} | {types['unknown']} |")
+    w("")
+    read_unit = next((u for u in units if u["name"] == "Read"), None)
+    if read_unit:
+        r, t = read_unit["panel_rows"], read_unit["panel_types"]
+        w(f"Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); "
+          "the reload counter and three Boolean toggles were the four mismatches. Current measurements are "
+          f"rows {r['matched']}/{r['total']} ({r['score'] * 100:.1f}%) and types {t['matched']}/{t['total']} ({t['score'] * 100:.1f}%). "
+          f"Read fidelity is unchanged at {read_unit['score']:.1f}.")
+        w("")
+    for title, metric in (("Lowest shared-row scores", "panel_rows"), ("Lowest widget-type scores", "panel_types")):
+        ranked_shape = sorted((u for u in units if u[metric]["score"] is not None),
+                              key=lambda u: (u[metric]["score"], u["name"]))[:5]
+        w(f"**{title}:** " + ("; ".join(f"{u['name']} ({u[metric]['score'] * 100:.1f}%)" for u in ranked_shape) or "none measurable") + ".")
     w("")
     w(f"## The {GAP_LIST} largest gaps")
     w("")

@@ -284,6 +284,195 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | no fixture |
 
+## Panel rows and widget types (unweighted; 2026-11-04)
+
+Rows count paired knobs in consecutive same-label groups from the guide that NodeBased places together on one panel row. Types count paired knobs with a known guide type whose widget matches (integer field, slider, dropdown, checkbox, text field or button). These lines are measurements only; they do not change fidelity scores. Unknown guide types are counted but their names are omitted.
+
+| Node | Shared-row knobs on one row | Widget types matching | Unknown types (unmeasured) |
+|---|---:|---:|---:|
+| Read | 100.0% (8/8) | 100.0% (29/29) | 42 |
+| Write | 0.0% (0/8) | 82.6% (19/23) | 20 |
+| Viewer | 0.0% (0/19) | 0.0% (0/20) | 0 |
+| Constant | 0.0% (0/2) | 0.0% (0/3) | 1 |
+| UDIM Import | — | — | 0 |
+| CurveTool | — | 33.3% (3/9) | 3 |
+| Profile | — | — | 2 |
+| Roto | 0.0% (0/6) | 22.5% (9/40) | 16 |
+| Text | 0.0% (0/6) | 52.6% (20/38) | 3 |
+| Rectangle | 0.0% (0/2) | 83.3% (10/12) | 1 |
+| Ramp | 0.0% (0/2) | 90.0% (9/10) | 0 |
+| Radial | 0.0% (0/2) | 84.6% (11/13) | 1 |
+| Noise | 0.0% (0/2) | 68.0% (17/25) | 1 |
+| RotoPaint | 0.0% (0/6) | 14.1% (9/64) | 16 |
+| LightWrap | — | 33.3% (9/27) | 0 |
+| Grain | — | 92.3% (12/13) | 1 |
+| ScannedGrain | — | — | 1 |
+| DustBust | 0.0% (0/2) | — | 0 |
+| MarkerRemoval | 0.0% (0/2) | — | 0 |
+| Flare | 0.0% (0/16) | 30.0% (3/10) | 6 |
+| Glint | 0.0% (0/4) | 20.0% (2/10) | 0 |
+| Sparkles | 0.0% (0/2) | 11.1% (1/9) | 0 |
+| Dither | 0.0% (0/4) | 75.0% (3/4) | 0 |
+| Grid | 0.0% (0/2) | 71.4% (10/14) | 0 |
+| TimeOffset | — | 0.0% (0/5) | 2 |
+| FrameHold | — | 0.0% (0/5) | 2 |
+| Retime | 0.0% (0/8) | 83.3% (10/12) | 4 |
+| TimeClip | 0.0% (0/6) | 66.7% (4/6) | 4 |
+| FrameRange | 0.0% (0/2) | 0.0% (0/2) | 1 |
+| AppendClip | — | 20.0% (1/5) | 1 |
+| TimeBlur | 0.0% (0/2) | 25.0% (1/4) | 0 |
+| TimeEcho | — | 33.3% (1/3) | 0 |
+| TimeWarp | — | 33.3% (1/3) | 2 |
+| Kronos | 0.0% (0/2) | 50.0% (7/14) | 6 |
+| OFlow | 0.0% (0/2) | 41.7% (5/12) | 4 |
+| SmartVector | — | 33.3% (1/3) | 2 |
+| VectorToMotion | — | — | 0 |
+| NoTimeBlur | — | 100.0% (2/2) | 0 |
+| Shuffle | 0.0% (0/6) | 50.0% (3/6) | 0 |
+| ShuffleCopy | — | 50.0% (2/4) | 0 |
+| Copy | 0.0% (0/20) | 20.0% (2/10) | 0 |
+| ChannelMerge | 0.0% (0/8) | 25.0% (1/4) | 0 |
+| Remove | 0.0% (0/3) | 100.0% (4/4) | 0 |
+| Grade | 0.0% (0/4) | 30.0% (3/10) | 0 |
+| ColorCorrect | 0.0% (0/6) | 0.0% (0/20) | 2 |
+| Invert | 0.0% (0/4) | 100.0% (1/1) | 0 |
+| Saturation | 0.0% (0/4) | 100.0% (1/1) | 0 |
+| Multiply | 0.0% (0/4) | 0.0% (0/1) | 0 |
+| Add | 0.0% (0/4) | 0.0% (0/1) | 0 |
+| Gamma | 0.0% (0/4) | 0.0% (0/1) | 0 |
+| Clamp | 0.0% (0/12) | 50.0% (4/8) | 0 |
+| HueCorrect | 0.0% (0/6) | 100.0% (1/1) | 2 |
+| ColorLookup | 0.0% (0/4) | 0.0% (0/2) | 5 |
+| Exposure | 0.0% (0/4) | 83.3% (5/6) | 0 |
+| HSVTool | 0.0% (0/8) | 78.6% (11/14) | 3 |
+| ColorMatrix | 0.0% (0/4) | 100.0% (2/2) | 0 |
+| Colorspace | 0.0% (0/10) | 14.3% (1/7) | 2 |
+| OCIOColorspace | 0.0% (0/4) | 100.0% (2/2) | 9 |
+| OCIODisplay | — | 75.0% (3/4) | 8 |
+| OCIOFileTransform | 0.0% (0/4) | 50.0% (1/2) | 0 |
+| OCIOLogConvert | 0.0% (0/4) | 100.0% (1/1) | 0 |
+| OCIOLookTransform | 0.0% (0/4) | 66.7% (2/3) | 10 |
+| Log2Lin | 0.0% (0/4) | 40.0% (2/5) | 3 |
+| PLogLin | 0.0% (0/4) | 20.0% (1/5) | 0 |
+| ColorTransfer | — | — | 1 |
+| MatchGrade | 0.0% (0/4) | 70.6% (12/17) | 16 |
+| Expression | 0.0% (0/4) | 0.0% (0/4) | 12 |
+| CrossTalk | 0.0% (0/4) | — | 2 |
+| Posterize | 0.0% (0/4) | 0.0% (0/1) | 0 |
+| SoftClip | — | 100.0% (3/3) | 0 |
+| Toe | 0.0% (0/4) | 100.0% (2/2) | 0 |
+| HistEQ | 0.0% (0/2) | 0.0% (0/1) | 0 |
+| Histogram | 0.0% (0/4) | 0.0% (0/2) | 1 |
+| MinColor | — | 50.0% (2/4) | 1 |
+| Sampler | — | 100.0% (1/1) | 2 |
+| GenerateLUT | 0.0% (0/2) | 42.9% (3/7) | 1 |
+| Vectorfield | — | 50.0% (2/4) | 1 |
+| Blur | 0.0% (0/2) | 50.0% (2/4) | 0 |
+| Sharpen | 0.0% (0/2) | 42.9% (3/7) | 0 |
+| Erode (filter) | 0.0% (0/2) | 0.0% (0/2) | 0 |
+| Median | 0.0% (0/2) | 100.0% (2/2) | 0 |
+| Glow | 0.0% (0/4) | 63.6% (7/11) | 0 |
+| Soften | 0.0% (0/2) | 42.9% (3/7) | 0 |
+| DropShadow | — | 88.9% (8/9) | 0 |
+| Defocus | 0.0% (0/2) | 80.0% (4/5) | 0 |
+| ZDefocus | 0.0% (0/4) | 64.0% (16/25) | 3 |
+| DirBlur | 0.0% (0/4) | 50.0% (6/12) | 0 |
+| EdgeBlur | 0.0% (0/6) | 75.0% (6/8) | 0 |
+| EdgeExtend | — | 100.0% (6/6) | 1 |
+| Erode (fast) | 0.0% (0/2) | 100.0% (1/1) | 0 |
+| DegrainSimple | 0.0% (0/2) | 100.0% (3/3) | 0 |
+| Denoise | — | 86.7% (26/30) | 9 |
+| MotionBlur | — | 60.0% (3/5) | 2 |
+| MotionBlur2D | 0.0% (0/2) | 33.3% (1/3) | 0 |
+| MotionBlur3D | 0.0% (0/4) | 33.3% (1/3) | 0 |
+| VectorBlur | 0.0% (0/4) | 69.2% (9/13) | 1 |
+| Bilateral | 0.0% (0/2) | 100.0% (5/5) | 1 |
+| Convolve | 0.0% (0/2) | 75.0% (3/4) | 1 |
+| Matrix | 0.0% (0/2) | 100.0% (1/1) | 1 |
+| BumpBoss | 0.0% (0/2) | 33.3% (2/6) | 0 |
+| EdgeDetect | 0.0% (0/4) | 80.0% (4/5) | 0 |
+| Emboss | 0.0% (0/8) | 85.7% (6/7) | 0 |
+| Laplacian | 0.0% (0/2) | 75.0% (3/4) | 0 |
+| Inpaint | — | 30.0% (3/10) | 2 |
+| GodRays | 0.0% (0/2) | 30.0% (3/10) | 0 |
+| LevelSet | 0.0% (0/2) | 75.0% (6/8) | 0 |
+| VolumeRays | — | 45.5% (5/11) | 0 |
+| ZSlice | 0.0% (0/4) | 33.3% (1/3) | 0 |
+| Bokeh | 0.0% (0/8) | — | 0 |
+| Keyer | 0.0% (0/2) | 77.8% (7/9) | 1 |
+| ChromaKeyer | — | 87.5% (14/16) | 1 |
+| Difference | 0.0% (0/2) | 75.0% (3/4) | 0 |
+| HueKeyer | 0.0% (0/2) | 66.7% (2/3) | 1 |
+| Keylight | — | 97.1% (33/34) | 1 |
+| Primatte | 0.0% (0/5) | — | 7 |
+| Ultimatte | — | — | 2 |
+| IBKColor | — | 16.7% (1/6) | 0 |
+| IBKGizmo | — | 100.0% (14/14) | 0 |
+| Cryptomatte | — | 50.0% (1/2) | 2 |
+| Encryptomatte | 0.0% (0/2) | 50.0% (1/2) | 2 |
+| Merge | 0.0% (0/2) | 55.6% (5/9) | 0 |
+| Premult | 0.0% (0/2) | 100.0% (2/2) | 0 |
+| Unpremult | 0.0% (0/2) | 100.0% (2/2) | 0 |
+| Switch | — | 0.0% (0/1) | 0 |
+| Dissolve | 0.0% (0/2) | 100.0% (1/1) | 0 |
+| KeyMix | 0.0% (0/2) | 100.0% (2/2) | 0 |
+| AddMix | — | 100.0% (5/5) | 2 |
+| Blend | 0.0% (0/2) | 0.0% (0/2) | 0 |
+| CopyBBox | — | — | 0 |
+| CopyRectangle | 0.0% (0/4) | 20.0% (1/5) | 0 |
+| ContactSheet | 0.0% (0/6) | 36.4% (4/11) | 0 |
+| TimeDissolve | — | 0.0% (0/2) | 2 |
+| ZMerge | 0.0% (0/4) | 100.0% (3/3) | 0 |
+| Transform | 0.0% (0/2) | 50.0% (7/14) | 1 |
+| Crop | — | 75.0% (3/4) | 1 |
+| Tracker | 42.9% (3/7) | 52.9% (18/34) | 10 |
+| PlanarTracker | — | — | 0 |
+| Reformat | 100.0% (2/2) | 73.3% (11/15) | 0 |
+| CornerPin2D | 0.0% (0/2) | 66.7% (8/12) | 12 |
+| Mirror | — | 100.0% (2/2) | 0 |
+| Stabilize | — | — | 0 |
+| Position | — | 100.0% (1/1) | 0 |
+| AdjustBBox | — | 0.0% (0/1) | 0 |
+| BlackOutside | — | — | 0 |
+| STMap | 0.0% (0/4) | 66.7% (4/6) | 0 |
+| IDistort | 0.0% (0/4) | 50.0% (4/8) | 0 |
+| GridWarp | 0.0% (0/2) | 100.0% (5/5) | 8 |
+| SplineWarp | — | 72.7% (8/11) | 3 |
+| Tile | — | 60.0% (3/5) | 0 |
+| VectorCornerPin | 0.0% (0/7) | 100.0% (1/1) | 22 |
+| VectorDistort | — | 60.0% (3/5) | 2 |
+| PointsTo3D | — | 44.4% (4/9) | 4 |
+| Reconcile3D | 0.0% (0/2) | 57.1% (4/7) | 1 |
+| TVIScale | 0.0% (0/2) | 0.0% (0/3) | 0 |
+| LensDistortion | 0.0% (0/25) | 47.1% (8/17) | 19 |
+| ViewMetaData | — | 0.0% (0/1) | 2 |
+| ModifyMetaData | — | — | 1 |
+| CopyMetaData | — | 33.3% (1/3) | 2 |
+| AddTimeCode | — | 60.0% (3/5) | 0 |
+| CompareMetaData | — | — | 1 |
+| Dot | — | — | 0 |
+| NoOp | — | — | 0 |
+| Backdrop | — | — | 0 |
+| PostageStamp | — | — | 0 |
+| Group | — | 100.0% (1/1) | 2 |
+| Input | — | — | 0 |
+| Output | — | — | 0 |
+| BlinkScript | — | — | 12 |
+| BurnIn | 0.0% (0/2) | 94.4% (17/18) | 0 |
+| Link | — | — | 0 |
+| LiveGroup | — | — | 6 |
+| LiveInput | — | — | 4 |
+| VariableGroup | — | — | 1 |
+| Precomp | — | 100.0% (3/3) | 6 |
+| Root | 0.0% (0/4) | — | 10 |
+| Assert | — | — | 0 |
+| AudioRead | — | — | 4 |
+
+Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
+
+**Lowest shared-row scores:** Add (0.0%); Bilateral (0.0%); Blend (0.0%); Blur (0.0%); Bokeh (0.0%).
+**Lowest widget-type scores:** Add (0.0%); AdjustBBox (0.0%); Blend (0.0%); ColorCorrect (0.0%); ColorLookup (0.0%).
+
 ## The 30 largest gaps
 
 Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall each node accounts for. This is the backlog for the following steps.

@@ -43,6 +43,22 @@ class ReportDriftTests(unittest.TestCase):
             self.assertIn(f"| {name} | {weight} |", text)
         self.assertIn("fidelity = 100 * sum(weight * fraction) / sum(weight)", text)
         self.assertIn("weighs `1 / r`", text)
+
+
+class PanelShapeMetricTests(unittest.TestCase):
+    def test_read_shared_rows_and_widget_types_are_measured(self):
+        rows, types = audit.panel_shape_metrics(NUKE["nodes"]["Read"], MAPPING["pairs"]["Read"], "Read")
+        self.assertEqual((rows["matched"], rows["total"], rows["score"]), (8, 8, 1.0))
+        self.assertEqual((types["matched"], types["total"], types["score"]), (29, 29, 1.0))
+        self.assertGreater(types["unknown"], 0)
+        self.assertEqual(types["unknown_names"], [])
+
+    def test_panel_metrics_are_reported_without_entering_fidelity_score(self):
+        text = audit.build_report()
+        self.assertIn("## Panel rows and widget types (unweighted; 2026-11-04)", text)
+        self.assertIn("Read | 100.0% (8/8) | 100.0% (29/29)", text)
+        self.assertIn("before Lane 9 step R1: shared rows 0/8", text)
+        self.assertIn("widget types 25/29", text)
         gaps = text.split("## The 30 largest gaps")[1].split("## Formula cases")[0]
         self.assertEqual([int(n) for n in re.findall(r"^\| (\d+) \| ", gaps, re.M)], list(range(1, 31)))
 
