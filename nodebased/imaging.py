@@ -3193,15 +3193,25 @@ class Evaluator:
                         from .opticalflow import _sample
                         seq = [r.pixels for r, _ in smartvector_sequence]
                         ref_ix = int(params["reference_frame"]) - smartvector_first
+                        from . import smartvectorknobs as _svknobs
+                        if int(params.get("flicker_compensation", 0)):
+                            seq = _svknobs.flicker_compensated(seq, ref_ix)
+                        seq = _svknobs.weighted(seq, params)
                         if smartvector_masks is not None:
                             from . import smartvectormatte as _svmatte
                             seq = _svmatte.apply(seq, smartvector_masks, params.get("matte_output", "Background"))
                         fw, bw = accumulated_vectors(seq, ref_ix, vector_detail=int(params["vector_detail"]),
-                            smoothness=float(params["smoothness"]), reanchor_interval=int(params["reanchor_interval"]),
+                            smoothness=_svknobs.effective_smoothness(params["smoothness"], params.get("match_strength", 1.5)),
+                            reanchor_interval=int(params["reanchor_interval"]),
                             backend=params.get("flow_backend", "auto"))
                         hh, ww = seq[ref_ix].shape[:2]
                         yy, xx = np.mgrid[:hh, :ww].astype(np.float32)
                         range_layers = {}
+                        inpaint_plan = None
+                        if smartvector_masks is not None and int(params.get("inpainting", 0)):
+                            inpaint_plan = _svknobs.inpaint_plan(
+                                _svmatte.kept(smartvector_masks[ref_ix], params.get("matte_output", "Background")),
+                                int(params.get("matte_dilation", 50)), Evaluator._distance_transform)
                         for frame_index, (forward, backward) in enumerate(zip(fw, bw)):
                             reverse_at = _sample(backward, xx + forward[..., 0], yy + forward[..., 1])
                             error = np.linalg.norm(forward + reverse_at, axis=2)
@@ -3212,6 +3222,9 @@ class Evaluator:
                                 if smartvector_masks is not None:       # the other side's vectors are absent
                                     side = _svmatte.kept(smartvector_masks[ref_ix], params.get("matte_output", "Background"))
                                     rgba[..., :2] *= side[..., None]; rgba[..., 3] = side
+                                    if inpaint_plan is not None:            # Inpaint Matte Region: the nearest present vectors fill it
+                                        rgba[..., :2] = _svknobs.infill(rgba[..., :2], inpaint_plan)
+                                        rgba[..., 3] = 1
                                 range_layers[f"frame.{frame_index}.{direction}"] = Raster.of(
                                     rgba, smartvector_sequence[ref_ix][0].display)
                         reference = smartvector_sequence[ref_ix][0]

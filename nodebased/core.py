@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -919,7 +919,9 @@ SPECS = {
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
     "SmartVector": {"inputs": ["image"], "optional_inputs": ["matte"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
                      "vector_detail": 4, "smoothness": 1.0, "reanchor_interval": 5,
-                     "flow_backend": "auto", "matte_channel": "None", "matte_output": "Background"}},
+                     "flow_backend": "auto", "matte_channel": "None", "matte_output": "Background",
+                     "match_strength": 1.5, "inpainting": 0, "matte_dilation": 50, "flicker_compensation": 0,
+                     "weight_red": 0.3, "weight_green": 0.6, "weight_blue": 0.1}},
     "VectorDistort": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
                        "params": {"reference_frame": 1, "blur_size": 0.0, "fade_frames": 20, "mix": 1.0, **_vectordistortknobs.NEW}},
     "VectorCornerPin": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
@@ -2517,6 +2519,7 @@ LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_len
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["retime_output"] = list(_retimeknobs.OUTPUTS)
 CHOICES.update(_behaviour2d.CHOICES)
+LIMITS.update({"match_strength": (0.1, 10.0), "inpainting": (0, 1), "matte_dilation": (0, 1000), "weight_red": (0.0, 1.0), "weight_green": (0.0, 1.0), "weight_blue": (0.0, 1.0)})      # SmartVector (nodebased/smartvectorknobs.py)
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0), "detail_amount": (0.0, 1.0), "edge_mask": (0, 1), "legacy_defocus_disc": (0, 1)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
 CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric Creation: the two styles the guide describes plainly
@@ -3002,6 +3005,25 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _read_format_defaults(doc["nodes"])
         doc["version"] = 30
+    if isinstance(doc, dict) and doc.get("version") == 30:
+        # v30 -> v31 gives SmartVector Nuke's luminance weights (0.3, 0.6, 0.1). A SmartVector saved before estimated on Rec. 709
+        # luminance; those nodes keep those weights, so their vectors do not change.
+        def _smartvector_weights(scope):
+            for node in scope.values():
+                if not isinstance(node, dict):
+                    continue
+                if node.get("type") == "SmartVector":
+                    params = node.setdefault("params", {})
+                    for name, value in zip(("weight_red", "weight_green", "weight_blue"), (0.2126, 0.7152, 0.0722)):
+                        params.setdefault(name, value)
+                    for name, value in SPECS["SmartVector"]["params"].items():
+                        params.setdefault(name, value)
+                graph = node.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _smartvector_weights(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _smartvector_weights(doc["nodes"])
+        doc["version"] = 31
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

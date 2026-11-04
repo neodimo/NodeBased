@@ -2,7 +2,7 @@
 
 **Overall fidelity: 94.5 / 100** (167 nodes scored, rank-weighted; 96.8 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.4 (97.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.4 (97.8 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 95.8 (98.2 counting only the nodes NodeBased has).
 
@@ -36,7 +36,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 95.2 | 94.6 | 98.1 | 6 |
 | Draw | 91.1 | 83.4 | 90.9 | 17 |
-| Time | 98.0 | 91.6 | 98.5 | 13 |
+| Time | 98.4 | 94.3 | 99.0 | 13 |
 | Channel | 98.8 | 97.7 | 98.9 | 5 |
 | Color | 96.6 | 87.4 | 96.2 | 34 |
 | Filter | 96.6 | 91.8 | 96.2 | 32 |
@@ -103,7 +103,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
 | 8 | Kronos | `Kronos` | supported | 80.1 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 71 | - | unmeasured |
 | 8 | OFlow | `OFlow` | supported | 82.0 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 71 | - | unmeasured |
-| 8 | SmartVector | `SmartVector` | supported | 59.3 | 51.3 | 35 (3/11) | - | 67 | 100 | - | - | 83 | - | no fixture |
+| 8 | SmartVector | `SmartVector` | supported | 94.2 | 94.4 | 94 (10/11) | - | 90 | 100 | - | - | 93 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
@@ -326,7 +326,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | TimeWarp | — | 100.0% (3/3) | 2 |
 | Kronos | 0.0% (0/2) | 85.7% (12/14) | 6 |
 | OFlow | 0.0% (0/2) | 83.3% (10/12) | 4 |
-| SmartVector | — | 50.0% (1/2) | 3 |
+| SmartVector | — | 77.8% (7/9) | 3 |
 | VectorToMotion | — | — | 0 |
 | NoTimeBlur | — | 100.0% (2/2) | 0 |
 | Shuffle | 100.0% (4/4) | 100.0% (2/2) | 4 |
@@ -505,11 +505,11 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 23 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
 | 24 | LensDistortion (Transform #20) | `Undistort` | 1.29 | 74.2 | 38 secondary knobs missing |
 | 25 | Remove (Channel #5) | `Remove` | 1.29 | 93.6 | nothing missing that the guide lists |
-| 26 | SmartVector (Time #8) | `SmartVector` | 1.27 | 59.3 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
-| 27 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
-| 28 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
-| 29 | RotoPaint (Draw #7) | `RotoPaint` | 1.11 | 92.2 | 14 secondary knobs missing |
-| 30 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
+| 26 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 27 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
+| 28 | RotoPaint (Draw #7) | `RotoPaint` | 1.11 | 92.2 | 14 secondary knobs missing |
+| 29 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
+| 30 | GridWarp (Transform #14) | `GridWarp` | 1.06 | 70.2 | 29 secondary knobs missing |
 
 ## Formula cases
 
