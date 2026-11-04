@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step O of 2: the project settings' format and proxy, and SmartVector's remaining knobs (integrator tick)
+
+- **What was done:** `main` `2078c314` -> `a419f980` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a419f980`: Ran 9220 tests in 593.071 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 - Lane 2 (2D behaviour), step O: SmartVector's remaining knobs (Root's primary knobs were already on main)
 
 - **What was done:** SmartVector gained `match_strength` (Strength), `inpainting`, `matte_dilation`, `flicker_compensation`, `weight_red`, `weight_green` and `weight_blue`, each paired in `docs/parity/nodebased_to_nuke.json` and shown acting by `tests/test_2d_behaviour_smartvector_o.py` (weights: motion in one channel only; flicker: a brightness step, error against the motion with the switch on and off; strength: a noisy plate, lower is smoother; inpainting and dilation: a matte of known size). Kernel code is `nodebased/smartvectorknobs.py`, wired in the SmartVector range build in `imaging.py`. Schema 30 to 31: saved SmartVectors keep Rec. 709 weights, so their vectors are bit for bit as before (tested). SmartVector fidelity 59.3 to 94.2, knob coverage 3/11 to 10/11 (`export_write` stays unsupported: a button). Knobs that change no pixels: 0. Overall 94.5, Time group 98.0 to 98.4. Root's `format`, `proxy_type`, `proxy_format`, `proxySetting` and `Script_directory` were already paired by step N finish (Root 50.7); nothing new for Root in this step.

@@ -1,5 +1,25 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step O: SmartVector's remaining knobs (Root's primary knobs were already on main)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (4:55 AM on 2026-11-04 PDT)
+
+`main` moved `2078c314` -> `a419f980` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a419f980` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0445.log`, started 4:45 AM): **Ran 9220 tests in 593.071 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step O of 2: the project settings' format and proxy, and SmartVector's remaining knobs.** Commits:
+  - `7ef38180` TASKLOG and state: 2D behaviour step O (SmartVector knobs)
+  - `a9e27e28` SmartVector gets Strength, Flicker Compensation, Weight Red/Green/Blue, Inpaint Matte Region and Matte Dilation (saved nodes keep Rec. 709 weights; SmartVector fidelity 59.3 to 94.2)
+  Diff: 10 files changed, 396 insertions(+), 29 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done:** SmartVector gained `match_strength` (Strength), `inpainting`, `matte_dilation`, `flicker_compensation`, `weight_red`, `weight_green` and `weight_blue`, each paired in `docs/parity/nodebased_to_nuke.json` and shown acting by `tests/test_2d_behaviour_smartvector_o.py` (weights: motion in one channel only; flicker: a brightness step, error against the motion with the switch on and off; strength: a noisy plate, lower is smoother; inpainting and dilation: a matte of known size). Kernel code is `nodebased/smartvectorknobs.py`, wired in the SmartVector range build in `imaging.py`. Schema 30 to 31: saved SmartVectors keep Rec. 709 weights, so their vectors are bit for bit as before (tested). SmartVector fidelity 59.3 to 94.2, knob coverage 3/11 to 10/11 (`export_write` stays unsupported: a button). Knobs that change no pixels: 0. Overall 94.5, Time group 98.0 to 98.4. Root's `format`, `proxy_type`, `proxy_format`, `proxySetting` and `Script_directory` were already paired by step N finish (Root 50.7); nothing new for Root in this step.
 - **Evidence:** the new module, `test_2d_behaviour_smartvector_l`, `test_smartvector`, `test_2d_behaviour_transform_n`, `test_2d_behaviour_filter_g`, `test_nuke_fidelity_audit`, `test_knowledge`, `test_tiles`, `test_bypass`, `test_knobs`, `test_tiers`, `test_core`, `test_animation`, `test_cache_correctness`, `test_flow2b_gridwarp_tracker`, `PropertiesLabelTests` and `FluidPropertiesPanelTests` all OK; the SmartVector modules and `transform_n` also OK with `wgpu` hidden.
 - **Honest limits:** a Strength above 1.5 changes the vectors but the solver does not keep getting rougher (its smoothing floors out near a smoothness of one); the guide does not say which side of the matte Matte Dilation grows, so the absent side grows; the SmartVector flow solver is the CPU Lucas-Kanade, so Strength is carried through its smoothness.
