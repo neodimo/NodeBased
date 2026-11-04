@@ -686,7 +686,7 @@ class CornerPinTests(unittest.TestCase):
     def test_the_main_tab_follows_nukes_order(self):
         wanted = [label for i in (1, 2, 3, 4) for label in (f"To {i}", f"Enable {i}")]
         wanted += [f"Extra matrix {r},{c}" for r in range(3) for c in range(3)]
-        wanted += ["Invert", "Filter", "Clamp", "Black outside", "Motion blur", "Shutter", "Shutter offset", "Custom shutter offset",
+        wanted += ["Invert", "Filter", "Clamp", "Black outside", "Motion blur", "Shutter", "Shutter offset",
                    "Samples", "From 1", "From 2", "From 3", "From 4"]
         self.assertEqual(labels("CornerPin"), wanted)
 

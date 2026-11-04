@@ -404,7 +404,10 @@ _COUNT_WORDS = {"frame", "frames", "first", "last", "count", "samples", "sample"
                 "columns", "points", "bits", "cycles", "repeat", "interval", "period"}
 # Knobs the guide gives as plain numbers that count frames although no word of their name says so (Tracker's smoothT, smoothR and smoothS
 # average the track over that many frames; Switch's which picks an input by index, where Dissolve's is a mix). Panel sweep S2, 2026-11-04.
-_COUNT_KNOBS = {("Tracker", "smoothT"), ("Tracker", "smoothR"), ("Tracker", "smoothS"), ("Switch", "which")}
+# Panel sweep S3 (2026-11-04): AppendClip's dissolve is the length of the cross-fade in frames; ContactSheet's width, height and gap are whole
+# pixels (Nuke's Resolution is a width/height pair of integers and its gap an Int_Knob), so none of them can be a fractional slider.
+_COUNT_KNOBS = {("Tracker", "smoothT"), ("Tracker", "smoothR"), ("Tracker", "smoothS"), ("Switch", "which"), ("AppendClip", "dissolve"),
+                ("ContactSheet", "width"), ("ContactSheet", "height"), ("ContactSheet", "gap")}
 # The Viewer's knobs are viewer state, not node params; this is the control each one has (the Viewer settings window, nodebased/viewersettings.py,
 # or the viewer strip: gain and gamma spin boxes, the zebra check box, the proxy tier, mask and safe-zone dropdowns).
 _VIEWER_WIDGETS = {
@@ -431,6 +434,8 @@ def number_knob_kind(name, default):
 
 def _widget_kind(group, param):
     """The widget a param gets: its group's kind, or for a row group the kind named for that param."""
+    if group.kind == "split" and param != group.params[0]:
+        return group.members[group.params.index(param) - 1]     # a check box beside the split knob
     return group.members[group.params.index(param)] if group.kind == "row" else group.kind
 
 
@@ -739,6 +744,15 @@ def build_report(reference_dir=None):
           for n in ("Tracker", "Viewer", "Switch", "TimeClip", "FrameRange", "Glow", "Keylight", "Reformat") if n in sweep) + ". "
       "Tracker's `motionblur` (a number in the guide, an on/off switch here) and `cornerPinOptions` (a menu in the guide, two export buttons here), and the Viewer's `clip_warning` (a menu in the guide, the zebra check box here), "
       "`downrez` (a number in the guide, the proxy-tier menu here) and `overscan` (a number in the guide, a whole-pixel field here) stay as they are: each would need a change to how the node renders or to viewer state.")
+    w("")
+    w("Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): "
+      "Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. "
+      "Current: " + "; ".join(
+          f"{n} rows {sweep[n]['panel_rows']['matched']}/{sweep[n]['panel_rows']['total']}, types {sweep[n]['panel_types']['matched']}/{sweep[n]['panel_types']['total']}"
+          for n in ("Remove", "AppendClip", "CornerPin2D", "BurnIn", "Clamp", "Blend", "DirBlur", "ContactSheet") if n in sweep) + ". "
+      "CornerPin2D's `invert` (a check box in the guide, the forward/inverse direction menu here) and `motionblur` (a number in the guide, an on/off switch here), and DirBlur's `target` (an xy pair in the guide, the text \"x,y\" here) "
+      "and `Quality` (a number in the guide, a low/normal/high menu here) stay as they are: each would change what a saved document stores or how the node renders. "
+      "AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.")
     w("")
     read_unit = next((u for u in units if u["name"] == "Read"), None)
     if read_unit:

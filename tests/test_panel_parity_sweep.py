@@ -1,7 +1,7 @@
 """Lane 2 panel sweep (2026-11-04): knobs the Nuke guide gives one label share one row, and number knobs that count are integer fields.
 
 Each test builds the node's Properties panel and asserts the shared rows and widget kinds the ruler (tools/audit_nuke_fidelity.py)
-measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer (step S1); Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, ScreenKeyer and Reformat (step S2)."""
+measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer (step S1); Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, ScreenKeyer and Reformat (step S2); Remove, AppendClip, CornerPin2D, BurnIn, Clamp, Blend, DirBlur and ContactSheet (step S3)."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import unittest
@@ -48,15 +48,29 @@ class PanelSweepTests(unittest.TestCase):
         return found
 
     def assertOneRow(self, panel, *names):
+        """Some row (a WrappingRow around the first widget; the outermost one when rows nest) holds every named widget."""
         widgets = [panel.findChild(QWidget, name) for name in names]
         for name, found in zip(names, widgets):
             self.assertIsNotNone(found, name)
-        row = widgets[0]
-        while row is not None and not isinstance(row, WrappingRow):
+        rows, row = [], widgets[0]
+        while row is not None:
+            if isinstance(row, WrappingRow):
+                rows.append(row)
             row = row.parentWidget()
-        self.assertIsNotNone(row, names)
-        for name, found in zip(names, widgets):
-            self.assertTrue(row.isAncestorOf(found), f"{name} is not on the row of {names[0]}")
+        self.assertTrue(rows, names)
+        self.assertTrue(any(all(r.isAncestorOf(found) for found in widgets) for r in rows), f"{names} do not share a row")
+
+    def assertOneSplitRow(self, panel, param, *names):
+        """The split knob's own row (`<param>-split-row`) holds the named widgets: its value (or channel fields) and its check boxes."""
+        row = panel.findChild(QWidget, f"{param}-split-row")
+        self.assertIsNotNone(row, param)
+        for name in names:
+            found = panel.findChild(QWidget, name)
+            self.assertIsNotNone(found, name)
+            self.assertTrue(row.isAncestorOf(found), f"{name} is not on the row of {param}")
+
+    def has_menu(self, panel, *items):
+        return any([c.itemText(i) for i in range(c.count())] == list(items) for c in panel.findChildren(QComboBox))
 
     def assertNoSlider(self, panel, name):
         field = panel.findChild(QWidget, name)
@@ -210,6 +224,92 @@ class PanelSweepTests(unittest.TestCase):
         panel = self.panel("Reformat")
         self.assertOneRow(panel, "width-field", "height-field")
         for name in ("center-switch", "flip-switch", "flop-switch", "turn-switch", "box_fixed-switch"):
+            self.widget(panel, name, QCheckBox)
+
+    # ---- step S3 ----
+    def test_remove_channels_share_the_and_row(self):
+        panel = self.panel("Remove")
+        self.assertOneRow(panel, "channels2-field", "channels3-field", "channels4-field")
+        for name in ("channels2-field", "channels3-field", "channels4-field", "layers-field"):
+            self.assertTrue(isinstance(panel.findChild(QWidget, name), (QLineEdit, QComboBox)), name)
+        self.assertTrue(self.has_menu(panel, "keep", "remove"))
+
+    def test_appendclip_dissolve_is_an_integer_field(self):
+        panel = self.panel("AppendClip")
+        self.widget(panel, "dissolve-field", QSpinBox)
+        self.assertNoSlider(panel, "dissolve-field")
+        self.widget(panel, "first_frame-field", QSpinBox)
+        self.widget(panel, "meta_from_first-switch", QCheckBox)
+        self.assertEqual(audit.number_knob_kind("dissolve", 0), "float")      # the name alone does not say it counts frames
+        self.assertIn(("AppendClip", "dissolve"), audit._COUNT_KNOBS)
+
+    def test_cornerpin_shutter_offset_row(self):
+        panel = self.panel("CornerPin")
+        self.assertOneRow(panel, "shutter_offset-choice", "custom_offset-field")
+        self.widget(panel, "shutter_offset-choice", QComboBox)
+        self.widget(panel, "custom_offset-field", QDoubleSpinBox)
+        for name in ("enable1-switch", "clamp-switch", "black_outside-switch", "motionblur-switch"):
+            self.widget(panel, name, QCheckBox)
+        # The guide gives invert as a check box and motionblur as a number; NodeBased keeps its direction menu and on/off switch
+        # (changing either alters what is stored and rendered, which is out of scope).
+        self.assertTrue(self.has_menu(panel, "forward", "inverse"))
+
+    def test_burnin_font_and_style_share_a_row(self):
+        panel = self.panel("BurnIn")
+        self.assertOneRow(panel, "font-field", "font_style-field")
+        for name in ("font-field", "font_style-field", "top_left-field", "bottom_right-field"):
+            self.widget(panel, name, QLineEdit)
+        self.widget(panel, "bar-switch", QCheckBox)
+
+    def test_clamp_enable_check_boxes_sit_beside_their_values(self):
+        panel = self.panel("Clamp")
+        self.assertOneSplitRow(panel, "minimum", "minimum-field", "minimum-split", "clamp_min-switch")
+        self.assertOneSplitRow(panel, "maximum", "maximum-field", "maximum-split", "clamp_max-switch")
+        self.assertOneRow(panel, "MinClampTo-field", "MinClampTo_enable-switch")
+        self.assertOneRow(panel, "MaxClampTo-field", "MaxClampTo_enable-switch")
+        for name in ("clamp_min-switch", "clamp_max-switch", "MinClampTo_enable-switch", "MaxClampTo_enable-switch"):
+            self.widget(panel, name, QCheckBox)
+        self.widget(panel, "minimum-split", QWidget)          # the per-channel split button is still there
+
+    def test_clamp_split_still_edits_per_channel_and_the_check_box_writes(self):
+        panel = self.panel("Clamp")
+        self.widget(panel, "clamp_min-switch", QCheckBox).click()
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["sweep-Clamp"]["params"]["clamp_min"] == 0))
+        self.widget(panel, "minimum-split", QWidget).click()
+        self.assertTrue(wait_until(lambda: isinstance(self.window.graph_nodes()["sweep-Clamp"]["params"]["minimum"], list)))
+        panel = self.panel("Clamp")        # opens the node's panel again, now with the split entries
+        self.assertOneSplitRow(panel, "minimum", "minimum-r-field", "minimum-a-field", "clamp_min-switch")
+
+    def test_blend_pairs_the_normalize_check_box(self):
+        panel = self.panel("Blend")
+        self.widget(panel, "normalize-switch", QCheckBox)
+        self.widget(panel, "weight0-field", QDoubleSpinBox)
+        self.widget(panel, "weight1-field", QDoubleSpinBox)
+        # the guide's table calls the normalize check box `weight1`; the mapping pairs it with `normalize`
+        import json
+        pairs = json.loads((Path(audit.__file__).resolve().parents[1] / "docs" / "parity" / "nodebased_to_nuke.json").read_text())["pairs"]
+        paired = {name: e["nodebased"] for e in pairs["Blend"]["knobs"] for name in e.get("nuke", [])}
+        self.assertEqual(paired["weight1"], ["normalize"])
+
+    def test_dirblur_counts_are_integer_fields(self):
+        panel = self.panel("DirBlur")
+        self.widget(panel, "Samples-field", QSpinBox)
+        self.assertNoSlider(panel, "Samples-field")
+        self.widget(panel, "UseTarget-switch", QCheckBox)
+        # The guide gives Linear Target as an xy pair and Quality as a number; NodeBased stores target as the text "x,y" and
+        # Quality as a low/normal/high menu (changing either alters the stored document and the render, which is out of scope).
+        self.assertTrue(self.has_menu(panel, "low", "normal", "high"))
+        self.assertTrue(isinstance(panel.findChild(QWidget, "target-field"), QLineEdit))
+
+    def test_contactsheet_rows_and_integer_pixels(self):
+        panel = self.panel("ContactSheet")
+        self.assertOneRow(panel, "width-field", "height-field")
+        self.assertOneRow(panel, "rows-field", "columns-field")
+        self.assertOneRow(panel, "startframe-field", "endframe-field")
+        for name in ("width-field", "height-field", "rows-field", "columns-field", "gap-field", "startframe-field", "endframe-field"):
+            self.widget(panel, name, QSpinBox)
+            self.assertNoSlider(panel, name)
+        for name in ("center-switch", "splitinputs-switch"):
             self.widget(panel, name, QCheckBox)
 
     def test_row_edits_reach_the_document(self):

@@ -414,8 +414,7 @@ def assert_in_order(test, kind, wanted):
 
 class LayoutTests(unittest.TestCase):
     def test_clamp(self):
-        assert_in_order(self, "Clamp", ["Channels", "Minimum", "Clamp Min", "Maximum", "Clamp Max", "Minimum clamp to", "Replace minimum", "Maximum clamp to",
-                                        "Replace maximum"])
+        assert_in_order(self, "Clamp", ["Channels", "Minimum", "Maximum", "Minimum clamp to", "Maximum clamp to"])   # each enable check box shares its value's row
 
     def test_color_lookup(self):
         assert_in_order(self, "ColorLookup", ["Channels", "Use precomputed table", "Range", "Master", "Red", "Green", "Blue", "Alpha", "Source", "Target"])

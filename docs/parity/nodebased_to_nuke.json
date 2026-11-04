@@ -3279,7 +3279,7 @@
    "knobs": [
     {"nodebased": ["mask_channel"], "nuke": ["maskChannelInput"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'mask', scripting name `maskChannelInput`"},
     {"nodebased": ["weight0"], "nuke": ["weight0"], "kind": "same"},
-    {"nodebased": ["weight1"], "nuke": ["weight1"], "kind": "same"},
+    {"nodebased": ["normalize"], "nuke": ["weight1"], "kind": "renamed", "reason": "the guide's table names the normalize checkbox weight1 (its label is 'normalize')"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
@@ -3297,7 +3297,7 @@
     {"nodebased": ["weight13"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["weight14"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["weight15"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["normalize"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["weight1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
   },

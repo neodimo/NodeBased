@@ -407,13 +407,13 @@ class TimeAndMetadataLayoutTests(unittest.TestCase):
 
     EXPECTED = {
         "AddTimeCode": ["Startcode", "FPS", "Get FPS from metadata", "Start Frame", "Use start frame", "Drop frame"],
-        "BurnIn": ["Color", "Opacity", "X padding", "Y padding", "Font", "Font style", "Text scale", "Top Left", "Top middle", "Top Right", "Bottom Left",
+        "BurnIn": ["Color", "Opacity", "X padding", "Y padding", "Font", "Text scale", "Top Left", "Top middle", "Top Right", "Bottom Left",
                    "Bottom middle", "Bottom Right", "Background bar", "Bar colour", "Bar opacity", "Bar X border", "Bar Y border"],
         "CurveTool": ["Curve type", "AutoCrop color", "AutoCrop tolerance", "Frames for base average", "Channels", "Box X", "Crop X", "Average R", "Average G",
                       "Average B", "Average A", "Max X", "Maximum luminance pixel value", "Min X", "Minimum luminance pixel value"],
         "AppendClip": ["Fade in", "Fade out", "Dissolve", "First Frame", "Take metadata from first clip"],
         "TimeBlur": ["Divisions", "Shutter", "Shutter Offset", "Custom Offset"],
-        "ContactSheet": ["Width", "Height", "Rows", "Columns", "Gap", "Center", "Row Order", "Column Order", "Split Inputs", "Start Frame", "End Frame"],
+        "ContactSheet": ["Resolution", "Rows/columns", "Gap", "Center", "Row Order", "Column Order", "Split Inputs", "Frame range"],
         "Precomp": ["File", "Reload count", "Read file for output", "Missing frames", "Reload file count", "Output node", "Use output node"],
     }
 

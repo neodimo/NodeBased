@@ -12711,6 +12711,19 @@ class Window(QMainWindow):
                 help_rows.clear()
 
             write_hidden = writenode.hidden_params(node["params"]) if node["type"] == "Write" else ()
+
+            def companion_boxes(group):
+                """A split knob's check boxes (Clamp's minimum and its enable) sit on the row beside it, as the guide's one label gives them."""
+                boxes = []
+                for companion in group.params[1:]:
+                    box = QCheckBox()
+                    box.setObjectName(f"{companion}-switch")
+                    box.setChecked(bool(node["params"][companion]))
+                    box.toggled.connect(lambda checked, k=key, p=companion: self.defer_command(
+                        {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
+                    boxes.append(box)
+                return boxes
+
             for group in knob_layout(node["type"]):
                 if node["type"] == "Read" and group.params and group.params[0] in readknobs.FORMAT_DEFAULTS:
                     if readknobs.options_tab(node["params"].get("path", "")) != {
@@ -12964,9 +12977,11 @@ class Window(QMainWindow):
                         split_layout.setSpacing(4)
                         split_layout.addWidget(WrappingRow(units, spacing=3), 1)
                         split_layout.addWidget(split_toggle, 0, Qt.AlignmentFlag.AlignTop)
+                        for box in companion_boxes(group):
+                            split_layout.addWidget(box, 0, Qt.AlignmentFlag.AlignTop)
                         form.addRow(group.label, split_row)
                         continue
-                    group = dataclasses.replace(group, kind="float_slider", channels=None)      # an unsplit knob is today's slider
+                    group = dataclasses.replace(group, kind="float_slider", channels=None, members=None)      # an unsplit knob is today's slider
                 if group.kind == "curve":
                     row = QWidget(); line = QHBoxLayout(row); line.setContentsMargins(0, 0, 0, 0)
                     edit = QPushButton("Edit curve…")
@@ -13046,6 +13061,8 @@ class Window(QMainWindow):
                         split_layout.setSpacing(4)
                         split_layout.addWidget(animated, 1)
                         split_layout.addWidget(split_toggle)
+                        for box in companion_boxes(group):
+                            split_layout.addWidget(box)
                         form.addRow(group.label, split_row)
                     else:
                         form.addRow(group.label, animated)

@@ -32,21 +32,23 @@ class KnobGroup:
     help: str | None = None        # one plain sentence shown under the knob and as its tooltip
     channels: str | None = None    # a "split" knob: its split set, "rgba" (r g b a) or "wh" (w h), as in core.SPLIT_CHANNELS
     captions: tuple[str, ...] | None = None    # an "xy" row's field captions when they are not x, y, z (a Keyer's A B C D)
-    members: tuple[str, ...] | None = None     # a "row" group: the widget kind of each param (int, float, enum, bool, string), side by side on one row
+    members: tuple[str, ...] | None = None     # a "row" group: the widget kind of each param (int, float, enum, bool, string), side by side on one row;
+                                               # a "split" group: "bool" for each check box param that sits beside the split knob (Clamp's clamp_min)
 
     def __post_init__(self):
         if self.kind == "split":
             from .core import SPLIT_CHANNELS
-            if self.channels not in SPLIT_CHANNELS or len(self.params) != 1:
-                raise ValueError(f"a split knob names one param and a split set of {sorted(SPLIT_CHANNELS)}")
+            if self.channels not in SPLIT_CHANNELS or not self.params \
+                    or len(self.members or ()) != len(self.params) - 1 or any(m != "bool" for m in self.members or ()):
+                raise ValueError(f"a split knob names one param and a split set of {sorted(SPLIT_CHANNELS)}, then a check box param for each member")
         elif self.channels is not None:
             raise ValueError("only a split knob takes channels")
         if self.kind == "row":
             if self.members is None or len(self.members) != len(self.params) or len(self.params) < 2 \
                     or any(m not in ("int", "float", "enum", "bool", "string") for m in self.members):
                 raise ValueError("a row knob names two or more params and a widget kind (int, float, enum, bool, string) for each")
-        elif self.members is not None:
-            raise ValueError("only a row knob takes members")
+        elif self.members is not None and self.kind != "split":
+            raise ValueError("only a row or split knob takes members")
         if self.captions is not None and (self.kind not in ("xy", "xyz") or len(self.captions) != len(self.params)):
             raise ValueError("captions go with an xy row and name each of its fields")
         if self.label is None:
@@ -221,9 +223,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("channels",)), KnobGroup("bool", ("clamp",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Clamp": _groups(
-        KnobGroup("split", ("minimum",), soft_range=(-1, 1), channels="rgba"),
-        KnobGroup("split", ("maximum",), soft_range=(0, 4), channels="rgba"),
-        KnobGroup("bool", ("clamp_min",)), KnobGroup("bool", ("clamp_max",)),
+        KnobGroup("split", ("minimum", "clamp_min"), soft_range=(-1, 1), channels="rgba", members=("bool",)),
+        KnobGroup("split", ("maximum", "clamp_max"), soft_range=(0, 4), channels="rgba", members=("bool",)),
         KnobGroup("float", ("MinClampTo",), label="Minimum clamp to"),
         KnobGroup("bool", ("MinClampTo_enable",), label="Replace minimum"),
         KnobGroup("float", ("MaxClampTo",), label="Maximum clamp to"),
@@ -2445,7 +2446,7 @@ STEP_D_NEW_KINDS = ("Clamp", "Exposure", "ShuffleCopy", "MatchGrade", "OCIOColor
 # Step D (11/2): the main tab of the nodes the audit still found out of Nuke's order or label (docs/PARITY_2D_FIDELITY.md, "Layout differences").
 # Where the guide shows no order for a knob NodeBased added, it keeps its place after these (config, the older-behaviour flags).
 NUKE_LAYOUT.update({
-    "Clamp": ("channels", "minimum", "clamp_min", "maximum", "clamp_max", "MinClampTo", "MinClampTo_enable", "MaxClampTo", "MaxClampTo_enable"),
+    "Clamp": ("channels", "minimum", "maximum", "MinClampTo", "MinClampTo_enable", "MaxClampTo", "MaxClampTo_enable"),
     "AddMix": ("Achannels", "Bchannels", "merge_output", "premultiplied", "nonlinear", "lut_a", "lut_b"),
     "Vectorfield": ("cube_path", "reload", "vector_file_type", "interpolation", "colorspace_in", "colorspace_out", "vector_output_bitdepth", "vector_normalize_output"),
     "Exposure": ("channels", "blackpoint", "exposure_mode", "gang", "red", "green", "blue"),
@@ -2631,6 +2632,15 @@ ROW_GROUPS = {
     "TimeClip": (KnobGroup("row", ("first", "before", "last", "after"), label="Frame range", members=("int", "enum", "int", "enum")),
                  KnobGroup("row", ("origfirst", "origlast"), label="Original range", members=("int", "int"))),
     "FrameRange": (KnobGroup("row", ("first_frame", "last_frame"), label="Frame range", members=("int", "int")),),
+    # Panel sweep S3 (11/4)
+    "Remove": (KnobGroup("row", ("channels2", "channels3", "channels4"), label="And", members=("string", "string", "string")),),
+    "CornerPin": (KnobGroup("row", ("shutter_offset", "custom_offset"), label="Shutter offset", members=("enum", "float")),),
+    "Clamp": (KnobGroup("row", ("MinClampTo", "MinClampTo_enable"), label="Minimum clamp to", members=("float", "bool")),
+              KnobGroup("row", ("MaxClampTo", "MaxClampTo_enable"), label="Maximum clamp to", members=("float", "bool"))),
+    "BurnIn": (KnobGroup("row", ("font", "font_style"), label="Font", members=("string", "string")),),
+    "ContactSheet": (KnobGroup("row", ("width", "height"), label="Resolution", members=("int", "int")),
+                     KnobGroup("row", ("rows", "columns"), label="Rows/columns", members=("int", "int")),
+                     KnobGroup("row", ("startframe", "endframe"), label="Frame range", members=("int", "int"))),
 }
 
 

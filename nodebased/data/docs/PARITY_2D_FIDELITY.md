@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 95.0 / 100** (167 nodes scored, rank-weighted; 97.3 counting only the nodes NodeBased has).
+**Overall fidelity: 95.1 / 100** (167 nodes scored, rank-weighted; 97.4 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.6 (98.0 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -37,14 +37,14 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Image | 97.1 | 96.9 | 98.1 | 6 |
 | Draw | 91.1 | 83.4 | 90.9 | 17 |
 | Time | 99.2 | 95.9 | 99.2 | 13 |
-| Channel | 98.8 | 97.7 | 98.9 | 5 |
-| Color | 97.3 | 90.8 | 97.1 | 34 |
+| Channel | 99.1 | 98.4 | 98.9 | 5 |
+| Color | 97.4 | 90.8 | 97.1 | 34 |
 | Filter | 96.7 | 91.8 | 96.2 | 32 |
 | Keyer | 93.1 | 79.9 | 93.1 | 11 |
-| Merge | 99.3 | 98.3 | 99.7 | 12 |
-| Transform | 96.3 | 92.5 | 96.0 | 20 |
+| Merge | 99.6 | 98.8 | 99.7 | 12 |
+| Transform | 96.5 | 92.6 | 96.0 | 20 |
 | Metadata | 91.2 | 96.0 | 100.0 | 5 |
-| Other | 81.2 | 44.9 | 81.5 | 12 |
+| Other | 81.5 | 45.2 | 81.5 | 12 |
 
 Behaviour checked: 95 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
@@ -97,7 +97,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 3 | Retime | `Retime` | supported | 98.8 | 98.4 | 97 (14/15) | - | 100 | 100 | - | 100 (47/47) | 100 | - | unmeasured |
 | 4 | TimeClip | `TimeClip` | supported | 100.0 | 100.0 | 100 (10/10) | - | 100 | 100 | - | 100 (33/33) | 100 | - | unmeasured |
 | 5 | FrameRange | `FrameRange` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 6 | AppendClip | `AppendClip` | supported | 99.2 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 93 | - | unmeasured |
+| 6 | AppendClip | `AppendClip` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
 | 7 | TimeBlur | `TimeBlur` | supported | 97.1 | 100.0 | 100 (4/4) | - | 100 | 100 | - | 100 (8/8) | 75 | - | unmeasured |
 | 7 | TimeEcho | `TimeEcho` | supported | 98.7 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (9/9) | 89 | - | unmeasured |
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
@@ -115,7 +115,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 2 | ShuffleCopy | `ShuffleCopy` | supported | 100.0 | 100.0 | 100 (4/4) | - | - | 100 | - | - | 100 | - | no fixture |
 | 3 | Copy | `Copy` | supported | 99.0 | 98.3 | 100 (10/10) | 100 (8/8) | 100 | 100 | 89 | 100 (8/8) | 100 | - | unmeasured |
 | 4 | ChannelMerge | `ChannelMerge` | supported | 95.7 | 94.2 | 100 (4/4) | 100 (4/4) | 67 | 100 | 83 | 100 (13/13) | 100 | - | unmeasured |
-| 5 | Remove | `Remove` | supported | 93.6 | 97.3 | 100 (4/4) | - | 80 | 100 | 100 | - | 75 | - | no fixture |
+| 5 | Remove | `Remove` | supported | 97.1 | 97.3 | 100 (4/4) | - | 80 | 100 | 100 | - | 100 | - | no fixture |
 
 ### Color
 
@@ -128,7 +128,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Multiply | `Multiply` | supported | 99.0 | 98.8 | 100 (1/1) | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | 100 | 100 (1/1) | unmeasured |
 | 6 | Add | `Add` | supported | 99.1 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | 100 | 100 (1/1) | unmeasured |
 | 7 | Gamma | `Gamma` | supported | 99.1 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | 100 | 100 (1/1) | unmeasured |
-| 8 | Clamp | `Clamp` | supported | 96.8 | 99.4 | 100 (8/8) | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | 67 | 100 (2/2) | unmeasured |
+| 8 | Clamp | `Clamp` | supported | 99.5 | 99.4 | 100 (8/8) | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | 100 | 100 (2/2) | unmeasured |
 | 9 | HueCorrect | `HueCorrect` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
 | 10 | ColorLookup | `ColorLookup` | supported | 92.1 | 90.0 | 75 (6/8) | - | 100 | 100 | 100 | 100 (7/7) | 100 | - | unmeasured |
 | 11 | Exposure | `Exposure` | supported | 95.7 | 93.6 | 86 (6/7) | 100 (6/6) | 93 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -220,10 +220,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Dissolve | `Dissolve` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | KeyMix | `Keymix` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 7 | AddMix | `AddMix` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 8 | Blend | `Blend` | supported | 95.4 | 95.3 | 100 (2/2) | 100 (2/2) | 83 | 100 | 80 | 100 (3/3) | 83 | - | unmeasured |
+| 8 | Blend | `Blend` | supported | 96.8 | 95.3 | 100 (2/2) | 100 (2/2) | 83 | 100 | 80 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | CopyBBox | `CopyBBox` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | CopyRectangle | `CopyRectangle` | supported | 97.8 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (2/2) | 75 | - | unmeasured |
-| 10 | ContactSheet | `ContactSheet` | supported | 91.7 | 97.0 | 100 (11/11) | - | 82 | 100 | - | - | 68 | - | no fixture |
+| 10 | ContactSheet | `ContactSheet` | supported | 97.0 | 97.0 | 100 (11/11) | - | 82 | 100 | - | - | 100 | - | no fixture |
 | 11 | TimeDissolve | `TimeDissolve` | supported | 96.1 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 67 | - | unmeasured |
 | 12 | ZMerge | `ZMerge` | supported | 98.1 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 89 | - | no fixture |
 
@@ -236,7 +236,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 3 | Tracker | `Tracker` | supported | 90.9 | 89.3 | 78 (41/54) | - | 83 | 100 | 100 | 100 (5/5) | 98 | - | unmeasured |
 | 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
-| 6 | CornerPin2D | `CornerPin` | supported | 96.6 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 71 | - | unmeasured |
+| 6 | CornerPin2D | `CornerPin` | supported | 99.5 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 96 | - | unmeasured |
 | 7 | Mirror | `Mirror` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 8 | Stabilize | `Stabilize` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | Position | `Position` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
@@ -276,7 +276,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Input | `Input` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Output | `Output` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 6 | BlinkScript | - | missing | 0.0 | 0.0 | 0 (0/19) | - | - | 0 | - | - | - | - | no fixture |
-| 7 | BurnIn | `BurnIn` | supported | 87.5 | 91.7 | 100 (18/18) | - | 50 | 100 | - | - | 75 | - | no fixture |
+| 7 | BurnIn | `BurnIn` | supported | 91.7 | 91.7 | 100 (18/18) | - | 50 | 100 | - | - | 100 | - | no fixture |
 | 8 | Link | - | missing | 0.0 | 0.0 | - | - | - | 0 | - | - | - | - | no fixture |
 | 8 | LiveGroup | - | missing | 0.0 | 0.0 | 0 (0/11) | - | - | 0 | - | - | - | - | no fixture |
 | 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | no fixture |
@@ -320,7 +320,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Retime | 100.0% (8/8) | 100.0% (12/12) | 4 |
 | TimeClip | 100.0% (6/6) | 100.0% (6/6) | 4 |
 | FrameRange | 100.0% (2/2) | 100.0% (2/2) | 1 |
-| AppendClip | — | 80.0% (4/5) | 1 |
+| AppendClip | — | 100.0% (5/5) | 1 |
 | TimeBlur | 0.0% (0/2) | 100.0% (4/4) | 0 |
 | TimeEcho | — | 66.7% (2/3) | 0 |
 | TimeWarp | — | 100.0% (3/3) | 2 |
@@ -333,7 +333,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | ShuffleCopy | — | 100.0% (2/2) | 2 |
 | Copy | — | 100.0% (2/2) | 8 |
 | ChannelMerge | — | 100.0% (1/1) | 3 |
-| Remove | 0.0% (0/3) | 100.0% (4/4) | 0 |
+| Remove | 100.0% (3/3) | 100.0% (4/4) | 0 |
 | Grade | — | 100.0% (10/10) | 0 |
 | ColorCorrect | — | 100.0% (20/20) | 2 |
 | Invert | — | 100.0% (1/1) | 0 |
@@ -341,7 +341,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Multiply | — | 100.0% (1/1) | 0 |
 | Add | — | 100.0% (1/1) | 0 |
 | Gamma | — | 100.0% (1/1) | 0 |
-| Clamp | 0.0% (0/8) | 100.0% (8/8) | 0 |
+| Clamp | 100.0% (8/8) | 100.0% (8/8) | 0 |
 | HueCorrect | — | 100.0% (1/1) | 2 |
 | ColorLookup | — | 100.0% (2/2) | 5 |
 | Exposure | — | 100.0% (5/5) | 1 |
@@ -418,10 +418,10 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Dissolve | — | 100.0% (1/1) | 0 |
 | KeyMix | — | 100.0% (1/1) | 1 |
 | AddMix | — | 100.0% (2/2) | 5 |
-| Blend | — | 50.0% (1/2) | 0 |
+| Blend | — | 100.0% (2/2) | 0 |
 | CopyBBox | — | — | 0 |
 | CopyRectangle | 0.0% (0/4) | 100.0% (5/5) | 0 |
-| ContactSheet | 0.0% (0/6) | 72.7% (8/11) | 0 |
+| ContactSheet | 100.0% (6/6) | 100.0% (11/11) | 0 |
 | TimeDissolve | — | 0.0% (0/2) | 2 |
 | ZMerge | — | 100.0% (3/3) | 0 |
 | Transform | 100.0% (2/2) | 92.3% (12/13) | 2 |
@@ -429,7 +429,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Tracker | 100.0% (5/5) | 94.1% (32/34) | 10 |
 | PlanarTracker | — | — | 0 |
 | Reformat | 100.0% (2/2) | 100.0% (14/14) | 1 |
-| CornerPin2D | 0.0% (0/2) | 83.3% (10/12) | 12 |
+| CornerPin2D | 100.0% (2/2) | 83.3% (10/12) | 12 |
 | Mirror | — | 100.0% (2/2) | 0 |
 | Stabilize | — | — | 0 |
 | Position | — | 100.0% (1/1) | 0 |
@@ -459,7 +459,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Input | — | — | 0 |
 | Output | — | — | 0 |
 | BlinkScript | — | — | 12 |
-| BurnIn | 0.0% (0/2) | 100.0% (18/18) | 0 |
+| BurnIn | 100.0% (2/2) | 100.0% (18/18) | 0 |
 | Link | — | — | 0 |
 | LiveGroup | — | — | 6 |
 | LiveInput | — | — | 4 |
@@ -471,9 +471,11 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 
 Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were placed on one row, counting knobs were integer fields and the Viewer's controls were measured: Tracker rows 3/5, types 27/34; Viewer types 0/20; Switch types 0/1; TimeClip rows 0/6; FrameRange rows 0/2; Glow types 8/9; Keylight types 33/34; Reformat types 12/14. Current: Tracker rows 5/5, types 32/34; Viewer rows 0/0, types 14/17; Switch rows 0/0, types 1/1; TimeClip rows 6/6, types 6/6; FrameRange rows 2/2, types 2/2; Glow rows 0/0, types 9/9; Keylight rows 0/0, types 34/34; Reformat rows 2/2, types 14/14. Tracker's `motionblur` (a number in the guide, an on/off switch here) and `cornerPinOptions` (a menu in the guide, two export buttons here), and the Viewer's `clip_warning` (a menu in the guide, the zebra check box here), `downrez` (a number in the guide, the proxy-tier menu here) and `overscan` (a number in the guide, a whole-pixel field here) stay as they are: each would need a change to how the node renders or to viewer state.
 
+Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. Current: Remove rows 3/3, types 4/4; AppendClip rows 0/0, types 5/5; CornerPin2D rows 2/2, types 10/12; BurnIn rows 2/2, types 18/18; Clamp rows 8/8, types 8/8; Blend rows 0/0, types 2/2; DirBlur rows 0/0, types 9/11; ContactSheet rows 6/6, types 11/11. CornerPin2D's `invert` (a check box in the guide, the forward/inverse direction menu here) and `motionblur` (a number in the guide, an on/off switch here), and DirBlur's `target` (an xy pair in the guide, the text "x,y" here) and `Quality` (a number in the guide, a low/normal/high menu here) stay as they are: each would change what a saved document stores or how the node renders. AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.
+
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
-**Lowest shared-row scores:** BurnIn (0.0%); Clamp (0.0%); Colorspace (0.0%); ContactSheet (0.0%); CopyRectangle (0.0%).
+**Lowest shared-row scores:** Colorspace (0.0%); CopyRectangle (0.0%); Encryptomatte (0.0%); GenerateLUT (0.0%); Kronos (0.0%).
 **Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); TimeDissolve (0.0%).
 
 ## The 30 largest gaps
@@ -500,18 +502,18 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 16 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
 | 17 | Tracker (Transform #3) | `Tracker` | 3.03 | 90.9 | 13 secondary knobs missing |
 | 18 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
-| 19 | BurnIn (Other #7) | `BurnIn` | 1.79 | 87.5 | nothing missing that the guide lists |
-| 20 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 21 | LensDistortion (Transform #20) | `Undistort` | 1.29 | 74.2 | 38 secondary knobs missing |
-| 22 | Remove (Channel #5) | `Remove` | 1.29 | 93.6 | nothing missing that the guide lists |
-| 23 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
-| 24 | RotoPaint (Draw #7) | `RotoPaint` | 1.11 | 92.2 | 14 secondary knobs missing |
-| 25 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
-| 26 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
-| 27 | GridWarp (Transform #14) | `GridWarp` | 1.02 | 71.4 | 28 secondary knobs missing |
-| 28 | ZSlice (Filter #19) | `ZSlice` | 1.00 | 81.0 | node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 29 | PointsTo3D (Transform #17) | `PointsTo3D` | 0.92 | 84.4 | nothing missing that the guide lists |
-| 30 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
+| 19 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
+| 20 | LensDistortion (Transform #20) | `Undistort` | 1.29 | 74.2 | 38 secondary knobs missing |
+| 21 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 22 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 23 | RotoPaint (Draw #7) | `RotoPaint` | 1.11 | 92.2 | 14 secondary knobs missing |
+| 24 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
+| 25 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
+| 26 | GridWarp (Transform #14) | `GridWarp` | 1.02 | 71.4 | 28 secondary knobs missing |
+| 27 | ZSlice (Filter #19) | `ZSlice` | 1.00 | 81.0 | node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
+| 28 | PointsTo3D (Transform #17) | `PointsTo3D` | 0.92 | 84.4 | nothing missing that the guide lists |
+| 29 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
+| 30 | Blur (Filter #1) | `Blur` | 0.80 | 99.2 | nothing missing that the guide lists |
 
 ## Formula cases
 

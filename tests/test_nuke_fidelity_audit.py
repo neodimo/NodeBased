@@ -60,6 +60,8 @@ FULL_PANEL_SHAPE = (
     'VectorCornerPin', 'VectorDistort', 'Vectorfield', 'VolumeRays', 'ZMerge', 'ZSlice',
     # Panel sweep S2 (2026-11-04); HSVTool and IDistort reached it through the colour/xy rule for a knob split into components
     'FrameRange', 'Glow', 'HSVTool', 'IDistort', 'Keylight', 'Reformat', 'Switch', 'TimeClip',
+    # Panel sweep S3 (2026-11-04)
+    'AppendClip', 'Blend', 'BurnIn', 'Clamp', 'ContactSheet', 'Remove',
 )
 
 
@@ -92,6 +94,9 @@ class PanelShapeMetricTests(unittest.TestCase):
         self.assertEqual(audit.number_knob_kind("which", 0), "float")     # Dissolve's which is a mix; Switch's is listed in _COUNT_KNOBS
         self.assertIn(("Switch", "which"), audit._COUNT_KNOBS)
         self.assertIn(("Tracker", "smoothT"), audit._COUNT_KNOBS)
+        self.assertEqual(audit.number_knob_kind("dissolve", 0), "float")     # TimeDissolve's and Dissolve's mix; AppendClip's counts frames
+        self.assertIn(("AppendClip", "dissolve"), audit._COUNT_KNOBS)
+        self.assertIn(("ContactSheet", "width"), audit._COUNT_KNOBS)
 
     def test_tracker_viewer_and_components_are_measured(self):
         def metrics(key):
