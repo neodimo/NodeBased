@@ -1,5 +1,24 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step O: SmartVector's remaining knobs (Root's primary knobs were already on main)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (5:15 AM on 2026-11-04 PDT)
+
+`main` moved `efe62b07` -> `0249c679` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `0249c679` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0505.log`, started 5:05 AM): **Ran 9225 tests in 591.435 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step P of 2: GridWarp and SplineWarp's remaining knobs, Flare, Sparkles and VolumeRays' secondary knobs, and VectorDistort's blur (finish 1).** Commits:
+  - `be9998b8` Add remaining warp displacement controls
+  Diff: 9 files changed, 121 insertions(+), 20 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (4:55 AM on 2026-11-04 PDT)
 
 `main` moved `2078c314` -> `a419f980` (lane commits cherry-picked onto main in lane order) and then to this
