@@ -58,6 +58,8 @@ FULL_PANEL_SHAPE = (
     'Radial', 'Ramp', 'Read', 'Rectangle', 'Retime', 'STMap', 'Sampler', 'Saturation', 'Sharpen', 'Shuffle',
     'ShuffleCopy', 'SoftClip', 'Soften', 'TVIScale', 'Text', 'Tile', 'TimeOffset', 'TimeWarp', 'Toe', 'Unpremult',
     'VectorCornerPin', 'VectorDistort', 'Vectorfield', 'VolumeRays', 'ZMerge', 'ZSlice',
+    # Panel sweep S2 (2026-11-04); HSVTool and IDistort reached it through the colour/xy rule for a knob split into components
+    'FrameRange', 'Glow', 'HSVTool', 'IDistort', 'Keylight', 'Reformat', 'Switch', 'TimeClip',
 )
 
 
@@ -85,6 +87,24 @@ class PanelShapeMetricTests(unittest.TestCase):
         self.assertEqual(audit.number_knob_kind("gain", 1), "float")
         self.assertEqual(audit.number_knob_kind("shutter", 0.5), "float")
         self.assertEqual(audit.number_knob_kind("mystery", None), "unknown")
+        self.assertEqual(audit.number_knob_kind("grab_interval", 0), "int")
+        self.assertEqual(audit.number_knob_kind("jitter_period", 10), "int")
+        self.assertEqual(audit.number_knob_kind("which", 0), "float")     # Dissolve's which is a mix; Switch's is listed in _COUNT_KNOBS
+        self.assertIn(("Switch", "which"), audit._COUNT_KNOBS)
+        self.assertIn(("Tracker", "smoothT"), audit._COUNT_KNOBS)
+
+    def test_tracker_viewer_and_components_are_measured(self):
+        def metrics(key):
+            pair = MAPPING["pairs"][key]
+            return audit.panel_shape_metrics(NUKE["nodes"][key], pair, pair["nodebased"], key)
+        rows, types = metrics("Tracker")
+        self.assertEqual(rows["score"], 1.0)
+        self.assertEqual([m[0] for m in types["missed"]], ["cornerPinOptions", "motionblur"])
+        rows, types = metrics("Viewer")
+        self.assertEqual((types["matched"], types["total"], types["unknown"]), (14, 17, 3))
+        self.assertEqual([m[0] for m in types["missed"]], ["clip_warning", "downrez", "overscan"])
+        for key in ("Reformat", "Glow", "Keylight"):
+            self.assertEqual(metrics(key)[1]["score"], 1.0, key)
 
     def test_read_shared_rows_and_widget_types_are_measured(self):
         rows, types = audit.panel_shape_metrics(NUKE["nodes"]["Read"], MAPPING["pairs"]["Read"], "Read")

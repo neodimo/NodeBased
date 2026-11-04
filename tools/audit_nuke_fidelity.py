@@ -401,7 +401,18 @@ _READ_NODE_WIDGETS = {
 
 _COUNT_WORDS = {"frame", "frames", "first", "last", "count", "samples", "sample", "iterations", "iteration", "index", "seed", "octaves",
                 "octave", "divisions", "division", "steps", "step", "levels", "level", "passes", "pass", "number", "num", "layers", "rows",
-                "columns", "points", "bits", "cycles", "repeat"}
+                "columns", "points", "bits", "cycles", "repeat", "interval", "period"}
+# Knobs the guide gives as plain numbers that count frames although no word of their name says so (Tracker's smoothT, smoothR and smoothS
+# average the track over that many frames; Switch's which picks an input by index, where Dissolve's is a mix). Panel sweep S2, 2026-11-04.
+_COUNT_KNOBS = {("Tracker", "smoothT"), ("Tracker", "smoothR"), ("Tracker", "smoothS"), ("Switch", "which")}
+# The Viewer's knobs are viewer state, not node params; this is the control each one has (the Viewer settings window, nodebased/viewersettings.py,
+# or the viewer strip: gain and gamma spin boxes, the zebra check box, the proxy tier, mask and safe-zone dropdowns).
+_VIEWER_WIDGETS = {
+    "frame_range": "string", "frame_range_lock": "bool", "frame_increment": "int", "clip_warning": "bool", "gain": "float",
+    "gamma": "float", "rgb_only": "bool", "downrez": "enum", "ignore_pixel_aspect": "bool", "zoom_lock": "bool",
+    "show_overscan": "bool", "full_frame_processing": "bool", "overscan": "int", "safe_zone": "enum", "format_center": "bool",
+    "masking_ratio": "enum", "masking_mode": "enum", "center_fstop": "float", "shutter_angle": "float", "useGPUForViewer": "bool",
+}
 _COUNT_SUFFIXES = ("samples", "frames", "frame", "count", "iterations", "index", "seed", "octaves", "steps", "levels", "divisions")
 
 
@@ -437,6 +448,7 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
     groups = knob_layout(node_type) if node_type else ()
     splits = _split_table()["knobs"].get(key or "", {})
     row_sets = [set(g.params) for g in groups]
+    components = {n for e in entries if e.get("kind") == "components" for n in e.get("nuke", [])}
     group_for = {param: g for g in groups for param in g.params}
 
     # Consecutive same-label entries define a shared guide row. Count every knob in such a row.
@@ -463,6 +475,7 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
                        "float": 0, "number_list": 0, "channels": 0}
     type_match = type_total = unknown_count = 0
     read = node_type == "Read"
+    viewer = node_type == "Viewer"
     for knob in knobs:
         name, nuke_kind = knob.get("name"), knob.get("type", "unknown")
         if not node_type:
@@ -474,7 +487,7 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         elif nuke_kind == "string" and str(knob.get("default")).strip().lower() in ("on", "off"):
             nuke_kind = "bool"      # the guide writes a checkbox's default as on or off
         elif nuke_kind == "number":
-            nuke_kind = number_knob_kind(name, knob.get("default"))
+            nuke_kind = "int" if (node_type, name) in _COUNT_KNOBS else number_knob_kind(name, knob.get("default"))
         if nuke_kind == "unknown":
             unknown_count += 1
             continue
@@ -483,12 +496,13 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         if name not in mapped:
             continue
         params = mapped.get(name, set())
-        actual = ([_READ_NODE_WIDGETS[p] for p in params if p in _READ_NODE_WIDGETS]
-                  if read else ["enum" if is_open_choice(node_type, p) else _widget_kind(group_for[p], p) for p in params if p in group_for])
+        actual = ([_READ_NODE_WIDGETS[p] for p in params if p in _READ_NODE_WIDGETS] if read
+                  else [_VIEWER_WIDGETS[name]] if viewer and name in _VIEWER_WIDGETS
+                  else ["enum" if is_open_choice(node_type, p) else _widget_kind(group_for[p], p) for p in params if p in group_for])
         if nuke_kind == "string" and not read and "enum" in actual:
             unknown_count += 1   # the guide infers `string` from any text default, and a menu's entry is text: it cannot tell the two apart
             continue
-        if nuke_kind == "float" and (splits.get(name) or re.fullmatch(r"color\d*(#\d+)?", name)) and any(k in ("color", "split", "xy", "xyz") for k in actual):
+        if nuke_kind == "float" and (splits.get(name) or name in components or re.fullmatch(r"color\d*(#\d+)?", name)) and any(k in ("color", "split", "xy", "xyz") for k in actual):
             actual = ["float_slider"]   # an AColor or WH knob (docs/parity/nuke_split_knobs.json, or a knob named color) is one control that splits per channel
         expected_counts[nuke_kind] = expected_counts.get(nuke_kind, 0) + 1
         type_total += 1
@@ -704,8 +718,9 @@ def build_report(reference_dir=None):
     w("")
     w("Rows count paired knobs in consecutive same-label groups from the guide that NodeBased places together on one panel row (a guide knob with no NodeBased knob is not counted, a row of fewer than two paired knobs is not measured, and the label `N/A` shares nothing). "
       "Types count paired knobs with a known guide type whose widget matches. The guide's `type` is inferred from defaults, so a `number` is resolved as follows: "
-      "an integer field with no slider when the guide default is an integer and the knob's name counts, indexes or names a frame (frame, first, last, count, samples, iterations, index, seed, octaves, divisions, steps, levels and the like); "
-      "otherwise a float with a slider and value field (Nuke's Double_Knob), which a per-channel split, or a colour row for a knob named color or listed in the split table, also satisfies; with no numeric default the type is left unmeasured. "
+      "an integer field with no slider when the guide default is an integer and the knob's name counts, indexes or names a frame (frame, first, last, count, samples, iterations, index, seed, octaves, divisions, steps, levels, interval, period and the like, and the few knobs listed by node because their name does not say so: Tracker's smoothT, smoothR and smoothS, which average over that many frames, and Switch's which, which picks an input by index); "
+      "otherwise a float with a slider and value field (Nuke's Double_Knob), which a per-channel split, or a colour, xy or xyz row for a knob named color, listed in the split table, or paired by components onto such a row (Glow's tint, Keylight's edge color, Reformat's box width and height), also satisfies; with no numeric default the type is left unmeasured. "
+      "The Viewer's knobs are viewer state rather than node params, so each is measured against the control it has in the Viewer settings window or the viewer strip (a fixed table in the tool, checked against the real widgets by tests.test_panel_parity_sweep). "
       "A `string` paired with a dropdown is left unmeasured (the guide gives a menu's current entry as text and cannot tell the two apart), and a `string` defaulting to on or off is a checkbox. "
       "A `number_list` needs a colour, xy, xyz or split row; `enum` and `channels` need a dropdown; `bool` a checkbox. Unmeasured knobs are counted in the last column and never score.")
     w("| Node | Shared-row knobs on one row | Widget types matching | Unknown types (unmeasured) |")
@@ -715,6 +730,15 @@ def build_report(reference_dir=None):
         row_text = f"{rows['score'] * 100:.1f}% ({rows['matched']}/{rows['total']})" if rows["total"] else "—"
         type_text = f"{types['score'] * 100:.1f}% ({types['matched']}/{types['total']})" if types["total"] else "—"
         w(f"| {u['name']} | {row_text} | {type_text} | {types['unknown']} |")
+    w("")
+    sweep = {u["name"]: u for u in units}
+    w("Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were placed on one row, counting knobs were integer fields and the Viewer's controls were measured: "
+      "Tracker rows 3/5, types 27/34; Viewer types 0/20; Switch types 0/1; TimeClip rows 0/6; FrameRange rows 0/2; Glow types 8/9; Keylight types 33/34; Reformat types 12/14. "
+      "Current: " + "; ".join(
+          f"{n} rows {sweep[n]['panel_rows']['matched']}/{sweep[n]['panel_rows']['total']}, types {sweep[n]['panel_types']['matched']}/{sweep[n]['panel_types']['total']}"
+          for n in ("Tracker", "Viewer", "Switch", "TimeClip", "FrameRange", "Glow", "Keylight", "Reformat") if n in sweep) + ". "
+      "Tracker's `motionblur` (a number in the guide, an on/off switch here) and `cornerPinOptions` (a menu in the guide, two export buttons here), and the Viewer's `clip_warning` (a menu in the guide, the zebra check box here), "
+      "`downrez` (a number in the guide, the proxy-tier menu here) and `overscan` (a number in the guide, a whole-pixel field here) stay as they are: each would need a change to how the node renders or to viewer state.")
     w("")
     read_unit = next((u for u in units if u["name"] == "Read"), None)
     if read_unit:

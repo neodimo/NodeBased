@@ -2626,6 +2626,11 @@ ROW_GROUPS = {
                KnobGroup("row", ("output_range_start", "output_range_start_lock", "output_range_end", "output_range_end_lock"), label="Output range",
                          members=("int", "bool", "int", "bool"))),
     "Constant": (KnobGroup("row", ("first", "last"), label="Frame range", members=("int", "int")),),
+    # Panel sweep S2 (11/4)
+    "Tracker": (KnobGroup("row", ("shutter_offset", "custom_offset"), label="Shutter offset", members=("enum", "float")),),
+    "TimeClip": (KnobGroup("row", ("first", "before", "last", "after"), label="Frame range", members=("int", "enum", "int", "enum")),
+                 KnobGroup("row", ("origfirst", "origlast"), label="Original range", members=("int", "int"))),
+    "FrameRange": (KnobGroup("row", ("first_frame", "last_frame"), label="Frame range", members=("int", "int")),),
 }
 
 

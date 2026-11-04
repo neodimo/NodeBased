@@ -1,7 +1,7 @@
 """Lane 2 panel sweep (2026-11-04): knobs the Nuke guide gives one label share one row, and number knobs that count are integer fields.
 
 Each test builds the node's Properties panel and asserts the shared rows and widget kinds the ruler (tools/audit_nuke_fidelity.py)
-measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer."""
+measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer (step S1); Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, ScreenKeyer and Reformat (step S2)."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import unittest
@@ -12,7 +12,12 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
 
 from nodebased.app import Window
 from nodebased.knobfit import WrappingRow
+from nodebased.viewersettings import ViewerSettings
 from tests.waiting import wait_until
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+import audit_nuke_fidelity as audit  # noqa: E402
 
 APP = QApplication.instance() or QApplication([])
 
@@ -122,6 +127,90 @@ class PanelSweepTests(unittest.TestCase):
         for name in ("first-field", "last-field"):
             self.widget(panel, name, QSpinBox)
             self.assertNoSlider(panel, name)
+
+    # ---- step S2 ----
+    def test_tracker_shutter_row_and_integer_counts(self):
+        panel = self.panel("Tracker")
+        self.assertOneRow(panel, "shutter_offset-choice", "custom_offset-field")
+        self.widget(panel, "shutter_offset-choice", QComboBox)
+        self.widget(panel, "custom_offset-field", QDoubleSpinBox)
+        for name in ("grab_interval-field", "jitter_period-field", "smoothing-field", "pattern_radius-field", "search_radius-field", "reference_frame-field"):
+            self.widget(panel, name, QSpinBox)
+            self.assertNoSlider(panel, name)
+        # The guide's motionblur is a number; NodeBased keeps its on/off switch (a kernel change to give it a quality value is out of scope).
+        self.widget(panel, "motionblur-switch", QCheckBox)
+
+    def test_viewer_knob_controls_match_the_audit_table(self):
+        window = self.window
+        settings = ViewerSettings(window)
+        want = {"frame_range": QLineEdit, "frame_range_lock": QCheckBox, "frame_increment": QSpinBox, "rgb_only": QCheckBox,
+                "ignore_pixel_aspect": QCheckBox, "zoom_lock": QCheckBox, "show_overscan": QCheckBox, "overscan": QSpinBox,
+                "full_frame_processing": QCheckBox, "safe_zone": QComboBox, "format_center": QCheckBox, "center_fstop": QDoubleSpinBox,
+                "shutter_angle": QDoubleSpinBox, "use_gpu_for_viewer": QCheckBox}
+        for name, cls in want.items():
+            self.assertIs(type(settings.controls[name]), cls, name)
+        table = audit._VIEWER_WIDGETS
+        kinds = {QLineEdit: "string", QCheckBox: "bool", QSpinBox: "int", QDoubleSpinBox: "float", QComboBox: "enum"}
+        guide = {"frame_range": "frame_range", "frame_range_lock": "frame_range_lock", "frame_increment": "frame_increment", "rgb_only": "rgb_only",
+                 "ignore_pixel_aspect": "ignore_pixel_aspect", "zoom_lock": "zoom_lock", "show_overscan": "show_overscan", "overscan": "overscan",
+                 "full_frame_processing": "full_frame_processing", "safe_zone": "safe_zone", "format_center": "format_center",
+                 "center_fstop": "center_fstop", "shutter_angle": "shutter_angle", "use_gpu_for_viewer": "useGPUForViewer"}
+        for name, nuke_name in guide.items():
+            self.assertEqual(table[nuke_name], kinds[want[name]], name)
+        # the strip: gain and gamma spin boxes, the zebra check box, the proxy tier and the two mask dropdowns
+        self.assertIsInstance(window.exposure, QDoubleSpinBox)
+        self.assertIsInstance(window.gamma, QDoubleSpinBox)
+        self.assertIsInstance(window.zebra, QCheckBox)
+        self.assertIsInstance(window.proxy, QComboBox)
+        self.assertIsInstance(window.mask_choice, QComboBox)
+        self.assertIsInstance(window.mask_mode, QComboBox)
+        self.assertEqual((table["gain"], table["gamma"], table["clip_warning"], table["downrez"], table["masking_ratio"], table["masking_mode"]),
+                         ("float", "float", "bool", "enum", "enum", "enum"))
+        settings.deleteLater()
+
+    def test_switch_which_is_an_integer_field(self):
+        panel = self.panel("Switch")
+        self.widget(panel, "which-field", QSpinBox)
+        self.assertNoSlider(panel, "which-field")
+
+    def test_timeclip_range_rows(self):
+        panel = self.panel("TimeClip")
+        self.assertOneRow(panel, "first-field", "before-choice", "last-field", "after-choice")
+        self.assertOneRow(panel, "origfirst-field", "origlast-field")
+        for name in ("first-field", "last-field", "origfirst-field", "origlast-field"):
+            self.widget(panel, name, QSpinBox)
+            self.assertNoSlider(panel, name)
+        for name in ("before-choice", "after-choice"):
+            self.widget(panel, name, QComboBox)
+        self.widget(panel, "reverse-switch", QCheckBox)
+
+    def test_framerange_frames_share_a_row(self):
+        panel = self.panel("FrameRange")
+        self.assertOneRow(panel, "first_frame-field", "last_frame-field")
+        for name in ("first_frame-field", "last_frame-field"):
+            self.widget(panel, name, QSpinBox)
+            self.assertNoSlider(panel, name)
+        self.assertEqual(len([c for c in panel.findChildren(QComboBox) if c.isVisible()]), 2)   # before and after
+
+    def test_glow_tint_is_a_colour_row(self):
+        panel = self.panel("Glow")
+        self.assertOneRow(panel, "red-field", "green-field", "blue-field")
+        for name in ("red-field", "green-field", "blue-field"):
+            self.widget(panel, name, QDoubleSpinBox)
+        self.widget(panel, "nonlinear-switch", QCheckBox)
+        self.widget(panel, "crop-switch", QCheckBox)
+
+    def test_screenkeyer_edge_colour_is_a_colour_row(self):
+        panel = self.panel("ScreenKeyer")
+        self.assertOneRow(panel, "source_edge_red-field", "source_edge_green-field", "source_edge_blue-field")
+        self.assertOneRow(panel, "screen_red-field", "screen_green-field", "screen_blue-field")
+        self.widget(panel, "unpremultiply_result-switch", QCheckBox)
+
+    def test_reformat_size_is_one_row(self):
+        panel = self.panel("Reformat")
+        self.assertOneRow(panel, "width-field", "height-field")
+        for name in ("center-switch", "flip-switch", "flop-switch", "turn-switch", "box_fixed-switch"):
+            self.widget(panel, name, QCheckBox)
 
     def test_row_edits_reach_the_document(self):
         panel = self.panel("Constant")
