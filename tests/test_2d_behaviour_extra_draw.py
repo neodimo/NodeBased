@@ -419,6 +419,9 @@ class SparklesTests(unittest.TestCase):
         np.testing.assert_array_equal(a, b)
         self.assertTrue(differs(a, sparkles(spark_thick=5.0)))
 
+    def test_anamorphic_stretches_the_ray_field(self):
+        self.assertTrue(differs(sparkles(spark_anamorphic=2.0), sparkles()))
+
     def test_brightness_and_colour_scale_the_rays(self):
         base = sparkles()
         np.testing.assert_allclose(sparkles(spark_brightness=2.0)[..., :3], 2.0 * base[..., :3] - black(41, 41)[..., :3] * 0.0, atol=1e-5)
@@ -432,7 +435,8 @@ class SparklesTests(unittest.TestCase):
     def test_every_paired_knob_changes_the_pixels(self):
         base = sparkles()
         for name, value in {"spark_x": 12.0, "spark_size": 8.0, "spark_rotation": 25.0, "spark_ray_nb": 9, "spark_thick": 3.0, "spark_ray_falloff": 0.5, "seed": 99,
-                            "spark_brightness": 2.0, "spark_color": 0.5, "spark_mode": "Fireworks", "spark_triangle_think": 1}.items():
+                            "spark_brightness": 2.0, "spark_color": 0.5, "spark_mode": "Fireworks", "spark_triangle_think": 1,
+                            "spark_anamorphic": 2.0}.items():
             with self.subTest(knob=name):
                 self.assertTrue(differs(sparkles(**{name: value}), base), name)
 
@@ -451,7 +455,7 @@ class SparklesTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Sparkles")]
-        self.assertEqual(labels[:13], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Ray falloff", "Seed", "Brightness", "Color"])
+        self.assertEqual(labels[:14], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Anamorphic", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Ray falloff", "Seed", "Brightness", "Color"])
         self.assertEqual(labels[-1], "Mix")
 
 

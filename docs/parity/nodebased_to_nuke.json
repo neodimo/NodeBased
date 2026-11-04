@@ -920,6 +920,7 @@
     {"nodebased": ["spark_triangle_think"], "nuke": ["triangle_think"], "kind": "renamed", "reason": "tapers each ray toward its outer end to form the guide's triangle shape"},
     {"nodebased": ["spark_x", "spark_y"], "nuke": ["position"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["spark_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; the older `size` stays for graphs saved before"},
+    {"nodebased": ["spark_anamorphic"], "nuke": ["anamorphic"], "kind": "renamed", "reason": "stretches ray directions horizontally by the anamorphic ratio"},
     {"nodebased": ["spark_rotation"], "nuke": ["rotation"], "kind": "renamed", "reason": "same control under another name"},
     {"nodebased": ["spark_relative_rotation"], "nuke": ["relative_rotation"], "kind": "renamed", "reason": "adds the image-centre-to-Position direction to the ray rotation"},
     {"nodebased": ["spark_ray_nb"], "nuke": ["ray_nb"], "kind": "renamed", "reason": "same control under another name"},
