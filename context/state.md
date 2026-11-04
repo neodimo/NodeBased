@@ -1,5 +1,24 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step N finish
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (3:15 AM on 2026-11-04 PDT)
+
+`main` moved `12dd3eac` -> `759efc39` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `759efc39` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0305.log`, started 3:05 AM): **Ran 9186 tests in 584.159 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R1: the Read node's Properties panel laid out like Nuke's, with Nuke's knob types (finish 1).** Commits:
+  - `efc9e2c3` Lane 9 R1 finish: report panel shape metrics
+  Diff: 4 files changed, 522 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (2:35 AM on 2026-11-04 PDT)
 
 `main` moved `ed537804` -> `dc63c653` (lane commits cherry-picked onto main in lane order) and then to this
