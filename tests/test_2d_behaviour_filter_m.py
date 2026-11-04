@@ -173,7 +173,7 @@ class MotionBlurEstimationTests(unittest.TestCase):
         a, b, _, _ = moving_pair()
         half = motionblurknobs.estimate_flow(a, b, {**self.P, "motion_method": "Local", "motion_vector_detail": 0.5})
         low_a, low_b = motionblurknobs._down(a, 2), motionblurknobs._down(b, 2)
-        flow, _, _ = flow_pair(low_a, low_b, vector_detail=4, smoothness=0.0, backend="cpu")
+        flow, _, _ = flow_pair(low_a, low_b, vector_detail=motionblurknobs.pyramid_levels(2), smoothness=0.0, backend="cpu")
         np.testing.assert_allclose(half, motionblurknobs._up(np.asarray(flow, np.float32), 2, 64, 96), atol=1e-6)
 
     def test_lower_detail_changes_the_vectors(self):

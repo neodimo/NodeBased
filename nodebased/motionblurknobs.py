@@ -136,6 +136,14 @@ def density_step(p, height, width):
     return step
 
 
+def pyramid_levels(step):
+    """Pyramid levels for a field found at 1 / step size: the full-size estimate's four, less the octaves the averaging down already
+    removed (ceil(log2 step)). Motion on the smaller pair is step times smaller, so the extra coarse levels only add tiny levels where
+    the 15-pixel match windows see mostly edge padding; on the CPU estimator they made a 4-pixel pan read as 60 to 70 pixels
+    (Desktop conformance on 8ab38cf, tests.test_flow_node_accuracy)."""
+    return max(1, 4 - int(np.ceil(np.log2(step)))) if step > 1 else 4
+
+
 def estimate_flow(first, second, p, matte=None):
     """The vectors (pixels per frame, height x width x 2, float32) from `first` to `second` that Method, Vector Detail and the matte give."""
     from .opticalflow import _luma, flow_pair
@@ -144,7 +152,8 @@ def estimate_flow(first, second, p, matte=None):
     step = density_step(p, height, width)
     low_a, low_b = (_down(first, step), _down(second, step)) if step > 1 else (first, second)
     regularized = str(p.get("motion_method", "Regularized")) == "Regularized"
-    flow, _, _ = flow_pair(low_a, low_b, vector_detail=4, smoothness=1.0 if regularized else 0.0, backend=p.get("flow_backend", "auto"))
+    flow, _, _ = flow_pair(low_a, low_b, vector_detail=pyramid_levels(step), smoothness=1.0 if regularized else 0.0,
+                           backend=p.get("flow_backend", "auto"))
     flow = np.asarray(flow, np.float32)
     if regularized:
         flow = _regularize(flow, _luma(low_a))
