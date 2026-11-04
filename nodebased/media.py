@@ -487,6 +487,12 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             repeat_bottom = edge_pixels == 'repeat' or (edge_pixels == 'edge detect' and data.y + data.height == h)
             if edge_pixels == 'plate detect' and data == display:
                 repeat_left = repeat_right = repeat_top = repeat_bottom = True
+        else:
+            repeat_left = repeat_right = repeat_top = repeat_bottom = False
+        # With no edge repeated the policy is black outside the data window, which is what the bbox already
+        # means: keep the data window. Flattening it to the display window (as plate detect did when the
+        # bbox and format differ) changed every new Read's bbox and broke CopyBBox (11/4 4:16 AM).
+        if repeat_left or repeat_right or repeat_top or repeat_bottom:
             yy = np.arange(h, dtype=np.int32) - data.y
             xx = np.arange(w, dtype=np.int32) - data.x
             valid_y = ((yy >= 0) & (yy < data.height)) | ((yy < 0) & repeat_top) | ((yy >= data.height) & repeat_bottom)
