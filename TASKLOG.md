@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step T: Roto shapes take a fill source and Nuke's Clone tab (integrator tick)
+
+- **What was done:** `main` `0c48f44c` -> `f8daf865` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `f8daf865`: Ran 9329 tests in 590.167 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — Lane 9, step T (Roto shape source; partial)
 
 - **What was done:** Roto shapes now validate and retain `source`, expose Color/Foreground/Background in the shape panel, and pair Nuke's `shape_source` as a panel control. The wired `bg` plate is the available background source; without a picture input, picture-source modes render black. Older shapes without `source` keep their prior pixels.
