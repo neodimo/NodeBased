@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 95.1 / 100** (167 nodes scored, rank-weighted; 97.5 counting only the nodes NodeBased has).
+**Overall fidelity: 95.2 / 100** (167 nodes scored, rank-weighted; 97.5 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.7 (98.0 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -36,12 +36,12 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 97.1 | 96.9 | 98.1 | 6 |
 | Draw | 91.2 | 84.0 | 91.0 | 17 |
-| Time | 99.2 | 95.9 | 99.2 | 13 |
+| Time | 99.4 | 96.7 | 99.2 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 97.4 | 90.8 | 97.1 | 34 |
 | Filter | 96.7 | 91.8 | 96.2 | 32 |
-| Keyer | 93.1 | 79.9 | 93.1 | 11 |
-| Merge | 99.6 | 98.8 | 99.7 | 12 |
+| Keyer | 93.2 | 80.3 | 93.1 | 11 |
+| Merge | 99.7 | 99.3 | 99.7 | 12 |
 | Transform | 96.6 | 93.4 | 96.2 | 20 |
 | Metadata | 91.2 | 96.0 | 100.0 | 5 |
 | Other | 81.5 | 45.2 | 81.5 | 12 |
@@ -98,11 +98,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 4 | TimeClip | `TimeClip` | supported | 100.0 | 100.0 | 100 (10/10) | - | 100 | 100 | - | 100 (33/33) | 100 | - | unmeasured |
 | 5 | FrameRange | `FrameRange` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 6 | AppendClip | `AppendClip` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
-| 7 | TimeBlur | `TimeBlur` | supported | 97.1 | 100.0 | 100 (4/4) | - | 100 | 100 | - | 100 (8/8) | 75 | - | unmeasured |
-| 7 | TimeEcho | `TimeEcho` | supported | 98.7 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (9/9) | 89 | - | unmeasured |
+| 7 | TimeBlur | `TimeBlur` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
+| 7 | TimeEcho | `TimeEcho` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
-| 8 | Kronos | `Kronos` | supported | 80.1 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 71 | - | unmeasured |
-| 8 | OFlow | `OFlow` | supported | 82.0 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 71 | - | unmeasured |
+| 8 | Kronos | `Kronos` | supported | 83.2 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 98 | - | unmeasured |
+| 8 | OFlow | `OFlow` | supported | 85.2 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 98 | - | unmeasured |
 | 8 | SmartVector | `SmartVector` | supported | 94.2 | 94.4 | 94 (10/11) | - | 90 | 100 | - | - | 93 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
@@ -168,7 +168,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 6 | Soften | `Soften` | supported | 98.5 | 97.9 | 100 (7/7) | 100 (5/5) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 7 | DropShadow | `DropShadow` | supported | 96.8 | 96.1 | 100 (9/9) | 100 (8/8) | 67 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 8 | Defocus | `Defocus` | supported | 99.2 | 99.1 | 100 (5/5) | 100 (4/4) | 91 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 8 | ZDefocus | `ZDefocus` | supported | 91.0 | 89.4 | 78 (25/36) | - | 81 | 100 | 100 | 100 (3/3) | 99 | - | unmeasured |
+| 8 | ZDefocus | `ZDefocus` | supported | 91.2 | 89.4 | 78 (25/36) | - | 81 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | DirBlur | `DirBlur` | supported | 96.5 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (4/4) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -204,10 +204,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Keylight | `ScreenKeyer` | partial | 98.8 | 98.0 | 98 (34/35) | 100 (27/27) | 97 | 100 | - | - | 100 | - | unmeasured |
 | 6 | Primatte | - | missing | 0.0 | 0.0 | 0 (0/26) | - | - | 0 | 0 | - | - | - | no fixture |
 | 6 | Ultimatte | - | missing | 0.0 | 0.0 | 0 (0/60) | - | - | 0 | - | - | - | - | no fixture |
-| 7 | IBKColor | `IBKColor` | supported | 96.7 | 100.0 | 100 (6/6) | 100 (4/4) | 100 | 100 | - | - | 73 | - | unmeasured |
-| 7 | IBKGizmo | `IBKGizmo` | supported | 95.4 | 93.2 | 93 (14/15) | 100 (9/9) | 86 | 100 | - | - | 98 | - | unmeasured |
+| 7 | IBKColor | `IBKColor` | supported | 97.2 | 100.0 | 100 (6/6) | 100 (4/4) | 100 | 100 | - | - | 78 | - | unmeasured |
+| 7 | IBKGizmo | `IBKGizmo` | supported | 95.7 | 93.2 | 93 (14/15) | 100 (9/9) | 86 | 100 | - | - | 100 | - | unmeasured |
 | 8 | Cryptomatte | `Cryptomatte` | partial | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 8 | Encryptomatte | `Encryptomatte` | partial | 88.7 | 90.5 | 86 (3/4) | - | 100 | 100 | - | - | 75 | - | no fixture |
+| 8 | Encryptomatte | `Encryptomatte` | partial | 92.9 | 90.5 | 86 (3/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
 ### Merge
 
@@ -222,9 +222,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | AddMix | `AddMix` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 8 | Blend | `Blend` | supported | 96.8 | 95.3 | 100 (2/2) | 100 (2/2) | 83 | 100 | 80 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | CopyBBox | `CopyBBox` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 9 | CopyRectangle | `CopyRectangle` | supported | 97.8 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (2/2) | 75 | - | unmeasured |
+| 9 | CopyRectangle | `CopyRectangle` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 10 | ContactSheet | `ContactSheet` | supported | 97.0 | 97.0 | 100 (11/11) | - | 82 | 100 | - | - | 100 | - | no fixture |
-| 11 | TimeDissolve | `TimeDissolve` | supported | 96.1 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 67 | - | unmeasured |
+| 11 | TimeDissolve | `TimeDissolve` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 12 | ZMerge | `ZMerge` | supported | 98.1 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 89 | - | no fixture |
 
 ### Transform
@@ -321,11 +321,11 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | TimeClip | 100.0% (6/6) | 100.0% (6/6) | 4 |
 | FrameRange | 100.0% (2/2) | 100.0% (2/2) | 1 |
 | AppendClip | — | 100.0% (5/5) | 1 |
-| TimeBlur | 0.0% (0/2) | 100.0% (4/4) | 0 |
-| TimeEcho | — | 66.7% (2/3) | 0 |
+| TimeBlur | 100.0% (2/2) | 100.0% (4/4) | 0 |
+| TimeEcho | — | 100.0% (3/3) | 0 |
 | TimeWarp | — | 100.0% (3/3) | 2 |
-| Kronos | 0.0% (0/2) | 85.7% (12/14) | 6 |
-| OFlow | 0.0% (0/2) | 83.3% (10/12) | 4 |
+| Kronos | 100.0% (2/2) | 92.9% (13/14) | 6 |
+| OFlow | 100.0% (2/2) | 91.7% (11/12) | 4 |
 | SmartVector | — | 77.8% (7/9) | 3 |
 | VectorToMotion | — | — | 0 |
 | NoTimeBlur | — | 100.0% (2/2) | 0 |
@@ -376,7 +376,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Soften | — | 100.0% (6/6) | 1 |
 | DropShadow | — | 100.0% (8/8) | 1 |
 | Defocus | — | 100.0% (5/5) | 0 |
-| ZDefocus | — | 96.0% (24/25) | 3 |
+| ZDefocus | — | 100.0% (25/25) | 3 |
 | DirBlur | — | 100.0% (11/11) | 1 |
 | EdgeBlur | — | 100.0% (6/6) | 2 |
 | EdgeExtend | — | 100.0% (6/6) | 1 |
@@ -407,10 +407,10 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Keylight | — | 100.0% (34/34) | 1 |
 | Primatte | — | — | 7 |
 | Ultimatte | — | — | 2 |
-| IBKColor | — | 20.0% (1/5) | 1 |
-| IBKGizmo | — | 92.9% (13/14) | 0 |
+| IBKColor | — | 33.3% (1/3) | 3 |
+| IBKGizmo | — | 100.0% (14/14) | 0 |
 | Cryptomatte | — | 100.0% (1/1) | 3 |
-| Encryptomatte | 0.0% (0/2) | 100.0% (1/1) | 3 |
+| Encryptomatte | 100.0% (2/2) | 100.0% (1/1) | 3 |
 | Merge | — | 100.0% (5/5) | 4 |
 | Premult | — | 100.0% (1/1) | 1 |
 | Unpremult | — | 100.0% (1/1) | 1 |
@@ -420,9 +420,9 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | AddMix | — | 100.0% (2/2) | 5 |
 | Blend | — | 100.0% (2/2) | 0 |
 | CopyBBox | — | — | 0 |
-| CopyRectangle | 0.0% (0/4) | 100.0% (5/5) | 0 |
+| CopyRectangle | 100.0% (4/4) | 100.0% (5/5) | 0 |
 | ContactSheet | 100.0% (6/6) | 100.0% (11/11) | 0 |
-| TimeDissolve | — | 0.0% (0/2) | 2 |
+| TimeDissolve | — | 100.0% (2/2) | 2 |
 | ZMerge | — | 100.0% (3/3) | 0 |
 | Transform | 100.0% (2/2) | 92.3% (12/13) | 2 |
 | Crop | — | 100.0% (4/4) | 1 |
@@ -473,10 +473,12 @@ Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were place
 
 Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. Current: Remove rows 3/3, types 4/4; AppendClip rows 0/0, types 5/5; CornerPin2D rows 2/2, types 11/12; BurnIn rows 2/2, types 18/18; Clamp rows 8/8, types 8/8; Blend rows 0/0, types 2/2; DirBlur rows 0/0, types 11/11; ContactSheet rows 6/6, types 11/11. CornerPin2D's `invert` (a check box in the guide) is a check box over the stored forward/inverse text, DirBlur's `target` (an xy pair) is an x, y pair of fields over the stored text "x,y", and DirBlur's `Quality` (a number) is a whole-number field with a slider over the stored low/normal/high (1, 2 and 4; any other whole number is stored as its digits). A saved document keeps the text it held and renders as before. CornerPin2D's `motionblur` (a number in the guide, an on/off switch beside a samples count here) stays as it is, as Tracker's and Transform's do: one number would change how the node renders. AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.
 
+Panel sweep S4 (2026-11-04) baseline for its nodes, before rows were placed on one row and the count and fraction knobs were listed: TimeBlur rows 0/2; TimeEcho types 2/3; ZDefocus types 24/25; IBKGizmo types 13/14; Encryptomatte rows 0/2; Kronos rows 0/2, types 12/14; IBKColor types 1/5; OFlow rows 0/2, types 10/12; CopyRectangle rows 0/4; TimeDissolve types 0/2; RotoPaint types 9/62. Current: TimeBlur rows 2/2, types 4/4; TimeEcho rows 0/0, types 3/3; ZDefocus rows 0/0, types 25/25; IBKGizmo rows 0/0, types 14/14; Encryptomatte rows 2/2, types 1/1; Kronos rows 2/2, types 13/14; IBKColor rows 0/0, types 1/3; OFlow rows 2/2, types 11/12; CopyRectangle rows 4/4, types 5/5; TimeDissolve rows 0/0, types 2/2; RotoPaint rows 0/0, types 9/62. RotoPaint stays as it is: 52 of its 53 mismatches are per-shape and per-stroke knobs (colour, blending mode, brush size, feather, transform) that have no knob on the node's panel, and the last, `global_motionblur` (a number in the guide, a samples count beside an on/off switch here), would change how the node renders. Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.
+
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
-**Lowest shared-row scores:** Colorspace (0.0%); CopyRectangle (0.0%); Encryptomatte (0.0%); GenerateLUT (0.0%); Kronos (0.0%).
-**Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); TimeDissolve (0.0%).
+**Lowest shared-row scores:** Colorspace (0.0%); GenerateLUT (0.0%); LensDistortion (0.0%); MotionBlur2D (0.0%); MotionBlur3D (0.0%).
+**Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); ViewMetaData (0.0%).
 
 ## The 30 largest gaps
 

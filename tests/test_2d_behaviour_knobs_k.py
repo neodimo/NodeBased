@@ -412,7 +412,7 @@ class TimeAndMetadataLayoutTests(unittest.TestCase):
         "CurveTool": ["Curve type", "AutoCrop color", "AutoCrop tolerance", "Frames for base average", "Channels", "Box X", "Crop X", "Average R", "Average G",
                       "Average B", "Average A", "Max X", "Maximum luminance pixel value", "Min X", "Minimum luminance pixel value"],
         "AppendClip": ["Fade in", "Fade out", "Dissolve", "First Frame", "Take metadata from first clip"],
-        "TimeBlur": ["Divisions", "Shutter", "Shutter Offset", "Custom Offset"],
+        "TimeBlur": ["Divisions", "Shutter", "Shutter offset"],     # the offset menu and its custom value share one row (panel sweep S4)
         "ContactSheet": ["Resolution", "Rows/columns", "Gap", "Center", "Row Order", "Column Order", "Split Inputs", "Frame range"],
         "Precomp": ["File", "Reload count", "Read file for output", "Missing frames", "Reload file count", "Output node", "Use output node"],
     }

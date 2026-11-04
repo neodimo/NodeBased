@@ -2681,6 +2681,12 @@ ROW_GROUPS = {
     "ContactSheet": (KnobGroup("row", ("width", "height"), label="Resolution", members=("int", "int")),
                      KnobGroup("row", ("rows", "columns"), label="Rows/columns", members=("int", "int")),
                      KnobGroup("row", ("startframe", "endframe"), label="Frame range", members=("int", "int"))),
+    # Panel sweep S4 (11/4)
+    "TimeBlur": (KnobGroup("row", ("shutter_offset", "custom_offset"), label="Shutter offset", members=("enum", "float")),),
+    "Kronos": (KnobGroup("row", ("input_start", "input_end"), label="Input range", members=("float", "float")),),
+    "Encryptomatte": (KnobGroup("row", ("matte_name_type", "id0"), label="Matte Name", members=("enum", "string")),),
+    "OFlow": (KnobGroup("row", ("input_start", "input_end"), label="Input range", members=("float", "float")),),
+    "CopyRectangle": (KnobGroup("row", ("area_x", "area_y", "area_r", "area_t"), label="Area", members=("float", "float", "float", "float")),),
 }
 
 

@@ -64,6 +64,8 @@ FULL_PANEL_SHAPE = (
     'AppendClip', 'Blend', 'BurnIn', 'Clamp', 'ContactSheet', 'Remove',
     # Panel sweep S3 finish (2026-11-04): DirBlur Target and Quality
     'DirBlur',
+    # Panel sweep S4 (2026-11-04)
+    'CopyRectangle', 'Encryptomatte', 'IBKGizmo', 'TimeBlur', 'TimeDissolve', 'TimeEcho', 'ZDefocus',
 )
 
 
@@ -99,6 +101,9 @@ class PanelShapeMetricTests(unittest.TestCase):
         self.assertEqual(audit.number_knob_kind("dissolve", 0), "float")     # TimeDissolve's and Dissolve's mix; AppendClip's counts frames
         self.assertIn(("AppendClip", "dissolve"), audit._COUNT_KNOBS)
         self.assertIn(("ContactSheet", "width"), audit._COUNT_KNOBS)
+        self.assertIn(("TimeEcho", "framesbehind"), audit._COUNT_KNOBS)
+        self.assertIn(("ZDefocus", "blades"), audit._COUNT_KNOBS)
+        self.assertIn(("Kronos", "timingFrame2"), audit._FLOAT_KNOBS)
 
     def test_tracker_viewer_and_components_are_measured(self):
         def metrics(key):

@@ -408,6 +408,15 @@ _COUNT_WORDS = {"frame", "frames", "first", "last", "count", "samples", "sample"
 # pixels (Nuke's Resolution is a width/height pair of integers and its gap an Int_Knob), so none of them can be a fractional slider.
 _COUNT_KNOBS = {("Tracker", "smoothT"), ("Tracker", "smoothR"), ("Tracker", "smoothS"), ("Switch", "which"), ("AppendClip", "dissolve"),
                 ("ContactSheet", "width"), ("ContactSheet", "height"), ("ContactSheet", "gap")}
+# Panel sweep S4 (2026-11-04): TimeEcho's framesbehind counts frames and ZDefocus's blades counts the aperture's blades (whole numbers in Nuke's
+# Int_Knobs). _FLOAT_KNOBS are guide numbers whose name holds a count word although the value is a fraction or a time: IBKGizmo's level is the
+# screen range (a multiplier, default 1), Kronos's timingFrame2 is the frame the timing curve asks for, where a fractional frame is interpolated.
+# TimeDissolve's in and out are the first and last frame of the dissolve (defaults 1 and 10).
+_COUNT_KNOBS |= {("TimeEcho", "framesbehind"), ("ZDefocus", "blades"), ("TimeDissolve", "in"), ("TimeDissolve", "out")}
+_FLOAT_KNOBS = {("IBKGizmo", "level"), ("Kronos", "timingFrame2"), ("OFlow", "timingFrame2")}
+# Knobs whose Nuke widget the guide's default cannot tell: IBKColor's Size (a pixel size, default 10) and multi ("patch black", default 0, which
+# the gizmo may show as a check box or a number). Left unmeasured and counted as such, as the rule asks.
+_UNSURE_KNOBS = {("IBKColor", "Size"), ("IBKColor", "multi")}
 # The Viewer's knobs are viewer state, not node params; this is the control each one has (the Viewer settings window, nodebased/viewersettings.py,
 # or the viewer strip: gain and gamma spin boxes, the zebra check box, the proxy tier, mask and safe-zone dropdowns).
 _VIEWER_WIDGETS = {
@@ -494,7 +503,8 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         elif nuke_kind == "string" and str(knob.get("default")).strip().lower() in ("on", "off"):
             nuke_kind = "bool"      # the guide writes a checkbox's default as on or off
         elif nuke_kind == "number":
-            nuke_kind = "int" if (node_type, name) in _COUNT_KNOBS else number_knob_kind(name, knob.get("default"))
+            nuke_kind = ("int" if (node_type, name) in _COUNT_KNOBS else "float" if (node_type, name) in _FLOAT_KNOBS
+                         else "unknown" if (node_type, name) in _UNSURE_KNOBS else number_knob_kind(name, knob.get("default")))
         if nuke_kind == "unknown":
             unknown_count += 1
             continue
@@ -756,6 +766,18 @@ def build_report(reference_dir=None):
       "and DirBlur's `Quality` (a number) is a whole-number field with a slider over the stored low/normal/high (1, 2 and 4; any other whole number is stored as its digits). A saved document keeps the text it held and renders as before. "
       "CornerPin2D's `motionblur` (a number in the guide, an on/off switch beside a samples count here) stays as it is, as Tracker's and Transform's do: one number would change how the node renders. "
       "AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.")
+    w("")
+    w("Panel sweep S4 (2026-11-04) baseline for its nodes, before rows were placed on one row and the count and fraction knobs were listed: "
+      "TimeBlur rows 0/2; TimeEcho types 2/3; ZDefocus types 24/25; IBKGizmo types 13/14; Encryptomatte rows 0/2; Kronos rows 0/2, types 12/14; "
+      "IBKColor types 1/5; OFlow rows 0/2, types 10/12; CopyRectangle rows 0/4; TimeDissolve types 0/2; RotoPaint types 9/62. "
+      "Current: " + "; ".join(
+          f"{n} rows {sweep[n]['panel_rows']['matched']}/{sweep[n]['panel_rows']['total']}, types {sweep[n]['panel_types']['matched']}/{sweep[n]['panel_types']['total']}"
+          for n in ("TimeBlur", "TimeEcho", "ZDefocus", "IBKGizmo", "Encryptomatte", "Kronos", "IBKColor", "OFlow", "CopyRectangle", "TimeDissolve", "RotoPaint") if n in sweep) + ". "
+      "RotoPaint stays as it is: 52 of its 53 mismatches are per-shape and per-stroke knobs (colour, blending mode, brush size, feather, transform) that have no knob on the node's panel, "
+      "and the last, `global_motionblur` (a number in the guide, a samples count beside an on/off switch here), would change how the node renders. "
+      "Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) "
+      "stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. "
+      "TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.")
     w("")
     read_unit = next((u for u in units if u["name"] == "Read"), None)
     if read_unit:

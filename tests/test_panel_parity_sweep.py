@@ -1,7 +1,7 @@
 """Lane 2 panel sweep (2026-11-04): knobs the Nuke guide gives one label share one row, and number knobs that count are integer fields.
 
 Each test builds the node's Properties panel and asserts the shared rows and widget kinds the ruler (tools/audit_nuke_fidelity.py)
-measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer (step S1); Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, ScreenKeyer and Reformat (step S2); Remove, AppendClip, CornerPin2D, BurnIn, Clamp, Blend, DirBlur and ContactSheet (step S3)."""
+measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer (step S1); Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, ScreenKeyer and Reformat (step S2); Remove, AppendClip, CornerPin2D, BurnIn, Clamp, Blend, DirBlur and ContactSheet (step S3); TimeBlur, TimeEcho, ZDefocus, IBKGizmo, Encryptomatte, Kronos and IBKColor, with OFlow, CopyRectangle and TimeDissolve in place of RotoPaint (step S4)."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import unittest
@@ -369,6 +369,74 @@ class PanelSweepTests(unittest.TestCase):
             self.assertNoSlider(panel, name)
         for name in ("center-switch", "splitinputs-switch"):
             self.widget(panel, name, QCheckBox)
+
+    def test_timeblur_shutter_offset_row(self):
+        panel = self.panel("TimeBlur")
+        self.assertOneRow(panel, "shutter_offset-choice", "custom_offset-field")
+        self.widget(panel, "shutter_offset-choice", QComboBox)
+        self.widget(panel, "custom_offset-field", QDoubleSpinBox)
+        self.widget(panel, "divisions-field", QSpinBox)
+        self.assertNoSlider(panel, "divisions-field")
+
+    def test_timeecho_frames_are_whole_numbers(self):
+        panel = self.panel("TimeEcho")
+        self.widget(panel, "frames-field", QSpinBox)
+        self.assertNoSlider(panel, "frames-field")
+
+    def test_zdefocus_blades_are_a_whole_number(self):
+        panel = self.panel("ZDefocus")
+        self.widget(panel, "blade_count-field", QSpinBox)
+        self.assertNoSlider(panel, "blade_count-field")
+
+    def test_ibkgizmo_screen_range_is_a_slider_number(self):
+        panel = self.panel("IBKGizmo")
+        field = self.widget(panel, "screen_range-field", QDoubleSpinBox)
+        self.assertTrue(any(isinstance(w, QSlider) for w in field.parentWidget().findChildren(QSlider)))
+
+    def test_encryptomatte_matte_name_row(self):
+        panel = self.panel("Encryptomatte")
+        self.assertOneRow(panel, "matte_name_type-choice", "id0-field")
+        self.widget(panel, "matte_name_type-choice", QComboBox)
+
+    def test_kronos_input_range_row_and_frame_is_a_number(self):
+        panel = self.panel("Kronos")
+        self.assertOneRow(panel, "input_start-field", "input_end-field")
+        self.widget(panel, "frame-field", QDoubleSpinBox)
+        self.widget(panel, "shutter_samples-field", QSpinBox)
+        self.assertNoSlider(panel, "shutter_samples-field")
+
+    def test_ibkcolor_size_is_a_whole_number_and_patch_black_a_check_box(self):
+        panel = self.panel("IBKColor")
+        self.widget(panel, "fill_size-field", QSpinBox)
+        self.assertNoSlider(panel, "fill_size-field")
+        self.widget(panel, "patch_black-switch", QCheckBox)
+
+    def test_oflow_input_range_row_and_frame_is_a_number(self):
+        panel = self.panel("OFlow")
+        self.assertOneRow(panel, "input_start-field", "input_end-field")
+        self.widget(panel, "frame-field", QDoubleSpinBox)
+
+    def test_copyrectangle_area_is_one_row(self):
+        panel = self.panel("CopyRectangle")
+        self.assertOneRow(panel, "area_x-field", "area_y-field", "area_r-field", "area_t-field")
+
+    def test_timedissolve_frames_are_whole_numbers(self):
+        panel = self.panel("TimeDissolve")
+        for name in ("in-field", "out-field"):
+            self.widget(panel, name, QSpinBox)
+            self.assertNoSlider(panel, name)
+
+    def test_s4_nodes_measure_as_the_ruler_says(self):
+        def metrics(key):
+            pair = audit.load_json(audit.MAP_JSON)["pairs"][key]
+            nuke = audit.load_json(audit.NUKE_JSON)["nodes"][key]
+            return audit.panel_shape_metrics(nuke, pair, pair["nodebased"], key)
+        rows, types = metrics("Kronos")
+        self.assertEqual((rows["matched"], rows["total"]), (2, 2))
+        self.assertEqual([m[0] for m in types["missed"]], ["vectorDetail"])      # an integer 1 to 6 here, a 0 to 1 fraction in Nuke
+        rows, types = metrics("IBKColor")
+        self.assertEqual([m[0] for m in types["missed"]], ["off", "mult"])      # single numbers here, RGB triples in Nuke
+        self.assertEqual(types["unknown"], 3)
 
     def test_row_edits_reach_the_document(self):
         panel = self.panel("Constant")

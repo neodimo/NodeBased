@@ -301,7 +301,8 @@ class LayoutTests(unittest.TestCase):
 
     def test_kronos_main_tab_follows_the_guide_order(self):
         names = [n for n, _ in self.labels("Kronos")]
-        self.assertEqual(names[:8], ["input_start", "input_end", "retimed_channels", "interpolation", "timing", "speed", "input_speed", "frame"])
+        # input_start and input_end share one "Input range" row (panel sweep S4), listed under the first
+        self.assertEqual(names[:7], ["input_start", "retimed_channels", "interpolation", "timing", "speed", "input_speed", "frame"])
         labels = dict(self.labels("Kronos"))
         self.assertEqual((labels["interpolation"], labels["timing"], labels["speed"], labels["input_speed"], labels["frame"]),
                          ("Method", "Timing", "Output Speed", "Input Speed", "Frame"))
@@ -309,7 +310,7 @@ class LayoutTests(unittest.TestCase):
     def test_oflow_main_tab_follows_the_guide_order(self):
         names = [n for n, _ in self.labels("OFlow")]
         paired = [n for n in names if n != "output_start" and n != "flow_backend"]
-        self.assertEqual(paired, ["input_start", "input_end", "retimed_channels", "interpolation", "timing", "speed", "input_speed", "frame",
+        self.assertEqual(paired, ["input_start", "retimed_channels", "interpolation", "timing", "speed", "input_speed", "frame",
                                   "vector_detail", "smoothness", "shutter_samples", "shutter_time", "auto_shutter_time", "flicker_compensation"])
         labels = dict(self.labels("OFlow"))
         self.assertEqual((labels["interpolation"], labels["speed"], labels["frame"]), ("Method", "Output Speed", "Frame"))

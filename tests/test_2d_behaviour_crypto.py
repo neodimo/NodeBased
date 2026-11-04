@@ -116,7 +116,8 @@ class CryptomatteLayoutTests(unittest.TestCase):
                                                     ("sidecar_filepath", "Sidecar"), ("preview_enabled", "Preview")])
 
     def test_encryptomatte_main_tab_order_and_labels(self):
-        self.assertEqual(labels("Encryptomatte")[:4], [("matte_name_type", "Matte Name"), ("id0", "Matte name"),
+        # the matte name type and the first matte name share one row (panel sweep S4), labelled with the guide's "Matte Name"
+        self.assertEqual(labels("Encryptomatte")[:3], [("matte_name_type", "Matte Name"),
                                                       ("merge_operation", "Merge Operation"), ("layer_name", "Cryptomatte Layer")])
 
 
