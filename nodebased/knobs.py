@@ -34,6 +34,7 @@ class KnobGroup:
     captions: tuple[str, ...] | None = None    # an "xy" row's field captions when they are not x, y, z (a Keyer's A B C D)
     members: tuple[str, ...] | None = None     # a "row" group: the widget kind of each param (int, float, enum, bool, string), side by side on one row;
                                                # a "split" group: "bool" for each check box param that sits beside the split knob (Clamp's clamp_min)
+    stored: str | None = None      # a control whose widget differs from how the param is stored (see storedknobs.py): the document keeps its text
 
     def __post_init__(self):
         if self.kind == "split":
@@ -49,6 +50,10 @@ class KnobGroup:
                 raise ValueError("a row knob names two or more params and a widget kind (int, float, enum, bool, string) for each")
         elif self.members is not None and self.kind != "split":
             raise ValueError("only a row or split knob takes members")
+        if self.stored is not None:
+            from .storedknobs import STORED_KINDS
+            if STORED_KINDS.get(self.stored) != self.kind or len(self.params) != 1:
+                raise ValueError(f"a stored-as-text knob names one param and the widget kind it is stored for: {STORED_KINDS}")
         if self.captions is not None and (self.kind not in ("xy", "xyz") or len(self.captions) != len(self.params)):
             raise ValueError("captions go with an xy row and name each of its fields")
         if self.label is None:
@@ -465,9 +470,13 @@ KNOB_LAYOUT = {
         KnobGroup("xy", ("center_x", "center_y"), label="BlurCenter"),
         KnobGroup("float_slider", ("length",), label="BlurLength", soft_range=(0, 200)),
         KnobGroup("float_slider", ("angle",), label="BlurAngle", soft_range=(-180, 180)),
-        KnobGroup("string", ("target",), label="Target"), KnobGroup("bool", ("UseTarget",), label="UseTarget"),
+        KnobGroup("xy", ("target",), label="Target", stored="point_text",
+                  help="The point the linear blur runs toward from BlurCenter while UseTarget is on."),
+        KnobGroup("bool", ("UseTarget",), label="UseTarget"),
         KnobGroup("int", ("Samples",), label="Samples"), KnobGroup("float", ("PixelAspect",), label="PixelAspect"),
-        KnobGroup("enum", ("Quality",), label="Quality"), KnobGroup("float", ("pixeloffset",), label="Pixel offset"),
+        KnobGroup("float_slider", ("Quality",), label="Quality", soft_range=(1, 8), stored="factor_text",
+                  help="The scaling factor of the blur: 1 blurs at full size and gives the highest quality; a larger whole number blurs a smaller picture, faster and smoother."),
+        KnobGroup("float", ("pixeloffset",), label="Pixel offset"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
         KnobGroup("bool", ("legacy_dirblur_knobs",), label="Legacy knobs",
                   help="Leave UseTarget, Samples and Pixel offset without effect, as graphs saved before DirBlur read them do.")),
@@ -957,7 +966,8 @@ KNOB_LAYOUT = {
                     section="Extra matrix" if (r, c) == (0, 0) else None,
                     help="A matrix applied to the pinned picture after the pin, in canvas pixels." if (r, c) == (0, 0) else None)
           for r in range(3) for c in range(3)),
-        KnobGroup("enum", ("direction",), label="Invert", help="Forward warps the from points onto the to points. Inverse swaps them (Nuke's invert)."),
+        KnobGroup("bool", ("direction",), label="Invert", stored="inverse_text",
+                  help="Off warps the from points onto the to points. On swaps them (Nuke's invert)."),
         KnobGroup("enum", ("filter",), label="Filter"),
         KnobGroup("bool", ("clamp",), label="Clamp", help="Keep the filtered result inside the range of the input, so a sharp filter cannot overshoot."),
         KnobGroup("bool", ("black_outside",), label="Black outside",

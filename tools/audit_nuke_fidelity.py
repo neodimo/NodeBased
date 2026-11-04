@@ -750,8 +750,9 @@ def build_report(reference_dir=None):
       "Current: " + "; ".join(
           f"{n} rows {sweep[n]['panel_rows']['matched']}/{sweep[n]['panel_rows']['total']}, types {sweep[n]['panel_types']['matched']}/{sweep[n]['panel_types']['total']}"
           for n in ("Remove", "AppendClip", "CornerPin2D", "BurnIn", "Clamp", "Blend", "DirBlur", "ContactSheet") if n in sweep) + ". "
-      "CornerPin2D's `invert` (a check box in the guide, the forward/inverse direction menu here) and `motionblur` (a number in the guide, an on/off switch here), and DirBlur's `target` (an xy pair in the guide, the text \"x,y\" here) "
-      "and `Quality` (a number in the guide, a low/normal/high menu here) stay as they are: each would change what a saved document stores or how the node renders. "
+      "CornerPin2D's `invert` (a check box in the guide) is a check box over the stored forward/inverse text, DirBlur's `target` (an xy pair) is an x, y pair of fields over the stored text \"x,y\", "
+      "and DirBlur's `Quality` (a number) is a whole-number field with a slider over the stored low/normal/high (1, 2 and 4; any other whole number is stored as its digits). A saved document keeps the text it held and renders as before. "
+      "CornerPin2D's `motionblur` (a number in the guide, an on/off switch beside a samples count here) stays as it is, as Tracker's and Transform's do: one number would change how the node renders. "
       "AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.")
     w("")
     read_unit = next((u for u in units if u["name"] == "Read"), None)

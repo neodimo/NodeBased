@@ -250,9 +250,17 @@ class PanelSweepTests(unittest.TestCase):
         self.widget(panel, "custom_offset-field", QDoubleSpinBox)
         for name in ("enable1-switch", "clamp-switch", "black_outside-switch", "motionblur-switch"):
             self.widget(panel, name, QCheckBox)
-        # The guide gives invert as a check box and motionblur as a number; NodeBased keeps its direction menu and on/off switch
-        # (changing either alters what is stored and rendered, which is out of scope).
-        self.assertTrue(self.has_menu(panel, "forward", "inverse"))
+        # Invert is a check box over the stored direction text. The guide gives motionblur as a number; NodeBased keeps its on/off
+        # switch beside the samples count (as Tracker and Transform do), because one number would change what is stored and rendered.
+        self.assertFalse(self.has_menu(panel, "forward", "inverse"))
+        box = self.widget(panel, "direction-switch", QCheckBox)
+        self.assertFalse(box.isChecked())
+        box.click()
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["sweep-CornerPin"]["params"]["direction"] == "inverse"))
+        box = self.widget(self.panel("CornerPin"), "direction-switch", QCheckBox)
+        self.assertTrue(box.isChecked())
+        box.click()
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["sweep-CornerPin"]["params"]["direction"] == "forward"))
 
     def test_burnin_font_and_style_share_a_row(self):
         panel = self.panel("BurnIn")
@@ -296,10 +304,60 @@ class PanelSweepTests(unittest.TestCase):
         self.widget(panel, "Samples-field", QSpinBox)
         self.assertNoSlider(panel, "Samples-field")
         self.widget(panel, "UseTarget-switch", QCheckBox)
-        # The guide gives Linear Target as an xy pair and Quality as a number; NodeBased stores target as the text "x,y" and
-        # Quality as a low/normal/high menu (changing either alters the stored document and the render, which is out of scope).
-        self.assertTrue(self.has_menu(panel, "low", "normal", "high"))
-        self.assertTrue(isinstance(panel.findChild(QWidget, "target-field"), QLineEdit))
+        # Target is an x, y pair of fields over the text "x,y"; Quality is a whole-number factor with a slider over low/normal/high.
+        self.assertFalse(self.has_menu(panel, "low", "normal", "high"))
+        self.assertOneRow(panel, "target-x-field", "target-y-field")
+        self.assertEqual((self.widget(panel, "target-x-field", QDoubleSpinBox).value(), self.widget(panel, "target-y-field", QDoubleSpinBox).value()),
+                         (480.0, 240.0))
+        quality = self.widget(panel, "Quality-field", QDoubleSpinBox)
+        self.assertEqual(quality.value(), 1.0)          # "high"
+        self.assertEqual(quality.decimals(), 0)
+        self.assertTrue(any(isinstance(w, QSlider) for w in quality.parentWidget().findChildren(QSlider)))
+
+    def test_dirblur_target_and_quality_write_the_stored_text(self):
+        panel = self.panel("DirBlur")
+        x, y = self.widget(panel, "target-x-field", QDoubleSpinBox), self.widget(panel, "target-y-field", QDoubleSpinBox)
+        x.setValue(100.5)
+        x.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["sweep-DirBlur"]["params"]["target"] == "100.5,240"))
+        panel = self.panel("DirBlur")
+        self.assertEqual(self.widget(panel, "target-x-field", QDoubleSpinBox).value(), 100.5)
+        for typed, stored in ((2, "normal"), (4, "low"), (3, "3"), (1, "high")):
+            field = self.widget(self.panel("DirBlur"), "Quality-field", QDoubleSpinBox)
+            field.setValue(typed)
+            field.editingFinished.emit()
+            self.assertTrue(wait_until(lambda: self.window.graph_nodes()["sweep-DirBlur"]["params"]["Quality"] == stored), (typed, stored))
+        self.window.command({"op": "set", "id": "sweep-DirBlur", "param": "Quality", "value": "low"})
+        self.assertEqual(self.widget(self.panel("DirBlur"), "Quality-field", QDoubleSpinBox).value(), 4.0)
+
+    def test_dirblur_quality_factor_reads_names_and_whole_numbers(self):
+        from nodebased import filterbehaviour
+        for stored, factor in (("high", 1), ("normal", 2), ("low", 4), ("3", 3), ("8", 8), ("0", 1), ("junk", 1), ("1000", 64)):
+            self.assertEqual(filterbehaviour.dirblur_quality_factor({"Quality": stored, "legacy_dirblur_knobs": 0}), factor, stored)
+        self.assertEqual(filterbehaviour.dirblur_quality_factor({"Quality": "low", "legacy_dirblur_knobs": 1}), 1)
+
+    def test_dirblur_whole_number_quality_scales_the_picture_down(self):
+        import numpy as np
+        from nodebased.core import Dispatcher
+        from tests.test_2d_behaviour_filter_a import differs, kern, texture
+        pixels = texture()
+        blurred = {q: kern("DirBlur", pixels, blur_type="linear", length=11.0, angle=20.0, Quality=q) for q in ("high", "normal", "3", "low", "8")}
+        self.assertTrue(differs(blurred["high"], blurred["3"]))
+        self.assertTrue(differs(blurred["normal"], blurred["3"]))
+        self.assertTrue(differs(blurred["3"], blurred["low"]))
+        self.assertTrue(differs(blurred["low"], blurred["8"]))
+        flat = np.full((16, 20, 4), 0.4, np.float32)
+        np.testing.assert_allclose(kern("DirBlur", flat, length=9.0, Quality="3"), flat, atol=1e-6)
+        # a node holding a whole-number Quality is valid; a name outside the list or a stray number is refused
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "q", "type": "DirBlur", "pos": [0, 0]})
+        for good in ("3", "64", "high", "low"):
+            d.execute({"op": "set", "id": "q", "param": "Quality", "value": good})
+            self.assertEqual(d.document["nodes"]["q"]["params"]["Quality"], good)
+        for bad in ("1", "65", "3.5", "medium"):
+            with self.assertRaises(ValueError, msg=bad):
+                d.execute({"op": "set", "id": "q", "param": "Quality", "value": bad})
+            self.assertEqual(d.document["nodes"]["q"]["params"]["Quality"], "low")
 
     def test_contactsheet_rows_and_integer_pixels(self):
         panel = self.panel("ContactSheet")

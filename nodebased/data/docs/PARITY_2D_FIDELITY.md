@@ -169,7 +169,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | DropShadow | `DropShadow` | supported | 96.8 | 96.1 | 100 (9/9) | 100 (8/8) | 67 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 8 | Defocus | `Defocus` | supported | 99.2 | 99.1 | 100 (5/5) | 100 (4/4) | 91 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
 | 8 | ZDefocus | `ZDefocus` | supported | 91.0 | 89.4 | 78 (25/36) | - | 81 | 100 | 100 | 100 (3/3) | 99 | - | unmeasured |
-| 9 | DirBlur | `DirBlur` | supported | 96.0 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 94 | - | unmeasured |
+| 9 | DirBlur | `DirBlur` | supported | 96.5 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (4/4) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
@@ -236,7 +236,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 3 | Tracker | `Tracker` | supported | 90.9 | 89.3 | 78 (41/54) | - | 83 | 100 | 100 | 100 (5/5) | 98 | - | unmeasured |
 | 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
-| 6 | CornerPin2D | `CornerPin` | supported | 99.5 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 96 | - | unmeasured |
+| 6 | CornerPin2D | `CornerPin` | supported | 99.8 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 98 | - | unmeasured |
 | 7 | Mirror | `Mirror` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 8 | Stabilize | `Stabilize` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | Position | `Position` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
@@ -377,7 +377,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | DropShadow | — | 100.0% (8/8) | 1 |
 | Defocus | — | 100.0% (5/5) | 0 |
 | ZDefocus | — | 96.0% (24/25) | 3 |
-| DirBlur | — | 81.8% (9/11) | 1 |
+| DirBlur | — | 100.0% (11/11) | 1 |
 | EdgeBlur | — | 100.0% (6/6) | 2 |
 | EdgeExtend | — | 100.0% (6/6) | 1 |
 | Erode (fast) | — | 100.0% (1/1) | 0 |
@@ -429,7 +429,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Tracker | 100.0% (5/5) | 94.1% (32/34) | 10 |
 | PlanarTracker | — | — | 0 |
 | Reformat | 100.0% (2/2) | 100.0% (14/14) | 1 |
-| CornerPin2D | 100.0% (2/2) | 83.3% (10/12) | 12 |
+| CornerPin2D | 100.0% (2/2) | 91.7% (11/12) | 12 |
 | Mirror | — | 100.0% (2/2) | 0 |
 | Stabilize | — | — | 0 |
 | Position | — | 100.0% (1/1) | 0 |
@@ -471,7 +471,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 
 Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were placed on one row, counting knobs were integer fields and the Viewer's controls were measured: Tracker rows 3/5, types 27/34; Viewer types 0/20; Switch types 0/1; TimeClip rows 0/6; FrameRange rows 0/2; Glow types 8/9; Keylight types 33/34; Reformat types 12/14. Current: Tracker rows 5/5, types 32/34; Viewer rows 0/0, types 14/17; Switch rows 0/0, types 1/1; TimeClip rows 6/6, types 6/6; FrameRange rows 2/2, types 2/2; Glow rows 0/0, types 9/9; Keylight rows 0/0, types 34/34; Reformat rows 2/2, types 14/14. Tracker's `motionblur` (a number in the guide, an on/off switch here) and `cornerPinOptions` (a menu in the guide, two export buttons here), and the Viewer's `clip_warning` (a menu in the guide, the zebra check box here), `downrez` (a number in the guide, the proxy-tier menu here) and `overscan` (a number in the guide, a whole-pixel field here) stay as they are: each would need a change to how the node renders or to viewer state.
 
-Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. Current: Remove rows 3/3, types 4/4; AppendClip rows 0/0, types 5/5; CornerPin2D rows 2/2, types 10/12; BurnIn rows 2/2, types 18/18; Clamp rows 8/8, types 8/8; Blend rows 0/0, types 2/2; DirBlur rows 0/0, types 9/11; ContactSheet rows 6/6, types 11/11. CornerPin2D's `invert` (a check box in the guide, the forward/inverse direction menu here) and `motionblur` (a number in the guide, an on/off switch here), and DirBlur's `target` (an xy pair in the guide, the text "x,y" here) and `Quality` (a number in the guide, a low/normal/high menu here) stay as they are: each would change what a saved document stores or how the node renders. AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.
+Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. Current: Remove rows 3/3, types 4/4; AppendClip rows 0/0, types 5/5; CornerPin2D rows 2/2, types 11/12; BurnIn rows 2/2, types 18/18; Clamp rows 8/8, types 8/8; Blend rows 0/0, types 2/2; DirBlur rows 0/0, types 11/11; ContactSheet rows 6/6, types 11/11. CornerPin2D's `invert` (a check box in the guide) is a check box over the stored forward/inverse text, DirBlur's `target` (an xy pair) is an x, y pair of fields over the stored text "x,y", and DirBlur's `Quality` (a number) is a whole-number field with a slider over the stored low/normal/high (1, 2 and 4; any other whole number is stored as its digits). A saved document keeps the text it held and renders as before. CornerPin2D's `motionblur` (a number in the guide, an on/off switch beside a samples count here) stays as it is, as Tracker's and Transform's do: one number would change how the node renders. AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.
 
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 

@@ -298,6 +298,7 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
 
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, NEW_NODE_DEFAULTS as _WRITE_NEW_NODE_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from . import projectsettings as _projectsettings
+from . import storedknobs as _storedknobs
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
 from . import behaviour2d as _behaviour2d
@@ -3474,7 +3475,7 @@ def validate(doc, _depth=0):
                     raise ValueError(f"Invalid {name}: {value}")
                 continue
             if (name in CHOICES and value not in CHOICES[name] and not (kind == "LevelSet" and name in ("channel", "output"))
-                    and not _chrome.is_open_choice(kind, name)):
+                    and not _chrome.is_open_choice(kind, name) and not (kind == "DirBlur" and _storedknobs.is_factor_digits(value))):
                 raise ValueError(f"Invalid {name}: {value}")
             if isinstance(value, (list, tuple)) and name in SPLITTABLE.get(kind, {}):
                 _validate_split(doc, key, kind, name, value)

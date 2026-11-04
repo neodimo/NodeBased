@@ -12876,6 +12876,9 @@ class Window(QMainWindow):
                         units.append(unit)
                     form.addRow(group.label, WrappingRow(units))
                     continue
+                if group.stored is not None:
+                    form.addRow(group.label, self.stored_knob_control(key, group, node["params"][group.params[0]]))
+                    continue
                 if group.kind in ("xy", "xyz"):
                     axis_fields = [numeric_field(param) for param in group.params]
                     units = []
@@ -15460,6 +15463,56 @@ class Window(QMainWindow):
         frame = self.dispatcher.document["time"]["current"]
         self.defer_command({"op": "set_key", "id": key, "param": param,
                             "frame": int(frame), "value": float(value)})
+
+    def stored_knob_control(self, key, group, value):
+        """The control for a knob the document keeps as text (storedknobs.py): an x, y pair for a point, a check box for a direction,
+        a whole-number field with a slider for a scaling factor. Each writes back the text the knob always held. Text cannot be keyed."""
+        from . import storedknobs
+        param = group.params[0]
+        if group.stored == "point_text":
+            fields, units = [], []
+            for axis, shown in zip("xy", storedknobs.point_of(value)):
+                field = FittedDoubleSpinBox()
+                field.setObjectName(f"{param}-{axis}-field")
+                field.setRange(-1e7, 1e7)
+                field.setDecimals(3)
+                field.setSingleStep(0.1)
+                field.setValue(shown)
+                field.setKeyboardTracking(False)
+                fields.append(field)
+                unit = QWidget()
+                unit_layout = QHBoxLayout(unit)
+                unit_layout.setContentsMargins(0, 0, 0, 0)
+                unit_layout.setSpacing(4)
+                unit_layout.addWidget(QLabel(axis))
+                unit_layout.addWidget(field, 1)
+                units.append(unit)
+            for field in fields:
+                field.editingFinished.connect(
+                    lambda k=key, p=param, f=fields: self.defer_command(
+                        {"op": "set", "id": k, "param": p, "value": storedknobs.point_text(f[0].value(), f[1].value())}))
+            return WrappingRow(units)
+        if group.stored == "inverse_text":
+            control = QCheckBox()
+            control.setObjectName(f"{param}-switch")
+            control.setText("")
+            control.setChecked(storedknobs.inverse_of(value))
+            control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
+                {"op": "set", "id": k, "param": p, "value": storedknobs.direction_text(checked)}))
+            return control
+        control = FloatSliderControl(storedknobs.FACTOR_LIMITS, group.soft_range, float(storedknobs.factor_of(value)))
+        control.motion = self.motion
+        control.slider.motion = self.motion
+        control.spin.setObjectName(f"{param}-field")
+        control.spin.setDecimals(0)
+        control.spin.setSingleStep(1)
+        control.spin.editingFinished.connect(
+            lambda k=key, p=param, w=control: self.defer_command(
+                {"op": "set", "id": k, "param": p, "value": storedknobs.factor_text(w.value())}))
+        control.slider.sliderReleased.connect(
+            lambda k=key, p=param, w=control: self.defer_command(
+                {"op": "set", "id": k, "param": p, "value": storedknobs.factor_text(w.value())}))
+        return control
 
     def preview_param_drag(self, key, param, value):
         """Queue a coarse picture for a properties slider drag without committing its knob value."""

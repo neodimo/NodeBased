@@ -47,6 +47,7 @@ NEW = {
     "Convolve": {"legacy_convolve": 0, "normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"},
 }
 # What an older document's node of the kind gets on load besides the legacy flags: the new knobs, at the value that leaves it as it was.
+from . import storedknobs as _storedknobs      # noqa: E402
 from . import bilateralknobs as _bilateral      # noqa: E402  (Bilateral's tables live with its kernel)
 from . import vectorcornerpinknobs as _vcp      # noqa: E402
 from . import denoiseknobs as _denoise          # noqa: E402
@@ -109,15 +110,16 @@ def dirblur_sample_count(p, automatic):
     return automatic if wanted <= 0 or int(p.get("legacy_dirblur_knobs", 1)) else max(1, wanted)
 
 
-DIRBLUR_QUALITY = {"high": 1, "normal": 2, "low": 4}
+DIRBLUR_QUALITY = _storedknobs.FACTOR_NAMES
 
 
 def dirblur_quality_factor(p):
     """The whole-number factor DirBlur's `Quality` scales the picture down by before blurring ("the scaling factor of the blur. The minimum value
-    is 1 and produces the highest quality"): high 1, normal 2, low 4. An older node blurred at full size whatever it said."""
+    is 1 and produces the highest quality"): high 1, normal 2, low 4, or the whole number the panel's factor field stored. An older node
+    blurred at full size whatever it said."""
     if int(p.get("legacy_dirblur_knobs", 1)):
         return 1
-    return DIRBLUR_QUALITY.get(str(p.get("Quality", "high")), 1)
+    return _storedknobs.factor_of(p.get("Quality", "high"))
 
 
 def dirblur_pixel_aspect(p):

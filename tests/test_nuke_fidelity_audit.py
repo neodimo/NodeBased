@@ -62,6 +62,8 @@ FULL_PANEL_SHAPE = (
     'FrameRange', 'Glow', 'HSVTool', 'IDistort', 'Keylight', 'Reformat', 'Switch', 'TimeClip',
     # Panel sweep S3 (2026-11-04)
     'AppendClip', 'Blend', 'BurnIn', 'Clamp', 'ContactSheet', 'Remove',
+    # Panel sweep S3 finish (2026-11-04): DirBlur Target and Quality
+    'DirBlur',
 )
 
 
