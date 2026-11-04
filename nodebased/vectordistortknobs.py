@@ -59,7 +59,8 @@ def warp(p, held, current, field, resample, blur):
     """The picture VectorDistort outputs (before mask and mix) for a modern node.
 
     `held` is the reference frame's picture, `current` the source at this frame, `field` the reference-to-current displacement, `resample` the
-    evaluator's filtered sampler `(src, sx, sy, filter)`, and `blur` the box blur the Blur Size knob asks for (a function of the picture)."""
+    evaluator's filtered sampler `(src, sx, sy, filter)`, and `blur` the Blur Size operation on the internal ST map (a function of the field)."""
+    field = blur(field)
     mode = str(p.get("output_mode", "warped src"))
     if mode != "warped src":
         return st_map(field, inverse=mode == "st-map inverse"), False
@@ -71,4 +72,4 @@ def warp(p, held, current, field, resample, blur):
     result = resample(image, x, y, str(p.get("image_filter", "cubic")))
     valid = (x >= 0) & (x <= w - 1) & (y >= 0) & (y <= h - 1)
     result = np.where(valid[..., None], result, 0).astype(np.float32)
-    return blur(result), hold
+    return result, hold

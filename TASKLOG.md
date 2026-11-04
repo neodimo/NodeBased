@@ -1671,3 +1671,12 @@
 - **State:** Partial. Radeon native half reached 19.176–20.563 fps with p95 56.544–64.884 ms, so the 24 fps / 41.67 ms gate remains unmet. RTX and four-core rows also improved; 240-frame and Windows behaviour remain unverified.
 - **Next owner + concrete artifact:** Gonzo uses `benchmarks/2d-gpu/R6-1/playback-nativehalf-1031.json` and `docs/PERFORMANCE.md` to select the next playback bottleneck.
 - **Failure mode:** The earlier half path added a float32-to-float16 full-frame copy during decode, erasing its transfer saving. Native OIIO half decode removes that copy.
+## 2026-11-04 — Lane 9, step P (partial): VectorDistort Blur Size smooths the map
+
+**What was done — evidence.** VectorDistort's modern path now blurs its internal displacement/ST map before sampling the source once. A hard-edge plate with a smooth displacement field verifies that map blur leaves the warped edge sharp. The existing `legacy_vectordistort` migration preserves the old pixel-blur path for saved graphs. No knobs were added or unpaired. GridWarp/SplineWarp and Flare/Sparkles/VolumeRays remain open.
+
+**Artifacts.** `nodebased/vectordistortknobs.py`, `nodebased/imaging.py`, and `tests/test_2d_behaviour_transform_n.py`; committed locally on `openclaw/nb-2d-behaviour`. The regenerated `docs/PARITY_2D_FIDELITY.md` and bundled copy are byte-identical and unchanged from tracked content.
+
+**State.** Partial. The VectorDistort behavior module, neighboring warp/draw/filter tests, audit, tiles, bypass, knobs, tiers, core, knowledge, and required properties-panel checks passed. `tests.legacy_behaviour_d` contains no unittest tests. The audit remains 95.8 overall (95.4 under the previous formula); Draw 92.1, Filter 96.7, Transform 96.6. The six target nodes' fidelity/knob coverage is unchanged; the audit's inert-knob section remains empty (0). The new VectorDistort pixel assertion covers the guide's map-blur direction; no audit case was added because its fixture cannot express a measured temporal SmartVector.
+
+**Next owner + concrete artifact.** Needs Gonzo: continue groups 1 and 2 from `scratch/nb-lanes/auto/briefs/L9-behaviour-P-1103.md`, then rerun the audit and targeted gates.

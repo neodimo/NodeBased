@@ -3361,10 +3361,9 @@ class Evaluator:
                     elif kind == "VectorDistort" and not _vd.is_legacy(params):
                         # Hold Frame, Output and Filter (lane 9 step N, nodebased/vectordistortknobs.py).
                         current_source = values[source_key]
-                        from .flow_nodes import warp_by_flow as _blur_only
                         blur_size = float(params["blur_size"])
                         warped, vd_hold = _vd.warp(params, base.pixels, current_source.fit(base.data), field, self._resample,
-                                                   (lambda im: _blur_only(im, np.zeros(im.shape[:2] + (2,), np.float32), blur_size=blur_size))
+                                                   (lambda st: self._gaussian_2d(st, blur_size))
                                                    if blur_size > 0 else (lambda im: im))
                     else:
                         if gpu_warp:

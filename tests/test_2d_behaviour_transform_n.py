@@ -171,6 +171,21 @@ class VectorDistortFilters(unittest.TestCase):
         b = render(rig(image_filter="parzen"), "vd", 2)
         self.assertTrue(differs(a, b, 1e-4))
 
+    def test_blur_size_softens_the_st_map_and_keeps_warped_edges_sharp(self):
+        img = np.zeros((32, 48, 4), np.float32)
+        img[:, 24:, :3] = 1.0
+        img[..., 3] = 1.0
+        field = np.zeros((32, 48, 2), np.float32)
+        field[..., 0] = np.linspace(0.0, 2.0, 48, dtype=np.float32)[None, :]
+        smooth_map = Evaluator._gaussian_2d(field, 4.0)
+        out, _ = vd.warp({**SPECS["VectorDistort"]["params"], "blur_size": 4.0}, img, img, field,
+                         Evaluator._resample, lambda st: Evaluator._gaussian_2d(st, 4.0))
+        expected = Evaluator._resample(img, np.mgrid[:32, :48][1].astype(np.float32) - smooth_map[..., 0],
+                                       np.mgrid[:32, :48][0].astype(np.float32), "cubic")
+        np.testing.assert_allclose(out[8:-8, 8:-8], expected[8:-8, 8:-8], atol=1e-6)
+        edge = out[16, 19:29, 0]
+        self.assertGreater(float(np.max(np.diff(edge))), 0.9)
+
 
 class VectorDistortSavedGraphs(unittest.TestCase):
     def test_a_graph_saved_before_keeps_its_picture(self):
