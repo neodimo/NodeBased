@@ -1,5 +1,24 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step N finish
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:45 AM on 2026-11-04 PDT)
+
+`main` moved `7631887c` -> `62b034ac` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `62b034ac` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0035.log`, started 12:35 AM): **Ran 9148 tests in 586.037 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step N of 2: Kronos, OFlow and TimeWarp get Nuke's remaining retime knobs and inputs, and the project settings' proxy and format (finish 1).** Commits:
+  - `d2a10c31` 2D behaviour step N finish (lane 2): Root gets a project format, proxy type and format, read-proxy-files setting and script directory (older documents unchanged; Root fidelity 40.0 to 50.7)
+  Diff: 16 files changed, 450 insertions(+), 33 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Root's project fields `script_directory`, `format`, `proxy_type`, `proxy_format` and `read_proxy_files` are in `settings.project` (no schema bump;
 `SCHEMA_VERSION` stays what main holds). Fidelity: Root 50.7, overall 95.8. Targeted tests green, list in TASKLOG.md.
 

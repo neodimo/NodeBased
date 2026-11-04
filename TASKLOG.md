@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step N of 2: Kronos, OFlow and TimeWarp get Nuke's remaining retime knobs and inputs, and the project settings' proxy and format (finish 1) (integrator tick)
+
+- **What was done:** `main` `7631887c` -> `62b034ac` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `62b034ac`: Ran 9148 tests in 586.037 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 - Lane 2 (2D parity), 2D behaviour step N finish: Root's project format, proxy type and format, read-proxy-files setting and script directory
 
 - **What was done (evidence: tests and the audit, both run):** `settings.project` gained `script_directory`, `format`, `proxy_type`, `proxy_format`
