@@ -441,6 +441,29 @@ class SparklesTests(unittest.TestCase):
         self.assertTrue(differs(unmasked, masked))
         self.assertTrue(differs(masked, blurred))
 
+    def test_broken_ray_settings_remove_seeded_segments_after_the_start(self):
+        base = sparkles(spark_ray_nb=8, spark_thick=3.0)
+        broken = sparkles(spark_ray_nb=8, spark_thick=3.0, broken_rays=1, broken_affected=100.0,
+                          broken_start=0.25, broken_holes=3.0)
+        later = sparkles(spark_ray_nb=8, spark_thick=3.0, broken_rays=1, broken_affected=100.0,
+                         broken_start=0.65, broken_holes=5.0)
+        self.assertTrue(differs(base, broken))
+        self.assertTrue(differs(broken, later))
+
+    def test_random_broken_segments_are_repeatable_and_seed_sensitive(self):
+        args = dict(spark_ray_nb=8, spark_thick=3.0, broken_rays=1, broken_affected=100.0,
+                    broken_start=0.2, broken_holes=4.0, random_broken_start=1, random_broken_holes=1)
+        a, b = sparkles(seed=7, **args), sparkles(seed=7, **args)
+        np.testing.assert_array_equal(a, b)
+        self.assertTrue(differs(a, sparkles(seed=8, **args)))
+
+    def test_sparks_direction_clips_emission_to_the_open_angle(self):
+        full = sparkles(spark_ray_nb=12, spark_thick=3.0)
+        right = sparkles(spark_ray_nb=12, spark_thick=3.0, sparks=1, sparks_direction=0.0, sparks_angle=45.0)
+        left = sparkles(spark_ray_nb=12, spark_thick=3.0, sparks=1, sparks_direction=180.0, sparks_angle=45.0)
+        self.assertTrue(differs(full, right))
+        self.assertTrue(differs(right, left))
+
     def test_brightness_and_colour_scale_the_rays(self):
         base = sparkles()
         np.testing.assert_allclose(sparkles(spark_brightness=2.0)[..., :3], 2.0 * base[..., :3] - black(41, 41)[..., :3] * 0.0, atol=1e-5)
@@ -474,7 +497,7 @@ class SparklesTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Sparkles")]
-        self.assertEqual(labels[:19], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Anamorphic", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Sparkle falloff", "Ray falloff", "Seed", "Brightness", "Color", "Chroma shift", "Chroma spread", "Mask", "Mask blur"])
+        self.assertEqual(labels[:28], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Anamorphic", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Sparkle falloff", "Ray falloff", "Seed", "Brightness", "Color", "Chroma shift", "Chroma spread", "Mask", "Mask blur", "Broken rays", "% ray affected", "Break start", "Random start", "Breaks", "Random breaks", "Sparks (direction clip)", "Direction", "Open angle"])
         self.assertEqual(labels[-1], "Mix")
 
 

@@ -46,6 +46,8 @@ _GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.
 _SPARKLES_NEW = {"spark_x": 480.0, "spark_y": 270.0, "spark_size": 300.0, "spark_rotation": 0.0, "spark_ray_nb": 50, "spark_thick": 0.2,
                  "spark_falloff": 0.05, "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0, "spark_chroma_shift": 0.0,
                  "spark_chroma_spread": 0.0, "vismask": "none", "vismask_size": 4.0,
+                 "broken_rays": 0, "broken_affected": 50.0, "broken_start": 0.7, "random_broken_start": 0,
+                 "broken_holes": 0.2, "random_broken_holes": 0, "sparks": 0, "sparks_direction": 0.0, "sparks_angle": 45.0,
                  "spark_mode": "Rays", "spark_triangle_think": 0,
                  "spark_relative_rotation": 0, "spark_random_thick": 0, "spark_anamorphic": 1.0}
 _GRAIN_NEW = {"fullGrain": "", "grain_offset": 0.5, "grain_red": 0.3, "grain_green": 0.4, "grain_blue": 0.5, "grain_saturation": 1.0,
@@ -72,6 +74,8 @@ LIMITS = {**{flag: (0, 1) for flag in FLAGS.values()},
           "spark_color": (-1000.0, 1000.0), "spark_triangle_think": (0, 1), "spark_relative_rotation": (0, 1), "spark_random_thick": (0, 1),
           "spark_anamorphic": (0.01, 100.0), "spark_falloff": (0.0, 0.99), "spark_chroma_shift": (-1000.0, 1000.0),
           "spark_chroma_spread": (-0.99, 0.99), "vismask_size": (0.0, 1000.0),
+          "broken_rays": (0, 1), "broken_affected": (0.0, 100.0), "broken_start": (0.0, 1.0), "random_broken_start": (0, 1),
+          "broken_holes": (0.0, 100.0), "random_broken_holes": (0, 1), "sparks": (0, 1), "sparks_direction": (-360.0, 360.0), "sparks_angle": (0.0, 360.0),
           "grain_offset": (-10.0, 10.0), "grain_red": (0.0, 100.0), "grain_green": (0.0, 100.0), "grain_blue": (0.0, 100.0), "grain_saturation": (0.0, 100.0),
           "grain_low_clip": (-10.0, 10.0)}
 
@@ -177,7 +181,7 @@ def spark_angles(seed, count, rotation):
     return float(rotation) + 360.0 * (np.arange(count) + u) / count
 
 
-def sparkles(image, p, origin=(0, 0)):
+def sparkles(image, p, origin=(0, 0), frame=None):
     h, w = image.shape[:2]
     yy, xx = np.mgrid[:h, :w].astype(np.float64)
     dx, dy = xx + origin[0] - float(p.get("spark_x", w / 2)), yy + origin[1] - float(p.get("spark_y", h / 2))
@@ -197,12 +201,37 @@ def sparkles(image, p, origin=(0, 0)):
     gap = min(max((0.05 - float(p.get("spark_falloff", 0.05))) * 10.0, 0.0), 0.99)
     chroma_shift = float(p.get("spark_chroma_shift", 0.0))
     chroma_spread = float(p.get("spark_chroma_spread", 0.0))
+    seed = int(p.get("seed", 1)) % (2 ** 32)
+    break_rng = np.random.RandomState(seed ^ 0x5A17)
+    broken = set()
+    if int(p.get("broken_rays", 0)) and count:
+        affected_count = max(0, min(count, int(round(count * float(p.get("broken_affected", 50.0)) / 100.0))))
+        broken = set(break_rng.permutation(count)[:affected_count].tolist())
+    cone = float(p.get("sparks_angle", 360.0))
+    direction = float(p.get("sparks_direction", 0.0))
     for i, a in enumerate(angles):
         ux, uy = math.cos(a) * anamorphic, -math.sin(a)
         norm = math.hypot(ux, uy)
         ux, uy = ux / norm, uy / norm
         along = dx * ux + dy * uy
         across = np.abs(dy * ux - dx * uy)
+        theta_degrees = math.degrees(math.atan2(-uy, ux))
+        if int(p.get("sparks", 0)) and cone < 360.0:
+            delta = (theta_degrees - direction + 180.0) % 360.0 - 180.0
+            if abs(delta) > cone / 2.0:
+                continue
+        starts = float(p.get("broken_start", 0.7))
+        hole_positions = ()
+        if i in broken:
+            if int(p.get("random_broken_start", 0)):
+                starts = break_rng.uniform(starts, 1.0)
+            holes = int(math.ceil(float(p.get("broken_holes", 0.2))))
+            if holes:
+                if int(p.get("random_broken_holes", 0)):
+                    hole_positions = break_rng.uniform(starts, 1.0, holes).tolist()
+                else:
+                    hole_positions = (starts + (1.0 - starts) * (np.arange(holes) + 0.5) / holes).tolist()
+        gap_width = min(0.08, (1.0 - starts) / max(3, 3 * len(hole_positions))) if len(hole_positions) else 0.0
         ray_thick = float(random_widths[i]) if int(p.get("spark_random_thick", 0)) else thick
         for c, sign in ((0, 1.0), (1, 0.0), (2, -1.0)):
             ray_size = size * max(0.01, 1.0 + sign * chroma_spread)
@@ -219,6 +248,11 @@ def sparkles(image, p, origin=(0, 0)):
             channel_thick = ray_thick * (1.0 - t if int(p.get("spark_triangle_think", 0)) else 1.0)
             cover = np.clip(channel_thick / 2.0 + 1.0 - channel_across, 0.0, 1.0)
             ray = np.where((along >= 0.0) & (along <= ray_size), fade * cover, 0.0)
+            if len(hole_positions):
+                broken_here = np.zeros(along.shape, bool)
+                for location in hole_positions:
+                    broken_here |= (t >= location - gap_width / 2.0) & (t <= location + gap_width / 2.0)
+                ray = np.where(broken_here, 0.0, ray)
             values[..., c] = np.maximum(values[..., c], ray)
     mask_name = str(p.get("vismask", "none")).strip().lower()
     if mask_name not in ("", "none"):

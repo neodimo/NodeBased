@@ -800,6 +800,14 @@ def cases():
         ("sparkles_visibility_mask", (("vismask", "rgba.alpha"), ("vismask_size", 2.0)), {"vismask": "rgba.alpha", "vismask_size": 2.0},
          "the selected visibility channel limits sparkle brightness and is blurred by mask size",
          "the guide gives no blur kernel or edge handling for the visibility channel"),
+        ("sparkles_broken_rays", (("broken_rays", True), ("broken_affected", 100.0), ("broken_start", 0.25), ("broken_holes", 3.0)),
+         {"broken_rays": 1, "broken_affected": 100.0, "broken_start": 0.25, "broken_holes": 3.0},
+         "broken rays affect a percentage of rays and place breaks after a start point",
+         "the guide does not state break lengths, spacing, or the random-selection distribution"),
+        ("sparkles_direction_clip", (("sparks", True), ("sparks_direction", 0.0), ("sparks_angle", 45.0)),
+         {"sparks": 1, "sparks_direction": 0.0, "sparks_angle": 45.0},
+         "Sparks limits ray emission to the configured direction and open angle",
+         "the guide does not state whether the open angle is centred or how boundary rays are sampled"),
     ):
         case(cid, "Sparkles", "Sparkles", nuke_knobs, "Sparkles", nb_params, None, "guide", statement, unscored=reason)
     return out
