@@ -1,5 +1,29 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step N finish
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, GPT-6 Luna) (2:15 AM on 2026-11-04 PDT)
+
+`main` moved `55d95bf0` -> `299bef0e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `299bef0e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0155.log`, started 1:55 AM): **Ran 9175 tests in 596.330 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step NT: every node's Node tab carries Nuke's Node-tab knobs.** Commits:
+  - `50622061` Node tab on every node: font, bold, italic, font and tile colour, hide input, cached, lifetime, dope sheet and bookmark flags, Disable in Nuke's sense (step NT)
+  Diff: 9 files changed, 579 insertions(+), 24 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R1: the Read node's Properties panel laid out like Nuke's, with Nuke's knob types.** Commits:
+  - `45c504a2` Lane 9 R1 tests: Read panel tearDown marks the document saved (the close prompt hung the module 40 min), raw toggle waits for the deferred commit, Roto invert checkbox found by name (Lane 2's Node tab adds checkboxes ahead of it)
+  - `09eb9435` Lane 9 R1: group Read panel rows and tabs
+  Diff: 5 files changed, 202 insertions(+), 24 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:45 AM on 2026-11-04 PDT)
 
 `main` moved `7631887c` -> `62b034ac` (lane commits cherry-picked onto main in lane order) and then to this
