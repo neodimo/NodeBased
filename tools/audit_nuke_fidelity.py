@@ -281,11 +281,23 @@ def score_pair(key, pair, nuke, reference_dir=None):
         if frac is not None:
             res["components"]["acts"] = frac
     # Nuke's layout: knob order and main-tab labels
+    res["panel_rows"] = res["panel_types"] = None
     if kind is not None and not document and knobs:
         frac, detail = req.layout_component(kind, entries, knobs)
         res["detail"].update(detail)
-        if frac is not None:
-            res["components"]["layout"] = frac
+        # Since 2026-11-04 the layout fraction is four equal quarters: knob order, main-tab labels, shared rows and widget types;
+        # a quarter with nothing to count is left out and the rest renormalised. `layout_old` keeps the two-half form for the report.
+        rows, types = panel_shape_metrics(nuke, pair, kind, key)
+        res["panel_rows"], res["panel_types"] = rows, types
+        quarters = []
+        if detail.get("layout_order"):
+            quarters.append(detail["layout_order"][0] / detail["layout_order"][1])
+        if detail.get("layout_labels") and detail["layout_labels"][1]:
+            quarters.append(detail["layout_labels"][0] / detail["layout_labels"][1])
+        quarters += [m["score"] for m in (rows, types) if m["score"] is not None]
+        res["detail"]["layout_old"] = frac
+        if quarters:
+            res["components"]["layout"] = sum(quarters) / len(quarters)
     # per-channel splits (Nuke's AColor and WH knobs, docs/parity/nuke_split_knobs.json)
     if not document:
         frac, detail = req.splits_component(key, kind, entries, _split_table())
@@ -320,6 +332,16 @@ def score_pair(key, pair, nuke, reference_dir=None):
         res["score_previous"] = res["score"]
     else:
         res["score_previous"] = 100.0 * sum(PREVIOUS_WEIGHTS[c] * f for c, f in old.items()) / sum(PREVIOUS_WEIGHTS[c] for c in old)
+    # the same node with the layout fraction of the two-half form used until 2026-11-04
+    alt = dict(live)
+    if res["detail"].get("layout_old") is None:
+        alt.pop("layout", None)
+    else:
+        alt["layout"] = res["detail"]["layout_old"]
+    if res["score"] is not None and alt and pair.get("nodebased") is not None:
+        res["score_layout_old"] = 100.0 * sum(WEIGHTS[c] * f for c, f in alt.items()) / sum(WEIGHTS[c] for c in alt)
+    else:
+        res["score_layout_old"] = res["score"]
     res["document"] = document
     res["pixel_column"] = ("measured" if truth else ("unmeasured" if cases_for(key) else "no fixture"))
     return res
@@ -353,9 +375,8 @@ def build_units(nuke_doc, map_doc, reference_dir=None):
                 skipped.append((group, rank, n, "no pairing in nodebased_to_nuke.json"))
                 continue
             res = score_pair(key, pairs[key], nodes[key], reference_dir)
-            rows, types = panel_shape_metrics(nodes[key], pairs[key], pairs[key].get("nodebased"))
-            res["panel_rows"] = rows
-            res["panel_types"] = types
+            if res["panel_rows"] is None:   # a node without a layout still reports its measurements
+                res["panel_rows"], res["panel_types"] = panel_shape_metrics(nodes[key], pairs[key], pairs[key].get("nodebased"), key)
             res.update(group=group, rank=rank, name=n, status=status, weight=(1.0 / rank) / len(members))
             units.append(res)
     return units, skipped
@@ -378,9 +399,34 @@ _READ_NODE_WIDGETS = {
 }
 
 
-def panel_shape_metrics(nuke_node, pair, node_type):
+_COUNT_WORDS = {"frame", "frames", "first", "last", "count", "samples", "sample", "iterations", "iteration", "index", "seed", "octaves",
+                "octave", "divisions", "division", "steps", "step", "levels", "level", "passes", "pass", "number", "num", "layers", "rows",
+                "columns", "points", "bits", "cycles", "repeat"}
+_COUNT_SUFFIXES = ("samples", "frames", "frame", "count", "iterations", "index", "seed", "octaves", "steps", "levels", "divisions")
+
+
+def number_knob_kind(name, default):
+    """The widget a guide `number` knob needs: `int` (an integer field, no slider) when the guide default is an integer and the knob
+    counts, indexes or names a frame; `float` (a slider with a value field, Nuke's Double_Knob) when the default is a fraction or the
+    name is no count; `unknown` (left unmeasured, still counted) when the guide gives no numeric default."""
+    if isinstance(default, bool) or not isinstance(default, (int, float)):
+        return "unknown"
+    if isinstance(default, float) and not default.is_integer():
+        return "float"
+    words = set(re.findall(r"[a-z]+", re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).lower()))
+    counts = bool(words & _COUNT_WORDS) or name.lower().endswith(_COUNT_SUFFIXES)
+    return "int" if counts else "float"
+
+
+def _widget_kind(group, param):
+    """The widget a param gets: its group's kind, or for a row group the kind named for that param."""
+    return group.members[group.params.index(param)] if group.kind == "row" else group.kind
+
+
+def panel_shape_metrics(nuke_node, pair, node_type, key=None):
     """Measure shared guide rows and widget-kind matches; these lines do not affect fidelity."""
     from nodebased.knobs import knob_layout
+    from nodebased.ops2d_chrome import is_open_choice
 
     knobs = nuke_node.get("knobs", [])
     entries = [e for e in pair.get("knobs", []) if e.get("kind") in ("same", "renamed", "components", "panel")]
@@ -389,27 +435,32 @@ def panel_shape_metrics(nuke_node, pair, node_type):
         for name in entry.get("nuke", []):
             mapped.setdefault(name, set()).update(entry.get("nodebased", []))
     groups = knob_layout(node_type) if node_type else ()
+    splits = _split_table()["knobs"].get(key or "", {})
     row_sets = [set(g.params) for g in groups]
     group_for = {param: g for g in groups for param in g.params}
 
     # Consecutive same-label entries define a shared guide row. Count every knob in such a row.
     row_total = row_match = 0
+    row_missed, type_missed = [], []
     i = 0
     while i < len(knobs):
         j = i + 1
-        while j < len(knobs) and knobs[j].get("label") == knobs[i].get("label"):
+        while j < len(knobs) and knobs[j].get("label") == knobs[i].get("label") and str(knobs[i].get("label")).lower() not in ("n/a", ""):
             j += 1
-        if j - i > 1:
-            block = knobs[i:j]
+        # A row counts the knobs NodeBased pairs; a Nuke knob with no NodeBased knob (the mask checkbox beside the mask channel) is
+        # a missing knob, scored under `knobs`, and a row left with fewer than two paired knobs has no sharing to measure.
+        block = [k for k in knobs[i:j] if mapped.get(k["name"])]
+        if len(block) > 1:
             row_total += len(block)
-            names = [set(mapped.get(k["name"], ())) for k in block]
-            union = set().union(*names) if names else set()
-            if all(names) and any(union <= row for row in row_sets):
+            union = set().union(*(mapped[k["name"]] for k in block))
+            if any(union <= row for row in row_sets):
                 row_match += len(block)
+            else:
+                row_missed.append([k["name"] for k in block])
         i = j
 
     expected_counts = {"int": 0, "enum": 0, "bool": 0, "string": 0, "file": 0, "button": 0,
-                       "number": 0, "number_list": 0, "channels": 0}
+                       "float": 0, "number_list": 0, "channels": 0}
     type_match = type_total = unknown_count = 0
     read = node_type == "Read"
     for knob in knobs:
@@ -420,6 +471,10 @@ def panel_shape_metrics(nuke_node, pair, node_type):
             continue
         if read and name in _READ_KNOB_TYPES:
             nuke_kind = _READ_KNOB_TYPES[name]
+        elif nuke_kind == "string" and str(knob.get("default")).strip().lower() in ("on", "off"):
+            nuke_kind = "bool"      # the guide writes a checkbox's default as on or off
+        elif nuke_kind == "number":
+            nuke_kind = number_knob_kind(name, knob.get("default"))
         if nuke_kind == "unknown":
             unknown_count += 1
             continue
@@ -427,19 +482,24 @@ def panel_shape_metrics(nuke_node, pair, node_type):
             continue
         if name not in mapped:
             continue
-        expected_counts[nuke_kind] = expected_counts.get(nuke_kind, 0) + 1
-        type_total += 1
         params = mapped.get(name, set())
         actual = ([_READ_NODE_WIDGETS[p] for p in params if p in _READ_NODE_WIDGETS]
-                  if read else [group_for[p].kind for p in params if p in group_for])
+                  if read else ["enum" if is_open_choice(node_type, p) else _widget_kind(group_for[p], p) for p in params if p in group_for])
+        if nuke_kind == "string" and not read and "enum" in actual:
+            unknown_count += 1   # the guide infers `string` from any text default, and a menu's entry is text: it cannot tell the two apart
+            continue
+        if nuke_kind == "float" and (splits.get(name) or re.fullmatch(r"color\d*(#\d+)?", name)) and any(k in ("color", "split", "xy", "xyz") for k in actual):
+            actual = ["float_slider"]   # an AColor or WH knob (docs/parity/nuke_split_knobs.json, or a knob named color) is one control that splits per channel
+        expected_counts[nuke_kind] = expected_counts.get(nuke_kind, 0) + 1
+        type_total += 1
         if read and name == "sequence":
             actual = ["string"]  # Read-only source readout on NodeBased' Sequence tab.
         if nuke_kind == "button" and read and name in ("reload", "updateLocalization"):
             matches = True  # Both are built as action buttons in the Read panel builder.
         elif nuke_kind == "int":
             matches = any(k == "int" for k in actual)
-        elif nuke_kind == "number":
-            matches = any(k == "float_slider" for k in actual)
+        elif nuke_kind == "float":
+            matches = any(k in ("float_slider", "float", "split") for k in actual)
         elif nuke_kind == "enum" or nuke_kind == "channels":
             matches = any(k == "enum" for k in actual)
         elif nuke_kind == "bool":
@@ -447,7 +507,7 @@ def panel_shape_metrics(nuke_node, pair, node_type):
         elif nuke_kind == "file":
             matches = any(k in ("file", "file_read", "file_write", "string") for k in actual)
         elif nuke_kind == "string":
-            matches = any(k in ("string", "file_read", "file_write") for k in actual)
+            matches = any(k in ("string", "multiline", "file_read", "file_write") for k in actual)
         elif nuke_kind == "number_list":
             matches = any(k in ("color", "xy", "xyz", "split") for k in actual)
         elif nuke_kind == "button":
@@ -455,9 +515,11 @@ def panel_shape_metrics(nuke_node, pair, node_type):
         else:
             matches = False
         type_match += int(matches)
-    return {"matched": row_match, "total": row_total, "score": row_match / row_total if row_total else None}, {
+        if not matches:
+            type_missed.append((name, nuke_kind, sorted(actual)))
+    return {"matched": row_match, "total": row_total, "score": row_match / row_total if row_total else None, "missed": row_missed}, {
         "matched": type_match, "total": type_total, "score": type_match / type_total if type_total else None,
-        "unknown": unknown_count, "unknown_names": [], "by_kind": expected_counts,
+        "unknown": unknown_count, "unknown_names": [], "by_kind": expected_counts, "missed": type_missed,
     }
 
 
@@ -530,6 +592,7 @@ def build_report(reference_dir=None):
             u["none_reason"] = map_doc["pairs"][pair_key(u["group"], u["name"])].get("reason", "")
     overall, overall_existing, by_group = summarize(units)
     previous, previous_existing, previous_groups = summarize(units, "score_previous")
+    layout_old, layout_old_existing, _ = summarize(units, "score_layout_old")
     unscored = [u for u in units if u["score"] is None]
     lines = []
     w = lines.append
@@ -541,6 +604,9 @@ def build_report(reference_dir=None):
     w(f"Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores "
       f"{previous:.1f} ({previous_existing:.1f} counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, "
       "Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.")
+    w("")
+    w(f"Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 "
+      f"(order and labels as two halves) the same tree scores {layout_old:.1f} ({layout_old_existing:.1f} counting only the nodes NodeBased has).")
     w("")
     w("This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. "
       "[PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. "
@@ -564,10 +630,12 @@ def build_report(reference_dir=None):
     w(f"| chrome | {WEIGHTS['chrome']} | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |")
     w(f"| math | {WEIGHTS['math']} | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). *(11/2)* A node whose kernel runs on the fixture and that has no case at all scores 0 here (behaviour unchecked); "
       "the previous formula left it out, which is how a node with no behaviour checked could score 100. A node whose every case is listed `not scored`, with its reason, and a tap, stay out. |")
-    w(f"| layout | {WEIGHTS['layout']} | *(11/2)* Nuke's knob layout: half is the share of paired knobs that sit in the guide table's order in the Properties panel "
-      "(the longest run already in order), half the share of paired main-tab knobs whose label reads as the guide's label or the knob's scripting name (case and punctuation ignored; "
-      "a label the guide gives a whole row of knobs, or `n/a`, is not compared). "
-      "Section breaks and which knobs share a row are not measured yet. |")
+    w(f"| layout | {WEIGHTS['layout']} | *(11/2, four quarters since 11/4)* Nuke's knob layout, the mean of four equal quarters. **Order**: the share of paired knobs that sit in the guide table's order in the Properties panel "
+      "(the longest run already in order). **Labels**: the share of paired main-tab knobs whose label reads as the guide's label or the knob's scripting name (case and punctuation ignored; "
+      "a label the guide gives a whole row of knobs, or `n/a`, is not compared). **Rows**: the share of paired knobs in a shared guide row (consecutive knobs with one label, such as Transform's translate x and y) that NodeBased places on one row; "
+      "a Nuke knob with no NodeBased knob is not in the row, and a row left with fewer than two paired knobs is not measured. "
+      "**Types**: the share of paired knobs of known guide type whose widget matches (integer field, slider with value field, dropdown, checkbox, text field, button, per-channel split). "
+      "A quarter with nothing to count is left out and the rest renormalised. Section breaks are not measured. |")
     w(f"| splits | {WEIGHTS['splits']} | *(11/2)* For the Nuke knobs that split per channel (an AColor knob into r g b a, a WH knob into w h; "
       "`docs/parity/nuke_split_knobs.json`, see below), the share that are splittable NodeBased params (`core.SPLITTABLE`). A knob paired with one NodeBased param "
       "per channel and no one-slider form counts half. Only nodes the table lists have this component. |")
@@ -632,10 +700,14 @@ def build_report(reference_dir=None):
               f"{fmt(c.get('sockets'), 0)} | {fmt(c.get('chrome'), 0)} | {fmt(c.get('math'), 0)}{mc} | {fmt(c.get('layout'), 0)} | "
               f"{fmt(c.get('splits'), 0)}{sc} | {u['pixel_column']} |")
     w("")
-    w("## Panel rows and widget types (unweighted; 2026-11-04)")
+    w("## Panel rows and widget types (two quarters of the layout component; 2026-11-04)")
     w("")
-    w("Rows count paired knobs in consecutive same-label groups from the guide that NodeBased places together on one panel row. Types count paired knobs with a known guide type whose widget matches (integer field, slider, dropdown, checkbox, text field or button). These lines are measurements only; they do not change fidelity scores. Unknown guide types are counted but their names are omitted.")
-    w("")
+    w("Rows count paired knobs in consecutive same-label groups from the guide that NodeBased places together on one panel row (a guide knob with no NodeBased knob is not counted, a row of fewer than two paired knobs is not measured, and the label `N/A` shares nothing). "
+      "Types count paired knobs with a known guide type whose widget matches. The guide's `type` is inferred from defaults, so a `number` is resolved as follows: "
+      "an integer field with no slider when the guide default is an integer and the knob's name counts, indexes or names a frame (frame, first, last, count, samples, iterations, index, seed, octaves, divisions, steps, levels and the like); "
+      "otherwise a float with a slider and value field (Nuke's Double_Knob), which a per-channel split, or a colour row for a knob named color or listed in the split table, also satisfies; with no numeric default the type is left unmeasured. "
+      "A `string` paired with a dropdown is left unmeasured (the guide gives a menu's current entry as text and cannot tell the two apart), and a `string` defaulting to on or off is a checkbox. "
+      "A `number_list` needs a colour, xy, xyz or split row; `enum` and `channels` need a dropdown; `bool` a checkbox. Unmeasured knobs are counted in the last column and never score.")
     w("| Node | Shared-row knobs on one row | Widget types matching | Unknown types (unmeasured) |")
     w("|---|---:|---:|---:|")
     for u in sorted(units, key=lambda x: (GROUPS.index(x["group"]), x["rank"], x["name"])):

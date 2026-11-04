@@ -695,7 +695,7 @@ LAYOUTS = {
     ],
     'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'A', 'B', 'C', 'D', 'Mix'],
     'HueKeyer': [
-        'Channels', 'Amount', 'Saturation threshold', 'Output', 'Output channel', 'Invert', 'Older hue window', 'Hue center',
+        'Channels', 'Amount', 'Saturation threshold', 'Output', 'Invert', 'Older hue window', 'Hue center',
         'Hue width', 'Hue softness', 'Saturation min', 'Saturation max', 'Mix'
     ],
     'ChromaKeyer': [
@@ -704,7 +704,7 @@ LAYOUTS = {
         'Replace amount', 'Premultiply', 'Tolerance', 'Softness', 'Luminance gain', 'Shadow level', 'Highlight level', 'Despill',
         'Invert', 'Mix'
     ],
-    'Difference': ['Offset', 'Gain', 'Output', 'Output channel', 'Mix'],
+    'Difference': ['Offset', 'Gain', 'Output', 'Mix'],      # the output switch and its channel share one row (panel sweep, 11/4)
     'IBKColor': ['Screen type', 'Size', 'Darks', 'Lights', 'Erode', 'Patch black', 'Mix'],
     'IBKGizmo': [
         'Screen type', 'Color', 'Red weight', 'Blue/green weight', 'Luminance match', 'Screen range', 'Luminance level', 'Enable', 'Yellow', 'Cyan',
@@ -719,7 +719,7 @@ LAYOUTS = {
         'Mix'
     ],
     'Shuffle': [
-        'Input 1', 'Layer 1', 'Input 2', 'Layer 2', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',
+        'In', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',
         'Red from (second)', 'Green from (second)', 'Blue from (second)', 'Alpha from (second)'
     ],
     'HistEQ': ['Histogram entries', 'Equalise', 'Mix'],

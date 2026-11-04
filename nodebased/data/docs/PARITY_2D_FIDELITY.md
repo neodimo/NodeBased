@@ -1,8 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 95.8 / 100** (167 nodes scored, rank-weighted; 98.2 counting only the nodes NodeBased has).
+**Overall fidelity: 94.5 / 100** (167 nodes scored, rank-weighted; 96.8 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.4 (97.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 95.8 (98.2 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -18,7 +20,7 @@ Per node, up to nine components, each a fraction from 0 to 1. The parts marked *
 | sockets | 10 | The Nuke node's input sockets (mask included, A/B and numbered inputs as listed) that a NodeBased input is paired with. |
 | chrome | 10 | The shared node chrome the Nuke node has: channels selector, mask channel, mask invert, mask inject, mask fringe, (un)premult by, its invert, mix, bbox handling. |
 | math | 25 | Pixel tests of NodeBased's kernel against the behaviour the guide states (the 30 Merge operations, KeyMix, Gamma, Invert, Multiply, Add, Clamp, Premult, Unpremult, ColorMatrix) or Nuke's long-standing form, or a published measurement of Nuke itself, where the page names the knobs but states no formula (Grade, Exposure, ColorCorrect and the other grading nodes; marked *convention*). *(11/2)* A node whose kernel runs on the fixture and that has no case at all scores 0 here (behaviour unchecked); the previous formula left it out, which is how a node with no behaviour checked could score 100. A node whose every case is listed `not scored`, with its reason, and a tap, stay out. |
-| layout | 10 | *(11/2)* Nuke's knob layout: half is the share of paired knobs that sit in the guide table's order in the Properties panel (the longest run already in order), half the share of paired main-tab knobs whose label reads as the guide's label or the knob's scripting name (case and punctuation ignored; a label the guide gives a whole row of knobs, or `n/a`, is not compared). Section breaks and which knobs share a row are not measured yet. |
+| layout | 10 | *(11/2, four quarters since 11/4)* Nuke's knob layout, the mean of four equal quarters. **Order**: the share of paired knobs that sit in the guide table's order in the Properties panel (the longest run already in order). **Labels**: the share of paired main-tab knobs whose label reads as the guide's label or the knob's scripting name (case and punctuation ignored; a label the guide gives a whole row of knobs, or `n/a`, is not compared). **Rows**: the share of paired knobs in a shared guide row (consecutive knobs with one label, such as Transform's translate x and y) that NodeBased places on one row; a Nuke knob with no NodeBased knob is not in the row, and a row left with fewer than two paired knobs is not measured. **Types**: the share of paired knobs of known guide type whose widget matches (integer field, slider with value field, dropdown, checkbox, text field, button, per-channel split). A quarter with nothing to count is left out and the rest renormalised. Section breaks are not measured. |
 | splits | 10 | *(11/2)* For the Nuke knobs that split per channel (an AColor knob into r g b a, a WH knob into w h; `docs/parity/nuke_split_knobs.json`, see below), the share that are splittable NodeBased params (`core.SPLITTABLE`). A knob paired with one NodeBased param per channel and no one-slider form counts half. Only nodes the table lists have this component. |
 | pixels | 30 | Pixel truth against real Nuke renders. **Not measured yet**: it joins the formula once `--reference-dir` has renders; until then it is not in any number here. |
 
@@ -32,17 +34,17 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
-| Image | 98.2 | 97.8 | 98.1 | 6 |
-| Draw | 92.1 | 83.8 | 90.9 | 17 |
-| Time | 98.8 | 93.2 | 98.5 | 13 |
-| Channel | 99.1 | 98.4 | 98.9 | 5 |
-| Color | 96.9 | 88.5 | 96.2 | 34 |
-| Filter | 96.7 | 92.1 | 96.2 | 32 |
-| Keyer | 93.3 | 80.6 | 93.1 | 11 |
-| Merge | 99.5 | 98.7 | 99.5 | 12 |
-| Transform | 96.6 | 92.7 | 95.9 | 20 |
-| Metadata | 99.4 | 98.9 | 99.4 | 5 |
-| Other | 81.5 | 45.2 | 81.5 | 12 |
+| Image | 95.2 | 94.6 | 98.1 | 6 |
+| Draw | 91.1 | 83.4 | 90.9 | 17 |
+| Time | 98.0 | 91.6 | 98.5 | 13 |
+| Channel | 98.8 | 97.7 | 98.9 | 5 |
+| Color | 96.6 | 87.4 | 96.2 | 34 |
+| Filter | 96.6 | 91.8 | 96.2 | 32 |
+| Keyer | 93.1 | 79.8 | 93.1 | 11 |
+| Merge | 98.3 | 97.0 | 99.5 | 12 |
+| Transform | 95.9 | 91.8 | 95.9 | 20 |
+| Metadata | 90.6 | 94.9 | 99.4 | 5 |
+| Other | 81.2 | 44.8 | 81.5 | 12 |
 
 Behaviour checked: 95 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
@@ -57,8 +59,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Read | `Read` | supported | 100.0 | 100.0 | 100 (32/32) | - | 100 | - | - | - | 100 | - | no fixture |
-| 2 | Write | `Write` | supported | 99.3 | 99.4 | 100 (27/27) | - | 96 | - | 100 | - | 100 | - | no fixture |
-| 3 | Viewer | `Viewer` | supported | 90.0 | 89.7 | 83 (20/24) | - | - | 100 | 100 | - | - | - | no fixture |
+| 2 | Write | `Write` | supported | 94.9 | 99.4 | 100 (27/27) | - | 96 | - | 100 | - | 74 | - | no fixture |
+| 3 | Viewer | `Viewer` | supported | 75.0 | 89.7 | 83 (20/24) | - | - | 100 | 100 | - | 0 | - | no fixture |
 | 4 | Constant | `Constant` | supported | 97.6 | 97.2 | 100 (4/4) | 100 (2/2) | 75 | - | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 5 | UDIM Import | - | missing | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 6 | CurveTool | `CurveTool` | supported | 100.0 | 100.0 | 100 (12/12) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
@@ -68,13 +70,13 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 89.6 | 86.8 | 67 (49/75) | - | 100 | 100 | 100 | 100 (36/36) | 100 | - | unmeasured |
+| 1 | Roto | `Roto` | supported | 86.9 | 86.8 | 67 (49/75) | - | 100 | 100 | 100 | 100 (36/36) | 75 | - | unmeasured |
 | 2 | Text | `Text` | supported | 98.3 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 100 | - | no fixture |
 | 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 5 | Radial | `Radial` | supported | 98.7 | 98.8 | 100 (14/14) | - | 88 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | Noise | `Noise` | supported | 99.6 | 99.5 | 100 (26/26) | - | 96 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
-| 7 | RotoPaint | `RotoPaint` | supported | 95.2 | 93.9 | 85 (74/88) | - | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
+| 7 | RotoPaint | `RotoPaint` | supported | 92.2 | 93.9 | 85 (74/88) | - | 100 | 100 | 100 | 100 (5/5) | 72 | - | unmeasured |
 | 8 | LightWrap | `LightWrap` | supported | 99.1 | 98.9 | 100 (27/27) | 100 (26/26) | 89 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 9 | Grain | `Grain` | supported | 96.7 | 95.0 | 88 (13/14) | 100 (13/13) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (6/6) | - | - | unmeasured |
@@ -82,9 +84,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 10 | MarkerRemoval | - | supported | 0.0 | 0.0 | 0 (0/5) | - | - | 0 | - | - | - | - | no fixture |
 | 11 | Flare | `Flare` | supported | 77.2 | 62.9 | 24 (10/50) | 100 (10/10) | 90 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 11 | Glint | `Glint` | supported | 94.0 | 90.8 | 77 (10/13) | 100 (10/10) | 100 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
-| 11 | Sparkles | `Sparkles` | supported | 80.5 | 68.4 | 36 (9/32) | 100 (9/9) | 89 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
+| 11 | Sparkles | `Sparkles` | supported | 80.2 | 68.4 | 36 (9/32) | 100 (9/9) | 89 | 100 | - | 100 (9/9) | 96 | - | unmeasured |
 | 12 | Dither | `Dither` | supported | 99.3 | 99.2 | 100 (4/4) | 100 (3/3) | 92 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 13 | Grid | `Grid` | supported | 99.0 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 97 | - | unmeasured |
 
 ### Time
 
@@ -93,15 +95,15 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 1 | TimeOffset | `TimeOffset` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (14/14) | 100 | - | unmeasured |
 | 2 | FrameHold | `FrameHold` | supported | 100.0 | 100.0 | 100 (7/7) | - | 100 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
 | 3 | Retime | `Retime` | supported | 98.8 | 98.4 | 97 (14/15) | - | 100 | 100 | - | 100 (47/47) | 100 | - | unmeasured |
-| 4 | TimeClip | `TimeClip` | supported | 100.0 | 100.0 | 100 (10/10) | - | 100 | 100 | - | 100 (33/33) | 100 | - | unmeasured |
-| 5 | FrameRange | `FrameRange` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 6 | AppendClip | `AppendClip` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
-| 7 | TimeBlur | `TimeBlur` | supported | 94.1 | 94.1 | 100 (4/4) | - | 50 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
-| 7 | TimeEcho | `TimeEcho` | supported | 92.2 | 92.2 | 100 (3/3) | - | 33 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
+| 4 | TimeClip | `TimeClip` | supported | 97.1 | 100.0 | 100 (10/10) | - | 100 | 100 | - | 100 (33/33) | 75 | - | unmeasured |
+| 5 | FrameRange | `FrameRange` | supported | 96.1 | 100.0 | 100 (2/2) | - | 100 | 100 | - | 100 (3/3) | 67 | - | unmeasured |
+| 6 | AppendClip | `AppendClip` | supported | 99.2 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 93 | - | unmeasured |
+| 7 | TimeBlur | `TimeBlur` | supported | 91.2 | 94.1 | 100 (4/4) | - | 50 | 100 | - | 100 (8/8) | 75 | - | unmeasured |
+| 7 | TimeEcho | `TimeEcho` | supported | 90.8 | 92.2 | 100 (3/3) | - | 33 | 100 | - | 100 (9/9) | 89 | - | unmeasured |
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
-| 8 | Kronos | `Kronos` | supported | 83.4 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 100 | - | unmeasured |
-| 8 | OFlow | `OFlow` | supported | 85.5 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 100 | - | unmeasured |
-| 8 | SmartVector | `SmartVector` | supported | 62.1 | 51.3 | 35 (3/11) | - | 67 | 100 | - | - | 100 | - | no fixture |
+| 8 | Kronos | `Kronos` | supported | 80.1 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 71 | - | unmeasured |
+| 8 | OFlow | `OFlow` | supported | 82.0 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 71 | - | unmeasured |
+| 8 | SmartVector | `SmartVector` | supported | 59.3 | 51.3 | 35 (3/11) | - | 67 | 100 | - | - | 83 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
@@ -113,7 +115,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 2 | ShuffleCopy | `ShuffleCopy` | supported | 100.0 | 100.0 | 100 (4/4) | - | - | 100 | - | - | 100 | - | no fixture |
 | 3 | Copy | `Copy` | supported | 99.0 | 98.3 | 100 (10/10) | 100 (8/8) | 100 | 100 | 89 | 100 (8/8) | 100 | - | unmeasured |
 | 4 | ChannelMerge | `ChannelMerge` | supported | 95.7 | 94.2 | 100 (4/4) | 100 (4/4) | 67 | 100 | 83 | 100 (13/13) | 100 | - | unmeasured |
-| 5 | Remove | `Remove` | supported | 97.1 | 97.3 | 100 (4/4) | - | 80 | 100 | 100 | - | 100 | - | no fixture |
+| 5 | Remove | `Remove` | supported | 93.6 | 97.3 | 100 (4/4) | - | 80 | 100 | 100 | - | 75 | - | no fixture |
 
 ### Color
 
@@ -121,37 +123,37 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Grade | `Grade` | supported | 100.0 | 100.0 | 100 (10/10) | 100 (10/10) | 100 | 100 | 100 | 100 (6/6) | 100 | 100 (7/7) | unmeasured |
 | 2 | ColorCorrect | `ColorCorrect` | supported | 97.9 | 96.5 | 91 (21/23) | 100 (20/20) | 100 | 100 | 100 | 100 (20/20) | 100 | 100 (20/20) | unmeasured |
-| 3 | Invert | `Invert` | supported | 98.9 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | - | - | unmeasured |
-| 4 | Saturation | `Saturation` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (13/13) | - | - | unmeasured |
-| 5 | Multiply | `Multiply` | supported | 98.9 | 98.8 | 100 (1/1) | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | - | 100 (1/1) | unmeasured |
-| 6 | Add | `Add` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | - | 100 (1/1) | unmeasured |
-| 7 | Gamma | `Gamma` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | - | 100 (1/1) | unmeasured |
-| 8 | Clamp | `Clamp` | supported | 99.5 | 99.4 | 100 (8/8) | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | 100 | 100 (2/2) | unmeasured |
+| 3 | Invert | `Invert` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 4 | Saturation | `Saturation` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (13/13) | 100 | - | unmeasured |
+| 5 | Multiply | `Multiply` | supported | 99.0 | 98.8 | 100 (1/1) | 100 (1/1) | 88 | 100 | 100 | 100 (1/1) | 100 | 100 (1/1) | unmeasured |
+| 6 | Add | `Add` | supported | 99.1 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | 100 | 100 (1/1) | unmeasured |
+| 7 | Gamma | `Gamma` | supported | 99.1 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (2/2) | 100 | 100 (1/1) | unmeasured |
+| 8 | Clamp | `Clamp` | supported | 96.8 | 99.4 | 100 (8/8) | 100 (8/8) | 94 | 100 | 100 | 100 (3/3) | 67 | 100 (2/2) | unmeasured |
 | 9 | HueCorrect | `HueCorrect` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
 | 10 | ColorLookup | `ColorLookup` | supported | 92.1 | 90.0 | 75 (6/8) | - | 100 | 100 | 100 | 100 (7/7) | 100 | - | unmeasured |
 | 11 | Exposure | `Exposure` | supported | 95.7 | 93.6 | 86 (6/7) | 100 (6/6) | 93 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 12 | HSVTool | `HSVTool` | partial | 88.4 | 80.8 | 59 (14/25) | 100 (9/9) | 100 | 100 | - | 100 (11/11) | 100 | - | unmeasured |
+| 12 | HSVTool | `HSVTool` | partial | 87.6 | 80.8 | 59 (14/25) | 100 (9/9) | 100 | 100 | - | 100 (11/11) | 92 | - | unmeasured |
 | 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 14 | Colorspace | `Colorspace` | supported | 87.7 | 83.6 | 78 (7/9) | 100 (7/7) | 100 | 100 | 100 | 70 (14/20) | 100 | - | unmeasured |
+| 14 | Colorspace | `Colorspace` | supported | 85.5 | 83.6 | 78 (7/9) | 100 (7/7) | 100 | 100 | 100 | 70 (14/20) | 75 | - | unmeasured |
 | 14 | OCIOColorspace | `OCIOColorspace` | supported | 81.4 | 71.4 | 29 (2/11) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 14 | OCIODisplay | `OCIODisplay` | supported | 75.5 | 61.5 | 31 (4/17) | 100 (4/4) | 50 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
-| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 88.7 | 83.0 | 60 (2/4) | 100 (2/2) | 90 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | - | - | unmeasured |
-| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 84.3 | 76.0 | 40 (4/14) | 100 (4/4) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
+| 14 | OCIODisplay | `OCIODisplay` | supported | 74.7 | 61.5 | 31 (4/17) | 100 (4/4) | 50 | 100 | - | 100 (5/5) | 92 | - | unmeasured |
+| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 87.2 | 83.0 | 60 (2/4) | 100 (2/2) | 90 | 100 | 100 | 100 (2/2) | 83 | - | unmeasured |
+| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 83.4 | 76.0 | 40 (4/14) | 100 (4/4) | 100 | 100 | 100 | 100 (3/3) | 89 | - | unmeasured |
 | 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 15 | PLogLin | `PLogLin` | supported | 97.1 | 96.7 | 100 (5/5) | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 16 | ColorTransfer | - | supported | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
-| 16 | MatchGrade | `MatchGrade` | supported | 100.0 | 100.0 | 100 (33/33) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 17 | Expression | `Expression` | supported | 100.0 | 100.0 | 100 (16/16) | - | 100 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
+| 16 | MatchGrade | `MatchGrade` | supported | 99.0 | 100.0 | 100 (33/33) | - | 100 | 100 | - | - | 94 | - | no fixture |
+| 17 | Expression | `Expression` | supported | 94.7 | 100.0 | 100 (16/16) | - | 100 | 100 | 100 | 100 (15/15) | 50 | - | unmeasured |
 | 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
-| 19 | Posterize | `Posterize` | supported | 98.6 | 98.5 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | - | - | - | unmeasured |
+| 19 | Posterize | `Posterize` | supported | 87.7 | 98.5 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | - | 0 | - | unmeasured |
 | 19 | SoftClip | `SoftClip` | supported | 100.0 | 100.0 | 100 (3/3) | 100 (2/2) | 100 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
 | 19 | Toe | `Toe` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 20 | HistEQ | `HistEQ` | supported | 83.3 | 80.0 | 100 (1/1) | - | 100 | 100 | 0 | - | - | - | unmeasured |
-| 20 | Histogram | `Histogram` | supported | 73.5 | 65.1 | 67 (2/3) | - | 100 | 100 | 14 | - | 100 | - | no fixture |
+| 20 | HistEQ | `HistEQ` | supported | 71.4 | 80.0 | 100 (1/1) | - | 100 | 100 | 0 | - | 0 | - | unmeasured |
+| 20 | Histogram | `Histogram` | supported | 66.3 | 65.1 | 67 (2/3) | - | 100 | 100 | 14 | - | 50 | - | no fixture |
 | 20 | MinColor | `MinColor` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
-| 20 | Sampler | `Sampler` | supported | 35.0 | 30.8 | 25 (1/4) | - | - | 100 | 0 | - | - | - | no fixture |
-| 21 | GenerateLUT | `GenerateLUT` | supported | 82.0 | 83.1 | 82 (7/9) | - | 71 | 100 | - | - | 75 | - | no fixture |
+| 20 | Sampler | `Sampler` | supported | 45.8 | 30.8 | 25 (1/4) | - | - | 100 | 0 | - | 100 | - | no fixture |
+| 21 | GenerateLUT | `GenerateLUT` | supported | 78.9 | 83.1 | 82 (7/9) | - | 71 | 100 | - | - | 56 | - | no fixture |
 | 21 | Vectorfield | `Vectorfield` | supported | 52.6 | 42.3 | 38 (4/10) | - | 0 | 100 | - | - | 100 | - | no fixture |
 
 ### Filter
@@ -162,23 +164,23 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 2 | Sharpen | `Sharpen` | supported | 98.5 | 97.9 | 100 (7/7) | 100 (5/5) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 4 | Median | `Median` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 5 | Glow | `Glow` | supported | 99.1 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
+| 5 | Glow | `Glow` | supported | 98.8 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 96 | 100 (1/1) | unmeasured |
 | 6 | Soften | `Soften` | supported | 98.5 | 97.9 | 100 (7/7) | 100 (5/5) | 85 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
 | 7 | DropShadow | `DropShadow` | supported | 96.8 | 96.1 | 100 (9/9) | 100 (8/8) | 67 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 8 | Defocus | `Defocus` | supported | 99.2 | 99.1 | 100 (5/5) | 100 (4/4) | 91 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 8 | ZDefocus | `ZDefocus` | supported | 91.2 | 89.4 | 78 (25/36) | - | 81 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 9 | DirBlur | `DirBlur` | supported | 96.5 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
+| 8 | ZDefocus | `ZDefocus` | supported | 91.0 | 89.4 | 78 (25/36) | - | 81 | 100 | 100 | 100 (3/3) | 99 | - | unmeasured |
+| 9 | DirBlur | `DirBlur` | supported | 96.0 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 94 | - | unmeasured |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (4/4) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
+| 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
 | 12 | DegrainSimple | `DegrainSimple` | supported | 95.2 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 100 | - | no fixture |
 | 12 | Denoise | `Denoise` | supported | 99.6 | 99.6 | 100 (37/37) | - | 97 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 13 | MotionBlur | `MotionBlur` | supported | 93.3 | 93.3 | 100 (6/6) | - | 60 | 100 | - | - | 100 | - | no fixture |
-| 13 | MotionBlur2D | `MotionBlur2D` | supported | 87.5 | 83.3 | 75 (3/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 13 | MotionBlur3D | `MotionBlur3D` | supported | 75.0 | 66.7 | 50 (3/6) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 13 | VectorBlur | `VectorBlur` | supported | 90.1 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 100 | - | no fixture |
+| 13 | MotionBlur2D | `MotionBlur2D` | supported | 83.3 | 83.3 | 75 (3/4) | - | 100 | 100 | - | - | 75 | - | no fixture |
+| 13 | MotionBlur3D | `MotionBlur3D` | supported | 70.8 | 66.7 | 50 (3/6) | - | 100 | 100 | - | - | 75 | - | no fixture |
+| 13 | VectorBlur | `VectorBlur` | supported | 89.3 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 94 | - | no fixture |
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 15 | Convolve | `Convolve` | supported | 98.4 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 89 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 16 | BumpBoss | `BumpBoss` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 16 | EdgeDetect | `EdgeDetect` | supported | 87.9 | 80.6 | 64 (5/7) | 100 (4/4) | 100 | 100 | 100 | - | 100 | - | unmeasured |
@@ -196,16 +198,16 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Keyer | `Keyer` | supported | 100.0 | 100.0 | 100 (10/10) | 100 (9/9) | 100 | 100 | - | 100 (11/11) | 100 | - | unmeasured |
-| 2 | ChromaKeyer | `ChromaKeyer` | supported | 99.2 | 98.9 | 100 (16/16) | 100 (13/13) | 93 | 100 | - | - | 100 | - | unmeasured |
+| 2 | ChromaKeyer | `ChromaKeyer` | supported | 98.9 | 98.9 | 100 (16/16) | 100 (13/13) | 93 | 100 | - | - | 98 | - | unmeasured |
 | 3 | Difference | `Difference` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (4/4) | 100 | 100 | - | 100 (2/2) | 100 | - | unmeasured |
 | 4 | HueKeyer | `HueKeyer` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 5 | Keylight | `ScreenKeyer` | partial | 98.8 | 98.0 | 98 (34/35) | 100 (27/27) | 97 | 100 | - | - | 100 | - | unmeasured |
+| 5 | Keylight | `ScreenKeyer` | partial | 98.6 | 98.0 | 98 (34/35) | 100 (27/27) | 97 | 100 | - | - | 99 | - | unmeasured |
 | 6 | Primatte | - | missing | 0.0 | 0.0 | 0 (0/26) | - | - | 0 | 0 | - | - | - | no fixture |
 | 6 | Ultimatte | - | missing | 0.0 | 0.0 | 0 (0/60) | - | - | 0 | - | - | - | - | no fixture |
-| 7 | IBKColor | `IBKColor` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (4/4) | 100 | 100 | - | - | 100 | - | unmeasured |
-| 7 | IBKGizmo | `IBKGizmo` | supported | 95.7 | 93.2 | 93 (14/15) | 100 (9/9) | 86 | 100 | - | - | 100 | - | unmeasured |
+| 7 | IBKColor | `IBKColor` | supported | 96.7 | 100.0 | 100 (6/6) | 100 (4/4) | 100 | 100 | - | - | 73 | - | unmeasured |
+| 7 | IBKGizmo | `IBKGizmo` | supported | 95.4 | 93.2 | 93 (14/15) | 100 (9/9) | 86 | 100 | - | - | 98 | - | unmeasured |
 | 8 | Cryptomatte | `Cryptomatte` | partial | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 8 | Encryptomatte | `Encryptomatte` | partial | 92.9 | 90.5 | 86 (3/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 8 | Encryptomatte | `Encryptomatte` | partial | 88.7 | 90.5 | 86 (3/4) | - | 100 | 100 | - | - | 75 | - | no fixture |
 
 ### Merge
 
@@ -214,49 +216,49 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 1 | Merge | `Merge` | supported | 100.0 | 100.0 | 100 (9/9) | 100 (2/2) | 100 | 100 | 100 | 100 (29/29) | 100 | - | unmeasured |
 | 2 | Premult | `Premult` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (1/1) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 3 | Unpremult | `Unpremult` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (1/1) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 4 | Switch | `Switch` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | - | 100 (2/2) | - | - | unmeasured |
-| 5 | Dissolve | `Dissolve` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (4/4) | - | - | unmeasured |
+| 4 | Switch | `Switch` | supported | 90.5 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | - | 100 (2/2) | 0 | - | unmeasured |
+| 5 | Dissolve | `Dissolve` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | KeyMix | `Keymix` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 7 | AddMix | `AddMix` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 8 | Blend | `Blend` | supported | 96.8 | 95.3 | 100 (2/2) | 100 (2/2) | 83 | 100 | 80 | 100 (3/3) | 100 | - | unmeasured |
+| 8 | Blend | `Blend` | supported | 95.4 | 95.3 | 100 (2/2) | 100 (2/2) | 83 | 100 | 80 | 100 (3/3) | 83 | - | unmeasured |
 | 9 | CopyBBox | `CopyBBox` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 9 | CopyRectangle | `CopyRectangle` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 10 | ContactSheet | `ContactSheet` | supported | 90.9 | 90.9 | 100 (11/11) | - | 45 | 100 | - | - | 100 | - | no fixture |
-| 11 | TimeDissolve | `TimeDissolve` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 12 | ZMerge | `ZMerge` | supported | 97.2 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 83 | - | no fixture |
+| 9 | CopyRectangle | `CopyRectangle` | supported | 97.8 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (2/2) | 75 | - | unmeasured |
+| 10 | ContactSheet | `ContactSheet` | supported | 85.6 | 90.9 | 100 (11/11) | - | 45 | 100 | - | - | 68 | - | no fixture |
+| 11 | TimeDissolve | `TimeDissolve` | supported | 96.1 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 67 | - | unmeasured |
+| 12 | ZMerge | `ZMerge` | supported | 98.1 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 89 | - | no fixture |
 
 ### Transform
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Transform | `Transform` | supported | 100.0 | 100.0 | 100 (15/15) | 100 (10/10) | 100 | 100 | - | 100 (12/12) | 100 | 100 (1/1) | unmeasured |
+| 1 | Transform | `Transform` | supported | 99.8 | 100.0 | 100 (15/15) | 100 (10/10) | 100 | 100 | - | 100 (12/12) | 98 | 100 (1/1) | unmeasured |
 | 2 | Crop | `Crop` | supported | 97.6 | 97.1 | 100 (5/5) | 100 (2/2) | 75 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 3 | Tracker | `Tracker` | supported | 91.1 | 89.3 | 78 (41/54) | - | 83 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
+| 3 | Tracker | `Tracker` | supported | 89.0 | 89.3 | 78 (41/54) | - | 83 | 100 | 100 | 100 (5/5) | 80 | - | unmeasured |
 | 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
-| 6 | CornerPin2D | `CornerPin` | supported | 100.0 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
+| 5 | Reformat | `Reformat` | supported | 96.0 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 96 | 100 (1/1) | unmeasured |
+| 6 | CornerPin2D | `CornerPin` | supported | 96.6 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 71 | - | unmeasured |
 | 7 | Mirror | `Mirror` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 8 | Stabilize | `Stabilize` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 9 | Position | `Position` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | - | - | unmeasured |
-| 10 | AdjustBBox | `AdjustBBox` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | - | - | unmeasured |
+| 9 | Position | `Position` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
+| 10 | AdjustBBox | `AdjustBBox` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 11 | BlackOutside | `BlackOutside` | supported | 100.0 | 100.0 | - | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
 | 12 | STMap | `STMap` | supported | 98.0 | 98.1 | 100 (6/6) | - | 86 | 100 | 100 | - | 100 | - | no fixture |
-| 13 | IDistort | `IDistort` | supported | 93.9 | 94.3 | 100 (8/8) | - | 57 | 100 | 100 | - | 100 | - | no fixture |
+| 13 | IDistort | `IDistort` | supported | 92.5 | 94.3 | 100 (8/8) | - | 57 | 100 | 100 | - | 90 | - | no fixture |
 | 14 | GridWarp | `GridWarp` | supported | 70.2 | 63.2 | 15 (5/34) | - | 73 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 14 | SplineWarp | `SplineWarp` | supported | 82.1 | 79.7 | 67 (12/23) | - | 64 | 67 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 14 | SplineWarp | `SplineWarp` | supported | 81.2 | 79.7 | 67 (12/23) | - | 64 | 67 | 100 | 100 (2/2) | 91 | - | unmeasured |
 | 15 | Tile | `Tile` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
 | 16 | VectorCornerPin | `VectorCornerPin` | supported | 93.3 | 91.0 | 81 (13/17) | - | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 16 | VectorDistort | `VectorDistort` | supported | 90.5 | 88.1 | 78 (5/6) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
-| 17 | PointsTo3D | `PointsTo3D` | supported | 87.5 | 87.5 | 100 (9/9) | - | 25 | 100 | - | - | 100 | - | no fixture |
-| 18 | Reconcile3D | `Reconcile3D` | supported | 76.7 | 68.9 | 53 (7/14) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 17 | PointsTo3D | `PointsTo3D` | supported | 84.4 | 87.5 | 100 (9/9) | - | 25 | 100 | - | - | 81 | - | no fixture |
+| 18 | Reconcile3D | `Reconcile3D` | supported | 73.1 | 68.9 | 53 (7/14) | - | 100 | 100 | - | - | 79 | - | no fixture |
 | 19 | TVIScale | `TVIScale` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
-| 20 | LensDistortion | `Undistort` | supported | 77.6 | 70.2 | 37 (20/58) | - | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
+| 20 | LensDistortion | `Undistort` | supported | 74.2 | 70.2 | 37 (20/58) | - | 100 | 100 | - | 100 (7/7) | 70 | - | unmeasured |
 
 ### Metadata
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | ViewMetaData | `ViewMetaData` | supported | 100.0 | 100.0 | 100 (3/3) | - | - | 100 | - | - | - | - | no fixture |
+| 1 | ViewMetaData | `ViewMetaData` | supported | 80.0 | 100.0 | 100 (3/3) | - | - | 100 | - | - | 0 | - | no fixture |
 | 2 | ModifyMetaData | `ModifyMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | - | - | - | no fixture |
 | 3 | CopyMetaData | `CopyMetaData` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | - | 100 | - | no fixture |
 | 4 | AddTimeCode | `AddTimeCode` | supported | 94.4 | 94.4 | 100 (5/5) | - | 67 | 100 | - | - | 100 | - | no fixture |
@@ -270,11 +272,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 2 | NoOp | `NoOp` | supported | 100.0 | 100.0 | - | - | - | 100 | - | - | - | - | no fixture |
 | 3 | Backdrop | `Backdrop` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 4 | PostageStamp | `PostageStamp` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 5 | Group | `Group` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | - | - | - | no fixture |
+| 5 | Group | `Group` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | - | 100 | - | no fixture |
 | 5 | Input | `Input` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Output | `Output` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 6 | BlinkScript | - | missing | 0.0 | 0.0 | 0 (0/19) | - | - | 0 | - | - | - | - | no fixture |
-| 7 | BurnIn | `BurnIn` | supported | 91.7 | 91.7 | 100 (18/18) | - | 50 | 100 | - | - | 100 | - | no fixture |
+| 7 | BurnIn | `BurnIn` | supported | 87.3 | 91.7 | 100 (18/18) | - | 50 | 100 | - | - | 74 | - | no fixture |
 | 8 | Link | - | missing | 0.0 | 0.0 | - | - | - | 0 | - | - | - | - | no fixture |
 | 8 | LiveGroup | - | missing | 0.0 | 0.0 | 0 (0/11) | - | - | 0 | - | - | - | - | no fixture |
 | 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | no fixture |
@@ -284,171 +286,170 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | no fixture |
 
-## Panel rows and widget types (unweighted; 2026-11-04)
+## Panel rows and widget types (two quarters of the layout component; 2026-11-04)
 
-Rows count paired knobs in consecutive same-label groups from the guide that NodeBased places together on one panel row. Types count paired knobs with a known guide type whose widget matches (integer field, slider, dropdown, checkbox, text field or button). These lines are measurements only; they do not change fidelity scores. Unknown guide types are counted but their names are omitted.
-
+Rows count paired knobs in consecutive same-label groups from the guide that NodeBased places together on one panel row (a guide knob with no NodeBased knob is not counted, a row of fewer than two paired knobs is not measured, and the label `N/A` shares nothing). Types count paired knobs with a known guide type whose widget matches. The guide's `type` is inferred from defaults, so a `number` is resolved as follows: an integer field with no slider when the guide default is an integer and the knob's name counts, indexes or names a frame (frame, first, last, count, samples, iterations, index, seed, octaves, divisions, steps, levels and the like); otherwise a float with a slider and value field (Nuke's Double_Knob), which a per-channel split, or a colour row for a knob named color or listed in the split table, also satisfies; with no numeric default the type is left unmeasured. A `string` paired with a dropdown is left unmeasured (the guide gives a menu's current entry as text and cannot tell the two apart), and a `string` defaulting to on or off is a checkbox. A `number_list` needs a colour, xy, xyz or split row; `enum` and `channels` need a dropdown; `bool` a checkbox. Unmeasured knobs are counted in the last column and never score.
 | Node | Shared-row knobs on one row | Widget types matching | Unknown types (unmeasured) |
 |---|---:|---:|---:|
 | Read | 100.0% (8/8) | 100.0% (29/29) | 42 |
-| Write | 0.0% (0/8) | 82.6% (19/23) | 20 |
-| Viewer | 0.0% (0/19) | 0.0% (0/20) | 0 |
-| Constant | 0.0% (0/2) | 0.0% (0/3) | 1 |
+| Write | 0.0% (0/4) | 95.5% (21/22) | 21 |
+| Viewer | — | 0.0% (0/20) | 0 |
+| Constant | 100.0% (2/2) | 100.0% (3/3) | 1 |
 | UDIM Import | — | — | 0 |
-| CurveTool | — | 33.3% (3/9) | 3 |
+| CurveTool | — | 100.0% (9/9) | 3 |
 | Profile | — | — | 2 |
-| Roto | 0.0% (0/6) | 22.5% (9/40) | 16 |
-| Text | 0.0% (0/6) | 52.6% (20/38) | 3 |
-| Rectangle | 0.0% (0/2) | 83.3% (10/12) | 1 |
-| Ramp | 0.0% (0/2) | 90.0% (9/10) | 0 |
-| Radial | 0.0% (0/2) | 84.6% (11/13) | 1 |
-| Noise | 0.0% (0/2) | 68.0% (17/25) | 1 |
-| RotoPaint | 0.0% (0/6) | 14.1% (9/64) | 16 |
-| LightWrap | — | 33.3% (9/27) | 0 |
-| Grain | — | 92.3% (12/13) | 1 |
+| Roto | — | 23.7% (9/38) | 18 |
+| Text | 100.0% (4/4) | 100.0% (36/36) | 5 |
+| Rectangle | — | 100.0% (10/10) | 3 |
+| Ramp | — | 100.0% (8/8) | 2 |
+| Radial | — | 100.0% (11/11) | 3 |
+| Noise | — | 100.0% (23/23) | 3 |
+| RotoPaint | — | 14.5% (9/62) | 18 |
+| LightWrap | — | 100.0% (26/26) | 1 |
+| Grain | — | 100.0% (13/13) | 1 |
 | ScannedGrain | — | — | 1 |
-| DustBust | 0.0% (0/2) | — | 0 |
-| MarkerRemoval | 0.0% (0/2) | — | 0 |
-| Flare | 0.0% (0/16) | 30.0% (3/10) | 6 |
-| Glint | 0.0% (0/4) | 20.0% (2/10) | 0 |
-| Sparkles | 0.0% (0/2) | 11.1% (1/9) | 0 |
-| Dither | 0.0% (0/4) | 75.0% (3/4) | 0 |
-| Grid | 0.0% (0/2) | 71.4% (10/14) | 0 |
-| TimeOffset | — | 0.0% (0/5) | 2 |
-| FrameHold | — | 0.0% (0/5) | 2 |
-| Retime | 0.0% (0/8) | 83.3% (10/12) | 4 |
-| TimeClip | 0.0% (0/6) | 66.7% (4/6) | 4 |
-| FrameRange | 0.0% (0/2) | 0.0% (0/2) | 1 |
-| AppendClip | — | 20.0% (1/5) | 1 |
-| TimeBlur | 0.0% (0/2) | 25.0% (1/4) | 0 |
-| TimeEcho | — | 33.3% (1/3) | 0 |
-| TimeWarp | — | 33.3% (1/3) | 2 |
-| Kronos | 0.0% (0/2) | 50.0% (7/14) | 6 |
-| OFlow | 0.0% (0/2) | 41.7% (5/12) | 4 |
-| SmartVector | — | 33.3% (1/3) | 2 |
+| DustBust | — | — | 0 |
+| MarkerRemoval | — | — | 0 |
+| Flare | — | 100.0% (10/10) | 6 |
+| Glint | — | 100.0% (10/10) | 0 |
+| Sparkles | — | 88.9% (8/9) | 0 |
+| Dither | — | 100.0% (4/4) | 0 |
+| Grid | — | 91.7% (11/12) | 2 |
+| TimeOffset | — | 100.0% (4/4) | 3 |
+| FrameHold | — | 100.0% (4/4) | 3 |
+| Retime | 100.0% (8/8) | 100.0% (12/12) | 4 |
+| TimeClip | 0.0% (0/6) | 100.0% (6/6) | 4 |
+| FrameRange | 0.0% (0/2) | 100.0% (2/2) | 1 |
+| AppendClip | — | 80.0% (4/5) | 1 |
+| TimeBlur | 0.0% (0/2) | 100.0% (4/4) | 0 |
+| TimeEcho | — | 66.7% (2/3) | 0 |
+| TimeWarp | — | 100.0% (3/3) | 2 |
+| Kronos | 0.0% (0/2) | 85.7% (12/14) | 6 |
+| OFlow | 0.0% (0/2) | 83.3% (10/12) | 4 |
+| SmartVector | — | 50.0% (1/2) | 3 |
 | VectorToMotion | — | — | 0 |
 | NoTimeBlur | — | 100.0% (2/2) | 0 |
-| Shuffle | 0.0% (0/6) | 50.0% (3/6) | 0 |
-| ShuffleCopy | — | 50.0% (2/4) | 0 |
-| Copy | 0.0% (0/20) | 20.0% (2/10) | 0 |
-| ChannelMerge | 0.0% (0/8) | 25.0% (1/4) | 0 |
+| Shuffle | 100.0% (4/4) | 100.0% (2/2) | 4 |
+| ShuffleCopy | — | 100.0% (2/2) | 2 |
+| Copy | — | 100.0% (2/2) | 8 |
+| ChannelMerge | — | 100.0% (1/1) | 3 |
 | Remove | 0.0% (0/3) | 100.0% (4/4) | 0 |
-| Grade | 0.0% (0/4) | 30.0% (3/10) | 0 |
-| ColorCorrect | 0.0% (0/6) | 0.0% (0/20) | 2 |
-| Invert | 0.0% (0/4) | 100.0% (1/1) | 0 |
-| Saturation | 0.0% (0/4) | 100.0% (1/1) | 0 |
-| Multiply | 0.0% (0/4) | 0.0% (0/1) | 0 |
-| Add | 0.0% (0/4) | 0.0% (0/1) | 0 |
-| Gamma | 0.0% (0/4) | 0.0% (0/1) | 0 |
-| Clamp | 0.0% (0/12) | 50.0% (4/8) | 0 |
-| HueCorrect | 0.0% (0/6) | 100.0% (1/1) | 2 |
-| ColorLookup | 0.0% (0/4) | 0.0% (0/2) | 5 |
-| Exposure | 0.0% (0/4) | 83.3% (5/6) | 0 |
-| HSVTool | 0.0% (0/8) | 78.6% (11/14) | 3 |
-| ColorMatrix | 0.0% (0/4) | 100.0% (2/2) | 0 |
-| Colorspace | 0.0% (0/10) | 14.3% (1/7) | 2 |
-| OCIOColorspace | 0.0% (0/4) | 100.0% (2/2) | 9 |
+| Grade | — | 100.0% (10/10) | 0 |
+| ColorCorrect | — | 100.0% (20/20) | 2 |
+| Invert | — | 100.0% (1/1) | 0 |
+| Saturation | — | 100.0% (1/1) | 0 |
+| Multiply | — | 100.0% (1/1) | 0 |
+| Add | — | 100.0% (1/1) | 0 |
+| Gamma | — | 100.0% (1/1) | 0 |
+| Clamp | 0.0% (0/8) | 100.0% (8/8) | 0 |
+| HueCorrect | — | 100.0% (1/1) | 2 |
+| ColorLookup | — | 100.0% (2/2) | 5 |
+| Exposure | — | 100.0% (5/5) | 1 |
+| HSVTool | — | 84.6% (11/13) | 4 |
+| ColorMatrix | — | 100.0% (2/2) | 0 |
+| Colorspace | 0.0% (0/6) | 100.0% (1/1) | 8 |
+| OCIOColorspace | — | 100.0% (2/2) | 9 |
 | OCIODisplay | — | 75.0% (3/4) | 8 |
-| OCIOFileTransform | 0.0% (0/4) | 50.0% (1/2) | 0 |
-| OCIOLogConvert | 0.0% (0/4) | 100.0% (1/1) | 0 |
-| OCIOLookTransform | 0.0% (0/4) | 66.7% (2/3) | 10 |
-| Log2Lin | 0.0% (0/4) | 40.0% (2/5) | 3 |
-| PLogLin | 0.0% (0/4) | 20.0% (1/5) | 0 |
+| OCIOFileTransform | — | 50.0% (1/2) | 0 |
+| OCIOLogConvert | — | 100.0% (1/1) | 0 |
+| OCIOLookTransform | — | 66.7% (2/3) | 10 |
+| Log2Lin | — | 100.0% (5/5) | 3 |
+| PLogLin | — | 100.0% (5/5) | 0 |
 | ColorTransfer | — | — | 1 |
-| MatchGrade | 0.0% (0/4) | 70.6% (12/17) | 16 |
-| Expression | 0.0% (0/4) | 0.0% (0/4) | 12 |
-| CrossTalk | 0.0% (0/4) | — | 2 |
-| Posterize | 0.0% (0/4) | 0.0% (0/1) | 0 |
+| MatchGrade | — | 81.2% (13/16) | 17 |
+| Expression | — | 0.0% (0/4) | 12 |
+| CrossTalk | — | — | 2 |
+| Posterize | — | 0.0% (0/1) | 0 |
 | SoftClip | — | 100.0% (3/3) | 0 |
-| Toe | 0.0% (0/4) | 100.0% (2/2) | 0 |
-| HistEQ | 0.0% (0/2) | 0.0% (0/1) | 0 |
-| Histogram | 0.0% (0/4) | 0.0% (0/2) | 1 |
-| MinColor | — | 50.0% (2/4) | 1 |
+| Toe | — | 100.0% (2/2) | 0 |
+| HistEQ | — | 0.0% (0/1) | 0 |
+| Histogram | — | 0.0% (0/2) | 1 |
+| MinColor | — | 100.0% (4/4) | 1 |
 | Sampler | — | 100.0% (1/1) | 2 |
-| GenerateLUT | 0.0% (0/2) | 42.9% (3/7) | 1 |
-| Vectorfield | — | 50.0% (2/4) | 1 |
-| Blur | 0.0% (0/2) | 50.0% (2/4) | 0 |
-| Sharpen | 0.0% (0/2) | 42.9% (3/7) | 0 |
-| Erode (filter) | 0.0% (0/2) | 0.0% (0/2) | 0 |
-| Median | 0.0% (0/2) | 100.0% (2/2) | 0 |
-| Glow | 0.0% (0/4) | 63.6% (7/11) | 0 |
-| Soften | 0.0% (0/2) | 42.9% (3/7) | 0 |
-| DropShadow | — | 88.9% (8/9) | 0 |
-| Defocus | 0.0% (0/2) | 80.0% (4/5) | 0 |
-| ZDefocus | 0.0% (0/4) | 64.0% (16/25) | 3 |
-| DirBlur | 0.0% (0/4) | 50.0% (6/12) | 0 |
-| EdgeBlur | 0.0% (0/6) | 75.0% (6/8) | 0 |
+| GenerateLUT | 0.0% (0/2) | 75.0% (3/4) | 4 |
+| Vectorfield | — | 100.0% (2/2) | 3 |
+| Blur | — | 100.0% (3/3) | 1 |
+| Sharpen | — | 100.0% (6/6) | 1 |
+| Erode (filter) | — | 100.0% (1/1) | 1 |
+| Median | — | 100.0% (2/2) | 0 |
+| Glow | — | 88.9% (8/9) | 2 |
+| Soften | — | 100.0% (6/6) | 1 |
+| DropShadow | — | 100.0% (8/8) | 1 |
+| Defocus | — | 100.0% (5/5) | 0 |
+| ZDefocus | — | 96.0% (24/25) | 3 |
+| DirBlur | — | 81.8% (9/11) | 1 |
+| EdgeBlur | — | 100.0% (6/6) | 2 |
 | EdgeExtend | — | 100.0% (6/6) | 1 |
-| Erode (fast) | 0.0% (0/2) | 100.0% (1/1) | 0 |
-| DegrainSimple | 0.0% (0/2) | 100.0% (3/3) | 0 |
-| Denoise | — | 86.7% (26/30) | 9 |
-| MotionBlur | — | 60.0% (3/5) | 2 |
-| MotionBlur2D | 0.0% (0/2) | 33.3% (1/3) | 0 |
-| MotionBlur3D | 0.0% (0/4) | 33.3% (1/3) | 0 |
-| VectorBlur | 0.0% (0/4) | 69.2% (9/13) | 1 |
-| Bilateral | 0.0% (0/2) | 100.0% (5/5) | 1 |
-| Convolve | 0.0% (0/2) | 75.0% (3/4) | 1 |
-| Matrix | 0.0% (0/2) | 100.0% (1/1) | 1 |
-| BumpBoss | 0.0% (0/2) | 33.3% (2/6) | 0 |
-| EdgeDetect | 0.0% (0/4) | 80.0% (4/5) | 0 |
-| Emboss | 0.0% (0/8) | 85.7% (6/7) | 0 |
-| Laplacian | 0.0% (0/2) | 75.0% (3/4) | 0 |
-| Inpaint | — | 30.0% (3/10) | 2 |
-| GodRays | 0.0% (0/2) | 30.0% (3/10) | 0 |
-| LevelSet | 0.0% (0/2) | 75.0% (6/8) | 0 |
-| VolumeRays | — | 45.5% (5/11) | 0 |
-| ZSlice | 0.0% (0/4) | 33.3% (1/3) | 0 |
-| Bokeh | 0.0% (0/8) | — | 0 |
-| Keyer | 0.0% (0/2) | 77.8% (7/9) | 1 |
-| ChromaKeyer | — | 87.5% (14/16) | 1 |
-| Difference | 0.0% (0/2) | 75.0% (3/4) | 0 |
-| HueKeyer | 0.0% (0/2) | 66.7% (2/3) | 1 |
+| Erode (fast) | — | 100.0% (1/1) | 0 |
+| DegrainSimple | — | 100.0% (3/3) | 0 |
+| Denoise | — | 100.0% (29/29) | 10 |
+| MotionBlur | — | 100.0% (5/5) | 2 |
+| MotionBlur2D | 0.0% (0/2) | 100.0% (3/3) | 0 |
+| MotionBlur3D | 0.0% (0/2) | 100.0% (3/3) | 0 |
+| VectorBlur | — | 83.3% (10/12) | 2 |
+| Bilateral | — | 100.0% (5/5) | 1 |
+| Convolve | — | 66.7% (2/3) | 2 |
+| Matrix | — | 100.0% (1/1) | 1 |
+| BumpBoss | — | 100.0% (6/6) | 0 |
+| EdgeDetect | — | 100.0% (4/4) | 1 |
+| Emboss | — | 100.0% (6/6) | 1 |
+| Laplacian | — | 100.0% (3/3) | 1 |
+| Inpaint | — | 100.0% (9/9) | 3 |
+| GodRays | — | 100.0% (10/10) | 0 |
+| LevelSet | — | 100.0% (7/7) | 1 |
+| VolumeRays | — | 100.0% (11/11) | 0 |
+| ZSlice | — | 100.0% (3/3) | 0 |
+| Bokeh | — | — | 0 |
+| Keyer | — | 100.0% (7/7) | 3 |
+| ChromaKeyer | — | 93.3% (14/15) | 2 |
+| Difference | 100.0% (2/2) | 100.0% (3/3) | 1 |
+| HueKeyer | 100.0% (2/2) | 100.0% (2/2) | 2 |
 | Keylight | — | 97.1% (33/34) | 1 |
-| Primatte | 0.0% (0/5) | — | 7 |
+| Primatte | — | — | 7 |
 | Ultimatte | — | — | 2 |
-| IBKColor | — | 16.7% (1/6) | 0 |
-| IBKGizmo | — | 100.0% (14/14) | 0 |
-| Cryptomatte | — | 50.0% (1/2) | 2 |
-| Encryptomatte | 0.0% (0/2) | 50.0% (1/2) | 2 |
-| Merge | 0.0% (0/2) | 55.6% (5/9) | 0 |
-| Premult | 0.0% (0/2) | 100.0% (2/2) | 0 |
-| Unpremult | 0.0% (0/2) | 100.0% (2/2) | 0 |
+| IBKColor | — | 20.0% (1/5) | 1 |
+| IBKGizmo | — | 92.9% (13/14) | 0 |
+| Cryptomatte | — | 100.0% (1/1) | 3 |
+| Encryptomatte | 0.0% (0/2) | 100.0% (1/1) | 3 |
+| Merge | — | 100.0% (5/5) | 4 |
+| Premult | — | 100.0% (1/1) | 1 |
+| Unpremult | — | 100.0% (1/1) | 1 |
 | Switch | — | 0.0% (0/1) | 0 |
-| Dissolve | 0.0% (0/2) | 100.0% (1/1) | 0 |
-| KeyMix | 0.0% (0/2) | 100.0% (2/2) | 0 |
-| AddMix | — | 100.0% (5/5) | 2 |
-| Blend | 0.0% (0/2) | 0.0% (0/2) | 0 |
+| Dissolve | — | 100.0% (1/1) | 0 |
+| KeyMix | — | 100.0% (1/1) | 1 |
+| AddMix | — | 100.0% (2/2) | 5 |
+| Blend | — | 50.0% (1/2) | 0 |
 | CopyBBox | — | — | 0 |
-| CopyRectangle | 0.0% (0/4) | 20.0% (1/5) | 0 |
-| ContactSheet | 0.0% (0/6) | 36.4% (4/11) | 0 |
+| CopyRectangle | 0.0% (0/4) | 100.0% (5/5) | 0 |
+| ContactSheet | 0.0% (0/6) | 72.7% (8/11) | 0 |
 | TimeDissolve | — | 0.0% (0/2) | 2 |
-| ZMerge | 0.0% (0/4) | 100.0% (3/3) | 0 |
-| Transform | 0.0% (0/2) | 50.0% (7/14) | 1 |
-| Crop | — | 75.0% (3/4) | 1 |
-| Tracker | 42.9% (3/7) | 52.9% (18/34) | 10 |
+| ZMerge | — | 100.0% (3/3) | 0 |
+| Transform | 100.0% (2/2) | 92.3% (12/13) | 2 |
+| Crop | — | 100.0% (4/4) | 1 |
+| Tracker | 60.0% (3/5) | 79.4% (27/34) | 10 |
 | PlanarTracker | — | — | 0 |
-| Reformat | 100.0% (2/2) | 73.3% (11/15) | 0 |
-| CornerPin2D | 0.0% (0/2) | 66.7% (8/12) | 12 |
+| Reformat | 100.0% (2/2) | 85.7% (12/14) | 1 |
+| CornerPin2D | 0.0% (0/2) | 83.3% (10/12) | 12 |
 | Mirror | — | 100.0% (2/2) | 0 |
 | Stabilize | — | — | 0 |
 | Position | — | 100.0% (1/1) | 0 |
-| AdjustBBox | — | 0.0% (0/1) | 0 |
+| AdjustBBox | — | 100.0% (1/1) | 0 |
 | BlackOutside | — | — | 0 |
-| STMap | 0.0% (0/4) | 66.7% (4/6) | 0 |
-| IDistort | 0.0% (0/4) | 50.0% (4/8) | 0 |
-| GridWarp | 0.0% (0/2) | 100.0% (5/5) | 8 |
+| STMap | — | 100.0% (4/4) | 2 |
+| IDistort | — | 71.4% (5/7) | 1 |
+| GridWarp | — | 100.0% (5/5) | 8 |
 | SplineWarp | — | 72.7% (8/11) | 3 |
-| Tile | — | 60.0% (3/5) | 0 |
-| VectorCornerPin | 0.0% (0/7) | 100.0% (1/1) | 22 |
-| VectorDistort | — | 60.0% (3/5) | 2 |
+| Tile | — | 100.0% (5/5) | 0 |
+| VectorCornerPin | — | 100.0% (1/1) | 22 |
+| VectorDistort | — | 100.0% (5/5) | 2 |
 | PointsTo3D | — | 44.4% (4/9) | 4 |
-| Reconcile3D | 0.0% (0/2) | 57.1% (4/7) | 1 |
-| TVIScale | 0.0% (0/2) | 0.0% (0/3) | 0 |
-| LensDistortion | 0.0% (0/25) | 47.1% (8/17) | 19 |
+| Reconcile3D | — | 57.1% (4/7) | 1 |
+| TVIScale | — | 100.0% (3/3) | 0 |
+| LensDistortion | 0.0% (0/10) | 81.2% (13/16) | 20 |
 | ViewMetaData | — | 0.0% (0/1) | 2 |
 | ModifyMetaData | — | — | 1 |
-| CopyMetaData | — | 33.3% (1/3) | 2 |
-| AddTimeCode | — | 60.0% (3/5) | 0 |
+| CopyMetaData | — | 100.0% (1/1) | 4 |
+| AddTimeCode | — | 100.0% (5/5) | 0 |
 | CompareMetaData | — | — | 1 |
 | Dot | — | — | 0 |
 | NoOp | — | — | 0 |
@@ -470,8 +471,8 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
-**Lowest shared-row scores:** Add (0.0%); Bilateral (0.0%); Blend (0.0%); Blur (0.0%); Bokeh (0.0%).
-**Lowest widget-type scores:** Add (0.0%); AdjustBBox (0.0%); Blend (0.0%); ColorCorrect (0.0%); ColorLookup (0.0%).
+**Lowest shared-row scores:** BurnIn (0.0%); Clamp (0.0%); Colorspace (0.0%); ContactSheet (0.0%); CopyRectangle (0.0%).
+**Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); Switch (0.0%).
 
 ## The 30 largest gaps
 
@@ -479,36 +480,36 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 2 | Roto (Draw #1) | `Roto` | 10.39 | 89.6 | 26 secondary knobs missing |
-| 3 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 4 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 5 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 6 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 7 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
-| 8 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 9 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
-| 10 | Viewer (Image #3) | `Viewer` | 3.33 | 90.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 11 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 12 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 13 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 14 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 15 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 16 | Tracker (Transform #3) | `Tracker` | 2.96 | 91.1 | 13 secondary knobs missing |
-| 17 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
-| 18 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 19 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
-| 20 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
-| 21 | SmartVector (Time #8) | `SmartVector` | 1.18 | 62.1 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
-| 22 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
-| 23 | LensDistortion (Transform #20) | `Undistort` | 1.12 | 77.6 | 38 secondary knobs missing |
-| 24 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
-| 25 | GridWarp (Transform #14) | `GridWarp` | 1.06 | 70.2 | 29 secondary knobs missing |
-| 26 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
-| 27 | ZSlice (Filter #19) | `ZSlice` | 1.00 | 81.0 | node chrome missing: channels selector, mask channel, mask invert, mask inject, mask fringe |
-| 28 | HSVTool (Color #12) | `HSVTool` | 0.97 | 88.4 | 11 secondary knobs missing: `huereset`, `HMask`, `invert_hue_mask`, `satreset`, `SMask` ... |
-| 29 | ContactSheet (Merge #10) | `ContactSheet` | 0.91 | 90.9 | nothing missing that the guide lists |
-| 30 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
+| 1 | ViewMetaData (Metadata #1) | `ViewMetaData` | 20.00 | 80.0 | nothing missing that the guide lists |
+| 2 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 3 | Roto (Draw #1) | `Roto` | 13.07 | 86.9 | 26 secondary knobs missing |
+| 4 | Viewer (Image #3) | `Viewer` | 8.33 | 75.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 5 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 6 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 7 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 8 | DustBust (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 9 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
+| 10 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 11 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
+| 12 | Tracker (Transform #3) | `Tracker` | 3.67 | 89.0 | 13 secondary knobs missing |
+| 13 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 14 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 15 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 16 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 17 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 18 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
+| 19 | Switch (Merge #4) | `Switch` | 2.38 | 90.5 | nothing missing that the guide lists |
+| 20 | BurnIn (Other #7) | `BurnIn` | 1.82 | 87.3 | nothing missing that the guide lists |
+| 21 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
+| 22 | ContactSheet (Merge #10) | `ContactSheet` | 1.44 | 85.6 | nothing missing that the guide lists |
+| 23 | AddTimeCode (Metadata #4) | `AddTimeCode` | 1.39 | 94.4 | nothing missing that the guide lists |
+| 24 | LensDistortion (Transform #20) | `Undistort` | 1.29 | 74.2 | 38 secondary knobs missing |
+| 25 | Remove (Channel #5) | `Remove` | 1.29 | 93.6 | nothing missing that the guide lists |
+| 26 | SmartVector (Time #8) | `SmartVector` | 1.27 | 59.3 | primary knobs missing: `strengthReg`, `inpainting`, `matteDilation`; 5 secondary knobs missing: `export_write`, `flickerCompensation`, `weightRed`, `weightGreen`, `weightBlue` |
+| 27 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 28 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
+| 29 | RotoPaint (Draw #7) | `RotoPaint` | 1.11 | 92.2 | 14 secondary knobs missing |
+| 30 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
 
 ## Formula cases
 

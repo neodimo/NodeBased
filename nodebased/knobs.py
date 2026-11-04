@@ -8,7 +8,7 @@ from .core import CHOICES, LIMITS, SPECS
 
 
 KNOB_KINDS = ("float_slider", "int", "bool", "enum", "xy", "xyz", "float", "color", "file_read",
-              "file_write", "string", "multiline", "split")
+              "file_write", "string", "multiline", "split", "row")
 
 
 def _default_label(params):
@@ -32,6 +32,7 @@ class KnobGroup:
     help: str | None = None        # one plain sentence shown under the knob and as its tooltip
     channels: str | None = None    # a "split" knob: its split set, "rgba" (r g b a) or "wh" (w h), as in core.SPLIT_CHANNELS
     captions: tuple[str, ...] | None = None    # an "xy" row's field captions when they are not x, y, z (a Keyer's A B C D)
+    members: tuple[str, ...] | None = None     # a "row" group: the widget kind of each param (int, float, enum, bool, string), side by side on one row
 
     def __post_init__(self):
         if self.kind == "split":
@@ -40,6 +41,12 @@ class KnobGroup:
                 raise ValueError(f"a split knob names one param and a split set of {sorted(SPLIT_CHANNELS)}")
         elif self.channels is not None:
             raise ValueError("only a split knob takes channels")
+        if self.kind == "row":
+            if self.members is None or len(self.members) != len(self.params) or len(self.params) < 2 \
+                    or any(m not in ("int", "float", "enum", "bool", "string") for m in self.members):
+                raise ValueError("a row knob names two or more params and a widget kind (int, float, enum, bool, string) for each")
+        elif self.members is not None:
+            raise ValueError("only a row knob takes members")
         if self.captions is not None and (self.kind not in ("xy", "xyz") or len(self.captions) != len(self.params)):
             raise ValueError("captions go with an xy row and name each of its fields")
         if self.label is None:
@@ -1530,7 +1537,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("inject_mask",), label="Inject mask")),
     "FrameHold": _groups(
         KnobGroup("enum", ("rounding_mode",), label="Mode"),
-        KnobGroup("float", ("first_frame",)), KnobGroup("float", ("increment",)),
+        KnobGroup("int", ("first_frame",), label="First Frame"), KnobGroup("float", ("increment",)),
         KnobGroup("bool", ("enable_path_mask",), label="Enable path mask"),
         KnobGroup("string", ("mask_patterns",), label="Mask patterns"),
         KnobGroup("bool", ("inject_mask",), label="Inject mask")),
@@ -2556,3 +2563,36 @@ def _nuke_layouts():
 
 
 _nuke_layouts()
+
+
+# Lane 2 panel sweep (11/4): knobs the guide's tables give one label share one row in Nuke's panel. Each row replaces the single-knob groups
+# it names, at the place of the first, with the guide's label; every param stays one param, so documents load and render as before.
+ROW_GROUPS = {
+    "Shuffle": (KnobGroup("row", ("fromInput1", "layer", "fromInput2", "in2"), label="In", members=("enum", "string", "enum", "string")),),
+    "Transform": (KnobGroup("row", ("shutter_offset", "custom_offset"), label="Shutter offset", members=("enum", "float")),),
+    "Text": (KnobGroup("row", ("justify", "yjustify"), label="Justify", members=("enum", "enum")),
+             KnobGroup("row", ("font", "index"), label="Font", members=("string", "string"))),
+    "Difference": (KnobGroup("row", ("output_enabled", "output_channel"), label="Output", members=("bool", "enum")),),
+    "HueKeyer": (KnobGroup("row", ("output_enabled", "output_channel"), label="Output", members=("bool", "enum")),),
+    "Retime": (KnobGroup("row", ("input_range_start", "input_range_start_lock", "input_range_end", "input_range_end_lock"), label="Input range",
+                         members=("int", "bool", "int", "bool")),
+               KnobGroup("row", ("output_range_start", "output_range_start_lock", "output_range_end", "output_range_end_lock"), label="Output range",
+                         members=("int", "bool", "int", "bool"))),
+    "Constant": (KnobGroup("row", ("first", "last"), label="Frame range", members=("int", "int")),),
+}
+
+
+def _merge_rows():
+    for kind, rows in ROW_GROUPS.items():
+        groups = list(KNOB_LAYOUT[kind])
+        for row in rows:
+            held = [i for i, g in enumerate(groups) if g.params and set(g.params) <= set(row.params)]
+            assert {p for i in held for p in groups[i].params} == set(row.params), (kind, row.params)
+            first = groups[held[0]]
+            groups[held[0]] = dataclasses.replace(row, section=first.section, help=first.help)
+            for i in reversed(held[1:]):
+                del groups[i]
+        KNOB_LAYOUT[kind] = groups
+
+
+_merge_rows()

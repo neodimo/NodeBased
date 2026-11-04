@@ -12628,7 +12628,7 @@ class Window(QMainWindow):
                         control.setPlaceholderText("RGBA, or e.g. beauty / diffuse / Z")
                         control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
                 else:
-                    control = FittedSpinBox() if type(value) is int else FittedDoubleSpinBox()
+                    control = FittedSpinBox() if (type(value) is int or kind == "int") else FittedDoubleSpinBox()
                     control.setObjectName(f"{param}-field")
                     control.setRange(*( (2, 15) if node["type"] in ("GridWarp", "GridWarpTracker") and param in ("rows", "columns")
                                         else parameter_limits(node["type"], param)))
@@ -12636,7 +12636,8 @@ class Window(QMainWindow):
                         control.setDecimals(3)
                         control.setSingleStep(0.1)
                     curve = curves.get(param)
-                    control.setValue(resolved[param] if (curve or param in expressions) else value)
+                    shown = resolved[param] if (curve or param in expressions) else value
+                    control.setValue(int(round(shown)) if isinstance(control, QSpinBox) else shown)
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
@@ -12814,6 +12815,40 @@ class Window(QMainWindow):
                         diamond.setStyleSheet(diamond.styleSheet() + "; padding: 0")
                         units.append(unit)
                     form.addRow(group.label, WrappingRow(units, spacing=3))
+                    continue
+                if group.kind == "row":
+                    # Knobs the guide gives one label share a row (Nuke: Transform's shutter offset and custom offset), each in its own widget.
+                    units = []
+                    for param, member in zip(group.params, group.members):
+                        member_value = node["params"][param]
+                        if member == "int":
+                            field = FittedSpinBox()
+                            field.setObjectName(f"{param}-field")
+                            field.setRange(*parameter_limits(node["type"], param))
+                            field.setValue(int(member_value))
+                            field.setKeyboardTracking(False)
+                            hide_spin_buttons(field)
+                            field.editingFinished.connect(lambda k=key, p=param, w=field: self.commit_param(k, p, w.value()))
+                            self.install_expression_shortcut(field, key, param, field)
+                            unit = self.animatable_row(key, param, field)
+                        elif member == "float":
+                            unit = self.animatable_row(key, param, numeric_field(param))
+                        elif member == "bool":
+                            unit = QCheckBox()
+                            unit.setObjectName(f"{param}-switch")
+                            unit.setChecked(bool(member_value))
+                            unit.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
+                                {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
+                        else:
+                            # A dropdown or text field is built by the one-knob code, then lifted out of its throwaway form.
+                            row_form, form = form, QFormLayout()
+                            add_legacy_param(param, member_value, member, label="")
+                            unit = form.itemAt(0, QFormLayout.ItemRole.FieldRole).widget()
+                            form = row_form
+                            if not unit.objectName():
+                                unit.setObjectName(f"{param}-choice" if member == "enum" else f"{param}-field")
+                        units.append(unit)
+                    form.addRow(group.label, WrappingRow(units))
                     continue
                 if group.kind in ("xy", "xyz"):
                     axis_fields = [numeric_field(param) for param in group.params]

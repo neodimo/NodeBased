@@ -45,7 +45,47 @@ class ReportDriftTests(unittest.TestCase):
         self.assertIn("weighs `1 / r`", text)
 
 
+# Nodes whose shared rows and widget types both measure 1 (a node with no shared row, or no measurable type, has nothing to miss on that
+# side). A later change that breaks one fails here by name (Lane 2 panel sweep, 2026-11-04).
+FULL_PANEL_SHAPE = (
+    'Add', 'AddMix', 'AddTimeCode', 'AdjustBBox', 'Bilateral', 'Blur', 'BumpBoss', 'ChannelMerge', 'ColorCorrect',
+    'ColorLookup', 'ColorMatrix', 'Constant', 'Copy', 'CopyMetaData', 'Crop', 'Cryptomatte', 'CurveTool', 'Defocus',
+    'DegrainSimple', 'Denoise', 'Difference', 'Dissolve', 'Dither', 'DropShadow', 'EdgeBlur', 'EdgeDetect',
+    'EdgeExtend', 'Emboss', 'Erode (fast)', 'Erode (filter)', 'Exposure', 'Flare', 'FrameHold', 'Gamma', 'Glint',
+    'GodRays', 'Grade', 'Grain', 'GridWarp', 'Group', 'HueCorrect', 'HueKeyer', 'Inpaint', 'Invert', 'KeyMix', 'Keyer',
+    'Laplacian', 'LevelSet', 'LightWrap', 'Log2Lin', 'Matrix', 'Median', 'Merge', 'MinColor', 'Mirror', 'MotionBlur',
+    'Multiply', 'NoTimeBlur', 'Noise', 'OCIOColorspace', 'OCIOLogConvert', 'PLogLin', 'Position', 'Precomp', 'Premult',
+    'Radial', 'Ramp', 'Read', 'Rectangle', 'Retime', 'STMap', 'Sampler', 'Saturation', 'Sharpen', 'Shuffle',
+    'ShuffleCopy', 'SoftClip', 'Soften', 'TVIScale', 'Text', 'Tile', 'TimeOffset', 'TimeWarp', 'Toe', 'Unpremult',
+    'VectorCornerPin', 'VectorDistort', 'Vectorfield', 'VolumeRays', 'ZMerge', 'ZSlice',
+)
+
+
 class PanelShapeMetricTests(unittest.TestCase):
+    def test_nodes_with_a_full_panel_shape_keep_it(self):
+        broken = []
+        for name in FULL_PANEL_SHAPE:
+            key = next(k for k in NUKE["nodes"] if k == name or NUKE["nodes"][k].get("guide_title") == name)
+            pair = MAPPING["pairs"][key]
+            rows, types = audit.panel_shape_metrics(NUKE["nodes"][key], pair, pair["nodebased"], key)
+            for label, metric in (("rows", rows), ("types", types)):
+                if metric["score"] not in (None, 1.0):
+                    broken.append(f"{name} {label} {metric['matched']}/{metric['total']}: {metric['missed']}")
+        self.assertEqual(broken, [])
+
+    def test_layout_is_four_equal_quarters(self):
+        res = audit.score_pair("Transform", MAPPING["pairs"]["Transform"], NUKE["nodes"]["Transform"])
+        kept, total = res["detail"]["layout_order"]
+        got, labels = res["detail"]["layout_labels"]
+        quarters = [kept / total, got / labels, res["panel_rows"]["score"], res["panel_types"]["score"]]
+        self.assertAlmostEqual(res["components"]["layout"], sum(quarters) / 4)
+        self.assertAlmostEqual(res["detail"]["layout_old"], 0.5 * quarters[0] + 0.5 * quarters[1])
+        self.assertEqual(audit.number_knob_kind("samples", 1), "int")
+        self.assertEqual(audit.number_knob_kind("firstFrame", 1), "int")
+        self.assertEqual(audit.number_knob_kind("gain", 1), "float")
+        self.assertEqual(audit.number_knob_kind("shutter", 0.5), "float")
+        self.assertEqual(audit.number_knob_kind("mystery", None), "unknown")
+
     def test_read_shared_rows_and_widget_types_are_measured(self):
         rows, types = audit.panel_shape_metrics(NUKE["nodes"]["Read"], MAPPING["pairs"]["Read"], "Read")
         self.assertEqual((rows["matched"], rows["total"], rows["score"]), (8, 8, 1.0))
@@ -53,9 +93,10 @@ class PanelShapeMetricTests(unittest.TestCase):
         self.assertGreater(types["unknown"], 0)
         self.assertEqual(types["unknown_names"], [])
 
-    def test_panel_metrics_are_reported_without_entering_fidelity_score(self):
+    def test_panel_metrics_are_reported_and_form_two_quarters_of_layout(self):
         text = audit.build_report()
-        self.assertIn("## Panel rows and widget types (unweighted; 2026-11-04)", text)
+        self.assertIn("## Panel rows and widget types (two quarters of the layout component; 2026-11-04)", text)
+        self.assertIn("four equal quarters", text)
         self.assertIn("Read | 100.0% (8/8) | 100.0% (29/29)", text)
         self.assertIn("before Lane 9 step R1: shared rows 0/8", text)
         self.assertIn("widget types 25/29", text)
@@ -213,7 +254,7 @@ class ScoringTests(unittest.TestCase):
                         pair_inputs=[{"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}])
         w = audit.WEIGHTS
         live = res["components"]
-        self.assertEqual(set(live), {"knobs", "acts", "defaults", "sockets", "math"})
+        self.assertEqual(set(live), {"knobs", "acts", "defaults", "sockets", "math", "layout"})
         self.assertAlmostEqual(res["score"], 100 * sum(w[c] * f for c, f in live.items()) / sum(w[c] for c in live))
         # Grade's kernel runs on the fixture and the fake node has no case, so its behaviour is unchecked: 0 on math.
         self.assertEqual(live["math"], 0.0)

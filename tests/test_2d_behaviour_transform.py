@@ -348,7 +348,7 @@ class KnobsActTests(unittest.TestCase):
     def test_every_main_tab_knob_is_laid_out_in_nuke_order(self):
         self.assertEqual(labels("Transform"), ["Translate", "Rotate", "Scale", "Older scale mode", "Older scale X, Y", "Skew X", "Skew Y", "Skew order",
                                                "Center", "Invert", "Filter", "Clamp", "Black outside", "Motion blur", "Shutter",
-                                               "Shutter offset", "Custom shutter offset", "Samples"])
+                                               "Shutter offset", "Samples"])   # the custom offset shares the Shutter offset row (panel sweep, 11/4)
 
 
 # ----------------------------------------------------------------------------------------------------- an older document
