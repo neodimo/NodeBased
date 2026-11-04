@@ -52,6 +52,11 @@ NOT_PIXEL = {
                    "boundary_curverez": "the guide lists boundary-curve resolution but gives no rendered-pixel behavior; NodeBased has no separate boundary curve payload",
                    "rbf": "the guide names Classic warping but specifies no pixel formula or direction for the switch",
                    "transform_matrix": "the guide names an extra matrix control but gives no matrix interpretation or pixel behavior"},
+    # Tracker's zoom and keyframe strips are viewer presentation controls. The Tracker guide
+    # describes their display, and they cannot alter the analyzed image pixels.
+    "Tracker": {name: "viewer display only (Nuke 17.0 Tracker reference guide)" for name in (
+        "zoom_window_behavior", "zoom_window_size", "zoom_magnification_size", "zoom_window_filter_behaviour",
+        "keyframe_display", "keyframe_size", "max_number_of_keyframe_tracks_to_display")},
     "Flare": {"chroma_shift_angle_add": "adds the image-centre-to-Position angle only when the flare is off-centre and chroma shift is non-zero; verified by FlareTests, while the one-knob audit fixture is centred",
               "vis_in": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",
               "vis_out": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",

@@ -454,6 +454,7 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
     """Measure shared guide rows and widget-kind matches; these lines do not affect fidelity."""
     from nodebased.knobs import knob_layout
     from nodebased.ops2d_chrome import is_open_choice
+    import nuke_fidelity_requirements as req
 
     knobs = nuke_node.get("knobs", [])
     entries = [e for e in pair.get("knobs", []) if e.get("kind") in ("same", "renamed", "components", "panel")]
@@ -513,6 +514,11 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         if name not in mapped:
             continue
         params = mapped.get(name, set())
+        # Empty `panel` pairs classified NOT_PIXEL (for example Tracker's viewer
+        # presentation controls) count as paired controls, while having no node widget
+        # whose type can be measured here.
+        if not params and req.not_pixel_reason(node_type, name):
+            continue
         actual = ([_READ_NODE_WIDGETS[p] for p in params if p in _READ_NODE_WIDGETS] if read
                   else [_VIEWER_WIDGETS[name]] if viewer and name in _VIEWER_WIDGETS
                   else ["enum" if is_open_choice(node_type, p) else _widget_kind(group_for[p], p) for p in params if p in group_for])
