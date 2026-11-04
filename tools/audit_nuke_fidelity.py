@@ -439,7 +439,7 @@ def number_knob_kind(name, default):
     if isinstance(default, float) and not default.is_integer():
         return "float"
     words = set(re.findall(r"[a-z]+", re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).lower()))
-    counts = bool(words & _COUNT_WORDS) or name.lower().endswith(_COUNT_SUFFIXES)
+    counts = name.lower() == "corners" or bool(words & _COUNT_WORDS) or name.lower().endswith(_COUNT_SUFFIXES)
     return "int" if counts else "float"
 
 

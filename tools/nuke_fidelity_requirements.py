@@ -53,6 +53,8 @@ NOT_PIXEL = {
                    "rbf": "the guide names Classic warping but specifies no pixel formula or direction for the switch",
                    "transform_matrix": "the guide names an extra matrix control but gives no matrix interpretation or pixel behavior"},
     "Flare": {"chroma_shift_angle_add": "adds the image-centre-to-Position angle only when the flare is off-centre and chroma shift is non-zero; verified by FlareTests, while the one-knob audit fixture is centred",
+              "vis_in": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",
+              "vis_out": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",
               "MultiPenta": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",
               "LgRainbow": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",
               "Bright": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",

@@ -2253,6 +2253,7 @@ CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", 
 CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion", "patch"], "mincolor_mode": ["minimum", "maximum"],
            "spark_mode": ["Rays", "Sparkles", "Fireworks"],
            "vismask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
+           "vis_mask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
            "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
            "mask_channel": ["alpha", "red", "green", "blue", "luminance"],
            "autocrop_mode": ["alpha", "color"],
@@ -2556,6 +2557,7 @@ NODE_LIMITS["Sharpen"] = NODE_LIMITS["Soften"] = {"minimum": (-1000000.0, 100000
 NODE_LIMITS["Grade"] = {"black": (-1000.0, 1000.0), "white": (-1000.0, 1000.0), "blackpoint": (-1000.0, 1000.0)}
 # Glint's and Sparkles's threshold is a picture value (a highlight can be many times white, and Nuke's tolerance can be 0); the shared name is a solver tolerance elsewhere.
 NODE_LIMITS["Glint"] = NODE_LIMITS["Sparkles"] = {"tolerance": (0.0, 1000.0)}
+NODE_LIMITS["Flare"] = {"corners": (3, 32)}
 # DirBlur stores Quality as text (low/normal/high or digits); its panel field is the whole-number factor that text means.
 NODE_LIMITS["DirBlur"] = {"Quality": tuple(float(v) for v in _storedknobs.FACTOR_LIMITS)}
 

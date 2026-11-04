@@ -41,7 +41,10 @@ FLAGS = {"Flare": "legacy_flare", "Glint": "legacy_glint", "Sparkles": "legacy_s
 _FLARE_NEW = {"flare_radius_inner": 80.0, "flare_radius_middle": 100.0, "flare_radius_outer": 120.0, "flare_size_mult": 1.0,
               "flare_ring_color": 1.0, "flare_inner_color": 0.5, "flare_outer_falloff": 1.0, "flare_inner_falloff": 1.0,
               "flare_chroma_shift": 0.0, "flare_chroma_angle": 0.0, "flare_offset": 0.0, "flare_anamorph": 1.0,
-              "flare_chroma_spread": 0.0, "flare_chroma_angle_add": 0}
+              "flare_chroma_spread": 0.0, "flare_chroma_angle_add": 0,
+              "vis_in": 1.0, "vis_out": 1.1, "vis_mask": "none", "vis_mask_size": 4.0,
+              "corners": 5, "flattening": 0.0, "sharpness": 0.5, "corners_angle": 0.0, "corners_angle_add": 0,
+              "asym_repeat": 1, "asym_multiplier": 1.0, "asym_falloff": 1.0, "asym_angle": 0.0}
 _GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.0, "glint_steps": 5, "glint_max": 1, "glint_effect_only": 0}
 _SPARKLES_NEW = {"spark_x": 480.0, "spark_y": 270.0, "spark_size": 300.0, "spark_rotation": 0.0, "spark_ray_nb": 50, "spark_thick": 0.2,
                  "spark_falloff": 0.05, "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0, "spark_chroma_shift": 0.0,
@@ -67,6 +70,9 @@ LIMITS = {**{flag: (0, 1) for flag in FLAGS.values()},
           "flare_chroma_shift": (-100000.0, 100000.0), "flare_chroma_angle": (-360.0, 360.0),
           "flare_offset": (0.0, 1.0), "flare_anamorph": (0.01, 100.0), "flare_chroma_spread": (-0.99, 0.99),
           "flare_chroma_angle_add": (0, 1),
+          "vis_in": (0.0, 10.0), "vis_out": (0.0, 10.0), "vis_mask_size": (0.0, 1000.0),
+          "corners": (3, 32), "flattening": (0.0, 2.0), "sharpness": (0.01, 10.0), "corners_angle": (-360.0, 360.0), "corners_angle_add": (0, 1),
+          "asym_repeat": (1, 256), "asym_multiplier": (0.0, 1.0), "asym_falloff": (0.01, 100.0), "asym_angle": (-360.0, 360.0),
           "glint_oddlen": (0.0, 100.0), "glint_from_color": (-1000.0, 1000.0), "glint_to_color": (-1000.0, 1000.0), "glint_steps": (1, 256), "glint_max": (0, 1),
           "glint_effect_only": (0, 1),
           "spark_x": (-1000000.0, 1000000.0), "spark_y": (-1000000.0, 1000000.0), "spark_size": (0.0, 1000000.0), "spark_rotation": (-360.0, 360.0),
@@ -109,6 +115,32 @@ def _profile(r, inner, middle, outer, ring, core, outer_falloff, inner_falloff):
     return np.where(r >= outer, 0.0, value)
 
 
+def _box_blur2d(values, radius):
+    radius = min(128, max(0, int(round(float(radius)))))
+    if radius == 0:
+        return values
+    h, w = values.shape
+    padded = np.pad(values, ((radius, radius), (radius, radius)), mode="edge")
+    horizontal = np.stack([padded[radius:radius + h, x:x + w] for x in range(2 * radius + 1)], axis=0).mean(axis=0)
+    padded = np.pad(horizontal, ((radius, radius), (0, 0)), mode="edge")
+    return np.stack([padded[y:y + h] for y in range(2 * radius + 1)], axis=0).mean(axis=0)
+
+
+def _visibility_channel(image, name, radius):
+    name = str(name).strip().lower()
+    if name in ("", "none"):
+        return np.ones(image.shape[:2], np.float64)
+    component = name.rsplit(".", 1)[-1]
+    index = {"red": 0, "r": 0, "green": 1, "g": 1, "blue": 2, "b": 2, "alpha": 3, "a": 3}.get(component)
+    if component == "luminance":
+        values = 0.2126 * image[..., 0] + 0.7152 * image[..., 1] + 0.0722 * image[..., 2]
+    elif index is not None:
+        values = image[..., index]
+    else:
+        return np.ones(image.shape[:2], np.float64)
+    return np.clip(_box_blur2d(np.asarray(values, np.float64), radius), 0.0, 1.0)
+
+
 def flare(image, p, origin=(0, 0)):
     h, w = image.shape[:2]
     yy, xx = np.mgrid[:h, :w].astype(np.float64)
@@ -129,6 +161,23 @@ def flare(image, p, origin=(0, 0)):
     anamorph = max(float(p.get("flare_anamorph", 1.0)), 1e-6)
     chroma_spread = float(p.get("flare_chroma_spread", 0.0))
     gain = float(p.get("brightness", 1.0))
+    light_distance = math.hypot(px - w / 2.0, py - h / 2.0) / max(1.0, max(w, h) / 2.0)
+    visible_in, visible_out = float(p.get("vis_in", 1.0)), float(p.get("vis_out", 1.1))
+    if visible_out <= visible_in:
+        visibility = 1.0 if light_distance <= visible_in else 0.0
+    else:
+        visibility = float(np.clip((visible_out - light_distance) / (visible_out - visible_in), 0.0, 1.0))
+    vis_mask = _visibility_channel(image, p.get("vis_mask", "none"), p.get("vis_mask_size", 4.0))
+    corners = max(3, min(32, int(p.get("corners", 5))))
+    flattening = float(p.get("flattening", 0.0))
+    sharpness = max(float(p.get("sharpness", 0.5)), 0.01)
+    shape_angle = float(p.get("corners_angle", 0.0))
+    if int(p.get("corners_angle_add", 0)):
+        shape_angle += math.degrees(math.atan2(-(py - h / 2.0), px - w / 2.0))
+    asym_repeat = max(1, min(256, int(p.get("asym_repeat", 1))))
+    asym_multiplier = float(np.clip(p.get("asym_multiplier", 1.0), 0.0, 1.0))
+    asym_falloff = max(float(p.get("asym_falloff", 1.0)), 0.01)
+    asym_angle = math.radians(float(p.get("asym_angle", 0.0)))
     out = image.astype(np.float64)
     for c, sign in ((0, 1.0), (1, 0.0), (2, -1.0)):
         ox, oy = cx + sign * shift * math.cos(angle), cy - sign * shift * math.sin(angle)
@@ -136,7 +185,23 @@ def flare(image, p, origin=(0, 0)):
         ry = yy - oy
         radial_scale = 1.0 + (chroma_spread if c == 0 else -chroma_spread if c == 2 else 0.0)
         r = np.hypot(rx / anamorph, ry) / max(radial_scale, 1e-6)
-        out[..., c] += gain * _profile(r, inner, middle, outer, ring, core, outer_falloff, inner_falloff)
+        if flattening != 0.0:
+            theta = np.arctan2(-ry, rx) - math.radians(shape_angle)
+            period = 2.0 * math.pi / corners
+            phase = (theta - math.pi / corners + period / 2.0) % period - period / 2.0
+            polygon = math.cos(math.pi / corners) / np.maximum(np.cos(phase), 1e-6)
+            boundary = np.maximum(0.05, 1.0 - flattening * np.maximum(0.0, 1.0 - polygon) ** (1.0 / sharpness))
+            r = r / boundary
+        if asym_multiplier < 1.0:
+            theta = np.arctan2(-ry, rx) - asym_angle
+            period = 2.0 * math.pi / asym_repeat
+            phase = (theta + period / 2.0) % period - period / 2.0
+            half_width = period / 2.0 * asym_falloff / (1.0 + asym_falloff)
+            dark = np.clip(1.0 - np.abs(phase) / max(half_width, 1e-9), 0.0, 1.0)
+            asymmetry = 1.0 - (1.0 - asym_multiplier) * dark
+        else:
+            asymmetry = 1.0
+        out[..., c] += gain * visibility * vis_mask * asymmetry * _profile(r, inner, middle, outer, ring, core, outer_falloff, inner_falloff)
     return out.astype(np.float32)
 
 

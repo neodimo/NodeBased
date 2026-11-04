@@ -157,6 +157,36 @@ class FlareTests(unittest.TestCase):
         self.assertGreater(float(out[15, 22, 0]), 0.0)
         self.assertEqual(float(out[24, 15, 0]), 0.0)
 
+    def test_polygon_shape_controls_change_the_flare_outline(self):
+        circle = flare(flattening=0.0)
+        polygon = flare(flattening=1.0, corners=5)
+        self.assertTrue(differs(circle, polygon))
+        self.assertTrue(differs(polygon, flare(flattening=1.0, corners=8)))
+        self.assertTrue(differs(polygon, flare(flattening=1.0, corners=5, sharpness=2.0)))
+        self.assertTrue(differs(polygon, flare(flattening=1.0, corners_angle=30.0)))
+        self.assertTrue(differs(flare(position_x=10.0, flattening=1.0),
+                                flare(position_x=10.0, flattening=1.0, corners_angle_add=1)))
+
+    def test_asymmetry_controls_dark_sections_around_the_flare(self):
+        full = flare(asym_multiplier=1.0)
+        dark = flare(asym_multiplier=0.0)
+        self.assertTrue(differs(full, dark))
+        self.assertTrue(differs(dark, flare(asym_multiplier=0.0, asym_repeat=3)))
+        self.assertTrue(differs(dark, flare(asym_multiplier=0.0, asym_falloff=10.0)))
+        self.assertTrue(differs(dark, flare(asym_multiplier=0.0, asym_angle=35.0)))
+
+    def test_visibility_range_and_channel_mask_gate_the_flare(self):
+        off_centre = dict(position_x=25.0)
+        invisible = flare(**off_centre, vis_in=0.1, vis_out=0.3)
+        visible = flare(**off_centre, vis_in=0.7, vis_out=0.9)
+        self.assertTrue(differs(invisible, visible))
+        plate = texture(30, 30)
+        unmasked = flare(image=plate)
+        masked = flare(image=plate, vis_mask="rgba.alpha", vis_mask_size=0.0)
+        softened = flare(image=plate, vis_mask="rgba.alpha", vis_mask_size=4.0)
+        self.assertTrue(differs(unmasked, masked))
+        self.assertTrue(differs(masked, softened))
+
     def test_the_flare_is_added_to_the_picture(self):
         image = texture(30, 30)
         np.testing.assert_allclose(flare(image)[..., :3] - image[..., :3], flare()[..., :3] - black(30, 30)[..., :3], atol=1e-5)
@@ -193,7 +223,7 @@ class FlareTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Flare")]
-        self.assertEqual(labels[:10], ["Position", "Radius", "Size mult", "Ring color", "Inner color", "Outer falloff", "Inner falloff", "Chroma shift", "Angle", "Brightness"])
+        self.assertEqual(labels[:10], ["Position", "Offset", "Radius", "Size mult", "Anamorph", "Ring color", "Inner color", "Outer falloff", "Inner falloff", "Chroma spread"])
         self.assertEqual(labels[-1], "Mix")
 
 
@@ -617,7 +647,7 @@ class RegistryTests(unittest.TestCase):
                 with self.subTest(kind=kind, param=name):
                     self.assertIn(name, SPECS[kind]["params"])
                     self.assertIn(name, laid_out)
-                    if name in ("spark_mode", "vismask"):
+                    if name in ("spark_mode", "vismask", "vis_mask"):
                         self.assertIn(name, core.CHOICES)
                     elif name != "fullGrain":
                         self.assertIn(name, LIMITS)

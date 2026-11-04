@@ -808,8 +808,21 @@ def cases():
          {"sparks": 1, "sparks_direction": 0.0, "sparks_angle": 45.0},
          "Sparks limits ray emission to the configured direction and open angle",
          "the guide does not state whether the open angle is centred or how boundary rays are sampled"),
+        ("flare_shape", (("corners", 5), ("flattening", 1.0), ("sharpness", 0.5)),
+         {"corners": 5, "flattening": 1.0, "sharpness": 0.5},
+         "Flare edge flattening changes the circular flare into a polygon whose corners and sharpness are controlled",
+         "the guide describes the direction of the shape controls but gives no rasterization or edge equation"),
+        ("flare_asymmetry", (("asym_repeat", 3), ("asym_multiplier", 0.0), ("asym_falloff", 1.0), ("asym_angle", 20.0)),
+         {"asym_repeat": 3, "asym_multiplier": 0.0, "asym_falloff": 1.0, "asym_angle": 20.0},
+         "Asymmetry creates repeated darkened sections whose multiplier, edge falloff and rotation are adjustable",
+         "the guide does not give the dark-section profile or exact angular width"),
+        ("flare_visibility", (("vis_in", 0.2), ("vis_out", 0.5), ("vis_mask", "rgba.alpha"), ("vis_mask_size", 2.0)),
+         {"vis_in": 0.2, "vis_out": 0.5, "vis_mask": "rgba.alpha", "vis_mask_size": 2.0},
+         "Flare visibility fades between the in/out distances and is limited by the selected blurred channel",
+         "the guide does not state distance normalization or the channel blur kernel"),
     ):
-        case(cid, "Sparkles", "Sparkles", nuke_knobs, "Sparkles", nb_params, None, "guide", statement, unscored=reason)
+        node = "Sparkles" if cid.startswith("sparkles_") else "Flare"
+        case(cid, node, node, nuke_knobs, node, nb_params, None, "guide", statement, unscored=reason)
     return out
 
 
