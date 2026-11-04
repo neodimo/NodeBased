@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S3: Nuke's rows and knob types on the third eight most-used nodes (finish 1), Lane 9 (2D behaviour B, GPT-6 Luna) step P of 2: GridWarp and SplineWarp's remaining knobs, Flare, Sparkles and VolumeRays' secondary knobs, and VectorDistort's blur (finish 1) (integrator tick)
+
+- **What was done:** `main` `ac8e1c9f` -> `83b4135a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `83b4135a`: Ran 9304 tests in 585.037 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S3: Nuke's rows and knob types on the third eight most-used nodes (integrator tick)
 
 - **What was done:** `main` `41c504f8` -> `cef86472` plus this docs commit. Evidence and per-lane commit

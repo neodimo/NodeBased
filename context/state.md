@@ -1,5 +1,33 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step P: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on four time and metadata nodes
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, GPT-6 Luna) (7:35 AM on 2026-11-04 PDT)
+
+`main` moved `ac8e1c9f` -> `83b4135a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `83b4135a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0725.log`, started 7:25 AM): **Ran 9304 tests in 585.037 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step S3: Nuke's rows and knob types on the third eight most-used nodes (finish 1).** Commits:
+  - `e21e6ff1` DirBlur Quality: the panel's whole-number factor gets hard limits 1 to 64 (the slider test looked them up and found none)
+  - `879a70c6` Panel sweep S3 finish: DirBlur Target as an x, y pair and Quality as a whole-number factor, CornerPin2D Invert as a check box, each over the text the document already held (DirBlur layout 94 to 100, CornerPin2D 96 to 98)
+  Diff: 10 files changed, 223 insertions(+), 26 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step P of 2: GridWarp and SplineWarp's remaining knobs, Flare, Sparkles and VolumeRays' secondary knobs, and VectorDistort's blur (finish 1).** Commits:
+  - `c7af7e6c` Record Flare relative-angle probe state
+  - `d0d29cf8` Implement Sparkles modes and per-ray shape controls
+  - `1c10be1f` Implement Sparkles ray modes and shape controls
+  - `8c6552ab` Add Flare offset and chroma shape controls
+  - `c52e5fe8` Complete GridWarp transform and render controls
+  Diff: 12 files changed, 282 insertions(+), 44 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:45 AM on 2026-11-04 PDT)
 
 `main` moved `41c504f8` -> `cef86472` (lane commits cherry-picked onto main in lane order) and then to this
