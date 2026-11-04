@@ -16,6 +16,7 @@ import time
 import numpy as np
 
 from . import cachetier
+from .core import node_tab_pixels
 from .media import half_safe
 
 
@@ -452,8 +453,9 @@ class DisplayCache:
         # Presentation-only node fields never change a pixel. Leaving them in meant dragging or
         # labelling a node silently orphaned every cached frame and blanked the timeline band.
         document = {**document, "nodes": {
-            key: {name: value for name, value in node.items()
-                  if name not in PRESENTATION_FIELDS}
+            key: {**{name: value for name, value in node.items()
+                     if name not in PRESENTATION_FIELDS and name != "tab"},
+                  **({"tab": node_tab_pixels(node)} if node_tab_pixels(node) else {})}
             for key, node in document.get("nodes", {}).items()}}
         digest = hashlib.blake2b(json.dumps(document, sort_keys=True).encode(), digest_size=16).digest()
         return (digest, target, int(tier))

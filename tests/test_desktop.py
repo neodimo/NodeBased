@@ -423,16 +423,16 @@ class DesktopTests(unittest.TestCase):
             lambda: w.dispatcher.document['nodes']['grade'].get('label') == 'key light\nsecond line'))
         self.assertIn('key light', [child.text() for child in w.graph.items_by_id['grade'].childItems()
                                     if hasattr(child, 'text')])
-        enabled = w.properties.widget().findChild(QCheckBox, 'node-enabled')
-        self.assertTrue(enabled.isChecked())
-        enabled.setChecked(False)
+        disable = w.properties.widget().findChild(QCheckBox, 'node-disable')
+        self.assertFalse(disable.isChecked())
+        disable.setChecked(True)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['disabled']))
         # The Node tab stays the open tab across the rebuild the edit caused.
         w.properties.widget().findChild(QTabWidget, 'node-tabs').setCurrentIndex(1)
         w.inspect('grade')
         self.assertEqual(w.properties.widget().findChild(QTabWidget, 'node-tabs').currentIndex(), 1)
         w.inspect('plate')
-        self.assertFalse(w.properties.widget().findChild(QCheckBox, 'node-enabled').isEnabled())
+        self.assertFalse(w.properties.widget().findChild(QCheckBox, 'node-disable').isEnabled())
 
     def test_the_cache_band_counts_frames_cached_at_any_proxy_tier(self):
         w = self.window

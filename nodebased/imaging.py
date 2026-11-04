@@ -23,6 +23,7 @@ from . import metadata
 from . import pathmask as _pathmask
 from . import readproxy as _readproxy
 from .projectsettings import project as _project_fields
+from .core import apply_lifetime
 from . import ops2d_chrome as _chrome
 from . import keyerknobs as _keyerknobs
 from . import paintknobs
@@ -1009,6 +1010,7 @@ class Evaluator:
         # read-ahead only pays where the Roto is what the frame waits for.
         self._roto_wait = {}
         self.cache = OrderedDict()
+        self._pinned = {}   # node id -> digest of its result, for nodes whose Node-tab "cached" is on
         self.bytes = 0
         # Roto coverage is independent of the connected plate's frame. Keep a separate bounded
         # cache for the matte so an animated/read-sequence background does not rerasterize static
@@ -1242,8 +1244,14 @@ class Evaluator:
         """
         spilled = []
         with self._lock:
+            pinned = set(self._pinned.values())
             while self.cache and self.bytes + raster.nbytes > self.budget:
-                old_digest, old = self.cache.popitem(last=False)
+                # Oldest first, skipping results a node's "cached" knob pins; with only pinned ones left
+                # the budget is allowed to run over rather than drop what the artist asked to keep.
+                victim = next((name for name in self.cache if name not in pinned), None)
+                if victim is None:
+                    break
+                old_digest, old = victim, self.cache.pop(victim)
                 self.bytes -= old.nbytes
                 if old.layers is None and self.disk_spills_enabled:
                     # The disk tier stores one array per raster; layers would be lost.
@@ -1568,6 +1576,9 @@ class Evaluator:
         # Groups are expanded into the equivalent plain graph here, so the walk below (and every
         # cache key it makes) never sees one. See groups.py.
         doc, target = groups.flatten_groups(doc, target)
+        # A node whose Node-tab lifetime excludes this frame is bypassed like a disabled one; the
+        # digests below see it as disabled, so a lifetime change reuses exactly what it can.
+        doc = apply_lifetime(doc, frame)
         nodes = doc["nodes"]
         # Iterative postorder traversal: execute only ancestors of the viewer.
         order, seen = [], set()
@@ -3143,6 +3154,11 @@ class Evaluator:
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes,
                                                 node.get("input_outputs", {}), fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
+            if node.get("tab", {}).get("cached"):
+                # Node tab "cached": this node's result is kept against eviction while it is current.
+                self._pinned[key] = digest
+            elif key in self._pinned:
+                del self._pinned[key]
             if kind == "Roto" and (self._ahead_inflight or getattr(self._ahead_local, "done", None) is not None):
                 self._ahead_gate(digest, cancel)
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the

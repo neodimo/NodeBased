@@ -5,6 +5,7 @@ import copy
 import json
 import math
 import os
+import re
 from pathlib import Path
 import tempfile
 import uuid
@@ -159,7 +160,72 @@ _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0, **_LIGHT_LINK, 
             # (Blinn-Phong) look's usual dielectric until an artist raises `metallic`.
             "metallic": 0.0, "pbr_roughness": 0.5, "pbr_specular": 0.5, **_LIQUID}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
-OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph", "input_outputs"}
+OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph", "input_outputs", "tab"}
+
+# Nuke's Node tab, the knobs every node shares beyond label, disable and postage stamp. A node stores
+# them under one optional key, `tab`, holding only the values that differ from the defaults here, so an
+# untouched node (and every older document) serialises exactly as before.
+NODE_TAB_FONTS = ("Default", "Sans Serif", "Serif", "Monospace")
+NODE_TAB_DEFAULTS = {
+    "font": "Default", "font_size": 11, "bold": False, "italic": False, "font_color": "",
+    "tile_color": "", "hide_input": False, "cached": False,
+    "use_lifetime": False, "lifetime_start": 1, "lifetime_end": 100,
+    "bookmark": False, "dope_sheet": False,
+}
+NODE_TAB_FONT_SIZE = (6, 48)
+NODE_TAB_FRAME = (-1000000, 1000000)
+# The knobs that can change a pixel; every other `tab` value is presentation and never orphans a cache.
+NODE_TAB_PIXEL_KEYS = ("use_lifetime", "lifetime_start", "lifetime_end", "cached")
+
+
+def node_tab_value(node, name):
+    return node.get("tab", {}).get(name, NODE_TAB_DEFAULTS[name])
+
+
+def node_tab_pixels(node):
+    """The part of a node's `tab` that can change a result (empty when it holds none)."""
+    return {name: value for name, value in node.get("tab", {}).items() if name in NODE_TAB_PIXEL_KEYS}
+
+
+def check_node_tab_value(name, value):
+    if name not in NODE_TAB_DEFAULTS:
+        raise ValueError(f"Unknown Node-tab knob: {name}")
+    default = NODE_TAB_DEFAULTS[name]
+    if name == "font":
+        if value not in NODE_TAB_FONTS:
+            raise ValueError(f"font must be one of {', '.join(NODE_TAB_FONTS)}")
+    elif name in ("font_color", "tile_color"):
+        if not isinstance(value, str) or (value and not re.fullmatch(r"#[0-9a-fA-F]{6}", value)):
+            raise ValueError(f"{name} must be empty or a #rrggbb colour")
+    elif isinstance(default, bool):
+        if type(value) is not bool:
+            raise ValueError(f"{name} must be boolean")
+    else:
+        if type(value) is not int:
+            raise ValueError(f"{name} must be an integer")
+        low, high = NODE_TAB_FONT_SIZE if name == "font_size" else NODE_TAB_FRAME
+        if not low <= value <= high:
+            raise ValueError(f"{name} must be between {low} and {high}")
+    return value.lower() if name in ("font_color", "tile_color") else value
+
+
+def apply_lifetime(doc, frame):
+    """The document as the evaluator must see it at `frame`: a node whose lifetime is on and that
+    lies outside [start, end] is disabled, so it passes its input through exactly as Disable does.
+    Returns `doc` itself when no node uses a lifetime. Nodes with nothing to pass (sources) are left."""
+    nodes = doc.get("nodes", {})
+    out = None
+    for key, node in nodes.items():
+        tab = node.get("tab")
+        if not tab or not tab.get("use_lifetime") or node["disabled"]:
+            continue
+        first, last = tab.get("lifetime_start", 1), tab.get("lifetime_end", 100)
+        if first <= frame <= last or bypass_slot(node) is None:
+            continue
+        if out is None:
+            out = {**doc, "nodes": dict(nodes)}
+        out["nodes"][key] = {**node, "disabled": True}
+    return doc if out is None else out
 
 
 def node_label(node):
@@ -3291,6 +3357,14 @@ def validate(doc, _depth=0):
             raise ValueError(f"label must be a non-empty string of at most {NODE_LABEL_LIMIT} characters")
         if "thumbnail" in node and type(node["thumbnail"]) is not bool:
             raise ValueError("thumbnail must be boolean")
+        if "tab" in node:
+            tab = node["tab"]
+            if not isinstance(tab, dict) or not tab:
+                raise ValueError("tab must be a non-empty object")
+            for name, value in tab.items():
+                check_node_tab_value(name, value)
+                if value == NODE_TAB_DEFAULTS[name]:
+                    raise ValueError(f"tab.{name} holds its default; leave it out")
         kind = node["type"]
         if kind not in SPECS:
             raise ValueError(f"Unknown node type: {kind}")
@@ -3582,7 +3656,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "viewer_knobs", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "node_tab", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "viewer_knobs", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -3621,7 +3695,7 @@ class Dispatcher:
         return {"revision": self.revision, "result": result}
 
     # Operations that edit a graph, and so can run inside a Group when the command carries a "path".
-    GRAPH_EDIT_OPS = frozenset({"create", "set", "connect", "move", "rename", "label", "thumbnail", "disable",
+    GRAPH_EDIT_OPS = frozenset({"create", "set", "connect", "move", "rename", "label", "thumbnail", "node_tab", "disable",
                                 "delete", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_key", "set_curve", "delete_key", "clear_curve",
                                 "group", "ungroup"})
 
@@ -3865,6 +3939,18 @@ class Dispatcher:
                 node.pop("thumbnail", None)
             else:
                 node["thumbnail"] = value
+        elif op == "node_tab":
+            name = cmd.get("name")
+            value = check_node_tab_value(name, cmd.get("value"))
+            tab = dict(node.get("tab", {}))
+            if value == NODE_TAB_DEFAULTS[name]:
+                tab.pop(name, None)
+            else:
+                tab[name] = value
+            if tab:
+                node["tab"] = tab
+            else:
+                node.pop("tab", None)
         elif op == "set_warp_data":
             if node["type"] not in ("SplineWarp", "GridWarp"):
                 raise ValueError(f"set_warp_data: {node['type']} has no warp controls")

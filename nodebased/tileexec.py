@@ -55,7 +55,7 @@ from . import shapes
 from . import tiers
 from .animation import resolve_document
 from .cancellation import Cancelled
-from .core import DRAW_KINDS, SPECS, bypass_slot, switch_index
+from .core import DRAW_KINDS, SPECS, apply_lifetime, bypass_slot, switch_index
 from .imaging import Evaluator
 from .tiles import (DEFAULT_TILE_EDGE, SUPPORTED_TILED_KINDS, TileArtifact, TileCache, TileKey,
                     TileRegion, fits_in_budget, grid_for, is_tile_source_kind, iter_tiles,
@@ -629,6 +629,7 @@ class TileExecutor:
         # `imaging._TIME_REMAP_KINDS`). Baking first would freeze the source at the outer frame's
         # value before the remap ever got a chance to ask for a different one.
         document, target = groups.flatten_groups(document, target)
+        document = apply_lifetime(document, frame)   # a node outside its Node-tab lifetime is bypassed
         # `_temporal_tile` (TimeBlur/TimeEcho) needs this same unbaked, flattened `document` for
         # its own nested `Evaluator.evaluate` call, for the identical reason the full-frame
         # fallback below does: baking would freeze an animated upstream source at the outer

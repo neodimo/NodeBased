@@ -39,7 +39,7 @@ from . import __version__
 from .updater import Updater
 from .core import _downstream_of
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
-                   MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
+                   MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail, node_tab_pixels, node_tab_value, NODE_TAB_DEFAULTS, NODE_TAB_FONTS, NODE_TAB_FONT_SIZE, NODE_TAB_FRAME,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import projectsettings as _projectsettings
@@ -5106,7 +5106,9 @@ def thumbnail_key(document, target, frame, view):
         node = nodes[key]
         # Only what changes pixels: position, name, label and the stamp switch never do.
         upstream[key] = {name: value for name, value in node.items()
-                         if name not in ("pos", "name", "label", "thumbnail")}
+                         if name not in ("pos", "name", "label", "thumbnail", "tab")}
+        if node_tab_pixels(node):
+            upstream[key]["tab"] = node_tab_pixels(node)
         stack.extend(source for source in node["inputs"].values() if source)
     curves = document.get("animation", {}).get("curves", {})
     node_data = document.get("node_data") or {}
@@ -5292,6 +5294,8 @@ class NodeItem(QGraphicsRectItem):
         self.family = node_family(node["type"])
         # The Viewer is the one node that wears the interface accent: it is where you look, not a process.
         self.accent = QColor(TOKENS["acc"] if node["type"] == "Viewer" else FAMILY_COLORS[self.family])
+        if node_tab_value(node, "tile_color"):   # the Node tab's tile colour replaces the family colour
+            self.accent = QColor(node_tab_value(node, "tile_color"))
         self.setBrush(graphlook.mix(QColor(graphlook.BODY_DARK), self.accent, 0.10))
         self.setPen(QPen(graphlook.mix(self.accent, QColor("#000000"), 0.15), NODE_OUTLINE))
         self.disabled = bool(node.get("disabled", False))
@@ -5373,6 +5377,17 @@ class NodeItem(QGraphicsRectItem):
         subtitle.setBrush(graphlook.mix(QColor(TOKENS["tx2"]), self.accent, 0.35))
         details_font = graphlook.css_font(TYPE["mono"], TYPE["caption"], mono=True)
         subtitle.setFont(details_font)
+        if label and node.get("tab"):
+            # The Node tab's font, size, bold, italic and colour style the label line.
+            family = {"Sans Serif": TYPE["family"], "Serif": "'Noto Serif', 'Times New Roman', serif",
+                      "Monospace": TYPE["mono"]}.get(node_tab_value(node, "font"), TYPE["mono"])
+            details_font = graphlook.css_font(family, node_tab_value(node, "font_size"),
+                                              mono=node_tab_value(node, "font") in ("Default", "Monospace"))
+            details_font.setBold(node_tab_value(node, "bold"))
+            details_font.setItalic(node_tab_value(node, "italic"))
+            subtitle.setFont(details_font)
+            if node_tab_value(node, "font_color"):
+                subtitle.setBrush(QColor(node_tab_value(node, "font_color")))
         if self.form == "circle":
             if subtitle.boundingRect().width() > width - 24:
                 subtitle.setText("  ·  ".join(part[:12] for part in parts[:2]))
@@ -7330,6 +7345,8 @@ class Graph(PanZoomView):
         for key, node in doc["nodes"].items():
             # A PostageStamp with "hide input" keeps its connection but draws no noodle.
             if node["type"] == "PostageStamp" and node["params"]["hide_input"]:
+                continue
+            if node_tab_value(node, "hide_input"):   # the Node tab's own "hide input", on every node
                 continue
             for slot, source in node["inputs"].items():
                 if source:
@@ -11997,17 +12014,60 @@ class Window(QMainWindow):
                     self.defer_command({"op": "label", "id": k, "value": text})
             label.finished.connect(commit_label)
             form.addRow("Label", label)
-        enabled = QCheckBox("Enabled")
-        enabled.setObjectName("node-enabled")
-        enabled.setChecked(not node["disabled"])
-        if bypass_slot(node) is None:
-            enabled.setEnabled(False)
-            enabled.setToolTip("Source nodes have nothing to pass through, so they cannot be disabled")
-        else:
-            enabled.setToolTip("Disabled nodes pass their main input through unchanged  [D]")
-        enabled.toggled.connect(lambda value, k=key: self.defer_command(
-            {"op": "disable", "id": k, "value": not value}))
-        form.addRow(enabled)
+        # The rest of the tab follows Nuke's Node tab, in its order, on every node alike.
+        def send(name, value, k=key):
+            self.defer_command({"op": "node_tab", "id": k, "name": name, "value": value})
+
+        font_row = QWidget()
+        font_layout = QHBoxLayout(font_row)
+        font_layout.setContentsMargins(0, 0, 0, 0)
+        font = QComboBox()
+        font.setObjectName("node-font")
+        font.addItems(NODE_TAB_FONTS)
+        font.setCurrentText(node_tab_value(node, "font"))
+        font.setToolTip("Font of the label on the graph node")
+        font.activated.connect(lambda _index, w=font: send("font", w.currentText()))
+        font_size = QSpinBox()
+        font_size.setObjectName("node-font-size")
+        font_size.setRange(*NODE_TAB_FONT_SIZE)
+        font_size.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        font_size.setValue(node_tab_value(node, "font_size"))
+        font_size.setToolTip("Label size in pixels")
+        font_size.editingFinished.connect(lambda w=font_size: send("font_size", w.value()))
+        font_layout.addWidget(font, 1)
+        font_layout.addWidget(font_size)
+        form.addRow("Font", font_row)
+        for name, text in (("bold", "Bold"), ("italic", "Italic")):
+            box = QCheckBox(text)
+            box.setObjectName(f"node-{name}")
+            box.setChecked(node_tab_value(node, name))
+            box.toggled.connect(lambda value, n=name: send(n, value))
+            form.addRow(box)
+
+        def colour_row(name, text, tip):
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            swatch = QPushButton()
+            swatch.setObjectName(f"node-{name.replace('_', '-')}")
+            swatch.setFixedSize(56, 22)
+            swatch.setToolTip(tip)
+            current = node_tab_value(node, name)
+            swatch.setStyleSheet(f"QPushButton {{ background: {current or 'transparent'}; border: 1px solid #2c333b; }}")
+            swatch.clicked.connect(lambda _checked=False, n=name, c=current: self.pick_tab_colour(key, n, c))
+            reset = QToolButton()
+            reset.setObjectName(f"node-{name.replace('_', '-')}-clear")
+            reset.setText("×")
+            reset.setToolTip("Back to the automatic colour")
+            reset.setEnabled(bool(current))
+            reset.clicked.connect(lambda _checked=False, n=name: send(n, ""))
+            row_layout.addWidget(swatch)
+            row_layout.addWidget(reset)
+            row_layout.addStretch(1)
+            form.addRow(text, row)
+
+        colour_row("font_color", "Font colour", "Colour of the label on the graph node")
+        colour_row("tile_color", "Tile colour", "Colour of the node on the graph")
         stamp = QCheckBox("Postage stamp (thumbnail)")
         stamp.setObjectName("node-thumbnail")
         stamp.setChecked(node_thumbnail(node))
@@ -12021,7 +12081,57 @@ class Window(QMainWindow):
         stamp.toggled.connect(lambda value, k=key: self.defer_command(
             {"op": "thumbnail", "id": k, "value": value}))
         form.addRow(stamp)
+        for name, text, tip in (
+                ("hide_input", "Hide input", "The graph draws no wire into this node; the connection stays"),
+                ("cached", "Cached", "Keep this node's result in the cache while it is current")):
+            box = QCheckBox(text)
+            box.setObjectName(f"node-{name.replace('_', '-')}")
+            box.setChecked(node_tab_value(node, name))
+            box.setToolTip(tip)
+            box.toggled.connect(lambda value, n=name: send(n, value))
+            form.addRow(box)
+        disable = QCheckBox("Disable")
+        disable.setObjectName("node-disable")
+        disable.setChecked(bool(node["disabled"]))
+        if bypass_slot(node) is None:
+            disable.setEnabled(False)
+            disable.setToolTip("Source nodes have nothing to pass through, so they cannot be disabled")
+        else:
+            disable.setToolTip("Disabled nodes pass their main input through unchanged  [D]")
+        disable.toggled.connect(lambda value, k=key: self.defer_command(
+            {"op": "disable", "id": k, "value": bool(value)}))
+        form.addRow(disable)
+        for name, text, tip in (
+                ("dope_sheet", "Dope sheet", "Show this node's keys in the dope sheet"),
+                ("bookmark", "Bookmark", "Mark this node as a bookmark")):
+            box = QCheckBox(text)
+            box.setObjectName(f"node-{name.replace('_', '-')}")
+            box.setChecked(node_tab_value(node, name))
+            box.setToolTip(tip)
+            box.toggled.connect(lambda value, n=name: send(n, value))
+            form.addRow(box)
+        life = QCheckBox("Use lifetime")
+        life.setObjectName("node-use-lifetime")
+        life.setChecked(node_tab_value(node, "use_lifetime"))
+        life.setToolTip("Outside the start and end frames the node is bypassed, as if disabled")
+        life.toggled.connect(lambda value: send("use_lifetime", value))
+        form.addRow(life)
+        for name, text in (("lifetime_start", "Lifetime start"), ("lifetime_end", "Lifetime end")):
+            spin = QSpinBox()
+            spin.setObjectName(f"node-{name.replace('_', '-')}")
+            spin.setRange(*NODE_TAB_FRAME)
+            spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            spin.setValue(node_tab_value(node, name))
+            spin.setEnabled(node_tab_value(node, "use_lifetime"))
+            spin.editingFinished.connect(lambda w=spin, n=name: send(n, w.value()))
+            form.addRow(text, spin)
         return page
+
+    def pick_tab_colour(self, key, name, current):
+        """Choose a Node-tab colour (font or tile) with the colour dialog and store it."""
+        colour = QColorDialog.getColor(QColor(current or "#808080"), self, "Node colour")
+        if colour.isValid():
+            self.defer_command({"op": "node_tab", "id": key, "name": name, "value": colour.name()})
 
     def _fill_material_preview(self, label, params):
         try:
