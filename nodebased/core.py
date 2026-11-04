@@ -2209,7 +2209,8 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                "GridWarpTracker": {"rows": (2, 15), "columns": (2, 15),
                                    "local_motion": (0.0, 1.0), "fb_threshold": (0.0, 100.0)},
                "FluidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)},
-               "FluidLiquidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)}}
+               "FluidLiquidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)},
+               "Tracker": {"max_iter": (1, 1000), "epsilon": (0.000001, 1.0), "auto_regrab_pattern": (0, 1)}}
 
 
 def parameter_limits(kind, name):
@@ -2255,6 +2256,7 @@ EXR_BIT_DEPTHS = ("half", "float")
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
 CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion", "patch"], "mincolor_mode": ["minimum", "maximum"],
+           "tracker_warp": ["Translate", "Translate/Rotate", "Translate/Scale", "Translate/Rotate/Scale", "Affine"],
            "spark_mode": ["Rays", "Sparkles", "Fireworks"],
            "vismask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
            "vis_mask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
@@ -3084,9 +3086,12 @@ def upgrade_document(document):
                     if not isinstance(current, dict):
                         continue
                     params = current.get("params")
-                    if isinstance(params, dict) and current.get("type") in ("Clamp", "Group", "Generate"):
+                    if isinstance(params, dict) and current.get("type") in ("Clamp", "Group", "Generate", "Tracker"):
                         for name, value in SPECS[current["type"]]["params"].items():
-                            params.setdefault(name, value)
+                            if current.get("type") == "Tracker" and name not in (
+                                    "tracker_warp", "max_iter", "epsilon", "auto_regrab_pattern"):
+                                continue
+                            params.setdefault(name, copy.deepcopy(value))
                     graph = current.get("graph")
                     if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
                         _step_i_defaults(graph["nodes"])

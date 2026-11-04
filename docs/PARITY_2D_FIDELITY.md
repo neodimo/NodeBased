@@ -2,9 +2,9 @@
 
 **Overall fidelity: 95.5 / 100** (167 nodes scored, rank-weighted; 97.8 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.1 (98.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.1 (98.5 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.3 (98.7 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.4 (98.7 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -42,7 +42,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Filter | 96.7 | 91.8 | 96.2 | 32 |
 | Keyer | 93.2 | 80.3 | 93.1 | 11 |
 | Merge | 99.7 | 99.3 | 99.7 | 12 |
-| Transform | 96.6 | 93.4 | 96.2 | 20 |
+| Transform | 96.9 | 93.6 | 96.5 | 20 |
 | Metadata | 91.2 | 96.0 | 100.0 | 5 |
 | Other | 81.5 | 45.2 | 81.5 | 12 |
 
@@ -233,7 +233,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Transform | `Transform` | supported | 99.8 | 100.0 | 100 (15/15) | 100 (10/10) | 100 | 100 | - | 100 (12/12) | 98 | 100 (1/1) | unmeasured |
 | 2 | Crop | `Crop` | supported | 97.6 | 97.1 | 100 (5/5) | 100 (2/2) | 75 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 3 | Tracker | `Tracker` | supported | 90.9 | 89.3 | 78 (41/54) | - | 83 | 100 | 100 | 100 (5/5) | 98 | - | unmeasured |
+| 3 | Tracker | `Tracker` | supported | 93.1 | 92.3 | 84 (45/54) | - | 85 | 100 | 100 | 100 (5/5) | 97 | - | unmeasured |
 | 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
 | 6 | CornerPin2D | `CornerPin` | supported | 99.8 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 98 | - | unmeasured |
@@ -426,7 +426,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | ZMerge | — | 100.0% (3/3) | 0 |
 | Transform | 100.0% (2/2) | 92.3% (12/13) | 2 |
 | Crop | — | 100.0% (4/4) | 1 |
-| Tracker | 100.0% (5/5) | 94.1% (32/34) | 10 |
+| Tracker | 100.0% (5/5) | 94.7% (36/38) | 10 |
 | PlanarTracker | — | — | 0 |
 | Reformat | 100.0% (2/2) | 100.0% (14/14) | 1 |
 | CornerPin2D | 100.0% (2/2) | 91.7% (11/12) | 12 |
@@ -469,7 +469,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Assert | — | — | 0 |
 | AudioRead | — | — | 4 |
 
-Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were placed on one row, counting knobs were integer fields and the Viewer's controls were measured: Tracker rows 3/5, types 27/34; Viewer types 0/20; Switch types 0/1; TimeClip rows 0/6; FrameRange rows 0/2; Glow types 8/9; Keylight types 33/34; Reformat types 12/14. Current: Tracker rows 5/5, types 32/34; Viewer rows 0/0, types 14/17; Switch rows 0/0, types 1/1; TimeClip rows 6/6, types 6/6; FrameRange rows 2/2, types 2/2; Glow rows 0/0, types 9/9; Keylight rows 0/0, types 34/34; Reformat rows 2/2, types 14/14. Tracker's `motionblur` (a number in the guide, an on/off switch here) and `cornerPinOptions` (a menu in the guide, two export buttons here), and the Viewer's `clip_warning` (a menu in the guide, the zebra check box here), `downrez` (a number in the guide, the proxy-tier menu here) and `overscan` (a number in the guide, a whole-pixel field here) stay as they are: each would need a change to how the node renders or to viewer state.
+Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were placed on one row, counting knobs were integer fields and the Viewer's controls were measured: Tracker rows 3/5, types 27/34; Viewer types 0/20; Switch types 0/1; TimeClip rows 0/6; FrameRange rows 0/2; Glow types 8/9; Keylight types 33/34; Reformat types 12/14. Current: Tracker rows 5/5, types 36/38; Viewer rows 0/0, types 14/17; Switch rows 0/0, types 1/1; TimeClip rows 6/6, types 6/6; FrameRange rows 2/2, types 2/2; Glow rows 0/0, types 9/9; Keylight rows 0/0, types 34/34; Reformat rows 2/2, types 14/14. Tracker's `motionblur` (a number in the guide, an on/off switch here) and `cornerPinOptions` (a menu in the guide, two export buttons here), and the Viewer's `clip_warning` (a menu in the guide, the zebra check box here), `downrez` (a number in the guide, the proxy-tier menu here) and `overscan` (a number in the guide, a whole-pixel field here) stay as they are: each would need a change to how the node renders or to viewer state.
 
 Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. Current: Remove rows 3/3, types 4/4; AppendClip rows 0/0, types 5/5; CornerPin2D rows 2/2, types 11/12; BurnIn rows 2/2, types 18/18; Clamp rows 8/8, types 8/8; Blend rows 0/0, types 2/2; DirBlur rows 0/0, types 11/11; ContactSheet rows 6/6, types 11/11. CornerPin2D's `invert` (a check box in the guide) is a check box over the stored forward/inverse text, DirBlur's `target` (an xy pair) is an x, y pair of fields over the stored text "x,y", and DirBlur's `Quality` (a number) is a whole-number field with a slider over the stored low/normal/high (1, 2 and 4; any other whole number is stored as its digits). A saved document keeps the text it held and renders as before. CornerPin2D's `motionblur` (a number in the guide, an on/off switch beside a samples count here) stays as it is, as Tracker's and Transform's do: one number would change how the node renders. AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.
 
@@ -502,8 +502,8 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 14 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 15 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 16 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 17 | Tracker (Transform #3) | `Tracker` | 3.03 | 90.9 | 13 secondary knobs missing |
-| 18 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
+| 17 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
+| 18 | Tracker (Transform #3) | `Tracker` | 2.29 | 93.1 | 9 secondary knobs missing: `zoom_window_behavior`, `zoom_window_size`, `zoom_magnification_size`, `zoom_window_filter_behaviour`, `regrab_when_offset` ...; knob order differs from Nuke's (37 of 39 in order) |
 | 19 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
 | 20 | LensDistortion (Transform #20) | `Undistort` | 1.29 | 74.2 | 38 secondary knobs missing |
 | 21 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
@@ -1438,6 +1438,7 @@ Labels below are NodeBased's, then the guide's.
 
 - GenerateLUT (`GenerateLUT`): `file` reads "3D LUT (.cube or .3dl)", Nuke "output file"
 - ZMerge (`ZMerge`): `z_channel` reads "Depth layer", Nuke "Z channel"
+- Tracker (`Tracker`): 37 of 39 paired knobs in Nuke's order
 
 ### Split knobs
 

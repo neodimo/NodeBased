@@ -43,6 +43,7 @@ SHAPE_LIMITS = {
     "opacity": (0.0, 1.0), "feather": (-500.0, 500.0), "enabled": (0.0, 1.0),
     "stroke_width": (0.0, 4096.0),
     "error": (0.0, 1.0),
+    "warp_rotation": (-360000.0, 360000.0), "warp_scale": (0.000001, 1000000.0),
     "translate_x": (-65536.0, 65536.0), "translate_y": (-65536.0, 65536.0),
     "rotate": (-360000.0, 360000.0), "scale_x": (-1000.0, 1000.0),
     "scale_y": (-1000.0, 1000.0), "center_x": (-65536.0, 65536.0),
@@ -230,7 +231,7 @@ TRACK_OPTIONS = ("use_t", "use_r", "use_s", "pattern_radius", "search_radius")
 
 def validate_track(track, where):
     if (not isinstance(track, dict) or not {"name", "enabled", "x", "y"}.issubset(track)
-            or set(track) - {"name", "enabled", "x", "y", "error", *TRACK_OPTIONS}):
+            or set(track) - {"name", "enabled", "x", "y", "error", "warp_rotation", "warp_scale", *TRACK_OPTIONS}):
         raise ValueError(f"{where}: a track defines exactly name, enabled, x and y, with optional error, "
                          f"{', '.join(TRACK_OPTIONS)}")
     for field in ("use_t", "use_r", "use_s"):
@@ -245,6 +246,9 @@ def validate_track(track, where):
         validate_scalar(track[field], field, where)
     if "error" in track:
         validate_scalar(track["error"], "error", where)
+    for field in ("warp_rotation", "warp_scale"):
+        if field in track:
+            validate_scalar(track[field], field, where)
 
 
 def validate_payload(kind, payload, where):
@@ -837,13 +841,17 @@ def resolve_tracks(payload, frame):
     """Resolve a Tracker payload at `frame`. `enabled` resolves then thresholds at >= 0.5."""
     tracks = []
     for track in (payload or {}).get("tracks", []):
-        tracks.append({
+        item = {
             "name": track["name"],
             "enabled": resolve_scalar(track["enabled"], frame, "enabled") >= 0.5,
             "x": resolve_scalar(track["x"], frame, "x"),
             "y": resolve_scalar(track["y"], frame, "y"),
             "error": resolve_scalar(track.get("error", 0.0), frame, "error"),
-        })
+        }
+        for field in ("warp_rotation", "warp_scale"):
+            if field in track:
+                item[field] = resolve_scalar(track[field], frame, field)
+        tracks.append(item)
     return tracks
 
 

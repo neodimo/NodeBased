@@ -51,6 +51,7 @@ ANALYSIS = {"pretrack_filter": "median", "adjust_for_luminance_changes": 1, "max
             "grab_error_below": 0.0, "snap_to_markers": 0, "hide_progress_bar": 0, "show_error_on_track_links": 1,
             "create_key_on_move": 1, "autotracks_delete_keyframes": 1}
 SOLVE = {"jitter_period": 10, "livelink_transform": 1}
+WARP = {"tracker_warp": "Translate", "max_iter": 100, "epsilon": 0.01, "auto_regrab_pattern": 0}
 # What an older document's Tracker did: no filter, the luminance-proof match, the score-under-0.5 rule, no clamp, the pattern
 # kept (or `adaptive_update`), the picture following the tracks, the paths coloured by error.
 OLD = {**TRANSFORM, **ANALYSIS, **SOLVE, "pretrack_filter": "none", "adjust_for_luminance_changes": 1, "max_error": 1.0,
@@ -63,7 +64,7 @@ OLD = {**TRANSFORM, **ANALYSIS, **SOLVE, "pretrack_filter": "none", "adjust_for_
 # Its Transform tab reads black outside and clamp as the guide does (the Transform node's `legacy_transform_edges`): black outside on by default,
 # off carrying the outermost pixels over the format, clamp limiting a sharpening filter to the plate's range. A Tracker saved before keeps the
 # older reading (black outside off, painting the outside transparent, and clamp as an edge extension).
-NEW = {**TRANSFORM, **ANALYSIS, **SOLVE, "legacy_transform_edges": 0, "black_outside": 1}
+NEW = {**TRANSFORM, **ANALYSIS, **SOLVE, **WARP, "legacy_transform_edges": 0, "black_outside": 1}
 KINDS = ("Tracker",)
 
 
@@ -121,8 +122,10 @@ def analysis_options(params):
     max_error = float(p["max_error"])
     return {"metric": "ncc" if int(p["adjust_for_luminance_changes"]) else "ssd", "prefilter": p["pretrack_filter"],
             "clamp": bool(int(p["clamp_footage"])), "predict": bool(int(p["predict_track"])),
+            "warp": p.get("tracker_warp", "Translate"), "max_iter": int(p.get("max_iter", 100)),
+            "epsilon": float(p.get("epsilon", 0.01)),
             # `adaptive_update`, the older switch, is "every frame"
-            "grab": Grab("every frame" if int(p.get("adaptive_update", 0)) else p["grab_behavior"], int(p["grab_interval"]),
+            "grab": Grab("every frame" if int(p.get("adaptive_update", 0) or p.get("auto_regrab_pattern", 0)) else p["grab_behavior"], int(p["grab_interval"]),
                          float(p["grab_error_above"]), float(p["grab_error_below"])),
             "max_error": None if max_error >= 1.0 else max_error}
 

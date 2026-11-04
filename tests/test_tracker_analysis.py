@@ -28,6 +28,36 @@ def moved(image, dx, dy):
     return out
 
 
+def warped_patch(pattern, angle_degrees, scale):
+    height, width = pattern.shape
+    cy, cx = (height - 1) / 2, (width - 1) / 2
+    yy, xx = np.mgrid[:height, :width].astype(float)
+    angle = np.deg2rad(angle_degrees)
+    dx, dy = xx-cx, yy-cy
+    sx = cx + (np.cos(angle)*dx + np.sin(angle)*dy) / scale
+    sy = cy + (-np.sin(angle)*dx + np.cos(angle)*dy) / scale
+    return _sample(pattern, sx, sy)
+
+
+def _sample(image, xs, ys):
+    xs = np.clip(xs, 0, image.shape[1] - 1.000001)
+    ys = np.clip(ys, 0, image.shape[0] - 1.000001)
+    x0, y0 = np.floor(xs).astype(int), np.floor(ys).astype(int)
+    fx, fy = xs-x0, ys-y0
+    return (image[y0, x0]*(1-fx)*(1-fy) + image[y0, x0+1]*fx*(1-fy)
+            + image[y0+1, x0]*(1-fx)*fy + image[y0+1, x0+1]*fx*fy)
+
+
+def warped_plate(angle_degrees=0.0, scale=1.0):
+    yy, xx = np.mgrid[:96, :96].astype(float)
+    angle = np.deg2rad(angle_degrees)
+    dx, dy = xx-48, yy-48
+    sx = 48 + (np.cos(angle)*dx + np.sin(angle)*dy)/scale
+    sy = 48 + (-np.sin(angle)*dx + np.cos(angle)*dy)/scale
+    return (np.exp(-((sx-44)**2+(sy-45)**2)/18) + .6*np.exp(-((sx-53)**2+(sy-50)**2)/9)
+            + .3*np.sin(sx*.4+sy*.17)).astype(np.float32)
+
+
 class TrackerAnalysisTests(unittest.TestCase):
     def test_integer_peak_and_subpixel_refinement_are_bounded(self):
         first = texture()
@@ -36,6 +66,85 @@ class TrackerAnalysisTests(unittest.TestCase):
         self.assertGreater(score, 0.99)
         self.assertAlmostEqual(x, 51.5, delta=0.51)
         self.assertAlmostEqual(y, 50.5, delta=0.51)
+
+    def test_translate_warp_preserves_existing_result_and_rotation_fit_uses_limits(self):
+        from nodebased.tracker import _fit_pattern_warp
+        full = texture()
+        translated = moved(full, 2, -1)
+        self.assertEqual(match_pattern(full, translated, (48.5, 48.5), 6, 8),
+                         match_pattern(full, translated, (48.5, 48.5), 6, 8, warp="Translate"))
+        yy, xx = np.mgrid[:25, :25]
+        pattern = (np.exp(-((xx-8)**2+(yy-10)**2)/18) + .6*np.exp(-((xx-17)**2+(yy-15)**2)/9)
+                   + .3*np.sin(xx*.4+yy*.17))
+        plate = np.pad(warped_patch(pattern, 2.0, 1.0), 3, mode="edge")
+        one = _fit_pattern_warp(pattern, plate, 15, 15, 12, "Translate/Rotate", 1, 0.01)
+        fitted = _fit_pattern_warp(pattern, plate, 15, 15, 12, "Translate/Rotate", 100, 0.01)
+        self.assertAlmostEqual(fitted[2], 2.0, delta=0.2)
+        harder = np.pad(warped_patch(pattern, 8.0, 1.0), 3, mode="edge")
+        one = _fit_pattern_warp(pattern, harder, 15, 15, 12, "Translate/Rotate", 1, 0.01)
+        many = _fit_pattern_warp(pattern, harder, 15, 15, 12, "Translate/Rotate", 100, 0.01)
+        loose = _fit_pattern_warp(pattern, harder, 15, 15, 12, "Translate/Rotate", 100, 1.0)
+        self.assertGreater(abs(one[2] - 8.0), abs(many[2] - 8.0))
+        self.assertGreater(abs(loose[2] - 8.0), abs(many[2] - 8.0))
+
+    def test_scale_warp_recovers_synthetic_pattern_scale(self):
+        from nodebased.tracker import _fit_pattern_warp
+        yy, xx = np.mgrid[:25, :25]
+        pattern = (np.exp(-((xx-8)**2+(yy-10)**2)/18) + .6*np.exp(-((xx-17)**2+(yy-15)**2)/9)
+                   + .3*np.sin(xx*.4+yy*.17))
+        plate = np.pad(warped_patch(pattern, 0.0, 1.03), 3, mode="edge")
+        fitted = _fit_pattern_warp(pattern, plate, 15, 15, 12, "Translate/Rotate/Scale", 100, 0.01)
+        self.assertAlmostEqual(fitted[3], 1.03, delta=0.005)
+
+    def test_analysis_records_pattern_warp_for_single_track_transform(self):
+        from nodebased.tracker import solve
+        reference_values, current_values = warped_plate(), warped_plate(2.0, 1.03)
+        reference = np.ones((96, 96, 4), np.float32); current = reference.copy()
+        reference[..., :3] = reference_values[..., None]
+        current[..., :3] = current_values[..., None]
+        info = {}
+        result = analyse({1: reference, 2: current}, 1, (48.5, 48.5), 12, 12,
+                         last_frame=2, warp="Translate/Rotate/Scale", info=info)
+        self.assertAlmostEqual(result[2][0], 48.5, delta=0.2)
+        self.assertAlmostEqual(info["warps"][2]["rotate"], 2.0, delta=0.2)
+        self.assertAlmostEqual(info["warps"][2]["scale"], 1.03, delta=0.005)
+        keys = lambda values, initial: {"value": initial, "curve": {"interpolation": "linear", "keys": [
+            {"frame": 1, "value": initial}, {"frame": 2, "value": values}]}}
+        payload = {"tracks": [{"name": "one", "enabled": 1, "x": {"value": 48.5, "curve": {"interpolation": "linear", "keys": [
+            {"frame": 1, "value": 48.5}, {"frame": 2, "value": result[2][0]}]}},
+            "y": 48.5, "warp_rotation": keys(info["warps"][2]["rotate"], 0.0),
+            "warp_scale": keys(info["warps"][2]["scale"], 1.0)}]}
+        solved = solve(payload, 2, {"reference_frame": 1, "mode": "match_move", "livelink_transform": 1,
+                                   "apply_translate": 1, "apply_rotate": 1, "apply_scale": 1})
+        self.assertAlmostEqual(solved["rotate"], 2.0, delta=0.2)
+        self.assertAlmostEqual(solved["scale"], 1.03, delta=0.005)
+
+    def test_five_frame_warp_tracks_rotation_and_scale(self):
+        from nodebased.tracker import match_pattern
+        from nodebased.trackerknobs import analysis_options
+        frames = {frame: warped_plate(2.0*(frame-1), 1.0) for frame in range(1, 6)}
+        info = {}
+        rotations = analyse(frames, 1, (48.5, 48.5), 12, 20, last_frame=5,
+                            warp="Translate/Rotate", info=info)
+        self.assertAlmostEqual(info["warps"][5]["rotate"], 8.0, delta=0.2)
+        fixed = match_pattern(frames[1], frames[5], (48.5, 48.5), 12, 20)
+        fitted = match_pattern(frames[1], frames[5], (48.5, 48.5), 12, 20,
+                               warp="Translate/Rotate", max_iter=100)
+        self.assertGreater(fitted[2], fixed[2])
+        scale_frames = {frame: warped_plate(0.0, 1.03**(frame-1)) for frame in range(1, 6)}
+        scale_info = {}
+        analyse(scale_frames, 1, (48.5, 48.5), 12, 20, last_frame=5,
+                warp="Translate/Rotate/Scale", info=scale_info)
+        self.assertAlmostEqual(scale_info["warps"][5]["scale"], 1.03**4, delta=0.005)
+        self.assertEqual(analysis_options({"auto_regrab_pattern": 1})["grab"].behavior, "every frame")
+
+    def test_auto_regrab_changes_track_when_pattern_appearance_evolves(self):
+        from nodebased.trackerknobs import analysis_options
+        frames = {frame: warped_plate(2.0*(frame-1), 1.0) for frame in range(1, 9)}
+        fixed = analyse(frames, 1, (55.5, 48.5), 5, 16, last_frame=8)
+        adaptive = analyse(frames, 1, (55.5, 48.5), 5, 16, last_frame=8,
+                           **analysis_options({"auto_regrab_pattern": 1}))
+        self.assertGreater(np.linalg.norm(np.subtract(fixed[8], adaptive[8])), 0.25)
 
     def test_negative_data_window_origin_is_preserved(self):
         from nodebased.raster import Raster

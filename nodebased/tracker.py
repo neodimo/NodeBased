@@ -179,6 +179,63 @@ def _phase_refine(pattern, candidate, radius):
             max(-0.5, min(0.5, float(solution[1]))))
 
 
+def _bilinear(image, xs, ys):
+    x0, y0 = np.floor(xs).astype(int), np.floor(ys).astype(int)
+    if x0.min() < 0 or y0.min() < 0 or x0.max() + 1 >= image.shape[1] or y0.max() + 1 >= image.shape[0]:
+        raise AnalysisError("warped pattern extends outside the image")
+    fx, fy = xs - x0, ys - y0
+    a, b = image[y0, x0], image[y0, x0 + 1]
+    c, d = image[y0 + 1, x0], image[y0 + 1, x0 + 1]
+    return a*(1-fx)*(1-fy) + b*fx*(1-fy) + c*(1-fx)*fy + d*fx*fy
+
+
+def _fit_pattern_warp(pattern, image, cx, cy, radius, warp, max_iter, epsilon):
+    """Refine a translated match with a least-squares local similarity/affine fit."""
+    yy, xx = np.mgrid[-radius:radius + 1, -radius:radius + 1].astype(np.float64)
+    target = (pattern - pattern.mean()) / max(float(pattern.std()), 1e-12)
+    # x/y, angle radians, log scale, affine shear x/y
+    p = np.array([cx, cy, 0., 0., 0., 0.])
+    enabled = {"Translate/Rotate": (0, 1, 2), "Translate/Scale": (0, 1, 3),
+               "Translate/Rotate/Scale": (0, 1, 2, 3), "Affine": (0, 1, 2, 3, 4, 5)}.get(warp)
+    if enabled is None:
+        raise AnalysisError(f"unknown Tracker warp type: {warp}")
+    def sample(q):
+        angle, scale = q[2], math.exp(q[3])
+        ca, sa = math.cos(angle)*scale, math.sin(angle)*scale
+        xs = q[0] + ca*xx - sa*yy + q[4]*yy
+        ys = q[1] + sa*xx + ca*yy + q[5]*xx
+        v = _bilinear(image, xs, ys)
+        return (v-v.mean()) / max(float(v.std()), 1e-12)
+    for _ in range(max(1, int(max_iter))):
+        residual = (sample(p)-target).ravel()
+        cols = []
+        for i in enabled:
+            h = 0.05 if i < 2 else 1e-3
+            q = p.copy(); q[i] += h
+            cols.append(((sample(q)-target).ravel()-residual)/h)
+        try:
+            delta, *_ = np.linalg.lstsq(np.column_stack(cols), -residual, rcond=None)
+        except np.linalg.LinAlgError:
+            break
+        delta = np.clip(delta, [-1.0 if i < 2 else -0.05 for i in enabled],
+                        [1.0 if i < 2 else 0.05 for i in enabled])
+        old_error = float(np.dot(residual, residual))
+        accepted = False
+        for factor in (1.0, 0.5, 0.25, 0.125):
+            trial = p.copy()
+            for i, step in zip(enabled, delta): trial[i] += float(step) * factor
+            try:
+                error = float(np.sum((sample(trial)-target).ravel() ** 2))
+            except AnalysisError:
+                continue
+            if error <= old_error:
+                p, accepted = trial, True
+                break
+        if not accepted: break
+        if float(np.linalg.norm(delta)) <= max(1e-6, float(epsilon)): break
+    return float(p[0]), float(p[1]), math.degrees(float(p[2])), math.exp(float(p[3])), _ncc(target, sample(p))
+
+
 def _ssd_score(pattern, candidate):
     """One minus the squared difference over the pattern's own energy: 1 for an exact copy, falling as the levels differ."""
     energy = float(np.sum((pattern - pattern.mean(dtype=np.float64)) ** 2))
@@ -188,7 +245,8 @@ def _ssd_score(pattern, candidate):
 
 
 def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, search_point=None,
-                  channels="luminance", metric="ncc", prefilter="none", clamp=False, min_score=MINIMUM_MATCH_SCORE):
+                  channels="luminance", metric="ncc", prefilter="none", clamp=False, min_score=MINIMUM_MATCH_SCORE,
+                  warp="Translate", max_iter=100, epsilon=0.01, return_warp=False):
     """Deterministic zero-mean NCC with integer peak and parabolic refinement.
 
     `metric` "ssd" compares the levels themselves instead of their pattern, so a change of exposure or gain moves the best match
@@ -229,14 +287,20 @@ def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, s
                         px-pattern_radius:px+pattern_radius+1]
     refined = _phase_refine(pattern, candidate, pattern_radius)
     dx, dy = refined if refined is not None else _subpixel_peak(pattern, current, px, py, pattern_radius)
-    return (float(origin[0] + px + 0.5 + dx + point_offset_x),
-            float(origin[1] + py + 0.5 + dy + point_offset_y), scores[peak])
+    mx, my, angle, scale, score = float(px + dx), float(py + dy), 0.0, 1.0, scores[peak]
+    if warp != "Translate":
+        mx, my, angle, scale, score = _fit_pattern_warp(pattern, current, mx, my, pattern_radius,
+                                                        warp, max_iter, epsilon)
+    result = (float(origin[0] + mx + 0.5 + point_offset_x),
+              float(origin[1] + my + 0.5 + point_offset_y), score)
+    return (*result, angle, scale) if return_warp else result
 
 
 def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
             first_frame=None, last_frame=None, cancel=None, progress=None, direction="forward",
             channels="luminance", adaptive_update=False, roi_frame=None,
-            metric="ncc", prefilter="none", clamp=False, predict=False, grab=None, max_error=None, info=None):
+            metric="ncc", prefilter="none", clamp=False, predict=False, grab=None, max_error=None, info=None,
+            warp="Translate", max_iter=100, epsilon=0.01):
     """Track from the reference toward one timeline direction without mutating a document.
 
     Backward analysis uses ``first_frame`` as its inclusive endpoint; forward analysis uses
@@ -268,6 +332,7 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
     reference = (roi_frame(reference_frame, point, pattern_radius + 2)
                  if roi_frame is not None else get_frame(reference_frame))
     pattern_point = tuple(point)
+    template_warp = [0.0, 1.0]
     for offset, frame in enumerate(frame_numbers, start=1):
         if cancel is not None and cancel.is_set():
             raise CancelledError()
@@ -276,7 +341,8 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
         current_image = (roi_frame(frame, centre, margin) if roi_frame is not None else get_frame(frame))
         match = match_pattern(reference, current_image, pattern_point, pattern_radius, search_radius,
                               search_point=centre, channels=channels, metric=metric, prefilter=prefilter, clamp=clamp,
-                              min_score=MINIMUM_MATCH_SCORE if max_error is None else -math.inf)
+                              min_score=MINIMUM_MATCH_SCORE if max_error is None else -math.inf,
+                              warp=warp, max_iter=max_iter, epsilon=epsilon, return_warp=warp != "Translate")
         error = max(0.0, 1.0 - match[2])
         if max_error is not None and error > max_error:
             if info is not None:
@@ -285,10 +351,16 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
         velocity = (match[0] - previous[0], match[1] - previous[1])
         previous = match[:2]
         result[frame] = previous
+        if warp != "Translate":
+            warp_total = [template_warp[0] + match[3], template_warp[1] * match[4]]
+            if info is not None:
+                info.setdefault("warps", {})[frame] = {"rotate": warp_total[0], "scale": warp_total[1]}
         if progress is not None:
             progress(frame, offset, total, match[2])
         if grab is not None and grab.due(offset, error):
             reference, pattern_point = current_image, previous
+            if warp != "Translate":
+                template_warp = warp_total
     return result
 
 
@@ -430,6 +502,24 @@ def solve(payload, frame, params, force_stabilise=False):
     if not entries:
         return dict(IDENTITY)
     rotate, scale, origin, moved = _fit(entries)
+    # A single point has no positional baseline for R/S. The Auto-Tracking warp fit records
+    # those components on that track, so its per-frame orientation and size can drive output.
+    if payload and len(entries) == 1:
+        reference_tracks = _usable(payload, int(params.get("reference_frame", 1)))
+        current_tracks = _usable(payload, frame)
+        for index, track in enumerate(payload.get("tracks", [])):
+            if reference_tracks[index] is None or current_tracks[index] is None:
+                continue
+            if "warp_rotation" in track or "warp_scale" in track:
+                if "warp_rotation" in track and trackerknobs.track_flags(track)[1]:
+                    rotate = (shapes.resolve_scalar(track["warp_rotation"], frame, "warp_rotation")
+                              - shapes.resolve_scalar(track["warp_rotation"], int(params.get("reference_frame", 1)), "warp_rotation"))
+                if "warp_scale" in track and trackerknobs.track_flags(track)[2]:
+                    ref_scale = shapes.resolve_scalar(track["warp_scale"], int(params.get("reference_frame", 1)), "warp_scale")
+                    now_scale = shapes.resolve_scalar(track["warp_scale"], frame, "warp_scale")
+                    if ref_scale > MINIMUM_SPREAD:
+                        scale = now_scale / ref_scale
+                break
 
     if not int(params.get("apply_rotate", 1)):
         rotate = 0.0

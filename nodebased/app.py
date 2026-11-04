@@ -15533,6 +15533,16 @@ class Window(QMainWindow):
                                else float(track["error"]["value"]),
                                "curve": {"interpolation": "linear",
                                          "keys": trackerknobs.merged_keys(keys_of(track.get("error", 0.0)), error_keys, delete_keys)}}
+            for field, default in (("warp_rotation", 0.0), ("warp_scale", 1.0)):
+                warps = (job.get("info") or {}).get("warps", {})
+                if not warps:
+                    continue
+                keys = [{"frame": job["reference_frame"], "value": default}]
+                keys.extend({"frame": int(f), "value": float(values["rotate" if field == "warp_rotation" else "scale"])}
+                            for f, values in sorted(warps.items()) if f in results)
+                track[field] = {"value": default,
+                                "curve": {"interpolation": "linear",
+                                          "keys": trackerknobs.merged_keys(keys_of(track.get(field, default)), keys, delete_keys)}}
             self.command({"op": "set_tracks", "id": key, "tracks": payload["tracks"]})
             self._tracker_seed = None
             self._tracker_index = None

@@ -304,6 +304,16 @@ integer maximum is refined independently in x and y with a clamped three-sample
 parabola. Forward and backward frames search around the previous result, so the
 result is deterministic and independent of scrub order.
 
+Auto-tracking's `warp` can refine that initial translation as Translate/Rotate,
+Translate/Scale, Translate/Rotate/Scale, or Affine with a bounded Gauss-Newton
+fit over the pattern. `max_iter` caps the fit and `epsilon` ends it when the
+parameter update is small. Translate remains the default path. With warp fitting,
+the analysis `info` result carries rotation and scale per frame; the Tracker
+inspector stores these as animated per-track values so a single track can
+contribute its pattern's rotation and scale to the solved Transform.
+`auto_regrab_pattern` updates the reference pattern after each tracked frame
+and accumulates those per-frame warp values.
+
 Coordinates use pixel centres (`i + 0.5`) and the Raster data-window origin,
 including negative origins. Invalid radii, insufficient texture, incomplete
 pattern windows, searches with no complete candidate window, and weak matches

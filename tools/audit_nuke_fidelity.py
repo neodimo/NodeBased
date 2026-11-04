@@ -406,7 +406,7 @@ _COUNT_WORDS = {"frame", "frames", "first", "last", "count", "samples", "sample"
 # average the track over that many frames; Switch's which picks an input by index, where Dissolve's is a mix). Panel sweep S2, 2026-11-04.
 # Panel sweep S3 (2026-11-04): AppendClip's dissolve is the length of the cross-fade in frames; ContactSheet's width, height and gap are whole
 # pixels (Nuke's Resolution is a width/height pair of integers and its gap an Int_Knob), so none of them can be a fractional slider.
-_COUNT_KNOBS = {("Tracker", "smoothT"), ("Tracker", "smoothR"), ("Tracker", "smoothS"), ("Switch", "which"), ("AppendClip", "dissolve"),
+_COUNT_KNOBS = {("Tracker", "smoothT"), ("Tracker", "smoothR"), ("Tracker", "smoothS"), ("Tracker", "max_iter"), ("Switch", "which"), ("AppendClip", "dissolve"),
                 ("ContactSheet", "width"), ("ContactSheet", "height"), ("ContactSheet", "gap")}
 # Panel sweep S4 (2026-11-04): TimeEcho's framesbehind counts frames and ZDefocus's blades counts the aperture's blades (whole numbers in Nuke's
 # Int_Knobs). _FLOAT_KNOBS are guide numbers whose name holds a count word although the value is a fraction or a time: IBKGizmo's level is the
