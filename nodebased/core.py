@@ -753,6 +753,10 @@ SPECS = {
     # through and the shape's coverage becomes its alpha, at the plate's own format. Nuke's
     # premultiply control defaults to none.
     "Roto": {"inputs": [], "optional_inputs": ["bg", "mask"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none",
+                                                                    **_trackerknobs.new_params("Roto"),
+                                                                    "reference_frame": 1, "export_menu": "CornerPin2D (relative)", "link_output": 1,
+                                                                    **{f"pt{i}_{axis}": 0.0 for i in range(1, 5) for axis in ("x", "y")},
+                                                                    **{f"of{i}_{axis}": 0.0 for i in range(1, 5) for axis in ("x", "y")},
                                                                     **_rotoknobs.new_params("Roto"), **_drawbehaviour.new_params("Roto")}},
     # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
     # second image is the reveal source; clone samples from the plate at a source frame.
@@ -2312,6 +2316,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "vector_alpha": ["none", "weighted"], "vector_output": ["result", "uvs"], "vector_sampling": ["source", "destination"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
            "roworder": ["TopBottom", "BottomTop"], "colorder": ["LeftRight", "RightLeft", "Snake"],
            "mode": list(TRACKER_MODES), "pretrack_filter": list(_trackerknobs.PRETRACK_FILTERS),
+           "export_menu": ["CornerPin2D (relative)", "CornerPin2D (absolute)", "CornerPin2D (stabilize)", "Tracker"],
            "grab_behavior": list(_trackerknobs.GRAB_BEHAVIOURS), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
            "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
@@ -2456,6 +2461,9 @@ LIMITS.update({"global_font_scale": (0.01, 100.0), "font_width": (1.0, 1000.0), 
                "shadow_softness": (0.0, 1000.0), "shadow_expand": (-1000.0, 1000.0)})
 LIMITS.update({"shape_motionblur_on": (0, 1), "global_motionblur_on": (0, 1), "global_motionblur": (1, 64),
                "global_motionblur_shutter": (0.0, 8.0), "global_motionblur_shutter_offset": (-8.0, 8.0)})
+LIMITS.update({"link_output": (0, 1),
+               **{f"{prefix}{i}_{axis}": (-1000000.0, 1000000.0)
+                  for prefix in ("pt", "of") for i in range(1, 5) for axis in ("x", "y")}})
 CHOICES["channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["cliptype"] = list(_chrome.CLIP_TYPES)
 # Shuffle's two routing slots (fidelity step B): R, G, B, A read the first, R2, G2, B2, A2 the second.
@@ -3480,7 +3488,9 @@ def validate(doc, _depth=0):
                 if value != "Custom" and value not in document_formats(doc):
                     raise ValueError(f"Invalid {name}: {value}")
                 continue
-            if (name in CHOICES and value not in CHOICES[name] and not (kind == "LevelSet" and name in ("channel", "output"))
+            choices = (["none", "adjust contrast"] if kind == "Roto" and name == "pretrack_filter"
+                       else CHOICES.get(name, []))
+            if (name in CHOICES and value not in choices and not (kind == "LevelSet" and name in ("channel", "output"))
                     and not _chrome.is_open_choice(kind, name) and not (kind == "DirBlur" and _storedknobs.is_factor_digits(value))):
                 raise ValueError(f"Invalid {name}: {value}")
             if isinstance(value, (list, tuple)) and name in SPLITTABLE.get(kind, {}):

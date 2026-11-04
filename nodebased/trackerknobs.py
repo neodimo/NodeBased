@@ -68,7 +68,12 @@ KINDS = ("Tracker",)
 
 
 def new_params(kind):
-    return dict(NEW) if kind in KINDS else {}
+    if kind in KINDS:
+        return dict(NEW)
+    if kind == "Roto":
+        return {"pretrack_filter": "none", "adjust_for_luminance_changes": 1,
+                "clamp_footage": 1, "hide_progress_bar": 0, "tracking_channels": "rgb"}
+    return {}
 
 
 def upgrade_params(kind):

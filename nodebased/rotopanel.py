@@ -456,4 +456,10 @@ def build_panel(window, key):
         color_key.setToolTip("Set colour keys at the current frame")
         color_row.addWidget(color_key); layout.addLayout(color_row)
     draw=QPushButton("Draw shape…"); draw.setObjectName("roto-draw-shape"); draw.clicked.connect(lambda:window.begin_roto_draw(key)); layout.addWidget(draw)
+    track=QPushButton("Track selected shape"); track.setObjectName("roto-track-shape")
+    track.setToolTip("Track the selected shape's bounding quad from the reference frame")
+    track.clicked.connect(lambda: window.track_roto_shape(key)); layout.addWidget(track)
+    layout.addWidget(QLabel("Export"))
+    export=QPushButton("Create"); export.setObjectName("roto-create-tracking-export")
+    export.clicked.connect(lambda: window.export_roto_tracking(key)); layout.addWidget(export)
     return root

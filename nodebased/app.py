@@ -12533,7 +12533,7 @@ class Window(QMainWindow):
                     control = ElidingComboBox()
                     if node["type"] == "Read" and param in readknobs.FORMAT_DEFAULTS:
                         control.setObjectName(f"{param}-choice")
-                    control.addItems(CHOICES[param])
+                    control.addItems(["none", "adjust contrast"] if node["type"] == "Roto" and param == "pretrack_filter" else CHOICES[param])
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
                     form.addRow({"colorspace": "Input Transform", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
@@ -12795,7 +12795,7 @@ class Window(QMainWindow):
                         elif kind == "enum":
                             widget = ElidingComboBox()
                             widget.setObjectName(f"{name}-choice")
-                            widget.addItems(CHOICES[name]); widget.setCurrentText(str(node["params"][name]))
+                            widget.addItems(["none", "adjust contrast"] if node["type"] == "Roto" and name == "pretrack_filter" else CHOICES[name]); widget.setCurrentText(str(node["params"][name]))
                             widget.currentTextChanged.connect(lambda v, k=key, p=name: self.defer_command({"op":"set","id":k,"param":p,"value":v}))
                             layout.addWidget(widget, 1)
                         else:
@@ -14464,9 +14464,28 @@ class Window(QMainWindow):
     def _planar_context(self, key=None):
         selected = key or self.graph.selected_id()
         node = self.dispatcher.document["nodes"].get(selected) if selected else None
-        if node is None or node["type"] != "PlanarTracker":
+        if node is None or node["type"] not in ("PlanarTracker", "Roto"):
             return None
-        return selected, node, self.dispatcher.document.get("node_data", {}).get(selected, {"tracks": []})
+        payload = self.dispatcher.document.get("node_data", {}).get(selected, {})
+        return selected, node, payload if node["type"] == "PlanarTracker" else {"tracks": [], **payload}
+
+    def track_roto_shape(self, key):
+        """Track the selected Roto shape's reference-frame bounding quad."""
+        context = self._planar_context(key)
+        if context is None or context[1]["type"] != "Roto":
+            return False
+        shapes = context[2].get("shapes", [])
+        index = int(getattr(self.viewer, "roto_selected_shape_index", -1))
+        if not 0 <= index < len(shapes):
+            self._show_command_error(ValueError("Select a Roto shape before tracking")); return False
+        frame = int(context[1]["params"].get("reference_frame", self.dispatcher.document["time"]["current"]))
+        resolved = shape_model.resolve_shapes({"shapes": [shapes[index]]}, frame)[0]
+        points = resolved.get("points", [])
+        if not points:
+            self._show_command_error(ValueError("The selected Roto shape has no points to track")); return False
+        xs, ys = [float(p["x"]) for p in points], [float(p["y"]) for p in points]
+        corners = [(min(xs), min(ys)), (max(xs), min(ys)), (max(xs), max(ys)), (min(xs), max(ys))]
+        return self.analyse_planar(key, corners_override=corners)
 
     def begin_planar_pick(self, key):
         context = self._planar_context(key)
@@ -14497,16 +14516,16 @@ class Window(QMainWindow):
         self.statusBar().showMessage("PlanarTracker region set; run Track plane to analyze it")
         return True
 
-    def analyse_planar(self, key, first_frame=None, last_frame=None):
+    def analyse_planar(self, key, first_frame=None, last_frame=None, corners_override=None):
         if self._planar_future is not None or self._tracker_future is not None:
             return False
         context = self._planar_context(key)
         if context is None:
             return False
         _, node, payload = context
-        if len(payload.get("tracks", [])) != 4:
+        if node["type"] == "PlanarTracker" and len(payload.get("tracks", [])) != 4:
             self._show_command_error(ValueError("Pick four region corners before tracking")); return False
-        source = node["inputs"].get("image")
+        source = node["inputs"].get("image") or node["inputs"].get("bg")
         if source is None:
             self._show_command_error(ValueError("Connect an image before tracking the plane")); return False
         doc = copy.deepcopy(self.dispatcher.document)
@@ -14519,13 +14538,16 @@ class Window(QMainWindow):
             self._show_command_error(ValueError("Planar analysis is limited to 5,001 frames")); return False
         from . import planar
         cancel = threading.Event()
-        job = {"key": key, "base_tracks": copy.deepcopy(payload.get("tracks", [])),
+        job = {"key": key, "kind": node["type"], "base_tracks": copy.deepcopy(payload.get("tracks", [])),
+               "base_shapes": copy.deepcopy(payload.get("shapes", [])),
+               "corners": copy.deepcopy(corners_override),
                "progress": {"frame": ref, "completed": 0, "total": max(0, hi-lo)}}
         self._planar_job = job
         self._planar_cancel = cancel
 
         def analyze():
-            corners = planar.resolve_corners(payload, ref)
+            corners = (np.asarray(corners_override, dtype=np.float64) if corners_override is not None
+                       else planar.resolve_corners(payload, ref))
             roi_executor = TileExecutor(tile_edge=self.tile_executor.tile_edge)
             bounds = roi_executor.canvas_region(doc, source, ref, tier=1)
             margin = max(32, int(math.ceil(max(np.ptp(corners[:, 0]),
@@ -14540,12 +14562,27 @@ class Window(QMainWindow):
             for f in range(lo, hi+1):
                 if cancel.is_set():
                     raise CancelledError()
-                frames[f] = roi_executor.compose_region(doc, source, roi, frame=f, tier=1,
-                                                        cancel=cancel).pixels
+                pixels = roi_executor.compose_region(doc, source, roi, frame=f, tier=1, cancel=cancel).pixels
+                from . import tracker as point_tracker, trackerknobs
+                params = node["params"]
+                channel = params.get("tracking_channels", "rgb")
+                channel = {"rgba": "rgb", "all": "rgb", "none": "luminance"}.get(channel, channel)
+                prepared, _origin = point_tracker._analysis_pixels(
+                    pixels, channel, params.get("pretrack_filter", "none"),
+                    bool(int(params.get("clamp_footage", 0))))
+                if int(params.get("adjust_for_luminance_changes", 0)):
+                    ref_mean, ref_std = float(prepared.mean()), max(float(prepared.std()), 1e-6)
+                    # Per-frame affine exposure normalization keeps contrast structure available to LK.
+                    if f == ref:
+                        analysis_reference = (ref_mean, ref_std)
+                    else:
+                        mean, std = float(prepared.mean()), max(float(prepared.std()), 1e-6)
+                        prepared = (prepared - mean) * (analysis_reference[1] / std) + analysis_reference[0]
+                frames[f] = np.repeat(prepared[..., None].astype(np.float32), 3, axis=2)
                 job["progress"].update(frame=f, completed=len(frames)-1, total=hi-lo)
             local_corners = corners - np.asarray([left, top], dtype=np.float64)
             results = planar.track_region(frames, local_corners, ref,
-                samples_per_axis=int(node["params"].get("samples_per_axis", 8)),
+                samples_per_axis=int(node["params"].get("samples_per_axis", 16 if node["type"] == "Roto" else 8)),
                 vector_detail=int(node["params"].get("vector_detail", 4)),
                 smoothness=float(node["params"].get("smoothness", 1.0)), backend="cpu",
                 threshold=float(node["params"].get("ransac_threshold", 2.0)), cancel=cancel,
@@ -14559,7 +14596,8 @@ class Window(QMainWindow):
             return planar.tracks_from_results(results), len(results)
 
         self._planar_future = self.executor.submit(analyze)
-        self.statusBar().showMessage(f"PlanarTracker analysis: 0/{hi-lo} frames")
+        if not int(node["params"].get("hide_progress_bar", 0)):
+            self.statusBar().showMessage(f"{node['type']} analysis: 0/{hi-lo} frames")
         self.inspect(key)
         QTimer.singleShot(50, self._poll_planar_analysis)
         return True
@@ -14575,9 +14613,12 @@ class Window(QMainWindow):
             return
         if not future.done():
             progress = (self._planar_job or {}).get("progress", {})
-            self.statusBar().showMessage(
-                f"PlanarTracker analysis: {progress.get('completed', 0)}/"
-                f"{progress.get('total', 0)} frames · frame {progress.get('frame', '?')}")
+            job_key = (self._planar_job or {}).get("key")
+            active = self.dispatcher.document["nodes"].get(job_key, {})
+            if not int(active.get("params", {}).get("hide_progress_bar", 0)):
+                self.statusBar().showMessage(
+                    f"{active.get('type', 'PlanarTracker')} analysis: {progress.get('completed', 0)}/"
+                    f"{progress.get('total', 0)} frames · frame {progress.get('frame', '?')}")
             QTimer.singleShot(50, self._poll_planar_analysis)
             return
         self._planar_future = None
@@ -14588,17 +14629,34 @@ class Window(QMainWindow):
                 raise CancelledError()
             tracks, count = future.result()
             node = self.dispatcher.document["nodes"].get(job["key"])
-            current = self.dispatcher.document.get("node_data", {}).get(job["key"], {}).get("tracks", [])
-            if node is None or node["type"] != "PlanarTracker" or current != job["base_tracks"]:
-                raise ValueError("PlanarTracker changed during analysis; results discarded")
-            self.command({"op": "set_tracks", "id": job["key"], "tracks": tracks})
+            payload = self.dispatcher.document.get("node_data", {}).get(job["key"], {})
+            if node is None or node["type"] != job["kind"]:
+                raise ValueError("The tracking node changed during analysis; results discarded")
+            if job["kind"] == "PlanarTracker":
+                if payload.get("tracks", []) != job["base_tracks"]:
+                    raise ValueError("PlanarTracker changed during analysis; results discarded")
+                self.command({"op": "set_tracks", "id": job["key"], "tracks": tracks})
+            else:
+                if payload.get("shapes", []) != job["base_shapes"]:
+                    raise ValueError("Roto shapes changed during analysis; results discarded")
+                commands = []
+                for index, track in enumerate(tracks[:4], 1):
+                    for axis in ("x", "y"):
+                        value = track[axis]
+                        keys = value.get("curve", {}).get("keys", []) if isinstance(value, dict) else []
+                        if not keys:
+                            keys = [{"frame": int(node["params"].get("reference_frame", 1)),
+                                     "value": float(value.get("value", 0.0) if isinstance(value, dict) else value)}]
+                        commands.append({"op": "set_curve", "id": job["key"], "param": f"pt{index}_{axis}",
+                                         "curve": {"interpolation": "linear", "keys": keys}})
+                self.command({"op": "batch", "commands": commands})
         except CancelledError:
             self.statusBar().showMessage("PlanarTracker analysis cancelled")
             return
         except Exception as error:
             self._show_command_error(error)
             return
-        self.statusBar().showMessage(f"PlanarTracker: tracked {count} frames")
+        self.statusBar().showMessage(f"{node['type']}: tracked {count} frames")
         self.viewer.viewport().update()
         self.rebuild_properties_dock()
 
@@ -15196,6 +15254,88 @@ class Window(QMainWindow):
                         for field, curve in curves.items())
         self.command({"op": "batch", "commands": commands})
         self.statusBar().showMessage(f"Exported {node['name']} as animated Transform")
+        return True
+
+    def export_roto_tracking(self, key):
+        """Create the selected Roto tracking export from its animated planar corners."""
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "Roto":
+            return False
+        source = node["inputs"].get("bg")
+        if source is None:
+            self._show_command_error(ValueError("Connect a plate to Roto's background before creating an export"))
+            return False
+        params = node["params"]
+        export_kind = params.get("export_menu", "CornerPin2D (relative)")
+        doc = self.dispatcher.document
+        curves = (doc.get("animation") or {}).get("curves", {}).get(key, {})
+        if not any(f"pt{i}_{axis}" in curves for i in range(1, 5) for axis in ("x", "y")):
+            self._show_command_error(ValueError("Track the selected shape before creating an export")); return False
+        reference = int(params.get("reference_frame", 1))
+        time = self.dispatcher.document["time"]
+        first, last = int(time["first"]), int(time["last"])
+        if last - first > 5000:
+            self._show_command_error(ValueError("Export is limited to 5,001 sampled frames")); return False
+        from . import animation as animation_model
+        resolved = {frame: animation_model.resolve_document(doc, frame)["nodes"][key]["params"]
+                    for frame in set(range(first, last + 1)) | {reference}}
+        def point(index, axis, frame):
+            p = resolved[frame]
+            return float(p.get(f"pt{index}_{axis}", 0.0)) + float(p.get(f"of{index}_{axis}", 0.0))
+        tracked = {frame: [(point(i, "x", frame), point(i, "y", frame)) for i in range(1, 5)]
+                   for frame in range(first, last + 1)}
+        ref_corners = [(point(i, "x", reference), point(i, "y", reference)) for i in range(1, 5)]
+        ident = uuid.uuid4().hex[:12]
+        if export_kind == "Tracker":
+            tracks = []
+            for index in range(4):
+                tracks.append({"name": f"corner{index+1}", "enabled": 1,
+                    "x": {"value": ref_corners[index][0], "curve": {"interpolation": "linear", "keys": [
+                        {"frame": f, "value": tracked[f][index][0]} for f in range(first, last+1)]}},
+                    "y": {"value": ref_corners[index][1], "curve": {"interpolation": "linear", "keys": [
+                        {"frame": f, "value": tracked[f][index][1]} for f in range(first, last+1)]}}})
+            commands = [{"op": "create", "id": ident, "type": "Tracker", "name": f"{node['name']} Tracker",
+                         "params": {"reference_frame": reference}, "pos": [node["pos"][0], node["pos"][1]+100]},
+                        {"op": "connect", "id": ident, "input": "image", "source": source},
+                        {"op": "set_tracks", "id": ident, "tracks": tracks}]
+            self.command({"op": "batch", "commands": commands})
+            self.statusBar().showMessage(f"Created four tracks from {node['name']}")
+            return True
+        absolute = export_kind == "CornerPin2D (absolute)"
+        stabilize = export_kind == "CornerPin2D (stabilize)"
+        output_params = copy.deepcopy(SPECS["CornerPin"]["params"])
+        curves, expressions = {}, []
+        for index in range(1, 5):
+            for axis in ("x", "y"):
+                if absolute:
+                    from_value = {1: (0.0, 0.0), 2: (float(params["width"]), 0.0),
+                                  3: (float(params["width"]), float(params["height"])),
+                                  4: (0.0, float(params["height"]))}[index][0 if axis == "x" else 1]
+                else:
+                    from_value = ref_corners[index-1][0 if axis == "x" else 1]
+                to_keys = [{"frame": frame, "value": tracked[frame][index-1][0 if axis == "x" else 1]}
+                           for frame in range(first, last+1)]
+                from_keys = [{"frame": frame, "value": tracked[frame][index-1][0 if axis == "x" else 1]}
+                             for frame in range(first, last+1)] if stabilize else None
+                first_name, second_name = f"from{index}_{axis}", f"to{index}_{axis}"
+                moving_name, static_name = (first_name, second_name) if stabilize else (second_name, first_name)
+                moving_keys = from_keys if stabilize else to_keys
+                static_value = ref_corners[index-1][0 if axis == "x" else 1] if stabilize or not absolute else from_value
+                output_params[static_name] = float(static_value)
+                output_params[moving_name] = float(moving_keys[0]["value"] if moving_keys else static_value)
+                if int(params.get("link_output", 1)):
+                    expressions.append({"op": "set_expression", "id": ident, "param": moving_name,
+                        "expression": f'knob("{key}", "pt{index}_{axis}") + knob("{key}", "of{index}_{axis}")'})
+                else:
+                    curves[moving_name] = {"interpolation": "linear", "keys": moving_keys}
+        commands = [{"op": "create", "id": ident, "type": "CornerPin", "name": f"{node['name']} CornerPin",
+                     "params": output_params, "pos": [node["pos"][0], node["pos"][1]+100]},
+                    {"op": "connect", "id": ident, "input": "image", "source": source}]
+        commands.extend({"op": "set_curve", "id": ident, "param": name, "curve": curve}
+                        for name, curve in curves.items())
+        commands.extend(expressions)
+        self.command({"op": "batch", "commands": commands})
+        self.statusBar().showMessage(f"Created {export_kind} from {node['name']}")
         return True
 
     def export_tracker_cornerpin(self, key):

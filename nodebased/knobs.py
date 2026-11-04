@@ -1201,6 +1201,16 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("global_motionblur_shutter",), label="Global shutter", soft_range=(0, 2)),
         KnobGroup("enum", ("global_motionblur_shutter_offset_type",), label="Global shutter offset"),
         KnobGroup("float", ("global_motionblur_shutter_offset",), label="Global custom offset"),
+        KnobGroup("enum", ("tracking_channels",), label="Track channels"),
+        KnobGroup("enum", ("pretrack_filter",), label="Pre-track filter"),
+        KnobGroup("bool", ("adjust_for_luminance_changes",), label="Adjust for luminance changes"),
+        KnobGroup("bool", ("clamp_footage",), label="Clamp footage"),
+        KnobGroup("bool", ("hide_progress_bar",), label="Hide progress bar"),
+        KnobGroup("int", ("reference_frame",), label="Reference frame"),
+        KnobGroup("enum", ("export_menu",), label="Export"),
+        KnobGroup("bool", ("link_output",), label="Link output"),
+        *(KnobGroup("xy", (f"pt{i}_x", f"pt{i}_y"), label=f"Tracked corner {i}") for i in range(1, 5)),
+        *(KnobGroup("xy", (f"of{i}_x", f"of{i}_y"), label=f"Corner offset {i}") for i in range(1, 5)),
         KnobGroup("bool", ("legacy_roto_alpha",), label="Legacy alpha",
                   help="Write the matte over a wired background's alpha, as graphs saved before Roto followed the guide's Replace do."),
         KnobGroup("bool", ("legacy_roto_shapes",), label="Legacy shapes",
@@ -2603,11 +2613,16 @@ NUKE_LABELS.update({
 # then the format (Roto), the mask row, the output mask, opacity, the Motion Blur tab's switches and values, and the tracking channels last.
 _ROTO_ORDER = ("output", "premultiply_mode", "cliptype", "replace", "maskChannelInput", "inject", "invert_mask", "fringe", "outputMask", "opacity",
                "shape_motionblur_on", "global_motionblur_on", "global_motionblur", "global_motionblur_shutter",
-               "global_motionblur_shutter_offset_type", "global_motionblur_shutter_offset", "channels")
+               "global_motionblur_shutter_offset_type", "global_motionblur_shutter_offset", "tracking_channels")
 NUKE_LAYOUT_LANE9.update({
     "Roto": (*_ROTO_ORDER[:4], "width", "height", *_ROTO_ORDER[4:]),
-    "RotoPaint": _ROTO_ORDER,
+    "RotoPaint": (*_ROTO_ORDER[:-1], "channels"),
 })
+NUKE_LAYOUT_LANE9["Roto"] += ("pretrack_filter", "adjust_for_luminance_changes",
+                              "clamp_footage", "hide_progress_bar", "export_menu", "link_output",
+                              *(f"pt{i}_x" for i in range(1, 5)),
+                              *(f"of{i}_x" for i in range(1, 5)), "channels")
+NUKE_LABELS.setdefault("Roto", {})["channels"] = "Output channels"
 NUKE_LABELS.setdefault("Roto", {})["invert"] = "Invert matte"       # the mask row's own knob reads "Invert"
 
 # Lane 2 step G (11/2): EdgeBlur, GodRays and BumpBoss in the guide's order (docs/parity/nuke_nodes.json), the mask strip and mix closing the tab.

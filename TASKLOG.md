@@ -1833,3 +1833,12 @@
 **State.** Partial. The VectorDistort behavior module, neighboring warp/draw/filter tests, audit, tiles, bypass, knobs, tiers, core, knowledge, and required properties-panel checks passed. `tests.legacy_behaviour_d` contains no unittest tests. The audit remains 95.8 overall (95.4 under the previous formula); Draw 92.1, Filter 96.7, Transform 96.6. The six target nodes' fidelity/knob coverage is unchanged; the audit's inert-knob section remains empty (0). The new VectorDistort pixel assertion covers the guide's map-blur direction; no audit case was added because its fixture cannot express a measured temporal SmartVector.
 
 **Next owner + concrete artifact.** Needs Gonzo: continue groups 1 and 2 from `scratch/nb-lanes/auto/briefs/L9-behaviour-P-1103.md`, then rerun the audit and targeted gates.
+
+## 2026-11-04 — Lane 9, step U (Roto tracking)
+
+- **What was done:** Roto now analyzes the selected shape's bounding quad with the shared planar tracker, writes animated corner curves and per-corner offsets, and creates relative/absolute/stabilize CornerPins or a four-track Tracker. Roto analysis uses the shared tracker prefilter, channel selection, luminance adjustment and clamp; Roto progress feedback can be hidden. `tracking_channels` preserves the old NodeBased `channels` render behavior while pairing with Nuke's Tracking-tab `channels` knob.
+- **Evidence:** A synthetic plate translated 3 px per frame and ramped in brightness; the tracked square corners stayed within 0.25 px. Export tests cover both reference and moved frames, linked expressions, baked keys, all CornerPin modes, and four-track Tracker output. Targeted Roto, PlanarTracker, Tracker, RotoPaint, knob, core, tier, knowledge, audit, label and panel checks passed. Full-suite and real-display visual QA were not run.
+- **Parity:** Roto 18.0% (9/50) to 26.8% (15/56); overall 95.3 to 95.5; previous formula 95.9 to 96.1. Unsupported on Roto: `key`, `view`, `stereo_offset`, `source_view`. The mapping keeps legacy `channels` as NodeBased-only output control; `tracking_channels` maps to Nuke's Tracking-tab `channels`.
+- **Artifacts:** code, tests and byte-identical fidelity reports are in this worktree; report path is in `scratch/nb-lanes/run/report-L9.md` (outside this repository by instruction).
+- **State:** Done; no schema bump. Full suite, Windows CI, integration and real-display QA remain unverified.
+- **Next owner + artifact:** Gonzo can integrate this branch and run the stacked suite; use `openclaw/nb-2d-behaviour`.
