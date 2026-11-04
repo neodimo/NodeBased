@@ -1043,9 +1043,17 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("outputMask",), label="Output mask"),
         KnobGroup("bool", ("crop_to_format",), label="Crop to format"),
         KnobGroup("bool", ("boundary_bbox",), label="Bounding box boundary curve"),
+        KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"),
+        KnobGroup("float_slider", ("rotate",), label="Rotate"),
+        KnobGroup("float_slider", ("scale",), label="Scale"),
+        KnobGroup("float_slider", ("skew_x",), label="Skew X"),
+        KnobGroup("float_slider", ("skew_y",), label="Skew Y"),
+        KnobGroup("enum", ("skew_order",), label="Skew order"),
+        KnobGroup("xy", ("center_x", "center_y"), label="Center"),
         KnobGroup("enum", ("filter",)), KnobGroup("enum", ("output",))),
     "GridWarp": _groups(
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
+        KnobGroup("float_slider", ("warp",), label="Warp"),
         KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
         KnobGroup("enum", ("grid_output",), label="Output"),
         KnobGroup("enum", ("background",), label="Background"),
@@ -2528,8 +2536,9 @@ NUKE_LAYOUT_LANE9.update({
 # Lane 9 step H (11/3): GridWarp and SplineWarp in the guide's order (docs/parity/nuke_nodes.json): channels and the mask strip lead GridWarp, channels
 # and the Output group lead SplineWarp; rows, columns, the curve resolution and NodeBased's own box choice keep their place after these.
 NUKE_LAYOUT_LANE9.update({
-    "GridWarp": ("channels", "maskChannelInput", "inject", "invert_mask", "fringe", "grid_output", "mix", "background", "background_mix", "bbox", "filter"),
-    "SplineWarp": ("channels", "premultiply", "outputMask", "crop_to_format", "boundary_bbox", "output", "mix", "root_warp", "layer_warp", "pair_warp"),
+    "GridWarp": ("channels", "maskChannelInput", "inject", "invert_mask", "fringe", "grid_output", "warp", "mix", "background", "background_mix", "bbox", "filter"),
+    "SplineWarp": ("channels", "premultiply", "outputMask", "crop_to_format", "boundary_bbox", "output", "mix", "root_warp", "layer_warp", "pair_warp",
+                   "translate_x", "rotate", "scale", "skew_x", "skew_y", "skew_order", "center_x"),
 })
 # Lane 9 step K (11/3): Text in the guide's order (the Draw chrome first, then message, box, justify, font, transform, colour and ramp, shadows).
 NUKE_LAYOUT_LANE9["Text"] = ("output", "premult", "cliptype", "replace", "invert", "opacity", "message", "box_x", "justify", "yjustify", "font", "index",

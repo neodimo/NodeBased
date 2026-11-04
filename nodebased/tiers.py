@@ -781,6 +781,7 @@ PIXEL_UNIT_PARAMS = {
     "Rectangle": ("width", "height", "box_x", "box_y", "box_width", "box_height", "p0_x", "p0_y", "p1_x", "p1_y"),
     "Noise": ("width", "height", "size", "translate_x", "translate_y", "center_x", "center_y", "p0_x", "p0_y", "p1_x", "p1_y"),
     "Grid": ("width", "height", "spacing_x", "spacing_y", "grid_offset_x", "grid_offset_y", "line_width", "p0_x", "p0_y", "p1_x", "p1_y"),
+    "SplineWarp": ("translate_x", "translate_y", "center_x", "center_y"),
     "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height", "kerning", "tracking", "baseline_shift", "leading",
              "translate_x", "translate_y", "center_x", "center_y", "p0_x", "p0_y", "p1_x", "p1_y", "shadow_distance", "shadow_softness",
              "shadow_expand"),

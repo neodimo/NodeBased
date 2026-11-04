@@ -5156,6 +5156,7 @@ class Evaluator:
                                              p["rows"], p["columns"])
                 grids = {"source": default, "destination": default}
             src, dst = warps.grid_controls(grids["source"], grids["destination"])
+            dst = warps_knobs.scaled_destination(src, dst, float(p.get("warp", 1.0)))
             sigma = max(1.0, min(source.display.width / max(1, p["columns"] - 1),
                                  source.display.height / max(1, p["rows"] - 1)) * 0.55)
         else:
@@ -5166,8 +5167,11 @@ class Evaluator:
             src = np.concatenate(src_parts) if src_parts else np.zeros((0, 2), np.float64)
             dst = np.concatenate(dst_parts) if dst_parts else np.zeros((0, 2), np.float64)
             sigma = max(1.0, min(source.display.width, source.display.height) / 8.0)
-            if p.get("root_warp", "A") == "B":
-                src, dst = dst, src
+        if p.get("root_warp", "A") == "B":
+            src, dst = dst, src
+        if kind == "SplineWarp":
+            src = warps_knobs.transform_points(src, p)
+            dst = warps_knobs.transform_points(dst, p)
         mix = float(p.get("mix", 1.0))
         if len(src):
             control_source, control_destination = src, dst

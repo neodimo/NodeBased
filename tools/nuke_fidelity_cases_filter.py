@@ -1905,6 +1905,18 @@ def _warp_cases(Case, out):
 
     case("gridwarp_interior_key_moves_the_pixel_under_it", "GridWarp", {**grid_node, "_warp": {"source": grid, "destination": moved_grid}}, key_moved,
          "an interior key moved 3 pixels right carries the picture under it 3 pixels right and leaves the corner keys where they are")
+    def half_key(fx):
+        src = _plate_array(plate)
+        ref, valid = src.copy(), np.zeros(src.shape, bool)
+        ref[5, 9] = src[5, 7]
+        for row, col in ((0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1), (5, 9)):
+            valid[row, col] = True
+        return ref, valid
+
+    case("gridwarp_warp_two_thirds_scales_the_interior_move", "GridWarp",
+         {**grid_node, "warp": 2.0 / 3.0, "_warp": {"source": grid, "destination": moved_grid}},
+         half_key,
+         "warp scales the destination displacement before carrying the grid")
     case("gridwarp_mix_zero_is_the_source", "GridWarp", {**grid_node, "mix": 0.0, "_warp": {"source": grid, "destination": moved_grid}}, whole,
          "mix 0 gives the source back")
     case("gridwarp_output_source_is_the_source", "GridWarp", {**grid_node, "grid_output": "source", "_warp": {"source": grid, "destination": moved_grid}},
@@ -1932,6 +1944,17 @@ def _warp_cases(Case, out):
 
     case("splinewarp_curve_moves_the_pixels_on_it", "SplineWarp", {**spline, "_warp": pairs}, on_curve,
          "a source curve paired with a destination curve 3 pixels right carries the pixels on the curve 3 pixels right (the pixels at the curve's samples are scored)")
+    def translated_curve(fx):
+        src = _plate_array(plate)
+        ref, valid = src.copy(), np.zeros(src.shape, bool)
+        for row in range(0, 11, 2):
+            ref[row, 12] = src[row, 9]
+            valid[row, 12] = True
+        return ref, valid
+
+    case("splinewarp_transform_translate_moves_curve_pixels", "SplineWarp",
+         {**spline, "translate_x": 2.0, "_warp": pairs}, translated_curve,
+         "the Transform tab's translate moves both curves and the pixels carried by the destination curve")
     case("splinewarp_mix_zero_is_the_input", "SplineWarp", {**spline, "mix": 0.0, "_warp": pairs}, whole, "mix 0 gives the input back")
 
 

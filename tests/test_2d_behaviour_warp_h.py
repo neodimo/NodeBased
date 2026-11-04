@@ -99,6 +99,13 @@ class GridWarpTests(unittest.TestCase):
         src = ramp()
         np.testing.assert_array_equal(run_grid(grid_params(mix=0.0), src, moved_grid()).pixels, src)
 
+    def test_warp_scales_the_known_interior_displacement(self):
+        src = ramp()
+        two_thirds = run_grid(grid_params(warp=2.0 / 3.0), src, moved_grid()).pixels
+        expected = run_grid(grid_params(), src, moved_grid(dx=2.0)).pixels
+        np.testing.assert_allclose(two_thirds, expected, atol=1e-6)
+        np.testing.assert_array_equal(run_grid(grid_params(warp=0.0), src, moved_grid()).pixels, src)
+
     def test_output_choices(self):
         src, dst = ramp(), ramp(0.3)
         data = moved_grid()
@@ -200,6 +207,29 @@ class SplineWarpTests(unittest.TestCase):
         both = run_spline(spline_params(layer_warp=third, pair_warp=third), src).pixels
         self.assertGreater(float(np.abs(both - half).max()), 1e-3)
         np.testing.assert_allclose(run_spline(spline_params(layer_warp=0.0), src).pixels, src, atol=1e-6)
+
+    def test_transform_translate_moves_the_curve_and_the_pixels_under_it(self):
+        src = ramp()
+        out = run_spline(spline_params(translate_x=2.0), src).pixels
+        np.testing.assert_allclose(out[8, 14], src[8, 11], atol=1e-5)
+        np.testing.assert_allclose(run_spline(spline_params(), src).pixels[8, 12], src[8, 9], atol=1e-5)
+
+    def test_transform_scale_and_rotation_move_curve_points(self):
+        point = np.array([[3.0, 0.0]])
+        np.testing.assert_allclose(warpknobs.transform_points(point, {"scale": 2.0}), [[6.0, 0.0]])
+        np.testing.assert_allclose(warpknobs.transform_points(point, {"rotate": 90.0}), [[0.0, -3.0]], atol=1e-12)
+
+    def test_transform_skews_and_center_are_pixel_coordinates(self):
+        point = np.array([[3.0, 2.0]])
+        np.testing.assert_allclose(warpknobs.transform_points(point, {"skew_x": 0.5}), [[4.0, 2.0]])
+        np.testing.assert_allclose(warpknobs.transform_points(point, {"skew_y": 0.5}), [[3.0, 3.5]])
+        np.testing.assert_allclose(warpknobs.transform_points(point, {"scale": 2.0, "center_x": 1.0, "center_y": 2.0}), [[5.0, 2.0]])
+
+    def test_skew_order_changes_the_combined_transform(self):
+        point = np.array([[1.0, 1.0]])
+        xy = warpknobs.transform_points(point, {"skew_x": 1.0, "skew_y": 1.0, "skew_order": "XY"})
+        yx = warpknobs.transform_points(point, {"skew_x": 1.0, "skew_y": 1.0, "skew_order": "YX"})
+        self.assertFalse(np.array_equal(xy, yx))
 
     def test_premultiply_scales_the_colour_by_alpha(self):
         src = ramp(alpha=0.5)

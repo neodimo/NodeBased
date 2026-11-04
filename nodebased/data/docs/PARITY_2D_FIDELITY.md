@@ -42,7 +42,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Filter | 96.6 | 91.8 | 96.2 | 32 |
 | Keyer | 93.1 | 79.8 | 93.1 | 11 |
 | Merge | 98.3 | 97.0 | 99.5 | 12 |
-| Transform | 95.9 | 91.8 | 95.9 | 20 |
+| Transform | 96.0 | 92.3 | 96.0 | 20 |
 | Metadata | 90.6 | 94.9 | 99.4 | 5 |
 | Other | 81.2 | 44.8 | 81.5 | 12 |
 
@@ -244,8 +244,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 11 | BlackOutside | `BlackOutside` | supported | 100.0 | 100.0 | - | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
 | 12 | STMap | `STMap` | supported | 98.0 | 98.1 | 100 (6/6) | - | 86 | 100 | 100 | - | 100 | - | no fixture |
 | 13 | IDistort | `IDistort` | supported | 92.5 | 94.3 | 100 (8/8) | - | 57 | 100 | 100 | - | 90 | - | no fixture |
-| 14 | GridWarp | `GridWarp` | supported | 70.2 | 63.2 | 15 (5/34) | - | 73 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 14 | SplineWarp | `SplineWarp` | supported | 81.2 | 79.7 | 67 (12/23) | - | 64 | 67 | 100 | 100 (2/2) | 91 | - | unmeasured |
+| 14 | GridWarp | `GridWarp` | supported | 71.4 | 64.6 | 18 (6/34) | - | 75 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
+| 14 | SplineWarp | `SplineWarp` | supported | 89.5 | 89.5 | 88 (19/23) | - | 76 | 67 | 100 | 100 (3/3) | 94 | - | unmeasured |
 | 15 | Tile | `Tile` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
 | 16 | VectorCornerPin | `VectorCornerPin` | supported | 93.3 | 91.0 | 81 (13/17) | - | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 16 | VectorDistort | `VectorDistort` | supported | 90.5 | 88.1 | 78 (5/6) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
@@ -437,8 +437,8 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | BlackOutside | — | — | 0 |
 | STMap | — | 100.0% (4/4) | 2 |
 | IDistort | — | 71.4% (5/7) | 1 |
-| GridWarp | — | 100.0% (5/5) | 8 |
-| SplineWarp | — | 72.7% (8/11) | 3 |
+| GridWarp | — | 100.0% (6/6) | 8 |
+| SplineWarp | — | 81.2% (13/16) | 4 |
 | Tile | — | 100.0% (5/5) | 0 |
 | VectorCornerPin | — | 100.0% (1/1) | 22 |
 | VectorDistort | — | 100.0% (5/5) | 2 |
@@ -1049,10 +1049,12 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `vectorcornerpin_swapped_pins_mirror_the_picture` | convention | pass | within tolerance | - |
 | `vectorcornerpin_from_quad_picks_the_source` | convention | pass | within tolerance | - |
 | `gridwarp_interior_key_moves_the_pixel_under_it` | convention | pass | within tolerance | - |
+| `gridwarp_warp_two_thirds_scales_the_interior_move` | convention | pass | within tolerance | - |
 | `gridwarp_mix_zero_is_the_source` | convention | pass | within tolerance | - |
 | `gridwarp_output_source_is_the_source` | convention | pass | within tolerance | - |
 | `gridwarp_background_over_the_source` | convention | not scored: the guide's page for this node is a video transcript with no formula for the background and its mix; the reading is NodeBased's | - | - |
 | `splinewarp_curve_moves_the_pixels_on_it` | convention | pass | within tolerance | - |
+| `splinewarp_transform_translate_moves_curve_pixels` | convention | pass | within tolerance | - |
 | `splinewarp_mix_zero_is_the_input` | convention | pass | within tolerance | - |
 | `lensdistortion_classic_undistort` | guide | pass | within tolerance | - |
 | `lensdistortion_classic_two_terms` | guide | pass | within tolerance | - |

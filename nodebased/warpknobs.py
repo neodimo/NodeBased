@@ -34,14 +34,16 @@ import numpy as np
 
 GRID_OUTPUTS = ["source", "source warped", "destination", "destination warped"]
 BACKGROUNDS = ["on black", "on src", "on dst", "on bg"]
-GRIDWARP = {"grid_output": "source warped", "background": "on src", "background_mix": 0.0}
+GRIDWARP = {"grid_output": "source warped", "warp": 1.0, "background": "on src", "background_mix": 0.0}
 SPLINEWARP = {"premultiply": 0, "outputMask": "mask_splinwarp.a", "crop_to_format": 1, "boundary_bbox": 1,
-              "layer_warp": 1.0, "pair_warp": 1.0}
+              "layer_warp": 1.0, "pair_warp": 1.0,
+              "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0,
+              "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "center_x": 0.0, "center_y": 0.0}
 # A saved SplineWarp had no mask layer and no crop, so it keeps both off.
 SPLINEWARP_SAVED = {**SPLINEWARP, "outputMask": "none", "crop_to_format": 0}
-LIMITS = {"background_mix": (0.0, 1.0), "premultiply": (0, 1), "crop_to_format": (0, 1), "boundary_bbox": (0, 1),
+LIMITS = {"background_mix": (0.0, 1.0), "warp": (0.0, 10.0), "premultiply": (0, 1), "crop_to_format": (0, 1), "boundary_bbox": (0, 1),
           "layer_warp": (0.0, 1.0), "pair_warp": (0.0, 1.0)}
-CHOICES = {"grid_output": GRID_OUTPUTS, "background": BACKGROUNDS}
+CHOICES = {"grid_output": GRID_OUTPUTS, "background": BACKGROUNDS, "skew_order": ("XY", "YX")}
 OPEN_CHOICES = ("outputMask",)
 
 
@@ -70,6 +72,25 @@ def scaled_destination(source, destination, factor):
     if factor == 1.0 or not len(source):
         return destination
     return source + (destination - source) * np.float32(factor)
+
+
+def transform_points(points, p):
+    """Apply SplineWarp's Nuke-style Transform tab to both curve sets; identity is bit-preserving."""
+    tx, ty = float(p.get("translate_x", 0.0)), float(p.get("translate_y", 0.0))
+    rotate, scale = float(p.get("rotate", 0.0)), float(p.get("scale", 1.0))
+    kx, ky = float(p.get("skew_x", 0.0)), float(p.get("skew_y", 0.0))
+    if tx == ty == rotate == kx == ky == 0.0 and scale == 1.0:
+        return points
+    cx, cy = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
+    angle = np.deg2rad(-rotate)
+    c, s = np.cos(angle), np.sin(angle)
+    sx = np.array([[1.0, kx], [0.0, 1.0]])
+    sy = np.array([[1.0, 0.0], [ky, 1.0]])
+    skew = sy @ sx if p.get("skew_order", "XY") == "XY" else sx @ sy
+    linear = np.array([[c, -s], [s, c]]) @ skew * scale
+    pivot = np.array([cx, cy])
+    offset = pivot + np.array([tx, -ty]) - linear @ pivot
+    return np.asarray(points) @ linear.T + offset
 
 
 def over(top, under):
