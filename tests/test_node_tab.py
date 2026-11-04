@@ -8,13 +8,13 @@ import unittest.mock
 import numpy as np
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import QObject
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QPushButton, QSpinBox, QTabWidget, QToolButton)
+from PySide6.QtCore import QObject, Qt
+from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QPushButton, QSpinBox, QStyleOptionGraphicsItem, QTabWidget, QToolButton)
 
-from nodebased.app import Window, STYLE
-from nodebased.core import (Dispatcher, NODE_TAB_DEFAULTS, SPECS, apply_lifetime, load_document, node_tab_pixels,
-                            validate)
+from nodebased.app import CACHED_LINE_COLOR, Viewer, Window, STYLE
+from nodebased.core import (Dispatcher, NODE_TAB_DEFAULTS, SPECS, apply_lifetime, bookmarked_nodes, dope_sheet_rows,
+                            load_document, node_tab_pixels, validate)
 from nodebased.imaging import Evaluator
 from tests.waiting import wait_until
 
@@ -24,7 +24,8 @@ APP.setStyleSheet(STYLE)
 
 # Nuke's order, and the object names the panel gives them.
 EXPECTED_CONTROLS = ['node-label', 'node-font', 'node-font-size', 'node-bold', 'node-italic', 'node-font-color',
-                     'node-font-color-clear', 'node-tile-color', 'node-tile-color-clear', 'node-thumbnail',
+                     'node-font-color-clear', 'node-tile-color', 'node-tile-color-clear', 'node-highlight-color',
+                     'node-highlight-color-clear', 'node-thumbnail', 'node-postage-stamp-frame',
                      'node-hide-input', 'node-cached', 'node-disable', 'node-dope-sheet', 'node-bookmark',
                      'node-use-lifetime', 'node-lifetime-start', 'node-lifetime-end']
 
@@ -57,7 +58,8 @@ class DocumentTests(unittest.TestCase):
 
     def test_bad_values_are_refused(self):
         for name, value in (('font', 'Comic'), ('font_size', 2), ('font_size', 1.5), ('bold', 1),
-                            ('tile_color', 'red'), ('lifetime_start', True), ('nope', 1)):
+                            ('tile_color', 'red'), ('lifetime_start', True), ('nope', 1),
+                            ('highlight_color', 'blue'), ('postage_stamp_frame', 2.5)):
             with self.assertRaises(ValueError, msg=name):
                 self.d.execute({'op': 'node_tab', 'id': 'g', 'name': name, 'value': value})
 
@@ -88,6 +90,49 @@ class DocumentTests(unittest.TestCase):
         self.d.execute(inner)
         self.d.execute({'op': 'node_tab', 'id': 'i', 'name': 'cached', 'value': True, 'path': ['h']})
         self.assertEqual(self.d.document['nodes']['h']['graph']['nodes']['i']['tab'], {'cached': True})
+
+
+    def test_highlight_colour_and_static_frame_store_undo_and_clear(self):
+        self.d.execute({'op': 'node_tab', 'id': 'g', 'name': 'highlight_color', 'value': '#FFAA00'})
+        self.d.execute({'op': 'node_tab', 'id': 'g', 'name': 'postage_stamp_frame', 'value': 12})
+        self.assertEqual(self.tab(), {'highlight_color': '#ffaa00', 'postage_stamp_frame': 12})
+        self.d.execute({'op': 'undo'})
+        self.assertEqual(self.tab(), {'highlight_color': '#ffaa00'})
+        self.d.execute({'op': 'node_tab', 'id': 'g', 'name': 'highlight_color', 'value': ''})
+        self.assertNotIn('tab', self.d.document['nodes']['g'])
+
+
+class ListTests(unittest.TestCase):
+    def setUp(self):
+        self.d = Dispatcher()
+        for key, kind in (('b', 'Blur'), ('a', 'Grade'), ('r', 'Read'), ('c', 'Grade')):
+            self.d.execute({'op': 'create', 'id': key, 'type': kind, 'pos': [0, 0]})
+
+    @property
+    def nodes(self):
+        return self.d.document['nodes']
+
+    def test_the_bookmark_list_holds_the_flagged_nodes_by_name(self):
+        self.assertEqual(bookmarked_nodes(self.nodes), [])
+        for key in ('b', 'c'):
+            self.d.execute({'op': 'node_tab', 'id': key, 'name': 'bookmark', 'value': True})
+        self.assertEqual([key for key, _name in bookmarked_nodes(self.nodes)],
+                         sorted(('b', 'c'), key=lambda k: self.nodes[k]['name'].lower()))
+        self.d.execute({'op': 'node_tab', 'id': 'b', 'name': 'bookmark', 'value': False})
+        self.assertEqual([key for key, _name in bookmarked_nodes(self.nodes)], ['c'])
+
+    def test_the_dope_sheet_rows_follow_nukes_rule(self):
+        curves = {'a': {'gain': {'interpolation': 'linear',
+                                 'keys': [{'frame': 5, 'value': 1.0}, {'frame': 9, 'value': 2.0}]},
+                        'offset': {'interpolation': 'linear', 'keys': [{'frame': 7, 'value': 0.0}]}}}
+        self.assertEqual(dope_sheet_rows(self.nodes, curves), [('a', self.nodes['a']['name'], [5, 7, 9])])
+        self.d.execute({'op': 'node_tab', 'id': 'c', 'name': 'dope_sheet', 'value': True})
+        rows = {key: frames for key, _name, frames in dope_sheet_rows(self.nodes, curves)}
+        self.assertEqual(rows, {'a': [5, 7, 9], 'c': []})
+        # A Read with its panel open is listed without keys; a Read with no panel open is not.
+        self.assertNotIn('r', {key for key, _n, _f in dope_sheet_rows(self.nodes, curves)})
+        self.assertEqual(dict((k, f) for k, _n, f in dope_sheet_rows(self.nodes, curves, {'r', 'b'}))['r'], [])
+        self.assertNotIn('b', {key for key, _n, _f in dope_sheet_rows(self.nodes, curves, {'r', 'b'})})
 
 
 class LifetimeTests(unittest.TestCase):
@@ -276,6 +321,102 @@ class PanelTests(unittest.TestCase):
         panel = self.open_panel()
         panel.findChild(QToolButton, 'node-tile-color-clear').click()
         self.assertTrue(wait_until(lambda: 'tile_color' not in self.node()['tab']))
+
+    def test_highlight_colour_and_static_frame_controls_set_their_fields(self):
+        panel = self.open_panel()
+        with unittest.mock.patch('nodebased.app.QColorDialog.getColor', return_value=QColor('#ffaa00')):
+            panel.findChild(QPushButton, 'node-highlight-color').click()
+        self.assertTrue(wait_until(lambda: self.node().get('tab', {}).get('highlight_color') == '#ffaa00'))
+        panel = self.open_panel()
+        spin = panel.findChild(QSpinBox, 'node-postage-stamp-frame')
+        spin.setValue(7)
+        spin.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: self.node()['tab'].get('postage_stamp_frame') == 7))
+        panel = self.open_panel()
+        panel.findChild(QToolButton, 'node-highlight-color-clear').click()
+        self.assertTrue(wait_until(lambda: 'highlight_color' not in self.node()['tab']))
+
+    def test_roto_outlines_wear_the_highlight_colour(self):
+        self.assertEqual(Viewer.roto_handle_colour({'tab': {}}), '#58d7ff')
+        self.assertEqual(Viewer.roto_handle_colour({'tab': {'highlight_color': '#ffaa00'}}), '#ffaa00')
+
+    def test_a_cached_node_draws_the_yellow_line_and_an_uncached_one_does_not(self):
+        w = self.window
+        item = w.graph.items_by_id['grade']
+        self.assertFalse(item.cached)
+        w.command({'op': 'node_tab', 'id': 'grade', 'name': 'cached', 'value': True})
+        self.assertTrue(wait_until(lambda: w.graph.items_by_id['grade'].cached))
+        item = w.graph.items_by_id['grade']
+        image = QImage(int(item.rect().width()) + 8, int(item.rect().height()) + 8, QImage.Format.Format_ARGB32)
+        image.fill(0)
+        painter = QPainter(image)
+        painter.translate(4, 4)
+        item.paint(painter, QStyleOptionGraphicsItem())
+        painter.end()
+        yellow = QColor(CACHED_LINE_COLOR)
+        y = int(item.rect().bottom() - 3) + 4
+        self.assertEqual(QColor(image.pixel(int(item.rect().center().x()) + 4, y)).rgb(), yellow.rgb())
+
+    def test_the_static_frame_pins_the_stamp_to_one_frame(self):
+        w = self.window
+        w.show_thumbnails = True
+        w.thumbnails_closed = False
+        w.playing = False
+        w.busy = False
+        w.thumbnails.clear()
+        w.command({'op': 'node_tab', 'id': 'grade', 'name': 'postage_stamp_frame', 'value': 3})
+        w.command({'op': 'thumbnail', 'id': 'grade', 'value': True})
+        frames = []
+        real = w.evaluator.evaluate
+
+        def spy(document, key, **kwargs):
+            if key == 'grade':
+                frames.append(kwargs.get('frame'))
+            return real(document, key, **kwargs)
+        w.evaluator.evaluate = spy
+        try:
+            w.schedule_thumbnails()
+            self.assertTrue(wait_until(lambda: frames))
+        finally:
+            w.evaluator.evaluate = real
+        self.assertEqual(set(frames), {min(max(3, w.dispatcher.document['time']['first']),
+                                           w.dispatcher.document['time']['last'])})
+
+    def test_the_bookmark_list_navigates_to_the_node(self):
+        w = self.window
+        w.bookmark_dock.show()
+        w.command({'op': 'node_tab', 'id': 'grade', 'name': 'bookmark', 'value': True})
+        panel = w.bookmark_panel
+        self.assertTrue(wait_until(lambda: panel.list.count() == 1))
+        self.assertEqual(panel.list.item(0).data(Qt.ItemDataRole.UserRole), 'grade')
+        w.graph.scene().clearSelection()
+        panel.list.itemClicked.emit(panel.list.item(0))
+        self.assertEqual(w.graph.selected_id(), 'grade')
+        w.command({'op': 'node_tab', 'id': 'grade', 'name': 'bookmark', 'value': False})
+        self.assertTrue(wait_until(lambda: panel.list.count() == 0))
+
+    def test_the_dope_sheet_lists_keyed_and_flagged_nodes_and_moves_the_playhead(self):
+        w = self.window
+        w.dope_sheet_dock.show()
+        sheet = w.dope_sheet
+        first = w.dispatcher.document['time']['first']
+        w.command({'op': 'set_key', 'id': 'grade', 'param': 'multiply', 'frame': first + 2, 'value': 1.5})
+        self.assertTrue(wait_until(lambda: any(row[0] == 'grade' and (first + 2) in row[2] for row in sheet.rows)))
+        row = next(i for i, r in enumerate(sheet.rows) if r[0] == 'grade')
+        self.assertEqual([frame for frame, _point in sheet.key_points(row)], [first + 2])
+        # Alt+D lists a node that has no keys.
+        w.graph.scene().clearSelection()
+        w.graph.items_by_id['plate'].setSelected(True)
+        w.toggle_dope_sheet_flag()
+        self.assertTrue(wait_until(lambda: any(r[0] == 'plate' and not r[2] for r in sheet.rows)))
+        self.assertTrue(w.graph_nodes()['plate']['tab']['dope_sheet'])
+        w.toggle_dope_sheet_flag()
+        self.assertTrue(wait_until(lambda: 'tab' not in w.graph_nodes()['plate']))
+        # A click in the time area moves the playhead.
+        sheet.resize(600, 200)
+        target = first + 4
+        sheet.frame_chosen.emit(sheet.frame_at(sheet.frame_x(target)))
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['time']['current'] == target))
 
     def test_the_graph_item_reflects_tile_colour_and_hidden_input(self):
         w = self.window

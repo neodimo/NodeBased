@@ -39,7 +39,7 @@ from . import __version__
 from .updater import Updater
 from .core import _downstream_of
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
-                   MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail, node_tab_pixels, node_tab_value, NODE_TAB_DEFAULTS, NODE_TAB_FONTS, NODE_TAB_FONT_SIZE, NODE_TAB_FRAME,
+                   MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail, node_tab_pixels, node_tab_value, bookmarked_nodes, dope_sheet_rows, NODE_TAB_DEFAULTS, NODE_TAB_FONTS, NODE_TAB_FONT_SIZE, NODE_TAB_FRAME,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import projectsettings as _projectsettings
@@ -112,6 +112,7 @@ CLOCK_RAMP_TIER = 2
 from .raster import Raster
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
+from .nodelists import BookmarkPanel, DopeSheet
 from .timeline import (PLAY_ICON, STEP_BACK_ICON, STEP_FORWARD_ICON, STOP_ICON, TimelineBar, TimeRow, KEY_COLOR,
                        transport_icon, UNIT_CONTROL, START_ICON, END_ICON, PREV_KEY_ICON, NEXT_KEY_ICON, STEP_BACK_ONE_ICON,
                        STEP_FORWARD_ONE_ICON, PLAY_BACK_ICON, LOOP_ICONS, LOOP_MODES, LOOP_LABELS, playhead_at)
@@ -2114,6 +2115,11 @@ class Viewer(PanZoomView):
         if not self._handling_mouse_move:
             self._hide_pixel_readout()
         super().leaveEvent(event)
+
+    @staticmethod
+    def roto_handle_colour(node):
+        """The Roto outline colour in the Viewer: the node's Node-tab highlight colour, else the stock cyan."""
+        return node_tab_value(node, "highlight_color") or "#58d7ff"
 
     def _roto_context(self):
         """Return the selected Roto payload and display scale when it is safe to edit it.
@@ -4290,7 +4296,7 @@ class Viewer(PanZoomView):
                                   for point in context[2].get("shapes", [])[shape_index]["points"]
                                   for value in point.values())
                 color = ("#9de7ff" if is_keyed else "#b08cff" if is_animated else
-                         "#ff986f" if shape["mode"] == "subtract" else "#58d7ff")
+                         "#ff986f" if shape["mode"] == "subtract" else self.roto_handle_colour(context[1]))
                 pen = QPen(QColor(color), max(2.0, shape.get("stroke_width", 1.0) / tier) if not closed else 2)
                 if not closed:
                     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -5296,6 +5302,7 @@ class NodeItem(QGraphicsRectItem):
         self.accent = QColor(TOKENS["acc"] if node["type"] == "Viewer" else FAMILY_COLORS[self.family])
         if node_tab_value(node, "tile_color"):   # the Node tab's tile colour replaces the family colour
             self.accent = QColor(node_tab_value(node, "tile_color"))
+        self.cached = bool(node_tab_value(node, "cached"))   # Nuke draws a yellow line under a cached node
         self.setBrush(graphlook.mix(QColor(graphlook.BODY_DARK), self.accent, 0.10))
         self.setPen(QPen(graphlook.mix(self.accent, QColor("#000000"), 0.15), NODE_OUTLINE))
         self.disabled = bool(node.get("disabled", False))
@@ -5683,6 +5690,13 @@ class NodeItem(QGraphicsRectItem):
             return
         if not self.is_dot:
             self.paint_family_body(painter, option, widget)
+            if self.cached:
+                painter.save()
+                painter.setPen(QPen(QColor(CACHED_LINE_COLOR), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                bottom = self.rect().bottom() - 3
+                painter.drawLine(QPointF(self.rect().left() + NODE_RADIUS, bottom),
+                                 QPointF(self.rect().right() - NODE_RADIUS, bottom))
+                painter.restore()
             if self.wire_lit:
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -6815,6 +6829,7 @@ WIRE_SELECTED_COLOR = "#ffb454"   # a clicked wire: the warm accent no node fami
 # need press/release bookkeeping and would clash with typing into a focused field.
 KNIFE_MODIFIERS = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
 WIRE_CUT_COLOR = "#ff5d5d"        # a wire the knife line crosses
+CACHED_LINE_COLOR = "#f2c94c"   # the yellow line under a node whose Node tab has Cached on
 CUT_HANDLE_RADIUS = 10  # screen pixels: the hovered wire's "x" handle at its midpoint
 WIRE_PICK = 6        # screen pixels either side of a wire's path that still count as pointing at it
 DISCONNECT_DRAG = 6  # screen pixels a picked-up input wire must travel before an empty-space release disconnects it
@@ -9417,6 +9432,34 @@ class Window(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.curve_editor_dock)
         self.tabifyDockWidget(self.properties_dock, self.curve_editor_dock)
         self.curve_editor_dock.hide()
+        # The Node tab's two list boxes: Bookmark feeds the bookmark list, Dope sheet feeds the Dope Sheet.
+        features = (QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                    QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                    QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.bookmark_panel = BookmarkPanel(self)
+        self.bookmark_dock = QDockWidget("BOOKMARKS", self)
+        self.bookmark_dock.setObjectName("bookmark-dock")
+        self.bookmark_dock.setMinimumWidth(0)
+        self.bookmark_dock.setFeatures(features)
+        self.bookmark_dock.setWidget(self.bookmark_panel)
+        self.dope_sheet = DopeSheet(self)
+        self.dope_sheet.frame_chosen.connect(lambda frame: self.set_time(current=frame))
+        self.dope_sheet_dock = QDockWidget("DOPE SHEET", self)
+        self.dope_sheet_dock.setObjectName("dope-sheet-dock")
+        self.dope_sheet_dock.setMinimumWidth(0)
+        self.dope_sheet_dock.setFeatures(features)
+        dope_scroll = QScrollArea()
+        dope_scroll.setWidgetResizable(True)
+        dope_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        dope_scroll.setWidget(self.dope_sheet)
+        self.dope_sheet_dock.setWidget(dope_scroll)
+        for dock in (self.bookmark_dock, self.dope_sheet_dock):
+            self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
+            self.tabifyDockWidget(self.properties_dock, dock)
+            dock.hide()
+            dock.visibilityChanged.connect(lambda _shown: self.refresh_node_lists())
+        self.dope_sheet_shortcut = QShortcut(QKeySequence("Alt+D"), self)
+        self.dope_sheet_shortcut.activated.connect(self.toggle_dope_sheet_flag)
         self.queue_dock = QDockWidget("CONDITIONING QUEUE", self)
         self.queue_dock.setObjectName("conditioning-queue-dock")
         self.queue_dock.setMinimumWidth(0)
@@ -9469,6 +9512,7 @@ class Window(QMainWindow):
         self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
                                 self.nodes_dock, self.slice_dock,
                                 self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock,
+                                self.bookmark_dock, self.dope_sheet_dock,
                                 self.queue_dock, self.output_preview_dock, self.direct_dock]
         # QMainWindow otherwise divides a new, three-dock left column almost evenly, leaving
         # the viewer's actual canvas shorter than its controls and timeline.  Give the shared
@@ -9883,6 +9927,34 @@ class Window(QMainWindow):
         self.frame_slider.set_marks(cached, keyed, labels)
         bake = getattr(self, "_fluid_edit_bake", None)
         self.frame_slider.set_simulation_frames(() if bake is None else bake["baked"])
+        self.refresh_node_lists()
+
+    def refresh_node_lists(self):
+        """Bring the bookmark list and the Dope Sheet up to date (only the ones on screen)."""
+        for dock, panel in ((getattr(self, "bookmark_dock", None), getattr(self, "bookmark_panel", None)),
+                            (getattr(self, "dope_sheet_dock", None), getattr(self, "dope_sheet", None))):
+            if dock is not None and panel is not None and not dock.isHidden() and getattr(self, "graph", None) is not None:
+                panel.refresh()
+
+    def show_node(self, key):
+        """Select a node and frame it in the Node Graph (a bookmark or a Dope Sheet name was chosen)."""
+        item = self.graph.items_by_id.get(key)
+        if item is None:
+            return
+        self.graph.scene().clearSelection()
+        item.setSelected(True)
+        self.graph.frame_nodes([key])
+
+    def toggle_dope_sheet_flag(self):
+        """Alt+D: turn the Node tab's Dope sheet box on for the selected nodes (off when all have it on)."""
+        keys = self.graph.selected_ids()
+        if not keys:
+            return
+        nodes = self.graph_nodes()
+        value = not all(node_tab_value(nodes[key], "dope_sheet") for key in keys)
+        self.command({"op": "batch", "commands": [
+            {"op": "node_tab", "id": key, "name": "dope_sheet", "value": value} for key in keys]}
+            if len(keys) > 1 else {"op": "node_tab", "id": keys[0], "name": "dope_sheet", "value": value})
 
     def apply_fps_preset(self, index):
         rate = self.fps_presets.itemData(index)
@@ -12068,6 +12140,7 @@ class Window(QMainWindow):
 
         colour_row("font_color", "Font colour", "Colour of the label on the graph node")
         colour_row("tile_color", "Tile colour", "Colour of the node on the graph")
+        colour_row("highlight_color", "Highlight colour", "Colour of this node's controls in the Viewer")
         stamp = QCheckBox("Postage stamp (thumbnail)")
         stamp.setObjectName("node-thumbnail")
         stamp.setChecked(node_thumbnail(node))
@@ -12081,6 +12154,15 @@ class Window(QMainWindow):
         stamp.toggled.connect(lambda value, k=key: self.defer_command(
             {"op": "thumbnail", "id": k, "value": value}))
         form.addRow(stamp)
+        static = QSpinBox()
+        static.setObjectName("node-postage-stamp-frame")
+        static.setRange(*NODE_TAB_FRAME)
+        static.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        static.setValue(node_tab_value(node, "postage_stamp_frame"))
+        static.setToolTip("Static frame: the postage stamp shows this frame instead of the current one "
+                          "(clamped to the timeline's range). 0 follows the playhead.")
+        static.editingFinished.connect(lambda w=static: send("postage_stamp_frame", w.value()))
+        form.addRow("Static frame", static)
         for name, text, tip in (
                 ("hide_input", "Hide input", "The graph draws no wire into this node; the connection stays"),
                 ("cached", "Cached", "Keep this node's result in the cache while it is current")):
@@ -17262,13 +17344,17 @@ class Window(QMainWindow):
         frame = document["time"]["current"]
         view = self.display_view.currentText()
         wanted = []
+        first, last = document["time"]["first"], document["time"]["last"]
         for key, node in document["nodes"].items():
             if not wants_thumbnail(node):
                 continue
-            identity = thumbnail_key(document, key, frame, view)
+            # The Node tab's static frame pins the stamp to one frame, clamped to the timeline's range.
+            static = node_tab_value(node, "postage_stamp_frame")
+            node_frame = min(max(static, first), last) if static else frame
+            identity = thumbnail_key(document, key, node_frame, view)
             cached = self.thumbnails.get(key)
             if cached is None or cached[0] != identity:
-                wanted.append((key, identity))
+                wanted.append((key, identity, node_frame))
         for key in list(self.thumbnails):
             if key not in document["nodes"]:
                 del self.thumbnails[key]
@@ -17279,12 +17365,12 @@ class Window(QMainWindow):
         tier = max(PROXY_TIERS)
 
         def work():
-            for key, identity in wanted:
+            for key, identity, node_frame in wanted:
                 if cancel.is_set():
                     return
                 try:
                     pixels = self.evaluator.evaluate(document, key, cancel=cancel,
-                                                     frame=frame, tier=tier)
+                                                     frame=node_frame, tier=tier)
                 except Cancelled:
                     return
                 except Exception:

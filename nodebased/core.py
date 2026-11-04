@@ -168,7 +168,8 @@ OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph", "input_outputs", "tab"}
 NODE_TAB_FONTS = ("Default", "Sans Serif", "Serif", "Monospace")
 NODE_TAB_DEFAULTS = {
     "font": "Default", "font_size": 11, "bold": False, "italic": False, "font_color": "",
-    "tile_color": "", "hide_input": False, "cached": False,
+    "tile_color": "", "highlight_color": "", "hide_input": False, "cached": False,
+    "postage_stamp_frame": 0,
     "use_lifetime": False, "lifetime_start": 1, "lifetime_end": 100,
     "bookmark": False, "dope_sheet": False,
 }
@@ -194,7 +195,7 @@ def check_node_tab_value(name, value):
     if name == "font":
         if value not in NODE_TAB_FONTS:
             raise ValueError(f"font must be one of {', '.join(NODE_TAB_FONTS)}")
-    elif name in ("font_color", "tile_color"):
+    elif name in ("font_color", "tile_color", "highlight_color"):
         if not isinstance(value, str) or (value and not re.fullmatch(r"#[0-9a-fA-F]{6}", value)):
             raise ValueError(f"{name} must be empty or a #rrggbb colour")
     elif isinstance(default, bool):
@@ -206,7 +207,26 @@ def check_node_tab_value(name, value):
         low, high = NODE_TAB_FONT_SIZE if name == "font_size" else NODE_TAB_FRAME
         if not low <= value <= high:
             raise ValueError(f"{name} must be between {low} and {high}")
-    return value.lower() if name in ("font_color", "tile_color") else value
+    return value.lower() if name in ("font_color", "tile_color", "highlight_color") else value
+
+
+def bookmarked_nodes(nodes):
+    """The Node tab's bookmark list: (key, name) of every bookmarked node, ordered by name."""
+    found = [(key, node["name"]) for key, node in nodes.items() if node_tab_value(node, "bookmark")]
+    return sorted(found, key=lambda item: (item[1].lower(), item[0]))
+
+
+def dope_sheet_rows(nodes, curves, open_keys=()):
+    """The Dope Sheet's rows, as Nuke fills it: every node whose Node tab has "dope sheet" on, every
+    node with keyframes, and every Read whose panel is open. Each row is (key, name, frames), frames
+    being the sorted frames of all the node's keys (empty for a row with none), ordered by name."""
+    rows = []
+    for key, node in nodes.items():
+        keyed = sorted({k["frame"] for curve in (curves.get(key) or {}).values() for k in curve["keys"]})
+        if (keyed or node_tab_value(node, "dope_sheet")
+                or (node["type"] == "Read" and key in open_keys)):
+            rows.append((key, node["name"], keyed))
+    return sorted(rows, key=lambda row: (row[1].lower(), row[0]))
 
 
 def apply_lifetime(doc, frame):
