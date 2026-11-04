@@ -363,7 +363,8 @@ def read_exr_layers(source, spec, subimage, data, display, pixels=None):
             for name, channels in groups.items()}
 
 
-def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0, auto_alpha=True):
+def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0, auto_alpha=True,
+                      noprefix=False, edge_pixels='black', offset_negative_display_window=False):
     """Decode into a `Raster`, preserving the file's data window even when it exceeds the frame.
 
     OpenEXR stores `dataWindow` and `displayWindow` separately precisely so a render can carry
@@ -473,7 +474,26 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         # Both windows in display-window-relative coordinates: the display window is rebased to
         # (0, 0) and the data window keeps its offset, which may be negative or reach past w/h.
         display = Region(0, 0, w, h)
-        data = Region(spec.x - spec.full_x, spec.y - spec.full_y, spec.width, spec.height)
+        shift_x = max(0, -spec.full_x) if offset_negative_display_window else 0
+        shift_y = max(0, -spec.full_y) if offset_negative_display_window else 0
+        data = Region(spec.x - spec.full_x + shift_x, spec.y - spec.full_y + shift_y, spec.width, spec.height)
+        # Nuke's EXR edge-pixel policies fill only the parts of the display window whose
+        # edges are selected. The default legacy policy leaves the bbox black beyond data.
+        contained_data = (data.x >= 0 and data.y >= 0 and data.x + data.width <= w and data.y + data.height <= h)
+        if ext == '.exr' and edge_pixels != 'black' and contained_data and data != display:
+            repeat_left = edge_pixels == 'repeat' or (edge_pixels == 'edge detect' and data.x == 0)
+            repeat_right = edge_pixels == 'repeat' or (edge_pixels == 'edge detect' and data.x + data.width == w)
+            repeat_top = edge_pixels == 'repeat' or (edge_pixels == 'edge detect' and data.y == 0)
+            repeat_bottom = edge_pixels == 'repeat' or (edge_pixels == 'edge detect' and data.y + data.height == h)
+            if edge_pixels == 'plate detect' and data == display:
+                repeat_left = repeat_right = repeat_top = repeat_bottom = True
+            yy = np.arange(h, dtype=np.int32) - data.y
+            xx = np.arange(w, dtype=np.int32) - data.x
+            valid_y = ((yy >= 0) & (yy < data.height)) | ((yy < 0) & repeat_top) | ((yy >= data.height) & repeat_bottom)
+            valid_x = ((xx >= 0) & (xx < data.width)) | ((xx < 0) & repeat_left) | ((xx >= data.width) & repeat_right)
+            filled = rgba[np.clip(yy, 0, data.height - 1)[:, None], np.clip(xx, 0, data.width - 1)[None, :]].copy()
+            filled[~(valid_y[:, None] & valid_x[None, :])] = 0.0
+            rgba, data = filled, display
         # Respect standard raster orientation metadata. EXR camera-space conventions
         # stay explicit; do not reinterpret EXR coordinate systems here.
         orientation = spec.get_int_attribute('Orientation', 1) if ext != '.exr' else 1
@@ -495,7 +515,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         if ext == '.exr':
             from .metadata import header_entry
             meta = dict(entry for a in spec.extra_attribs
-                        if (entry := header_entry(a.name, a.value)) is not None) or None
+                        if (entry := header_entry(a.name, a.value, noprefix=noprefix)) is not None) or None
         raster = Raster(np.ascontiguousarray(rgba), data, display, layers, meta)
         # Uploading the original half words is exact only when decoding neither changes colour
         # nor unpremultiplies a partial-alpha image. Keep the optional compact copy on the decode

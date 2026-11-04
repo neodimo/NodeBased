@@ -26,7 +26,7 @@ EXR_TIMECODE_ATTRIBUTE = "smpte:TimeCode"   # OpenEXR's own timecode attribute: 
 _SUBSTITUTION = re.compile(r"\[\s*(frame|metadata)(?:\s+([^\]]*?))?\s*\]")
 
 
-def header_entry(name, value):
+def header_entry(name, value, noprefix=False):
     """`(key, string value)` for an EXR header attribute, or None when it is not metadata."""
     if name == EXR_TIMECODE_ATTRIBUTE:
         try:
@@ -35,7 +35,7 @@ def header_entry(name, value):
             return None
     if name in STRUCTURAL_ATTRIBUTES or ":" in name:
         return None
-    return (name if "/" in name else "exr/" + name), str(value)
+    return (name if "/" in name or noprefix else "exr/" + name), str(value)
 
 
 def key_to_header(key):

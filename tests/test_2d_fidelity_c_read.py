@@ -50,10 +50,11 @@ class SequenceCase(unittest.TestCase):
 
 class DefaultsTests(SequenceCase):
     def test_the_specs_carry_the_defaults(self):
-        # A new Read starts where Nuke's does (auto alpha off); a saved Read without the knob keeps readknobs.DEFAULTS.
+        # A new Read starts with Nuke's format-option defaults; old documents use the legacy defaults.
         for key, default in {**readknobs.DEFAULTS, **readknobs.NEW_NODE_DEFAULTS}.items():
             self.assertEqual(SPECS["Read"]["params"][key], default)
-        self.assertFalse(readknobs.active(SPECS["Read"]["params"]))
+        self.assertFalse(readknobs.active(readknobs.DEFAULTS))
+        self.assertTrue(readknobs.active(SPECS["Read"]["params"]))
 
     def test_default_knobs_read_exactly_what_read_always_read(self):
         for frame in (1, 3, 5):

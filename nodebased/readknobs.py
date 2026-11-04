@@ -27,10 +27,20 @@ DEFAULTS = {"read_format": "file", "first": 0, "last": 0, "before": "hold", "aft
             # Fidelity step F: localization (nodebased/localize.py), the reload counter, the proxy (nodebased/readproxy.py) and
             # the context variables (nodebased/pathcontext.py).
             "localizationPolicy": "from auto-localize path", "reload": 0, "proxy": "", "proxy_format": "file", **pathcontext.PARAMS}
+# Format-specific knobs are kept alongside the legacy defaults so old documents gain inert values.
+FORMAT_DEFAULTS = {"offset_negative_display_window": False, "noprefix": False, "edge_pixels": "black",
+                   "mov64_ycbcr_matrix": "", "mov64_decode_video_levels": "default",
+                   "mov64_first_track_only": True, "mov64_no_prefix": False, "mov64_match_meta_format": True,
+                   "mov64_codec_name": "", "breakout": ""}
+UNSUPPORTED_FORMAT_KNOBS = ("mov64_ycbcr_matrix", "mov64_decode_video_levels", "mov64_first_track_only",
+                            "mov64_no_prefix", "mov64_match_meta_format", "mov64_codec_name", "breakout")
+DEFAULTS.update(FORMAT_DEFAULTS)
+FORMAT_TABS = {".exr": "EXR Options", ".mov": "MOV Options", ".mp4": "MOV Options",
+               ".m4v": "MOV Options", ".psd": "PSD Options"}
 KEYS = tuple(DEFAULTS)
 # What a NEW Read starts with where Nuke's default differs from the Read of before. `DEFAULTS` stays the value a saved Read that
 # lacks the knob reads with (the legacy behaviour), so old documents render exactly as they did.
-NEW_NODE_DEFAULTS = {"auto_alpha": 0}
+NEW_NODE_DEFAULTS = {"auto_alpha": 0, "offset_negative_display_window": True, "edge_pixels": "plate detect"}
 # Knobs that change the pixels but not which part of the file is decoded: a partial-region read honours them itself.
 REGION_SAFE = ("auto_alpha",)
 RANGE_BEHAVIOURS = ("hold", "loop", "bounce", "black")
@@ -62,6 +72,11 @@ def import_sequence(path):
 def extras(params):
     """The Nuke Read knobs present in `params`, with defaults for any that are missing."""
     return {key: params.get(key, DEFAULTS[key]) for key in KEYS}
+
+
+def options_tab(path):
+    """Format options follow the filename extension, like Nuke's Read panel."""
+    return FORMAT_TABS.get(Path(str(path or "")).suffix.lower())
 
 
 def active(params):

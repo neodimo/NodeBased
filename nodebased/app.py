@@ -12531,6 +12531,8 @@ class Window(QMainWindow):
                     return
                 if param in CHOICES:
                     control = ElidingComboBox()
+                    if node["type"] == "Read" and param in readknobs.FORMAT_DEFAULTS:
+                        control.setObjectName(f"{param}-choice")
                     control.addItems(CHOICES[param])
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
@@ -12559,6 +12561,9 @@ class Window(QMainWindow):
                 elif isinstance(value, str):
                     control = QLineEdit(value)
                     control.setObjectName(f"{param}-field")
+                    if node["type"] == "Read" and param in readknobs.UNSUPPORTED_FORMAT_KNOBS:
+                        control.setReadOnly(True)
+                        control.setToolTip("Unavailable: this installation has no reader for this file format")
                     if kind in ("file_read", "file_write") or param.endswith("path"):
                         control.setProperty("knob_path", True)
                     control.editingFinished.connect(
@@ -12707,6 +12712,14 @@ class Window(QMainWindow):
 
             write_hidden = writenode.hidden_params(node["params"]) if node["type"] == "Write" else ()
             for group in knob_layout(node["type"]):
+                if node["type"] == "Read" and group.params and group.params[0] in readknobs.FORMAT_DEFAULTS:
+                    if readknobs.options_tab(node["params"].get("path", "")) != {
+                            "offset_negative_display_window": "EXR Options", "noprefix": "EXR Options",
+                            "edge_pixels": "EXR Options", "mov64_ycbcr_matrix": "MOV Options",
+                            "mov64_decode_video_levels": "MOV Options", "mov64_first_track_only": "MOV Options",
+                            "mov64_no_prefix": "MOV Options", "mov64_match_meta_format": "MOV Options",
+                            "mov64_codec_name": "MOV Options", "breakout": "PSD Options"}[group.params[0]]:
+                        continue
                 if node["type"] == "Read" and group.params == ("reload",):
                     continue
                 if node["type"] == "Read" and group.params == ("frame_offset",) and int(node["params"].get("frame_offset", 0)) == 0:
@@ -12979,6 +12992,9 @@ class Window(QMainWindow):
                     control.setChecked(bool(value))
                     control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
                         {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
+                    if node["type"] == "Read" and param in readknobs.UNSUPPORTED_FORMAT_KNOBS:
+                        control.setEnabled(False)
+                        control.setToolTip("Unavailable: this installation has no reader for this file format")
                     form.addRow(group.label, control)
                 elif group.kind in ("enum",):
                     add_legacy_param(param, value, group.kind, label=group.label)
@@ -14016,8 +14032,12 @@ class Window(QMainWindow):
             if node["type"] == "Read":
                 tabs.addTab(top_aligned(content), "Read")
                 read_tabs = {name: QFormLayout() for name in ("Context", "Sequence", "Metadata")}
+                format_tabs = {name: QFormLayout() for name in ("EXR Options", "MOV Options", "PSD Options")}
                 for target_form in read_tabs.values():
                     target_form.setContentsMargins(8, 8, 8, 8)
+                for target_form in format_tabs.values():
+                    target_form.setContentsMargins(8, 8, 8, 8)
+                active_format_tab = readknobs.options_tab(node["params"].get("path", ""))
                 for row_index in reversed(range(form.rowCount())):
                     field_item = form.itemAt(row_index, QFormLayout.ItemRole.FieldRole)
                     label_item = form.itemAt(row_index, QFormLayout.ItemRole.LabelRole)
@@ -14025,6 +14045,16 @@ class Window(QMainWindow):
                     names = ({w.objectName() for w in field_widget.findChildren(QWidget)} | {field_widget.objectName()}) if field_widget else set()
                     label_text = label_item.widget().text() if label_item and label_item.widget() and isinstance(label_item.widget(), QLabel) else ""
                     destination = None
+                    option_name = next((name for name in readknobs.FORMAT_DEFAULTS
+                                        if any(widget_name.startswith(name + "-") for widget_name in names)), None)
+                    if option_name:
+                        tab = {"offset_negative_display_window": "EXR Options", "noprefix": "EXR Options",
+                               "edge_pixels": "EXR Options", "mov64_ycbcr_matrix": "MOV Options",
+                               "mov64_decode_video_levels": "MOV Options", "mov64_first_track_only": "MOV Options",
+                               "mov64_no_prefix": "MOV Options", "mov64_match_meta_format": "MOV Options",
+                               "mov64_codec_name": "MOV Options", "breakout": "PSD Options"}[option_name]
+                        if tab == active_format_tab:
+                            destination = tab
                     if any(any(name.startswith(prefix + "-") for prefix in ("key1", "value1", "key2", "value2", "key3", "value3", "key4", "value4")) for name in names):
                         destination = "Context"
                     elif names & {"read-import-sequence", "read-sequence-state"}:
@@ -14035,10 +14065,14 @@ class Window(QMainWindow):
                         taken = form.takeRow(row_index)
                         label = taken.labelItem.widget() if taken.labelItem else None
                         field = taken.fieldItem.widget() if taken.fieldItem else None
-                        read_tabs[destination].addRow(label, field) if label else read_tabs[destination].addRow(field)
+                        target = format_tabs[destination] if destination in format_tabs else read_tabs[destination]
+                        target.addRow(label, field) if label else target.addRow(field)
                 for name in ("Context", "Sequence", "Metadata"):
                     holder = QWidget(); holder.setLayout(read_tabs[name])
                     tabs.addTab(top_aligned(holder), name)
+                if active_format_tab:
+                    holder = QWidget(); holder.setLayout(format_tabs[active_format_tab])
+                    tabs.addTab(top_aligned(holder), active_format_tab)
             else:
                 tabs.addTab(top_aligned(content), "Knobs")
             user_knobs = node.get("user_knobs") or (self.graph_document().get("node_data", {}).get(key, {}).get("user_knobs", []))

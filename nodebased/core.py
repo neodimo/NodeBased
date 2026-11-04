@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -2463,6 +2463,7 @@ CHOICES["views"] = list(_WRITE_VIEWS)
 from . import localize as _localize
 CHOICES["localizationPolicy"] = list(_localize.POLICIES)
 CHOICES["proxy_format"] = ["file", *REFORMAT_FORMATS]
+CHOICES["edge_pixels"] = ["plate detect", "edge detect", "repeat", "black"]
 CHOICES["on_error"] = list(MISSING_FRAME_POLICIES)
 CHOICES["missing_frames"] = list(_precompnode.MISSING_FRAMES)
 LIMITS.update({"reload": (0, 2147483647), "reading": (0, 1), "render_order": (-1000000, 1000000),
@@ -2984,6 +2985,23 @@ def upgrade_document(document):
         # v28 -> v29 lets a splittable knob (SPLITTABLE) hold one value per channel. Nothing existing changes: a scalar is still
         # one number for every channel. The bump keeps an older NodeBased from loading a list it would misread.
         doc["version"] = 29
+    if isinstance(doc, dict) and doc.get("version") == 29:
+        # v29 -> v30 adds Read's format-specific options. Old Reads keep the pre-option pixels;
+        # only newly created Reads opt into Nuke's edge and negative-window defaults.
+        def _read_format_defaults(scope):
+            for node in scope.values():
+                if not isinstance(node, dict):
+                    continue
+                if node.get("type") == "Read":
+                    params = node.setdefault("params", {})
+                    for name, value in _READ_KNOB_DEFAULTS.items():
+                        params.setdefault(name, value)
+                graph = node.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _read_format_defaults(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _read_format_defaults(doc["nodes"])
+        doc["version"] = 30
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

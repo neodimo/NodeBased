@@ -96,7 +96,8 @@ class DefaultsTests(unittest.TestCase):
         self.assertEqual((write["reading"], write["on_error"], write["reload"], write["render_order"]), (0, "error", 0, 1))
         for name in pathcontext.PARAMS:
             self.assertEqual((read[name], write[name]), ("", ""))
-        self.assertFalse(readknobs.active(read))
+        self.assertFalse(readknobs.active(readknobs.DEFAULTS))
+        self.assertTrue(readknobs.active(read))
         self.assertFalse(writenode.active({**write, "channels": writenode.DEFAULTS["channels"]}))
 
     def test_an_old_read_and_write_load_with_the_defaults_and_read_the_same(self):

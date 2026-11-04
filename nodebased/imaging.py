@@ -271,7 +271,10 @@ def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subi
                       frame_offset=0, missing="error", frame=None, read_format="file", first=0, last=0, before="hold",
                       after="hold", frame_mode="expression", frame_expr="", origfirst=0, origlast=0, raw=0,
                       premultiplied=0, auto_alpha=1, localizationPolicy="from auto-localize path", reload=0, proxy="",
-                      proxy_format="file", **context):
+                      proxy_format="file", offset_negative_display_window=False, noprefix=False,
+                      edge_pixels="black", mov64_ycbcr_matrix="default", mov64_decode_video_levels="default",
+                      mov64_first_track_only=True, mov64_no_prefix=False, mov64_match_meta_format=True,
+                      mov64_codec_name="", breakout="", **context):
     """Read one timeline frame, data window intact. Read owns its source-time mapping — see
     docs/TIME_MODEL.md; it owns its bounding box the same way — see docs/BOUNDING_BOX.md.
 
@@ -305,7 +308,8 @@ def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subi
     # Localization (nodebased/localize.py): the pixels come from the local copy when the policy asks for one; the metadata below
     # still names the file the sequence points at.
     raster = read_media_raster(localize.localized(resolved, localizationPolicy), colorspace, alpha_mode, layer, subimage,
-                               auto_alpha=bool(auto_alpha))
+                               auto_alpha=bool(auto_alpha), noprefix=bool(noprefix), edge_pixels=edge_pixels,
+                               offset_negative_display_window=bool(offset_negative_display_window))
     # Where the pixels came from, in Nuke's key names. Every value follows from the resolved file
     # (input/frame only when that file is the one the sequence names for this frame), so the Read's
     # cache key, which fingerprints the resolved file, already covers the metadata.
