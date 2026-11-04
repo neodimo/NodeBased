@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 95.3 / 100** (167 nodes scored, rank-weighted; 97.6 counting only the nodes NodeBased has).
+**Overall fidelity: 95.3 / 100** (167 nodes scored, rank-weighted; 97.7 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.9 (98.2 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.9 (98.3 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.2 (98.5 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.2 (98.6 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -38,7 +38,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Draw | 93.0 | 85.8 | 93.5 | 17 |
 | Time | 99.4 | 96.7 | 99.2 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
-| Color | 96.9 | 86.8 | 96.7 | 34 |
+| Color | 97.4 | 90.8 | 97.1 | 34 |
 | Filter | 96.7 | 91.8 | 96.2 | 32 |
 | Keyer | 93.2 | 80.3 | 93.1 | 11 |
 | Merge | 99.7 | 99.3 | 99.7 | 12 |
@@ -48,7 +48,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 Behaviour checked: 95 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 393 of the 394 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 411 of the 412 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -135,11 +135,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 12 | HSVTool | `HSVTool` | partial | 96.8 | 94.8 | 89 (22/25) | 100 (14/14) | 100 | 100 | - | 100 (11/11) | 100 | - | unmeasured |
 | 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 14 | Colorspace | `Colorspace` | supported | 94.9 | 95.6 | 89 (8/9) | 100 (8/8) | 100 | 100 | 100 | 100 (21/21) | 75 | - | unmeasured |
-| 14 | OCIOColorspace | `OCIOColorspace` | supported | 73.7 | 75.0 | 100 (11/11) | - | 100 | 100 | 100 | 0 (0/3) | 100 | - | unmeasured |
-| 14 | OCIODisplay | `OCIODisplay` | supported | 64.4 | 64.0 | 92 (16/17) | - | 75 | 100 | - | 0 (0/5) | 95 | - | unmeasured |
-| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 70.8 | 73.3 | 100 (4/4) | - | 83 | 100 | 100 | 0 (0/2) | 89 | - | unmeasured |
-| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 73.7 | 75.0 | 100 (1/1) | - | 100 | 100 | 100 | 0 (0/2) | 100 | - | unmeasured |
-| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 72.8 | 75.0 | 100 (14/14) | - | 100 | 100 | 100 | 0 (0/3) | 92 | - | unmeasured |
+| 14 | OCIOColorspace | `OCIOColorspace` | supported | 100.0 | 100.0 | 100 (11/11) | 100 (3/3) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
+| 14 | OCIODisplay | `OCIODisplay` | supported | 95.0 | 93.4 | 92 (16/17) | 100 (8/8) | 75 | 100 | - | 100 (5/5) | 95 | - | unmeasured |
+| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 97.6 | 98.3 | 100 (4/4) | 100 (2/2) | 83 | 100 | 100 | 100 (2/2) | 89 | - | unmeasured |
+| 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 99.3 | 100.0 | 100 (14/14) | 100 (4/4) | 100 | 100 | 100 | 100 (3/3) | 92 | - | unmeasured |
 | 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 15 | PLogLin | `PLogLin` | supported | 97.1 | 96.7 | 100 (5/5) | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 16 | ColorTransfer | - | supported | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
@@ -819,21 +819,21 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `shuffle_from_the_second_input` | guide | pass | within tolerance | - |
 | `shuffle_mix_of_both_and_constants` | guide | pass | within tolerance | - |
 | `shuffle_second_output_layer` | guide | not scored: the second layer is a named layer and the 16 x 12 fixture holds only rgba (tests/test_2d_behaviour_keyer.py checks the layer and its routing) | - | - |
-| `ocio_colorspace_gain` | convention | error | - | - |
-| `ocio_colorspace_encode` | convention | error | - | - |
-| `ocio_colorspace_decode` | convention | error | - | - |
-| `ocio_logconvert_log_to_lin` | convention | error | - | - |
-| `ocio_logconvert_lin_to_log` | convention | error | - | - |
-| `ocio_look_off` | convention | error | - | - |
-| `ocio_look_on` | convention | error | - | - |
-| `ocio_look_invert` | convention | error | - | - |
-| `ocio_display_mon_plain` | convention | error | - | - |
-| `ocio_display_mon_bright` | convention | error | - | - |
-| `ocio_display_alt_plain` | convention | error | - | - |
-| `ocio_display_input_space` | convention | error | - | - |
-| `ocio_display_invert` | convention | error | - | - |
-| `ocio_file_forward` | convention | error | - | - |
-| `ocio_file_invert` | convention | error | - | - |
+| `ocio_colorspace_gain` | convention | pass | within tolerance | - |
+| `ocio_colorspace_encode` | convention | pass | within tolerance | - |
+| `ocio_colorspace_decode` | convention | pass | within tolerance | - |
+| `ocio_logconvert_log_to_lin` | convention | pass | within tolerance | - |
+| `ocio_logconvert_lin_to_log` | convention | pass | within tolerance | - |
+| `ocio_look_off` | convention | pass | within tolerance | - |
+| `ocio_look_on` | convention | pass | within tolerance | - |
+| `ocio_look_invert` | convention | pass | within tolerance | - |
+| `ocio_display_mon_plain` | convention | pass | within tolerance | - |
+| `ocio_display_mon_bright` | convention | pass | within tolerance | - |
+| `ocio_display_alt_plain` | convention | pass | within tolerance | - |
+| `ocio_display_input_space` | convention | pass | within tolerance | - |
+| `ocio_display_invert` | convention | pass | within tolerance | - |
+| `ocio_file_forward` | convention | pass | within tolerance | - |
+| `ocio_file_invert` | convention | pass | within tolerance | - |
 | `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
 | `blur_box_1` | convention | pass | within tolerance | - |
 | `blur_box_2` | convention | pass | within tolerance | - |
