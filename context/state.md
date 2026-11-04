@@ -1,5 +1,24 @@
 ## 2026-11-04 - Lane 9, step Q (Flare and Sparkles remaining controls)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (8:25 AM on 2026-11-04 PDT)
+
+`main` moved `d36cd6d4` -> `872c89cd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `872c89cd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0815.log`, started 8:15 AM): **Ran 9315 tests in 591.458 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step S4: Nuke's rows and knob types on the fourth eight most-used nodes.** Commits:
+  - `ebfa8707` Panel sweep S4: shared rows and measured widget types for TimeBlur, TimeEcho, ZDefocus, IBKGizmo, Encryptomatte, Kronos, IBKColor, OFlow, CopyRectangle and TimeDissolve (layout 75 to 100, 89 to 100, 99 to 100, 98 to 100, 75 to 100, 71 to 98, 73 to 78, 71 to 98, 75 to 100, 67 to 100)
+  Diff: 9 files changed, 165 insertions(+), 58 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (8:05 AM on 2026-11-04 PDT)
 
 `main` moved `890114cd` -> `408cdade` (lane commits cherry-picked onto main in lane order) and then to this
