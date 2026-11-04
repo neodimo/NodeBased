@@ -40,7 +40,8 @@ FLAGS = {"Flare": "legacy_flare", "Glint": "legacy_glint", "Sparkles": "legacy_s
 
 _FLARE_NEW = {"flare_radius_inner": 80.0, "flare_radius_middle": 100.0, "flare_radius_outer": 120.0, "flare_size_mult": 1.0,
               "flare_ring_color": 1.0, "flare_inner_color": 0.5, "flare_outer_falloff": 1.0, "flare_inner_falloff": 1.0,
-              "flare_chroma_shift": 0.0, "flare_chroma_angle": 0.0}
+              "flare_chroma_shift": 0.0, "flare_chroma_angle": 0.0, "flare_offset": 0.0, "flare_anamorph": 1.0,
+              "flare_chroma_spread": 0.0, "flare_chroma_angle_add": 0}
 _GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.0, "glint_steps": 5, "glint_max": 1, "glint_effect_only": 0}
 _SPARKLES_NEW = {"spark_x": 480.0, "spark_y": 270.0, "spark_size": 300.0, "spark_rotation": 0.0, "spark_ray_nb": 50, "spark_thick": 0.2,
                  "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0}
@@ -59,6 +60,8 @@ LIMITS = {**{flag: (0, 1) for flag in FLAGS.values()},
           "flare_radius_inner": (0.0, 100000.0), "flare_radius_middle": (0.0, 100000.0), "flare_radius_outer": (0.0, 100000.0), "flare_size_mult": (0.0, 1000.0),
           "flare_ring_color": (-1000.0, 1000.0), "flare_inner_color": (-1000.0, 1000.0), "flare_outer_falloff": (0.01, 100.0), "flare_inner_falloff": (0.01, 100.0),
           "flare_chroma_shift": (-100000.0, 100000.0), "flare_chroma_angle": (-360.0, 360.0),
+          "flare_offset": (0.0, 1.0), "flare_anamorph": (0.01, 100.0), "flare_chroma_spread": (-0.99, 0.99),
+          "flare_chroma_angle_add": (0, 1),
           "glint_oddlen": (0.0, 100.0), "glint_from_color": (-1000.0, 1000.0), "glint_to_color": (-1000.0, 1000.0), "glint_steps": (1, 256), "glint_max": (0, 1),
           "glint_effect_only": (0, 1),
           "spark_x": (-1000000.0, 1000000.0), "spark_y": (-1000000.0, 1000000.0), "spark_size": (0.0, 1000000.0), "spark_rotation": (-360.0, 360.0),
@@ -101,18 +104,29 @@ def flare(image, p, origin=(0, 0)):
     h, w = image.shape[:2]
     yy, xx = np.mgrid[:h, :w].astype(np.float64)
     xx, yy = xx + origin[0], yy + origin[1]
-    cx, cy = float(p.get("position_x", w / 2)), float(p.get("position_y", h / 2))
+    px, py = float(p.get("position_x", w / 2)), float(p.get("position_y", h / 2))
+    offset = float(p.get("flare_offset", 0.0))
+    cx, cy = px + (px - w / 2) * offset, py + (py - h / 2) * offset
     mult = max(float(p.get("flare_size_mult", 1.0)), 0.0)
     inner, middle, outer = sorted(max(float(p.get(name, default)), 0.0) * mult for name, default in
                                   (("flare_radius_inner", 80.0), ("flare_radius_middle", 100.0), ("flare_radius_outer", 120.0)))
     ring, core = float(p.get("flare_ring_color", 1.0)), float(p.get("flare_inner_color", 0.5))
     outer_falloff, inner_falloff = float(p.get("flare_outer_falloff", 1.0)), float(p.get("flare_inner_falloff", 1.0))
-    shift, angle = float(p.get("flare_chroma_shift", 0.0)), math.radians(float(p.get("flare_chroma_angle", 0.0)))
+    shift = float(p.get("flare_chroma_shift", 0.0))
+    angle_degrees = float(p.get("flare_chroma_angle", 0.0))
+    if int(p.get("flare_chroma_angle_add", 0)):
+        angle_degrees += math.degrees(math.atan2(py - h / 2, px - w / 2))
+    angle = math.radians(angle_degrees)
+    anamorph = max(float(p.get("flare_anamorph", 1.0)), 1e-6)
+    chroma_spread = float(p.get("flare_chroma_spread", 0.0))
     gain = float(p.get("brightness", 1.0))
     out = image.astype(np.float64)
     for c, sign in ((0, 1.0), (1, 0.0), (2, -1.0)):
         ox, oy = cx + sign * shift * math.cos(angle), cy - sign * shift * math.sin(angle)
-        r = np.hypot(xx - ox, yy - oy)
+        rx = xx - ox
+        ry = yy - oy
+        radial_scale = 1.0 + (chroma_spread if c == 0 else -chroma_spread if c == 2 else 0.0)
+        r = np.hypot(rx / anamorph, ry) / max(radial_scale, 1e-6)
         out[..., c] += gain * _profile(r, inner, middle, outer, ring, core, outer_falloff, inner_falloff)
     return out.astype(np.float32)
 

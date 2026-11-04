@@ -146,6 +146,17 @@ class FlareTests(unittest.TestCase):
         centre_y = lambda c: float((up[:, 15, c] * ys).sum() / up[:, 15, c].sum())
         self.assertLess(centre_y(0), centre_y(1) - 2.5)                                    # 90 degrees anticlockwise is up the screen
 
+    def test_flare_offset_moves_beyond_position_from_the_image_centre(self):
+        at_source = flare(position_x=10.0, flare_offset=0.0)
+        moved = flare(position_x=10.0, flare_offset=1.0)
+        self.assertTrue(differs(at_source, moved))
+        self.assertGreater(float(moved[15, 5, 0]), 0.0)
+
+    def test_anamorph_extends_the_horizontal_radius(self):
+        out = flare(flare_anamorph=2.0)
+        self.assertGreater(float(out[15, 22, 0]), 0.0)
+        self.assertEqual(float(out[24, 15, 0]), 0.0)
+
     def test_the_flare_is_added_to_the_picture(self):
         image = texture(30, 30)
         np.testing.assert_allclose(flare(image)[..., :3] - image[..., :3], flare()[..., :3] - black(30, 30)[..., :3], atol=1e-5)
@@ -155,11 +166,15 @@ class FlareTests(unittest.TestCase):
         base = flare()
         for name, value in {"position_x": 10.0, "flare_radius_inner": 1.0, "flare_radius_middle": 5.0, "flare_radius_outer": 12.0, "flare_size_mult": 1.5,
                             "flare_ring_color": 0.4, "flare_inner_color": 0.9, "flare_outer_falloff": 2.0, "flare_inner_falloff": 2.0, "flare_chroma_shift": 2.0,
+                            "flare_anamorph": 1.5, "flare_chroma_spread": 0.5,
                             "brightness": 2.0}.items():
             with self.subTest(knob=name):
                 self.assertTrue(differs(flare(**{name: value}), base), name)
         shifted = flare(flare_chroma_shift=2.0)
         self.assertTrue(differs(flare(flare_chroma_shift=2.0, flare_chroma_angle=45.0), shifted))
+        self.assertTrue(differs(flare(position_x=10.0, flare_chroma_shift=2.0, flare_chroma_angle_add=1),
+                                flare(position_x=10.0, flare_chroma_shift=2.0)))
+        self.assertTrue(differs(flare(position_x=10.0, flare_offset=0.5), flare(position_x=10.0)))
 
     def test_a_document_saved_before_the_step_renders_as_it_did(self):
         old = dict(position_x=20.0, position_y=15.0, brightness=1.3, streaks=5, length=60.0, rotation=20.0, ghosts=3, spread=0.5, size=9.0, chromatic_shift=3.0)
