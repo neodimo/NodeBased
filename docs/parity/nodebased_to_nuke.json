@@ -916,11 +916,15 @@
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "knobs": [
+    {"nodebased": ["spark_mode"], "nuke": ["mode"], "kind": "renamed", "reason": "selects outward Rays, inward-fading Fireworks, or rays fading at both ends in Sparkles mode"},
+    {"nodebased": ["spark_triangle_think"], "nuke": ["triangle_think"], "kind": "renamed", "reason": "tapers each ray toward its outer end to form the guide's triangle shape"},
     {"nodebased": ["spark_x", "spark_y"], "nuke": ["position"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["spark_size"], "nuke": ["size"], "kind": "renamed", "reason": "same control under another name; the older `size` stays for graphs saved before"},
     {"nodebased": ["spark_rotation"], "nuke": ["rotation"], "kind": "renamed", "reason": "same control under another name"},
+    {"nodebased": ["spark_relative_rotation"], "nuke": ["relative_rotation"], "kind": "renamed", "reason": "adds the image-centre-to-Position direction to the ray rotation"},
     {"nodebased": ["spark_ray_nb"], "nuke": ["ray_nb"], "kind": "renamed", "reason": "same control under another name"},
     {"nodebased": ["spark_thick"], "nuke": ["ray_thick"], "kind": "renamed", "reason": "same control under another name"},
+    {"nodebased": ["spark_random_thick"], "nuke": ["random_thick"], "kind": "renamed", "reason": "chooses a deterministic per-ray thickness from 1 to ray_thick"},
     {"nodebased": ["spark_ray_falloff"], "nuke": ["ray_falloff"], "kind": "renamed", "reason": "same control under another name"},
     {"nodebased": ["seed"], "nuke": ["seed"], "kind": "same"},
     {"nodebased": ["spark_brightness"], "nuke": ["brightness"], "kind": "renamed", "reason": "same control under another name"},

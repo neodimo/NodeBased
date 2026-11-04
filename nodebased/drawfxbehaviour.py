@@ -44,7 +44,8 @@ _FLARE_NEW = {"flare_radius_inner": 80.0, "flare_radius_middle": 100.0, "flare_r
               "flare_chroma_spread": 0.0, "flare_chroma_angle_add": 0}
 _GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.0, "glint_steps": 5, "glint_max": 1, "glint_effect_only": 0}
 _SPARKLES_NEW = {"spark_x": 480.0, "spark_y": 270.0, "spark_size": 300.0, "spark_rotation": 0.0, "spark_ray_nb": 50, "spark_thick": 0.2,
-                 "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0}
+                 "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0, "spark_mode": "Rays", "spark_triangle_think": 0,
+                 "spark_relative_rotation": 0, "spark_random_thick": 0}
 _GRAIN_NEW = {"fullGrain": "", "grain_offset": 0.5, "grain_red": 0.3, "grain_green": 0.4, "grain_blue": 0.5, "grain_saturation": 1.0,
               "grain_low_clip": 0.0}
 # A new node: the flag off and Nuke's defaults.
@@ -66,7 +67,7 @@ LIMITS = {**{flag: (0, 1) for flag in FLAGS.values()},
           "glint_effect_only": (0, 1),
           "spark_x": (-1000000.0, 1000000.0), "spark_y": (-1000000.0, 1000000.0), "spark_size": (0.0, 1000000.0), "spark_rotation": (-360.0, 360.0),
           "spark_ray_nb": (0, 2000), "spark_thick": (0.0, 1000.0), "spark_ray_falloff": (0.0, 100.0), "spark_brightness": (0.0, 1000.0),
-          "spark_color": (-1000.0, 1000.0),
+          "spark_color": (-1000.0, 1000.0), "spark_triangle_think": (0, 1), "spark_relative_rotation": (0, 1), "spark_random_thick": (0, 1),
           "grain_offset": (-10.0, 10.0), "grain_red": (0.0, 100.0), "grain_green": (0.0, 100.0), "grain_blue": (0.0, 100.0), "grain_saturation": (0.0, 100.0),
           "grain_low_clip": (-10.0, 10.0)}
 
@@ -180,14 +181,28 @@ def sparkles(image, p, origin=(0, 0)):
     thick = max(float(p.get("spark_thick", 0.2)), 0.0)
     falloff = max(float(p.get("spark_ray_falloff", 2.0)), 0.0)
     count = max(0, min(2000, int(p.get("spark_ray_nb", 50))))
-    angles = np.radians(spark_angles(p.get("seed", 1), count, p.get("spark_rotation", 0.0)))
+    rotation = float(p.get("spark_rotation", 0.0))
+    if int(p.get("spark_relative_rotation", 0)):
+        rotation += math.degrees(math.atan2(-(float(p.get("spark_y", h / 2)) - h / 2), float(p.get("spark_x", w / 2)) - w / 2))
+    angles = np.radians(spark_angles(p.get("seed", 1), count, rotation))
+    random_widths = np.random.RandomState(int(p.get("seed", 1)) % (2 ** 32)).uniform(1.0, max(1.0, thick), count)
     value = np.zeros((h, w), np.float64)
-    for a in angles:
+    for i, a in enumerate(angles):
         ux, uy = math.cos(a), -math.sin(a)
         along = dx * ux + dy * uy
         across = np.abs(dy * ux - dx * uy)
-        fade = np.clip(1.0 - along / size, 0.0, 1.0) ** falloff
-        cover = np.clip(thick / 2.0 + 1.0 - across, 0.0, 1.0)
+        mode = p.get("spark_mode", "Rays")
+        t = np.clip(along / size, 0.0, 1.0)
+        if mode == "Fireworks":
+            fade = t ** falloff
+        elif mode == "Sparkles":
+            fade = (2.0 * np.minimum(t, 1.0 - t)) ** falloff
+        else:
+            fade = (1.0 - t) ** falloff
+        ray_thick = float(random_widths[i]) if int(p.get("spark_random_thick", 0)) else thick
+        if int(p.get("spark_triangle_think", 0)):
+            ray_thick *= 1.0 - t
+        cover = np.clip(ray_thick / 2.0 + 1.0 - across, 0.0, 1.0)
         value = np.maximum(value, np.where((along >= 0.0) & (along <= size), fade * cover, 0.0))
     out = image.astype(np.float64)
     out[..., :3] += (float(p.get("spark_brightness", 1.0)) * float(p.get("spark_color", 1.0)) * value)[..., None]

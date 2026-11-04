@@ -18,7 +18,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
 
-from nodebased import drawfxbehaviour, knobs
+from nodebased import core, drawfxbehaviour, knobs
 from nodebased.core import LIMITS, SPECS, upgrade_document, validate
 from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor
@@ -363,6 +363,24 @@ class SparklesTests(unittest.TestCase):
             along = (x - 20) * math.cos(angle) - (y - 20) * math.sin(angle)
             self.assertAlmostEqual(float(out[y, x, 0]), max(0.0, 1.0 - along / 15.0) ** 2, places=5, msg=d)          # the stated fade, 2 being the default falloff
 
+    def test_fireworks_fade_toward_the_origin_and_sparkles_peak_in_the_middle(self):
+        rays = sparkles(spark_ray_nb=1, spark_thick=3.0)
+        fireworks = sparkles(spark_ray_nb=1, spark_thick=3.0, spark_mode="Fireworks")
+        stars = sparkles(spark_ray_nb=1, spark_thick=3.0, spark_mode="Sparkles")
+        angle = math.radians(float(drawfxbehaviour.spark_angles(23, 1, 0.0)[0]))
+        def sample(image, d):
+            y, x = int(round(20 - d * math.sin(angle))), int(round(20 + d * math.cos(angle)))
+            return float(image[y, x, 0])
+        self.assertGreater(sample(fireworks, 12), sample(fireworks, 2))
+        self.assertGreater(sample(stars, 7), sample(stars, 2))
+        self.assertGreater(sample(stars, 7), sample(stars, 12))
+        self.assertTrue(differs(rays, fireworks))
+
+    def test_triangle_shapes_taper_toward_the_ray_tip(self):
+        round_rays = sparkles(spark_ray_nb=1, spark_thick=5.0)
+        triangle = sparkles(spark_ray_nb=1, spark_thick=5.0, spark_triangle_think=1)
+        self.assertTrue(differs(round_rays, triangle))
+
     def test_the_rays_end_at_the_size(self):
         out = sparkles(spark_ray_nb=40, spark_size=9.0)
         ys, xs = np.nonzero(out[..., 0] > 1e-6)
@@ -388,6 +406,19 @@ class SparklesTests(unittest.TestCase):
         for ray in range(5):
             self.assertGreater(along_ray(out, 23, ray, 5, rotation=40.0)[2], 0.2)
 
+    def test_relative_rotation_tracks_the_position_direction(self):
+        direct = drawfxbehaviour.spark_angles(23, 5, 0.0)
+        relative = drawfxbehaviour.spark_angles(23, 5, -45.0)
+        self.assertTrue(differs(sparkles(spark_x=30.0, spark_y=30.0, spark_rotation=0.0, spark_relative_rotation=1),
+                                sparkles(spark_x=30.0, spark_y=30.0, spark_rotation=0.0)))
+        self.assertTrue(np.allclose(relative - direct, -45.0))
+
+    def test_random_thickness_is_seeded_and_changes_ray_shape(self):
+        a = sparkles(spark_thick=5.0, spark_random_thick=1)
+        b = sparkles(spark_thick=5.0, spark_random_thick=1)
+        np.testing.assert_array_equal(a, b)
+        self.assertTrue(differs(a, sparkles(spark_thick=5.0)))
+
     def test_brightness_and_colour_scale_the_rays(self):
         base = sparkles()
         np.testing.assert_allclose(sparkles(spark_brightness=2.0)[..., :3], 2.0 * base[..., :3] - black(41, 41)[..., :3] * 0.0, atol=1e-5)
@@ -401,7 +432,7 @@ class SparklesTests(unittest.TestCase):
     def test_every_paired_knob_changes_the_pixels(self):
         base = sparkles()
         for name, value in {"spark_x": 12.0, "spark_size": 8.0, "spark_rotation": 25.0, "spark_ray_nb": 9, "spark_thick": 3.0, "spark_ray_falloff": 0.5, "seed": 99,
-                            "spark_brightness": 2.0, "spark_color": 0.5}.items():
+                            "spark_brightness": 2.0, "spark_color": 0.5, "spark_mode": "Fireworks", "spark_triangle_think": 1}.items():
             with self.subTest(knob=name):
                 self.assertTrue(differs(sparkles(**{name: value}), base), name)
 
@@ -420,7 +451,7 @@ class SparklesTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Sparkles")]
-        self.assertEqual(labels[:9], ["Position xy", "Size", "Rotation", "Rays Nb", "Thickness", "Ray falloff", "Seed", "Brightness", "Color"])
+        self.assertEqual(labels[:13], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Ray falloff", "Seed", "Brightness", "Color"])
         self.assertEqual(labels[-1], "Mix")
 
 
@@ -540,7 +571,9 @@ class RegistryTests(unittest.TestCase):
                 with self.subTest(kind=kind, param=name):
                     self.assertIn(name, SPECS[kind]["params"])
                     self.assertIn(name, laid_out)
-                    if name != "fullGrain":
+                    if name == "spark_mode":
+                        self.assertIn(name, core.CHOICES)
+                    elif name != "fullGrain":
                         self.assertIn(name, LIMITS)
 
     def test_a_new_node_validates_and_a_saved_one_is_flagged_legacy(self):

@@ -2251,6 +2251,7 @@ EXR_BIT_DEPTHS = ("half", "float")
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
 CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion", "patch"], "mincolor_mode": ["minimum", "maximum"],
+           "spark_mode": ["Rays", "Sparkles", "Fireworks"],
            "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
            "mask_channel": ["alpha", "red", "green", "blue", "luminance"],
            "autocrop_mode": ["alpha", "color"],
