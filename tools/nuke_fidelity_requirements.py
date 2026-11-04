@@ -145,6 +145,7 @@ NOT_PIXEL = {
     "OCIOLookTransform": {"reload": "re-reads the look files, which NodeBased reads on every render (tests/test_2d_behaviour_ocio_p.py)",
                           "ignore_errors": "acts only when the named look is missing from the config; the probe names none (tests/test_2d_behaviour_ocio_p.py)"},
     "OCIOFileTransform": {"interpolation": "tetrahedral and best differ from linear only on a 3D LUT whose corners are coupled, and OpenColorIO renders nearest as linear; the probe's file is a 1D LUT (tests/test_2d_behaviour_ocio_p.py)"},
+    "RotoPaint": {"hide_progress_bar": "progress display during the tracking action; it does not affect rendered pixels (tests/test_roto_tracking_x.py)"},
     "Crop": {"reformat": "makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)",
              "crop": "black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)"},
 }

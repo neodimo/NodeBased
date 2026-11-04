@@ -1233,6 +1233,16 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("global_motionblur_shutter",), label="Global shutter", soft_range=(0, 2)),
         KnobGroup("enum", ("global_motionblur_shutter_offset_type",), label="Global shutter offset"),
         KnobGroup("float", ("global_motionblur_shutter_offset",), label="Global custom offset"),
+        KnobGroup("enum", ("tracking_channels",), label="Track channels"),
+        KnobGroup("enum", ("pretrack_filter",), label="Pre-track filter"),
+        KnobGroup("bool", ("adjust_for_luminance_changes",), label="Adjust for luminance changes"),
+        KnobGroup("bool", ("clamp_footage",), label="Clamp footage"),
+        KnobGroup("bool", ("hide_progress_bar",), label="Hide progress bar"),
+        KnobGroup("int", ("reference_frame",), label="Reference frame"),
+        KnobGroup("enum", ("export_menu",), label="Export"),
+        KnobGroup("bool", ("link_output",), label="Link output"),
+        *(KnobGroup("xy", (f"pt{i}_x", f"pt{i}_y"), label=f"Tracked corner {i}") for i in range(1, 5)),
+        *(KnobGroup("xy", (f"of{i}_x", f"of{i}_y"), label=f"Corner offset {i}") for i in range(1, 5)),
         KnobGroup("bool", ("legacy_paint_replace",), label="Legacy replace",
                   help="Ignore Replace, as graphs saved before RotoPaint followed the guide do."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
@@ -2622,12 +2632,19 @@ _ROTO_ORDER = ("output", "premultiply_mode", "cliptype", "replace", "maskChannel
                "global_motionblur_shutter_offset_type", "global_motionblur_shutter_offset", "tracking_channels")
 NUKE_LAYOUT_LANE9.update({
     "Roto": (*_ROTO_ORDER[:4], "width", "height", *_ROTO_ORDER[4:]),
-    "RotoPaint": (*_ROTO_ORDER[:-1], "channels"),
+    "RotoPaint": (*_ROTO_ORDER[:-1], "channels", "tracking_channels", "pretrack_filter", "adjust_for_luminance_changes",
+                  "clamp_footage", "hide_progress_bar", "export_menu", "link_output",
+                  *(f"pt{i}_x" for i in range(1, 5)), *(f"of{i}_x" for i in range(1, 5)), "reference_frame"),
 })
 NUKE_LAYOUT_LANE9["Roto"] += ("pretrack_filter", "adjust_for_luminance_changes",
                               "clamp_footage", "hide_progress_bar", "export_menu", "link_output",
                               *(f"pt{i}_x" for i in range(1, 5)),
                               *(f"of{i}_x" for i in range(1, 5)), "channels")
+NUKE_LAYOUT_LANE9["RotoPaint"] += tuple(
+    name for name in ("tracking_channels", "pretrack_filter", "adjust_for_luminance_changes", "clamp_footage", "hide_progress_bar",
+                      "export_menu", "link_output", *(f"pt{i}_x" for i in range(1, 5)),
+                      *(f"of{i}_x" for i in range(1, 5)), "reference_frame")
+    if name not in NUKE_LAYOUT_LANE9["RotoPaint"])
 NUKE_LABELS.setdefault("Roto", {})["channels"] = "Output channels"
 NUKE_LABELS.setdefault("Roto", {})["invert"] = "Invert matte"       # the mask row's own knob reads "Invert"
 

@@ -13349,6 +13349,12 @@ class Window(QMainWindow):
                 form.addRow(hint)
             if node["type"] == "RotoPaint":
                 from . import paintknobs
+                from .rotopanel import add_tracking_actions
+                tracking_panel = QWidget()
+                tracking_layout = QVBoxLayout(tracking_panel)
+                tracking_layout.setContentsMargins(0, 0, 0, 0)
+                add_tracking_actions(tracking_layout, self, key)
+                form.addRow("Tracking", tracking_panel)
                 draw_shape = QPushButton("Draw shape…")
                 draw_shape.setToolTip("Click polygon points in the viewer, then Enter to commit · Esc cancels")
                 draw_shape.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
@@ -14472,22 +14478,35 @@ class Window(QMainWindow):
     def _planar_context(self, key=None):
         selected = key or self.graph.selected_id()
         node = self.dispatcher.document["nodes"].get(selected) if selected else None
-        if node is None or node["type"] not in ("PlanarTracker", "Roto"):
+        if node is None or node["type"] not in ("PlanarTracker", "Roto", "RotoPaint"):
             return None
         payload = self.dispatcher.document.get("node_data", {}).get(selected, {})
-        return selected, node, payload if node["type"] == "PlanarTracker" else {"tracks": [], **payload}
+        if node["type"] == "PlanarTracker":
+            return selected, node, payload
+        if node["type"] == "RotoPaint":
+            return selected, node, {"shapes": [item for item in payload.get("items", [])
+                                                if item.get("kind") in ("shape", "stroke")]}
+        return selected, node, {"tracks": [], **payload}
 
     def track_roto_shape(self, key):
         """Track the selected Roto shape's reference-frame bounding quad."""
         context = self._planar_context(key)
-        if context is None or context[1]["type"] != "Roto":
+        if context is None or context[1]["type"] not in ("Roto", "RotoPaint"):
             return False
         shapes = context[2].get("shapes", [])
-        index = int(getattr(self.viewer, "roto_selected_shape_index", -1))
+        index = (getattr(self.viewer, "paint_selected_item_index", None) if context[1]["type"] == "RotoPaint"
+                 else getattr(self.viewer, "roto_selected_shape_index", -1))
+        if index is None:
+            index = -1
+        index = int(index)
         if not 0 <= index < len(shapes):
             self._show_command_error(ValueError("Select a Roto shape before tracking")); return False
         frame = int(context[1]["params"].get("reference_frame", self.dispatcher.document["time"]["current"]))
-        resolved = shape_model.resolve_shapes({"shapes": [shapes[index]]}, frame)[0]
+        selected = shapes[index]
+        if context[1]["type"] == "RotoPaint" and selected.get("kind") == "stroke":
+            resolved = selected
+        else:
+            resolved = shape_model.resolve_shapes({"shapes": [selected]}, frame)[0]
         points = resolved.get("points", [])
         if not points:
             self._show_command_error(ValueError("The selected Roto shape has no points to track")); return False
@@ -14548,6 +14567,7 @@ class Window(QMainWindow):
         cancel = threading.Event()
         job = {"key": key, "kind": node["type"], "base_tracks": copy.deepcopy(payload.get("tracks", [])),
                "base_shapes": copy.deepcopy(payload.get("shapes", [])),
+               "base_items": copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(key, {}).get("items", [])),
                "corners": copy.deepcopy(corners_override),
                "progress": {"frame": ref, "completed": 0, "total": max(0, hi-lo)}}
         self._planar_job = job
@@ -14645,8 +14665,10 @@ class Window(QMainWindow):
                     raise ValueError("PlanarTracker changed during analysis; results discarded")
                 self.command({"op": "set_tracks", "id": job["key"], "tracks": tracks})
             else:
-                if payload.get("shapes", []) != job["base_shapes"]:
-                    raise ValueError("Roto shapes changed during analysis; results discarded")
+                unchanged = (payload.get("items", []) == job["base_items"] if job["kind"] == "RotoPaint"
+                             else payload.get("shapes", []) == job["base_shapes"])
+                if not unchanged:
+                    raise ValueError(f"{node['type']} shapes changed during analysis; results discarded")
                 commands = []
                 for index, track in enumerate(tracks[:4], 1):
                     for axis in ("x", "y"):
@@ -15267,9 +15289,9 @@ class Window(QMainWindow):
     def export_roto_tracking(self, key):
         """Create the selected Roto tracking export from its animated planar corners."""
         node = self.dispatcher.document["nodes"].get(key)
-        if node is None or node["type"] != "Roto":
+        if node is None or node["type"] not in ("Roto", "RotoPaint"):
             return False
-        source = node["inputs"].get("bg")
+        source = node["inputs"].get("image") if node["type"] == "RotoPaint" else node["inputs"].get("bg")
         if source is None:
             self._show_command_error(ValueError("Connect a plate to Roto's background before creating an export"))
             return False
@@ -15312,13 +15334,18 @@ class Window(QMainWindow):
         absolute = export_kind == "CornerPin2D (absolute)"
         stabilize = export_kind == "CornerPin2D (stabilize)"
         output_params = copy.deepcopy(SPECS["CornerPin"]["params"])
+        if node["type"] == "RotoPaint":
+            source_image = self.evaluator.evaluate_raster(doc, target=source, frame=reference)
+            plate_width, plate_height = float(source_image.data.width), float(source_image.data.height)
+        else:
+            plate_width, plate_height = float(params["width"]), float(params["height"])
         curves, expressions = {}, []
         for index in range(1, 5):
             for axis in ("x", "y"):
                 if absolute:
-                    from_value = {1: (0.0, 0.0), 2: (float(params["width"]), 0.0),
-                                  3: (float(params["width"]), float(params["height"])),
-                                  4: (0.0, float(params["height"]))}[index][0 if axis == "x" else 1]
+                    from_value = {1: (0.0, 0.0), 2: (plate_width, 0.0),
+                                  3: (plate_width, plate_height),
+                                  4: (0.0, plate_height)}[index][0 if axis == "x" else 1]
                 else:
                     from_value = ref_corners[index-1][0 if axis == "x" else 1]
                 to_keys = [{"frame": frame, "value": tracked[frame][index-1][0 if axis == "x" else 1]}

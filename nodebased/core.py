@@ -771,6 +771,9 @@ SPECS = {
     "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2", "mask"],
                   "params": {"dustbust_frame_start": 1, "dustbust_frame_end": 100, "dustbust_sensitivity": 0.5,
                              "dustbust_patch_blend": 0.5, "mix": 1.0,
+                             **_trackerknobs.new_params("Roto"), "reference_frame": 1,
+                             "export_menu": "CornerPin2D (relative)", "link_output": 1,
+                             **{f"{prefix}{i}_{axis}": 0.0 for prefix in ("pt", "of") for i in range(1, 5) for axis in ("x", "y")},
                              **_paintknobs.new_params("RotoPaint"), **_drawbehaviour.new_params("RotoPaint")}},
     # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
     # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
@@ -2466,6 +2469,8 @@ LIMITS.update({"shape_motionblur_on": (0, 1), "global_motionblur_on": (0, 1), "g
                "global_motionblur_shutter": (0.0, 8.0), "global_motionblur_shutter_offset": (-8.0, 8.0)})
 _ROTO_TRACKING_PARAMS = (*_trackerknobs.new_params("Roto"), "reference_frame", "export_menu", "link_output",
                          *(f"{prefix}{i}_{axis}" for prefix in ("pt", "of") for i in range(1, 5) for axis in ("x", "y")))
+for _name in _ROTO_TRACKING_PARAMS:
+    SPECS["RotoPaint"]["params"].setdefault(_name, SPECS["Roto"]["params"][_name])
 LIMITS.update({"link_output": (0, 1),
                **{f"{prefix}{i}_{axis}": (-1000000.0, 1000000.0)
                   for prefix in ("pt", "of") for i in range(1, 5) for axis in ("x", "y")}})
@@ -3115,6 +3120,10 @@ def upgrade_document(document):
                         # so the settings, corners and offsets take their defaults and render nothing differently.
                         for name in _ROTO_TRACKING_PARAMS:
                             params.setdefault(name, SPECS["Roto"]["params"][name])
+                    if isinstance(params, dict) and current.get("type") == "RotoPaint":
+                        # RotoPaint's Tracking tab is additive; saved strokes remain untouched.
+                        for name in _ROTO_TRACKING_PARAMS:
+                            params.setdefault(name, SPECS["RotoPaint"]["params"][name])
                     graph = current.get("graph")
                     if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
                         _crypto_legacy(graph["nodes"])

@@ -75,6 +75,9 @@ FILTER_CHROME = {
     "GridWarp": ("all", True, False), "SplineWarp": ("all", False, False),
     # VectorDistort (lane 9 step N): the guide lists `channels` and no mask strip; the older mask input and mix stay as NodeBased's own.
     "VectorDistort": ("all", False, False),
+    # ZSlice's kernel owns the legacy mask and mix when the chrome stays at defaults. The generic
+    # strip removes the mask slot before the kernel only when an artist changes a chrome control.
+    "ZSlice": ("all", True, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
