@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step P of 2: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on the time and metadata nodes (integrator tick)
+
+- **What was done:** `main` `57403f7a` -> `86a43d6f` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `86a43d6f`: Ran 9272 tests in 591.254 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 - Lane 2 (2D behaviour), step P: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on four time and metadata nodes
 
 - **What was done:** (1) OCIODisplay gained `gain`, `gamma`, `saturation`, `channel_selector` and context `key1`..`value4`; OCIOColorspace gained `swap` and the context slots; OCIOLookTransform gained `reload`, `ignore_errors` and the context slots; OCIOFileTransform gained `working_space` and its `file_interpolation` is now paired with Nuke's `interpolation`; Colorspace gained `swap`, the Rec.709 camera curve, Cineon and the CIE illuminants A, B, C, D50, D55, D75 and E (`nodebased/ocioknobs.py`, `nodebased/ocio_nodes.py`). (2) HSVTool gained `HMask`, `SMask`, `BMask` (a channel of the input; a wired mask socket takes priority), their three inverts and `invert_alpha_mask`; `Conversion` pairs with `output_alpha` (`nodebased/hsvtoolknobs.py`). Vectorfield gained `reload`, `vector_file_type`, `vector_output_bitdepth` and `vector_normalize_output` (`lutio.read_3dl` takes `output_depth` and `normalize`). (3) A new AddTimeCode starts at 01:00:00:00, TimeEcho at 1 frame / max, TimeBlur at shutter 0.5 / start, ContactSheet at 3072 x 2048, 3 rows, no gap; schema 32 (`nodebased/olderdefaults.py`) gives a saved node the older value for every param it does not store.

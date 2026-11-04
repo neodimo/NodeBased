@@ -1,5 +1,25 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step P: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on four time and metadata nodes
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:35 AM on 2026-11-04 PDT)
+
+`main` moved `57403f7a` -> `86a43d6f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `86a43d6f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0525.log`, started 5:25 AM): **Ran 9272 tests in 591.254 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step P of 2: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on the time and metadata nodes.** Commits:
+  - `200fdcb5` TASKLOG and state: 2D behaviour step P (OCIO, HSVTool, Vectorfield, Colorspace knobs and four defaults)
+  - `d5350aa3` OCIO nodes, HSVTool, Vectorfield and Colorspace gain their missing knobs, and four time nodes start with the guide's defaults (OCIO display 74.7 to 95.0, OCIO colorspace 81.4 to 100, look 83.4 to 99.3, file transform 87.2 to 97.6, HSVTool 87.6 to 96.3, Vectorfield 52.6 to 82.8, Colorspace 85.5 to 94.9; saved documents keep their defaults through schema 32)
+  Diff: 25 files changed, 1112 insertions(+), 163 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done:** (1) OCIODisplay gained `gain`, `gamma`, `saturation`, `channel_selector` and context `key1`..`value4`; OCIOColorspace gained `swap` and the context slots; OCIOLookTransform gained `reload`, `ignore_errors` and the context slots; OCIOFileTransform gained `working_space` and its `file_interpolation` is now paired with Nuke's `interpolation`; Colorspace gained `swap`, the Rec.709 camera curve, Cineon and the CIE illuminants A, B, C, D50, D55, D75 and E (`nodebased/ocioknobs.py`, `nodebased/ocio_nodes.py`). (2) HSVTool gained `HMask`, `SMask`, `BMask` (a channel of the input; a wired mask socket takes priority), their three inverts and `invert_alpha_mask`; `Conversion` pairs with `output_alpha` (`nodebased/hsvtoolknobs.py`). Vectorfield gained `reload`, `vector_file_type`, `vector_output_bitdepth` and `vector_normalize_output` (`lutio.read_3dl` takes `output_depth` and `normalize`). (3) A new AddTimeCode starts at 01:00:00:00, TimeEcho at 1 frame / max, TimeBlur at shutter 0.5 / start, ContactSheet at 3072 x 2048, 3 rows, no gap; schema 32 (`nodebased/olderdefaults.py`) gives a saved node the older value for every param it does not store.
 - **Evidence:** new modules `test_2d_behaviour_ocio_p`, `test_2d_behaviour_hsv_vf_p`, `test_2d_behaviour_defaults_p`; the older OCIO, HSV, Colorspace, split-knob and timecode tests were updated for the new knobs and defaults; the targeted modules the brief names plus every module that greps for these kinds pass. Tiles of 7, 16 and 32 equal the frame with and without a mask for the OCIO nodes and HSVTool with the new knobs moved. No GPU kernel is touched, so nothing here needs `wgpu` hidden.
 - **Scores (report regenerated, bundled copy identical):** overall 94.5 -> 94.7; OCIODisplay 74.7 -> 95.0, OCIOColorspace 81.4 -> 100.0, OCIOLookTransform 83.4 -> 99.3, OCIOFileTransform 87.2 -> 97.6, HSVTool 87.6 -> 96.3, Vectorfield 52.6 -> 82.8, Colorspace 85.5 -> 94.9 (math 14/20 -> 21/21), AddTimeCode 94.4 -> 100.0, TimeEcho 90.8 -> 98.7, TimeBlur 91.2 -> 97.1, ContactSheet 85.6 -> 91.7. "Knobs that change no pixels": 0.
