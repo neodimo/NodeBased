@@ -2554,6 +2554,8 @@ NODE_LIMITS["Sharpen"] = NODE_LIMITS["Soften"] = {"minimum": (-1000000.0, 100000
 NODE_LIMITS["Grade"] = {"black": (-1000.0, 1000.0), "white": (-1000.0, 1000.0), "blackpoint": (-1000.0, 1000.0)}
 # Glint's and Sparkles's threshold is a picture value (a highlight can be many times white, and Nuke's tolerance can be 0); the shared name is a solver tolerance elsewhere.
 NODE_LIMITS["Glint"] = NODE_LIMITS["Sparkles"] = {"tolerance": (0.0, 1000.0)}
+# DirBlur stores Quality as text (low/normal/high or digits); its panel field is the whole-number factor that text means.
+NODE_LIMITS["DirBlur"] = {"Quality": tuple(float(v) for v in _storedknobs.FACTOR_LIMITS)}
 
 
 def _downstream_of(nodes, key):
