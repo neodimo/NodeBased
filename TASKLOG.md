@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step NT: every node's Node tab carries Nuke's Node-tab knobs (finish 1) (integrator tick)
+
+- **What was done:** `main` `ed537804` -> `dc63c653` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `dc63c653`: Ran 9184 tests in 595.502 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step NT: every node's Node tab carries Nuke's Node-tab knobs, Lane 9 (2D behaviour B, GPT-6 Luna) step R1: the Read node's Properties panel laid out like Nuke's, with Nuke's knob types (integrator tick)
 
 - **What was done:** `main` `55d95bf0` -> `299bef0e` plus this docs commit. Evidence and per-lane commit
