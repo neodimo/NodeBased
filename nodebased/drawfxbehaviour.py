@@ -45,6 +45,11 @@ _FLARE_NEW = {"flare_radius_inner": 80.0, "flare_radius_middle": 100.0, "flare_r
               "vis_in": 1.0, "vis_out": 1.1, "vis_mask": "none", "vis_mask_size": 4.0,
               "corners": 5, "flattening": 0.0, "sharpness": 0.5, "corners_angle": 0.0, "corners_angle_add": 0,
               "asym_repeat": 1, "asym_multiplier": 1.0, "asym_falloff": 1.0, "asym_angle": 0.0}
+_FLARE_MULTI = {"mult_num": 1, "mult_seed": 0, "mult_offset": 1.0, "mult_offset_seed": 48235,
+                "mult_size": 0.0, "mult_size_seed": 94335, "mult_color": 0.0, "mult_color_seed": 77088,
+                "mult_brightness": 0.0, "mult_brightness_seed": 75021, "mult_visibility": 0.0, "mult_visibility_seed": 68995,
+                "mult_flattening": 0.0, "mult_flattening_seed": 45203, "mult_rotate": 0.0, "mult_rotate_seed": 49429}
+_FLARE_NEW.update(_FLARE_MULTI)
 _GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.0, "glint_steps": 5, "glint_max": 1, "glint_effect_only": 0}
 _SPARKLES_NEW = {"spark_x": 480.0, "spark_y": 270.0, "spark_size": 300.0, "spark_rotation": 0.0, "spark_ray_nb": 50, "spark_thick": 0.2,
                  "spark_falloff": 0.05, "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0, "spark_chroma_shift": 0.0,
@@ -73,6 +78,10 @@ LIMITS = {**{flag: (0, 1) for flag in FLAGS.values()},
           "vis_in": (0.0, 10.0), "vis_out": (0.0, 10.0), "vis_mask_size": (0.0, 1000.0),
           "corners": (3, 32), "flattening": (0.0, 2.0), "sharpness": (0.01, 10.0), "corners_angle": (-360.0, 360.0), "corners_angle_add": (0, 1),
           "asym_repeat": (1, 256), "asym_multiplier": (0.0, 1.0), "asym_falloff": (0.01, 100.0), "asym_angle": (-360.0, 360.0),
+          "mult_num": (1, 128), "mult_seed": (-1000000, 1000000), "mult_offset": (0.0, 10.0), "mult_offset_seed": (-1000000, 1000000),
+          "mult_size": (0.0, 10.0), "mult_size_seed": (-1000000, 1000000), "mult_color": (0.0, 1.0), "mult_color_seed": (-1000000, 1000000),
+          "mult_brightness": (0.0, 10.0), "mult_brightness_seed": (-1000000, 1000000), "mult_visibility": (0.0, 10.0), "mult_visibility_seed": (-1000000, 1000000),
+          "mult_flattening": (0.0, 2.0), "mult_flattening_seed": (-1000000, 1000000), "mult_rotate": (-360.0, 360.0), "mult_rotate_seed": (-1000000, 1000000),
           "glint_oddlen": (0.0, 100.0), "glint_from_color": (-1000.0, 1000.0), "glint_to_color": (-1000.0, 1000.0), "glint_steps": (1, 256), "glint_max": (0, 1),
           "glint_effect_only": (0, 1),
           "spark_x": (-1000000.0, 1000000.0), "spark_y": (-1000000.0, 1000000.0), "spark_size": (0.0, 1000000.0), "spark_rotation": (-360.0, 360.0),
@@ -143,6 +152,44 @@ def _visibility_channel(image, name, radius):
 
 def flare(image, p, origin=(0, 0)):
     h, w = image.shape[:2]
+    copies = max(1, min(128, int(p.get("mult_num", 1))))
+    if copies > 1:
+        out = image.astype(np.float64).copy()
+        base_seed = int(p.get("mult_seed", 0))
+        fields = (("offset", "mult_offset", "mult_offset_seed"), ("size", "mult_size", "mult_size_seed"),
+                  ("color", "mult_color", "mult_color_seed"), ("brightness", "mult_brightness", "mult_brightness_seed"),
+                  ("visibility", "mult_visibility", "mult_visibility_seed"), ("flattening", "mult_flattening", "mult_flattening_seed"),
+                  ("rotate", "mult_rotate", "mult_rotate_seed"))
+        for index in range(copies):
+            q = dict(p)
+            q["mult_num"] = 1
+            for label, amount_name, seed_name in fields:
+                amount = float(p.get(amount_name, 0.0))
+                seed = base_seed + int(p.get(seed_name, 0)) + index * 104729
+                rng = np.random.default_rng(seed)
+                delta = float(rng.uniform(-amount, amount))
+                if label == "offset":
+                    q["position_x"] = float(q.get("position_x", w / 2)) + delta * max(w, h) * 0.25
+                    q["position_y"] = float(q.get("position_y", h / 2)) + float(np.random.default_rng(seed ^ 0x55AA).uniform(-amount, amount)) * max(w, h) * 0.25
+                elif label == "size":
+                    q["flare_size_mult"] = float(q.get("flare_size_mult", 1.0)) * max(0.01, 1.0 + delta)
+                elif label == "color":
+                    q["flare_ring_color"] = float(q.get("flare_ring_color", 1.0)) * max(0.0, 1.0 + delta)
+                    q["flare_inner_color"] = float(q.get("flare_inner_color", 0.5)) * max(0.0, 1.0 + delta)
+                elif label == "brightness":
+                    q["brightness"] = float(q.get("brightness", 1.0)) * max(0.0, 1.0 + delta)
+                elif label == "visibility":
+                    q["brightness"] = float(q.get("brightness", 1.0)) * max(0.0, 1.0 + delta)
+                elif label == "flattening":
+                    q["flattening"] = max(0.0, float(q.get("flattening", 0.0)) + delta)
+                elif label == "rotate":
+                    theta = math.radians(delta)
+                    vx = float(q.get("position_x", w / 2)) - w / 2
+                    vy = float(q.get("position_y", h / 2)) - h / 2
+                    q["position_x"] = w / 2 + math.cos(theta) * vx - math.sin(theta) * vy
+                    q["position_y"] = h / 2 + math.sin(theta) * vx + math.cos(theta) * vy
+            out += flare(np.zeros_like(image), q, origin).astype(np.float64)
+        return out.astype(np.float32)
     yy, xx = np.mgrid[:h, :w].astype(np.float64)
     xx, yy = xx + origin[0], yy + origin[1]
     px, py = float(p.get("position_x", w / 2)), float(p.get("position_y", h / 2))

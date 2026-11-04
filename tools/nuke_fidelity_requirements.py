@@ -144,6 +144,10 @@ NOT_PIXEL = {
              "crop": "black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)"},
 }
 # Nuke nodes whose knobs only act on data the fixture does not hold, so the probe is skipped for the whole node.
+NOT_PIXEL["Flare"].update({name: ("multiple-flare controls only act when mult_num is greater than 1; pixel variation cases cover this state (tests/test_2d_behaviour_extra_draw.py)")
+                           for name in ("mult_offset", "mult_size", "mult_color", "mult_brightness", "mult_visibility", "mult_flattening", "mult_rotate")})
+NOT_PIXEL["Flare"].update({name: ("the per-family seed only changes deterministic randomization when its matching variation is nonzero and mult_num is greater than 1 (tests/test_2d_behaviour_extra_draw.py)")
+                           for name in ("mult_seed", "mult_offset_seed", "mult_size_seed", "mult_color_seed", "mult_brightness_seed", "mult_visibility_seed", "mult_flattening_seed", "mult_rotate_seed")})
 NOT_PROBED = {
     "Tracker": "tracks are solved across frames; a one-frame probe cannot move them",
     "Roto": "shapes live in the node's payload and the default node holds none",

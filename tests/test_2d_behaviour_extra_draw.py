@@ -187,6 +187,14 @@ class FlareTests(unittest.TestCase):
         self.assertTrue(differs(unmasked, masked))
         self.assertTrue(differs(masked, softened))
 
+    def test_multiple_flare_copies_and_variation_families_change_pixels(self):
+        base = flare(position_x=10.0, mult_num=2, mult_offset=0.0)
+        for changes in ({"mult_num": 3}, {"mult_offset": 0.5, "mult_seed": 11},
+                        {"mult_size": 0.3}, {"mult_color": 0.4}, {"mult_brightness": 0.5},
+                        {"mult_visibility": 0.2}, {"mult_flattening": 0.4}, {"mult_rotate": 40.0}):
+            params = {"position_x": 10.0, "mult_num": 2, "mult_offset": 0.0, **changes}
+            self.assertTrue(differs(base, flare(**params)), changes)
+
     def test_the_flare_is_added_to_the_picture(self):
         image = texture(30, 30)
         np.testing.assert_allclose(flare(image)[..., :3] - image[..., :3], flare()[..., :3] - black(30, 30)[..., :3], atol=1e-5)
