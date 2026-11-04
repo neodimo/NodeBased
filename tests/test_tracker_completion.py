@@ -121,6 +121,8 @@ class TrackerAcceptanceTests(unittest.TestCase):
         old["version"] = 15        # the literal: tracker defaults arrived in the v15 -> v16 step
         before = Evaluator().evaluate_raster(old, target="tracker", frame=1).pixels.copy()
         upgraded = upgrade_document(old)
+        self.assertEqual(upgraded["nodes"]["tracker"]["params"]["regrab_when_offset"], 1)
+        self.assertEqual(upgraded["nodes"]["tracker"]["params"]["retrack_on_move"], 1)
         after = Evaluator().evaluate_raster(upgraded, target="tracker", frame=1).pixels
         np.testing.assert_array_equal(before, after)
 
@@ -183,6 +185,7 @@ class TrackerUiAcceptanceTests(unittest.TestCase):
 
     def test_viewer_drag_keys_track_and_resize_boxes(self):
         from PySide6.QtCore import QPointF
+        self.window.dispatcher.document["nodes"]["tracker"]["params"]["retrack_on_move"] = 0
         self.window.command({"op": "view", "id": "tracker"})
         self.window.graph.items_by_id["tracker"].setSelected(True)
         viewer = self.window.viewer
@@ -194,6 +197,20 @@ class TrackerUiAcceptanceTests(unittest.TestCase):
                                "scene": QPointF(25.5, 26.5), "moved": True}
         self.assertTrue(viewer._commit_tracker_drag())
         self.assertEqual(self.window.dispatcher.document["nodes"]["tracker"]["params"]["pattern_radius"], 10)
+
+    def test_moving_a_key_retracks_to_its_neighbour(self):
+        self.window.command({"op": "view", "id": "tracker"})
+        self.window.dispatcher.execute({"op": "set_tracks", "id": "tracker", "tracks": [{
+            "name": "moving", "enabled": 1,
+            "x": {"value": 10.0, "curve": {"interpolation": "linear", "keys": [
+                {"frame": 1, "value": 10.0}, {"frame": 10, "value": 20.0}]}},
+            "y": {"value": 10.0, "curve": {"interpolation": "linear", "keys": [
+                {"frame": 1, "value": 10.0}, {"frame": 10, "value": 10.0}]}}}]})
+        calls = []
+        self.window.retrack_selected = lambda *args, **kwargs: calls.append((args, kwargs)) or True
+        self.assertTrue(self.window.retrack_moved_key("tracker", 0, 10))
+        self.assertEqual(calls[0][0], ("tracker", "backward", 1, 10))
+        self.assertEqual(calls[0][1]["reference_frame"], 10)
 
     def test_cancelled_ui_analysis_preserves_existing_tracks(self):
         track = {"name": "existing", "enabled": 1, "x": 12.5, "y": 18.5}

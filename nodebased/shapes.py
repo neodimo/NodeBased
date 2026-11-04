@@ -37,6 +37,7 @@ MAXIMUM_TRACKS = 200
 # surface, while these belong to the payload schema.
 SHAPE_LIMITS = {
     "x": (-65536.0, 65536.0), "y": (-65536.0, 65536.0),
+    "pattern_x": (-65536.0, 65536.0), "pattern_y": (-65536.0, 65536.0),
     "in_x": (-65536.0, 65536.0), "in_y": (-65536.0, 65536.0),
     "out_x": (-65536.0, 65536.0), "out_y": (-65536.0, 65536.0),
     "feather_x": (-500.0, 500.0), "feather_y": (-500.0, 500.0),
@@ -227,11 +228,12 @@ def validate_shape(shape, where):
 
 # A track's own T, R and S switches and its pattern and search areas (fidelity step G, nodebased/trackerknobs.py); absent means the node's.
 TRACK_OPTIONS = ("use_t", "use_r", "use_s", "pattern_radius", "search_radius")
+TRACK_PATTERN_OFFSET = ("pattern_x", "pattern_y")
 
 
 def validate_track(track, where):
     if (not isinstance(track, dict) or not {"name", "enabled", "x", "y"}.issubset(track)
-            or set(track) - {"name", "enabled", "x", "y", "error", "warp_rotation", "warp_scale", *TRACK_OPTIONS}):
+            or set(track) - {"name", "enabled", "x", "y", "error", "warp_rotation", "warp_scale", *TRACK_OPTIONS, *TRACK_PATTERN_OFFSET}):
         raise ValueError(f"{where}: a track defines exactly name, enabled, x and y, with optional error, "
                          f"{', '.join(TRACK_OPTIONS)}")
     for field in ("use_t", "use_r", "use_s"):
@@ -247,6 +249,9 @@ def validate_track(track, where):
     if "error" in track:
         validate_scalar(track["error"], "error", where)
     for field in ("warp_rotation", "warp_scale"):
+        if field in track:
+            validate_scalar(track[field], field, where)
+    for field in TRACK_PATTERN_OFFSET:
         if field in track:
             validate_scalar(track[field], field, where)
 

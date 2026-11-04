@@ -300,7 +300,7 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
             first_frame=None, last_frame=None, cancel=None, progress=None, direction="forward",
             channels="luminance", adaptive_update=False, roi_frame=None,
             metric="ncc", prefilter="none", clamp=False, predict=False, grab=None, max_error=None, info=None,
-            warp="Translate", max_iter=100, epsilon=0.01):
+            warp="Translate", max_iter=100, epsilon=0.01, pattern_point=None, regrab_when_offset=True):
     """Track from the reference toward one timeline direction without mutating a document.
 
     Backward analysis uses ``first_frame`` as its inclusive endpoint; forward analysis uses
@@ -329,9 +329,11 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
     previous = result[reference_frame]
     velocity = (0.0, 0.0)
     total = len(frame_numbers)
-    reference = (roi_frame(reference_frame, point, pattern_radius + 2)
+    # A manually offset track can start at a new coordinate while retaining the old
+    # reference template when regrab-when-offset is disabled.
+    pattern_point = tuple(point if regrab_when_offset or pattern_point is None else pattern_point)
+    reference = (roi_frame(reference_frame, pattern_point, pattern_radius + 2)
                  if roi_frame is not None else get_frame(reference_frame))
-    pattern_point = tuple(point)
     template_warp = [0.0, 1.0]
     for offset, frame in enumerate(frame_numbers, start=1):
         if cancel is not None and cancel.is_set():

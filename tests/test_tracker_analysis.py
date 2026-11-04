@@ -153,6 +153,20 @@ class TrackerAnalysisTests(unittest.TestCase):
         self.assertGreater(np.linalg.norm(np.subtract(fixed[5], expected)), 0.5)
         self.assertLess(np.linalg.norm(np.subtract(adaptive[5], expected)), 0.5)
 
+    def test_manual_offset_can_grab_the_new_feature_or_keep_the_old_pattern(self):
+        rng = np.random.default_rng(19)
+        plate = np.zeros((96, 120, 4), np.float32)
+        plate[..., 3] = 1
+        plate[34:46, 12:24, :3] = rng.random((12, 12), dtype=np.float32)[..., None]
+        plate[34:46, 52:64, :3] = rng.random((12, 12), dtype=np.float32)[..., None]
+        second = moved(plate, 2, 0)
+        old_pattern = analyse({1: plate, 2: second}, 1, (58.5, 40.5), 5, 50, last_frame=2,
+                              pattern_point=(18.5, 40.5), regrab_when_offset=False)
+        new_pattern = analyse({1: plate, 2: second}, 1, (58.5, 40.5), 5, 50, last_frame=2,
+                              pattern_point=(18.5, 40.5), regrab_when_offset=True)
+        self.assertGreater(abs(old_pattern[2][0] - 60.5), 0.5)
+        self.assertAlmostEqual(new_pattern[2][0], 60.5, delta=0.51)
+
     def test_negative_data_window_origin_is_preserved(self):
         from nodebased.raster import Raster
         from nodebased.tiers import Region

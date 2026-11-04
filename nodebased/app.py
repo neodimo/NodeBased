@@ -2979,10 +2979,17 @@ class Viewer(PanZoomView):
         if drag["kind"] == "point":
             x, y = self._tracker_data_point(drag["scene"])
             tracks = copy.deepcopy(payload.get("tracks", []))
+            old_track = tracks[drag["index"]]
+            old_x = shape_model.resolve_scalar(old_track["x"], frame, "x")
+            old_y = shape_model.resolve_scalar(old_track["y"], frame, "y")
             tracks[drag["index"]] = trackerknobs.moved_point(
                 tracks[drag["index"]], frame, x, y, bool(int(node["params"].get("create_key_on_move", 1))),
                 set_at=lambda scalar, at, value: self._roto_scalar_at_frame(scalar, at, value))
+            tracks[drag["index"]]["pattern_x"] = float(old_x)
+            tracks[drag["index"]]["pattern_y"] = float(old_y)
             self.window.command({"op": "set_tracks", "id": key, "tracks": tracks})
+            if int(node["params"].get("retrack_on_move", 1)):
+                self.window.retrack_moved_key(key, drag["index"], frame)
         else:
             center = drag["center"]
             point = self._tracker_data_point(drag["scene"])
@@ -8966,6 +8973,7 @@ class Window(QMainWindow):
         self._tracker_selected_index = None
         self._tracker_key = None
         self._tracker_job = None
+        self._tracker_retrack_queue = []
         self._planar_future = None
         self._planar_cancel = None
         self._planar_job = None
@@ -15387,7 +15395,7 @@ class Window(QMainWindow):
             self._planar_cancel.set()
             self.statusBar().showMessage("Tracker analysis: cancelling…")
 
-    def retrack_selected(self, key, direction="forward", first_frame=None, last_frame=None):
+    def retrack_selected(self, key, direction="forward", first_frame=None, last_frame=None, reference_frame=None):
         """Analyse the selected track again from its position at the reference frame, with that track's own pattern and search
         areas, and replace its keys. Returns True when the analysis started."""
         context = self._tracker_context(key)
@@ -15396,19 +15404,48 @@ class Window(QMainWindow):
             self._show_command_error(ValueError("Select a track point first"))
             return False
         track = context[2]["tracks"][index]
-        reference = int(context[1]["params"].get("reference_frame", 1))
+        reference = int(context[1]["params"].get("reference_frame", 1) if reference_frame is None else reference_frame)
         seed = {**copy.deepcopy(track), "x": shape_model.resolve_scalar(track["x"], reference, "x"),
                 "y": shape_model.resolve_scalar(track["y"], reference, "y")}
         seed.pop("error", None)
         self._tracker_seed, self._tracker_index, self._tracker_key = seed, index, key
         self._tracker_replace = True
-        started = self.analyse_tracker(key, direction, first_frame, last_frame)
+        started = self.analyse_tracker(key, direction, first_frame, last_frame, reference)
         if not started:
             self._tracker_seed = self._tracker_index = self._tracker_key = None
             self._tracker_replace = False
         return started
 
-    def analyse_tracker(self, key, direction="forward", first_frame=None, last_frame=None):
+    def retrack_moved_key(self, key, index, frame):
+        """Retrack intervals adjacent to a moved key, starting at its new position."""
+        context = self._tracker_context(key)
+        if context is None or index >= len(context[2].get("tracks", [])):
+            return False
+        track = context[2]["tracks"][index]
+        scalar = track.get("x")
+        curve = scalar.get("curve") if isinstance(scalar, dict) else None
+        keys = sorted(int(item["frame"]) for item in (curve or {}).get("keys", []))
+        if frame not in keys:
+            return False
+        previous = max((item for item in keys if item < frame), default=None)
+        following = min((item for item in keys if item > frame), default=None)
+        intervals = []
+        if previous is not None:
+            intervals.append(("backward", previous, frame))
+        if following is not None:
+            intervals.append(("forward", frame, following))
+        if not intervals:
+            return False
+        self._tracker_selected_index = index
+        self._tracker_retrack_queue = [(key, index, frame, direction, low, high)
+                                       for direction, low, high in intervals[1:]]
+        direction, low, high = intervals[0]
+        if not self.retrack_selected(key, direction, low, high, reference_frame=frame):
+            self._tracker_retrack_queue.clear()
+            return False
+        return True
+
+    def analyse_tracker(self, key, direction="forward", first_frame=None, last_frame=None, reference_frame=None):
         if self._tracker_future is not None:
             return False
         context = self._tracker_context(key)
@@ -15421,7 +15458,8 @@ class Window(QMainWindow):
             self._show_command_error(ValueError("Tracker analysis requires a connected image input"))
             return False
         snapshot = copy.deepcopy(self.dispatcher.document)
-        frame = int(context[1]["params"].get("reference_frame", snapshot["time"]["current"]))
+        frame = int(context[1]["params"].get("reference_frame", snapshot["time"]["current"])
+                    if reference_frame is None else reference_frame)
         last = int(snapshot["time"]["last"] if last_frame is None else last_frame)
         first = int(snapshot["time"]["first"] if first_frame is None else first_frame)
         if first > frame or last < frame:
@@ -15464,6 +15502,8 @@ class Window(QMainWindow):
                 direction=direction, pattern_radius=pattern_radius, search_radius=search_radius,
                 channels=context[1]["params"].get("tracking_channels", "luminance"),
                 roi_frame=read_roi, info=job["info"], **options,
+                pattern_point=(self._tracker_seed.get("pattern_x", point[0]),
+                               self._tracker_seed.get("pattern_y", point[1])),
                 progress=lambda f, n, total, score: (
                     job["progress"].update(frame=f, completed=n, total=total, score=score),
                     job["errors"].update({f: max(0.0, min(1.0, 1.0-score))})))
@@ -15555,12 +15595,18 @@ class Window(QMainWindow):
                     f"Tracker stopped at frame {stopped}: the error {job['info']['error']:.2f} is above the max error; "
                     f"kept {len(results)} frames", 10000)
         except CancelledError:
+            self._tracker_retrack_queue.clear()
             self.statusBar().showMessage("Tracker analysis cancelled; document unchanged")
         except (ValueError, KeyError, OSError) as error:
+            self._tracker_retrack_queue.clear()
             self._show_command_error(error)
             self.statusBar().showMessage(f"Tracker analysis failed: {error}", 10000)
         finally:
             self.inspect(self.graph.selected_id())
+            if job is not None and self._tracker_retrack_queue and self._tracker_future is None:
+                queued_key, queued_index, queued_frame, direction, low, high = self._tracker_retrack_queue.pop(0)
+                self._tracker_selected_index = queued_index
+                self.retrack_selected(queued_key, direction, low, high, reference_frame=queued_frame)
 
     # -- Animation on numeric knobs -------------------------------------------------------
     #

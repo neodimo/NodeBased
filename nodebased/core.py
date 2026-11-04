@@ -2210,7 +2210,8 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                                    "local_motion": (0.0, 1.0), "fb_threshold": (0.0, 100.0)},
                "FluidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)},
                "FluidLiquidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)},
-               "Tracker": {"max_iter": (1, 1000), "epsilon": (0.000001, 1.0), "auto_regrab_pattern": (0, 1)}}
+               "Tracker": {"max_iter": (1, 1000), "epsilon": (0.000001, 1.0), "auto_regrab_pattern": (0, 1),
+                           "regrab_when_offset": (0, 1), "retrack_on_move": (0, 1)}}
 
 
 def parameter_limits(kind, name):
@@ -3089,7 +3090,8 @@ def upgrade_document(document):
                     if isinstance(params, dict) and current.get("type") in ("Clamp", "Group", "Generate", "Tracker"):
                         for name, value in SPECS[current["type"]]["params"].items():
                             if current.get("type") == "Tracker" and name not in (
-                                    "tracker_warp", "max_iter", "epsilon", "auto_regrab_pattern"):
+                                    "tracker_warp", "max_iter", "epsilon", "auto_regrab_pattern",
+                                    "regrab_when_offset", "retrack_on_move"):
                                 continue
                             params.setdefault(name, copy.deepcopy(value))
                     graph = current.get("graph")
