@@ -163,9 +163,9 @@ class TrackerTests(unittest.TestCase):
 
     def test_the_main_tab_lists_the_knobs_in_nukes_order(self):
         self.assertEqual(labels("Tracker"), [
-            "Track channels", "Pre-track filter", "Adjust for luminance changes", "Max error", "Clamp super-white, sub-zero footage",
+            "Track channels", "Pre-track filter", "Adjust for luminance changes", "Max iterations", "Epsilon / resolution", "Max error", "Clamp super-white, sub-zero footage",
             "Pattern Radius", "Search Radius", "Show error on track paths", "Hide progress bar", "Snap to markers", "Predict track",
-            "Pattern grab behaviour", "Every n frames", "When error above", "When error below", "Update the pattern every frame",
+            "Pattern grab behaviour", "Warp type", "When tracking is stopped", "Every n frames", "When error above", "When error below", "Update the pattern every frame",
             "Create new key when track is moved", "Auto-tracks delete keyframes", "Transform", "Reference Frame", "Jitter period", "Smoothing",
             "Apply Translate", "Apply Rotate", "Apply Scale", "Live-link transform", "Translate", "Rotate", "Scale", "Skew X", "Skew Y",
             "Skew order", "Center", "Filter", "Clamp", "Black outside", "Motion blur", "Shutter", "Shutter offset",  # Nuke gives both shutter-offset knobs one label: one shared row (S2)
