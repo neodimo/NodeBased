@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S1: Nuke's rows and knob types on the most-used nodes, and the ruler scores them, Lane 9 (2D behaviour B, GPT-6 Luna) step R2: the Read node's per-format option tabs (EXR, MOV, PSD) as Nuke shows them (integrator tick)
+
+- **What was done:** `main` `037d7e4d` -> `9a6bf201` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `9a6bf201`: Ran 9202 tests in 585.432 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R1: the Read node's Properties panel laid out like Nuke's, with Nuke's knob types (finish 1) (integrator tick)
 
 - **What was done:** `main` `12dd3eac` -> `759efc39` plus this docs commit. Evidence and per-lane commit
