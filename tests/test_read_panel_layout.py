@@ -22,6 +22,8 @@ class ReadPanelLayoutTests(unittest.TestCase):
         self.tabs = self.panel.findChild(QTabWidget, "node-tabs")
 
     def tearDown(self):
+        # Every test edits the document; without this, closing asks "Save changes?" and the modal box never returns.
+        self.window.saved_document = self.window.dispatcher.document
         self.window.close(); self.window.deleteLater(); APP.processEvents()
 
     def named(self, name):
@@ -68,7 +70,8 @@ class ReadPanelLayoutTests(unittest.TestCase):
     def test_boolean_controls_commit_and_legacy_offset_is_conditional(self):
         toggle = self.panel.findChild(QCheckBox, "raw-switch")
         toggle.click()
-        self.assertEqual(self.window.graph_nodes()["read-layout"]["params"]["raw"], 1)
+        # The checkbox commits through defer_command, so the value lands on a later event-loop turn.
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()["read-layout"]["params"]["raw"] == 1))
         self.window.command({"op": "set", "id": "read-layout", "param": "frame_offset", "value": 3})
         self.window.inspect("read-layout")
         QTest.qWait(100)

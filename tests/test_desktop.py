@@ -2758,7 +2758,8 @@ class KnobLayoutTests(unittest.TestCase):
 
     def test_bool_knob_renders_as_checkbox_and_commits(self):
         self.select('roto')
-        checkbox = self.window.properties.findChild(QCheckBox)
+        # By name: the panel holds other checkboxes (the Node tab's flags) and their creation order is not this test's subject.
+        checkbox = self.window.properties.findChild(QCheckBox, 'invert-switch')
         self.assertIsNotNone(checkbox)
         checkbox.setChecked(not checkbox.isChecked())
         expected = 1 if checkbox.isChecked() else 0
