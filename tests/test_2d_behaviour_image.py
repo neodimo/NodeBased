@@ -31,12 +31,12 @@ WRITE = [("channels", "Channels"), ("path", "File"), ("proxy", "Proxy"), ("frame
 WRITE_AFTER_FORMAT = [("create_directories", "Create directories"), ("render_order", "Render order"), ("first", "First frame"), ("last", "Last frame"),
                       ("use_limit", "Limit to range"), ("reading", "Read file"), ("on_error", "Missing frames"), ("reload", "Reload"),
                       ("read_all_lines", "Read all lines")]
-CONSTANT = [("channels", "Channels"), ("red", "Color"), ("width", "Width"), ("height", "Height"), ("first", "First frame"), ("last", "Last frame")]
+CONSTANT = [("channels", "Channels"), ("red", "Color"), ("width", "Width"), ("height", "Height"), ("first", "Frame range"), ("last", "Frame range")]  # one shared row, as in Nuke
 
 
 def layout(kind):
     return [(param, g.label) for g in knob_layout(kind)
-            for param in (g.params if kind == "Read" else g.params[:1])]
+            for param in (g.params if kind == "Read" or g.kind == "row" else g.params[:1])]
 
 
 def labelled(kind, wanted):
