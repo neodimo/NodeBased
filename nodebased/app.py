@@ -12452,7 +12452,7 @@ class Window(QMainWindow):
                     control.addItems(CHOICES[param])
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
-                    form.addRow({"colorspace": "Input space", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
+                    form.addRow({"colorspace": "Input Transform", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
                                  "blue_from": "Blue", "alpha_from": "Alpha"}.get(
                                      param, label or param.replace("_", " ").title()), control)
                 elif node["type"] == "ReadVDB3D" and param in ("density_grid", "temperature_grid", "velocity_grid"):
@@ -12476,6 +12476,7 @@ class Window(QMainWindow):
                                  "velocity_grid": "Velocity grid"}[param], control)
                 elif isinstance(value, str):
                     control = QLineEdit(value)
+                    control.setObjectName(f"{param}-field")
                     if kind in ("file_read", "file_write") or param.endswith("path"):
                         control.setProperty("knob_path", True)
                     control.editingFinished.connect(
@@ -12485,6 +12486,19 @@ class Window(QMainWindow):
                     self.attach_text_menu(control, default=SPECS[node["type"]]["params"][param],
                                           commit=lambda text, k=key, p=param: self.defer_command(
                                               {"op": "set", "id": k, "param": p, "value": text}))
+                    if node["type"] == "Read" and param in ("path", "proxy"):
+                        row = QWidget(); row_layout = QHBoxLayout(row)
+                        row_layout.setContentsMargins(0, 0, 0, 0); row_layout.setSpacing(4)
+                        browse = QToolButton(); browse.setObjectName(f"{param}-browse")
+                        browse.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
+                        browse.setToolTip("Browse for an image or sequence")
+                        if param == "path":
+                            browse.clicked.connect(lambda _checked=False, k=key: self.browse_read(k))
+                        else:
+                            browse.clicked.connect(lambda _checked=False, k=key: self.browse_read_proxy(k))
+                        row_layout.addWidget(control, 1); row_layout.addWidget(browse)
+                        form.addRow(label or ("File" if param == "path" else "Proxy"), row)
+                        return
                     form.addRow({"splat_path": "Splat file", "abc_path": "Alembic file", "abc_root": "Root object",
                                  "abc_camera": "Camera object", "gltf_path": "glTF file", "vdb_path": "VDB file or sequence",
                                  "gltf_root": "Root node"}.get(
@@ -12610,6 +12624,10 @@ class Window(QMainWindow):
 
             write_hidden = writenode.hidden_params(node["params"]) if node["type"] == "Write" else ()
             for group in knob_layout(node["type"]):
+                if node["type"] == "Read" and group.params == ("reload",):
+                    continue
+                if node["type"] == "Read" and group.params == ("frame_offset",) and int(node["params"].get("frame_offset", 0)) == 0:
+                    continue
                 if group.help or group.section:
                     # Rows are added by many branches below; the caption goes in at the next iteration.
                     describe_rows()
@@ -12641,6 +12659,55 @@ class Window(QMainWindow):
                             form = section_form
                 if group.help:
                     help_rows.append((form, form.rowCount(), group.help))
+                if node["type"] == "Read" and group.kind in ("read_frame_range", "read_orig_range", "read_frame"):
+                    row = QWidget(); layout = QHBoxLayout(row)
+                    layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(4)
+                    if group.kind == "read_frame_range":
+                        specs = (("first", "int"), ("before", "enum"), ("last", "int"), ("after", "enum"))
+                    elif group.kind == "read_orig_range":
+                        specs = (("origfirst", "int"), ("origlast", "int"))
+                    else:
+                        specs = (("frame_mode", "enum"), ("frame_expr", "string"))
+                    for name, kind in specs:
+                        if kind == "int":
+                            widget = FittedSpinBox()
+                            widget.setObjectName(f"{name}-field")
+                            widget.setRange(*parameter_limits("Read", name))
+                            widget.setValue(int(node["params"][name]))
+                            widget.setKeyboardTracking(False)
+                            hide_spin_buttons(widget)
+                            widget.editingFinished.connect(lambda k=key, p=name, w=widget: self.commit_param(k, p, w.value()))
+                            self.install_expression_shortcut(widget, key, name, widget)
+                            widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                            widget.customContextMenuRequested.connect(lambda point, k=key, p=name, w=widget: self.curve_menu(k, p, w, w, point))
+                            layout.addWidget(widget, 1)
+                            if name in ("first", "last", "origfirst", "origlast"):
+                                add_animation_button(layout, name, widget)
+                        elif kind == "enum":
+                            widget = ElidingComboBox()
+                            widget.setObjectName(f"{name}-choice")
+                            widget.addItems(CHOICES[name]); widget.setCurrentText(str(node["params"][name]))
+                            widget.currentTextChanged.connect(lambda v, k=key, p=name: self.defer_command({"op":"set","id":k,"param":p,"value":v}))
+                            layout.addWidget(widget, 1)
+                        else:
+                            widget = QLineEdit(str(node["params"][name]))
+                            widget.setObjectName(f"{name}-field")
+                            widget.editingFinished.connect(lambda k=key, p=name, w=widget: w.text() != self.graph_nodes()[k]["params"][p] and self.defer_command({"op":"set","id":k,"param":p,"value":w.text()}))
+                            layout.addWidget(widget, 2)
+                    form.addRow(group.label, row)
+                    continue
+                if node["type"] == "Read" and group.params == ("localizationPolicy",):
+                    row = QWidget(); layout = QHBoxLayout(row)
+                    layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(4)
+                    policy = ElidingComboBox(); policy.setObjectName("localizationPolicy-choice")
+                    policy.addItems(CHOICES["localizationPolicy"]); policy.setCurrentText(node["params"]["localizationPolicy"])
+                    policy.setMinimumWidth(220)
+                    policy.currentTextChanged.connect(lambda v, k=key: self.defer_command({"op":"set","id":k,"param":"localizationPolicy","value":v}))
+                    update = QPushButton("Update"); update.setObjectName("read-update-localization")
+                    update.clicked.connect(lambda _checked=False, k=key: self.update_localization(k))
+                    layout.addWidget(policy, 1); layout.addWidget(update)
+                    form.addRow(group.label, row)
+                    continue
                 if node["type"] == "Flare" and set(group.params) & {"tracker_id", "track_index"}:
                     # The two stored link fields are presented as one validated track picker below.
                     continue
@@ -12789,8 +12856,9 @@ class Window(QMainWindow):
                     line.addWidget(reset)
                     form.addRow(group.label, row)
                 elif group.kind == "bool":
-                    control = PropertiesSwitch()
+                    control = QCheckBox()
                     control.setObjectName(f"{param}-switch")
+                    control.setText("")
                     control.setChecked(bool(value))
                     control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
                         {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
@@ -12926,11 +12994,6 @@ class Window(QMainWindow):
                     button.clicked.connect(lambda _checked=False, k=key, h=handler: h(k))
                     form.addRow(button)
             if node["type"] == "Read":
-                localize_button = QPushButton("Update localization")
-                localize_button.setObjectName("read-update-localization")
-                localize_button.setToolTip("Replace the local copies of this Read's files with the current ones")
-                localize_button.clicked.connect(lambda _checked=False, k=key: self.update_localization(k))
-                form.addRow(localize_button)
                 import_sequence = QPushButton("Import sequence")
                 import_sequence.setObjectName("read-import-sequence")
                 import_sequence.setToolTip("Replace the filename's frame number with a padded sequence pattern")
@@ -13833,7 +13896,34 @@ class Window(QMainWindow):
             tabs.setObjectName("node-tabs")
             tabs.setStyleSheet("QTabBar::tab { padding: 6px 10px; color: #7d8793; border: 0; }"
                                f"QTabBar::tab:selected {{ color: #edf1f5; border-bottom: 2px solid {TOKENS['acc']}; }}")
-            tabs.addTab(top_aligned(content), "Knobs")
+            if node["type"] == "Read":
+                tabs.addTab(top_aligned(content), "Read")
+                read_tabs = {name: QFormLayout() for name in ("Context", "Sequence", "Metadata")}
+                for target_form in read_tabs.values():
+                    target_form.setContentsMargins(8, 8, 8, 8)
+                for row_index in reversed(range(form.rowCount())):
+                    field_item = form.itemAt(row_index, QFormLayout.ItemRole.FieldRole)
+                    label_item = form.itemAt(row_index, QFormLayout.ItemRole.LabelRole)
+                    field_widget = field_item.widget() if field_item else None
+                    names = ({w.objectName() for w in field_widget.findChildren(QWidget)} | {field_widget.objectName()}) if field_widget else set()
+                    label_text = label_item.widget().text() if label_item and label_item.widget() and isinstance(label_item.widget(), QLabel) else ""
+                    destination = None
+                    if any(any(name.startswith(prefix + "-") for prefix in ("key1", "value1", "key2", "value2", "key3", "value3", "key4", "value4")) for name in names):
+                        destination = "Context"
+                    elif names & {"read-import-sequence", "read-sequence-state"}:
+                        destination = "Sequence"
+                    elif names & {"read-metadata-filter", "read-shown-metadata", "read-metadata-summary"}:
+                        destination = "Metadata"
+                    if destination:
+                        taken = form.takeRow(row_index)
+                        label = taken.labelItem.widget() if taken.labelItem else None
+                        field = taken.fieldItem.widget() if taken.fieldItem else None
+                        read_tabs[destination].addRow(label, field) if label else read_tabs[destination].addRow(field)
+                for name in ("Context", "Sequence", "Metadata"):
+                    holder = QWidget(); holder.setLayout(read_tabs[name])
+                    tabs.addTab(top_aligned(holder), name)
+            else:
+                tabs.addTab(top_aligned(content), "Knobs")
             user_knobs = node.get("user_knobs") or (self.graph_document().get("node_data", {}).get(key, {}).get("user_knobs", []))
             if user_knobs:
                 user_tab = QWidget()
@@ -15679,6 +15769,13 @@ class Window(QMainWindow):
         self.last_browse_directory = str(Path(chosen["path"]).parent)
         self.command({"op": "set", "id": key, "param": "path", "value": chosen["path"]})
         self.offer_sequence_range(chosen)
+
+    def browse_read_proxy(self, key):
+        current = self.graph_nodes()[key]["params"].get("proxy", "")
+        path, _ = QFileDialog.getOpenFileName(self, "Choose proxy image", str(Path(current).parent) if current else "",
+                                              "Images (*.png *.jpg *.jpeg *.tif *.tiff *.exr *.bmp);;All files (*)")
+        if path:
+            self.command({"op": "set", "id": key, "param": "proxy", "value": path})
 
     def browse_lut(self, key):
         node = self.graph_nodes().get(key)

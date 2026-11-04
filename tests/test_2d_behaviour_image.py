@@ -21,10 +21,11 @@ MAPPING = json.loads(audit.MAP_JSON.read_text(encoding="utf-8"))["pairs"]
 NUKE = json.loads(audit.NUKE_JSON.read_text(encoding="utf-8"))["nodes"]
 
 # The main tab, in the guide's order, as the Properties panel shows it: (NodeBased param, label).
-READ = [("path", "File"), ("localizationPolicy", "Localization policy"), ("read_format", "Format"), ("proxy", "Proxy"), ("proxy_format", "Proxy format"),
-        ("first", "First frame"), ("before", "Before first"), ("last", "Last frame"), ("after", "After last"), ("frame_mode", "Frame mode"),
-        ("frame_expr", "Frame"), ("origfirst", "Original first"), ("origlast", "Original last"), ("missing", "Missing frames"), ("reload", "Reload"),
-        ("colorspace", "Input transform"), ("premultiplied", "Premultiplied"), ("raw", "Raw data"), ("auto_alpha", "Auto alpha")]
+READ = [("path", "File"), ("localizationPolicy", "Localization Policy"), ("read_format", "Format"), ("proxy", "Proxy"), ("proxy_format", "Proxy Format"),
+        ("first", "Frame Range"), ("before", "Frame Range"), ("last", "Frame Range"), ("after", "Frame Range"),
+        ("frame_mode", "Frame"), ("frame_expr", "Frame"), ("origfirst", "Original Range"), ("origlast", "Original Range"),
+        ("missing", "Missing Frames"), ("reload", "Reload"), ("colorspace", "Input Transform"),
+        ("premultiplied", "Premultiplied"), ("raw", "Raw Data"), ("auto_alpha", "Auto Alpha")]
 WRITE = [("channels", "Channels"), ("path", "File"), ("proxy", "Proxy"), ("frame_mode", "Frame mode"), ("frame_expr", "Frame"),
          ("colorspace", "Output transform"), ("premultiplied", "Premultiplied"), ("raw", "Raw data"), ("views", "Views"), ("file_type", "File type")]
 WRITE_AFTER_FORMAT = [("create_directories", "Create directories"), ("render_order", "Render order"), ("first", "First frame"), ("last", "Last frame"),
@@ -34,7 +35,8 @@ CONSTANT = [("channels", "Channels"), ("red", "Color"), ("width", "Width"), ("he
 
 
 def layout(kind):
-    return [(g.params[0], g.label) for g in knob_layout(kind)]
+    return [(param, g.label) for g in knob_layout(kind)
+            for param in (g.params if kind == "Read" else g.params[:1])]
 
 
 def labelled(kind, wanted):
