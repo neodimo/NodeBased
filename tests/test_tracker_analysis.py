@@ -140,11 +140,18 @@ class TrackerAnalysisTests(unittest.TestCase):
 
     def test_auto_regrab_changes_track_when_pattern_appearance_evolves(self):
         from nodebased.trackerknobs import analysis_options
-        frames = {frame: warped_plate(2.0*(frame-1), 1.0) for frame in range(1, 9)}
-        fixed = analyse(frames, 1, (55.5, 48.5), 5, 16, last_frame=8)
-        adaptive = analyse(frames, 1, (55.5, 48.5), 5, 16, last_frame=8,
+        base = texture()
+        frames = {}
+        for frame in range(1, 6):
+            shift, appearance = frame - 1, 0.125 * (frame - 1)
+            frames[frame] = ((1.0 - appearance) * moved(base, shift, 0)
+                             + appearance * moved(base, shift + 2, 0))
+        fixed = analyse(frames, 1, (48.5, 48.5), 6, 12, last_frame=5)
+        adaptive = analyse(frames, 1, (48.5, 48.5), 6, 12, last_frame=5,
                            **analysis_options({"auto_regrab_pattern": 1}))
-        self.assertGreater(np.linalg.norm(np.subtract(fixed[8], adaptive[8])), 0.25)
+        expected = (52.5, 48.5)  # the original pattern continues moving four pixels per frame
+        self.assertGreater(np.linalg.norm(np.subtract(fixed[5], expected)), 0.5)
+        self.assertLess(np.linalg.norm(np.subtract(adaptive[5], expected)), 0.5)
 
     def test_negative_data_window_origin_is_preserved(self):
         from nodebased.raster import Raster
