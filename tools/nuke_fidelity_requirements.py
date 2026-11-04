@@ -59,6 +59,7 @@ NOT_PIXEL = {
               "ManyBright": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",
               "Symmetry4": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",
               "all": "reset button clears presets and restores controls; it is an action, not stored rendered state (Flare reference guide, Presets tab)"},
+    "Sparkles": {"spark_falloff": "only affects Sparkles type; the audit probe starts in Rays mode (tests/test_2d_behaviour_extra_draw.py verifies the knob in Sparkles mode)"},
     "DropShadow": {"operation": "merges the shadowed picture over the bg input, so it acts only with bg wired (tests/test_2d_behaviour_filter_f.py)"},
     "DirBlur": {"BlurCenter": "the origin of a zoom or radial blur (a linear blur uses it only with UseTarget on); the default type is linear (tests/test_2d_behaviour_filter_f.py)",
                 "Samples": "the number of taps of a zoom or radial blur; the default type is linear (tests/test_2d_behaviour_filter_f.py)",

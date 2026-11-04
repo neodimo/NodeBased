@@ -785,6 +785,23 @@ def cases():
     _vectorcornerpin_cases(Case, out)
     _warp_cases(Case, out)
     _lens_cases(Case, out)
+    # Sparkles secondary controls state directions or conditional behavior but the guide publishes no exact pixel formula.
+    # Their pixel effects are asserted in tests/test_2d_behaviour_extra_draw.py; keep math unscored rather than inventing a Nuke kernel.
+    for cid, nuke_knobs, nb_params, statement, reason in (
+        ("sparkles_falloff_gap", (("mode", "Sparkles"), ("spark_falloff", 0.5)), {"spark_mode": "Sparkles", "spark_falloff": 0.5},
+         "higher Sparkles falloff brings the visible part of Sparkles-mode rays closer to their origin",
+         "the guide states only the direction of the gap change, not the kernel that shapes or blends the sparkle gap"),
+        ("sparkles_chroma_shift", (("chroma_shift", 2.0),), {"spark_chroma_shift": 2.0},
+         "positive chroma shift splits red clockwise and blue counter-clockwise",
+         "the guide states the direction but not how shift magnitude maps to angle or subpixel displacement"),
+        ("sparkles_chroma_spread", (("chroma_spread", 0.5),), {"spark_chroma_spread": 0.5},
+         "positive chroma spread extends red and reduces blue ray reach",
+         "the guide gives channel directions but no magnitude-to-reach curve"),
+        ("sparkles_visibility_mask", (("vismask", "rgba.alpha"), ("vismask_size", 2.0)), {"vismask": "rgba.alpha", "vismask_size": 2.0},
+         "the selected visibility channel limits sparkle brightness and is blurred by mask size",
+         "the guide gives no blur kernel or edge handling for the visibility channel"),
+    ):
+        case(cid, "Sparkles", "Sparkles", nuke_knobs, "Sparkles", nb_params, None, "guide", statement, unscored=reason)
     return out
 
 

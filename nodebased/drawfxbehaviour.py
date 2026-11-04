@@ -44,7 +44,9 @@ _FLARE_NEW = {"flare_radius_inner": 80.0, "flare_radius_middle": 100.0, "flare_r
               "flare_chroma_spread": 0.0, "flare_chroma_angle_add": 0}
 _GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.0, "glint_steps": 5, "glint_max": 1, "glint_effect_only": 0}
 _SPARKLES_NEW = {"spark_x": 480.0, "spark_y": 270.0, "spark_size": 300.0, "spark_rotation": 0.0, "spark_ray_nb": 50, "spark_thick": 0.2,
-                 "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0, "spark_mode": "Rays", "spark_triangle_think": 0,
+                 "spark_falloff": 0.05, "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0, "spark_chroma_shift": 0.0,
+                 "spark_chroma_spread": 0.0, "vismask": "none", "vismask_size": 4.0,
+                 "spark_mode": "Rays", "spark_triangle_think": 0,
                  "spark_relative_rotation": 0, "spark_random_thick": 0, "spark_anamorphic": 1.0}
 _GRAIN_NEW = {"fullGrain": "", "grain_offset": 0.5, "grain_red": 0.3, "grain_green": 0.4, "grain_blue": 0.5, "grain_saturation": 1.0,
               "grain_low_clip": 0.0}
@@ -68,7 +70,8 @@ LIMITS = {**{flag: (0, 1) for flag in FLAGS.values()},
           "spark_x": (-1000000.0, 1000000.0), "spark_y": (-1000000.0, 1000000.0), "spark_size": (0.0, 1000000.0), "spark_rotation": (-360.0, 360.0),
           "spark_ray_nb": (0, 2000), "spark_thick": (0.0, 1000.0), "spark_ray_falloff": (0.0, 100.0), "spark_brightness": (0.0, 1000.0),
           "spark_color": (-1000.0, 1000.0), "spark_triangle_think": (0, 1), "spark_relative_rotation": (0, 1), "spark_random_thick": (0, 1),
-          "spark_anamorphic": (0.01, 100.0),
+          "spark_anamorphic": (0.01, 100.0), "spark_falloff": (0.0, 0.99), "spark_chroma_shift": (-1000.0, 1000.0),
+          "spark_chroma_spread": (-0.99, 0.99), "vismask_size": (0.0, 1000.0),
           "grain_offset": (-10.0, 10.0), "grain_red": (0.0, 100.0), "grain_green": (0.0, 100.0), "grain_blue": (0.0, 100.0), "grain_saturation": (0.0, 100.0),
           "grain_low_clip": (-10.0, 10.0)}
 
@@ -188,28 +191,50 @@ def sparkles(image, p, origin=(0, 0)):
     angles = np.radians(spark_angles(p.get("seed", 1), count, rotation))
     random_widths = np.random.RandomState(int(p.get("seed", 1)) % (2 ** 32)).uniform(1.0, max(1.0, thick), count)
     anamorphic = max(float(p.get("spark_anamorphic", 1.0)), 1e-6)
-    value = np.zeros((h, w), np.float64)
+    values = np.zeros((h, w, 3), np.float64)
+    mode = p.get("spark_mode", "Rays")
+    # Larger values bring the visible sparkle closer to its origin (the published direction); 0.05 keeps the default connected.
+    gap = min(max((0.05 - float(p.get("spark_falloff", 0.05))) * 10.0, 0.0), 0.99)
+    chroma_shift = float(p.get("spark_chroma_shift", 0.0))
+    chroma_spread = float(p.get("spark_chroma_spread", 0.0))
     for i, a in enumerate(angles):
         ux, uy = math.cos(a) * anamorphic, -math.sin(a)
         norm = math.hypot(ux, uy)
         ux, uy = ux / norm, uy / norm
         along = dx * ux + dy * uy
         across = np.abs(dy * ux - dx * uy)
-        mode = p.get("spark_mode", "Rays")
-        t = np.clip(along / size, 0.0, 1.0)
-        if mode == "Fireworks":
-            fade = t ** falloff
-        elif mode == "Sparkles":
-            fade = (2.0 * np.minimum(t, 1.0 - t)) ** falloff
-        else:
-            fade = (1.0 - t) ** falloff
         ray_thick = float(random_widths[i]) if int(p.get("spark_random_thick", 0)) else thick
-        if int(p.get("spark_triangle_think", 0)):
-            ray_thick *= 1.0 - t
-        cover = np.clip(ray_thick / 2.0 + 1.0 - across, 0.0, 1.0)
-        value = np.maximum(value, np.where((along >= 0.0) & (along <= size), fade * cover, 0.0))
+        for c, sign in ((0, 1.0), (1, 0.0), (2, -1.0)):
+            ray_size = size * max(0.01, 1.0 + sign * chroma_spread)
+            t = np.clip(along / ray_size, 0.0, 1.0)
+            if mode == "Fireworks":
+                fade = t ** falloff
+            elif mode == "Sparkles":
+                # Sparkle falloff opens a gap at the origin; increasing it moves the first visible point outward.
+                active_t = np.clip((t - gap) / max(1.0 - gap, 1e-9), 0.0, 1.0)
+                fade = (2.0 * np.minimum(active_t, 1.0 - active_t)) ** falloff
+            else:
+                fade = (1.0 - t) ** falloff
+            channel_across = np.abs((dy * ux - dx * uy) - sign * chroma_shift)
+            channel_thick = ray_thick * (1.0 - t if int(p.get("spark_triangle_think", 0)) else 1.0)
+            cover = np.clip(channel_thick / 2.0 + 1.0 - channel_across, 0.0, 1.0)
+            ray = np.where((along >= 0.0) & (along <= ray_size), fade * cover, 0.0)
+            values[..., c] = np.maximum(values[..., c], ray)
+    mask_name = str(p.get("vismask", "none")).strip().lower()
+    if mask_name not in ("", "none"):
+        component = mask_name.rsplit(".", 1)[-1]
+        channel_index = {"red": 0, "r": 0, "green": 1, "g": 1, "blue": 2, "b": 2, "alpha": 3, "a": 3}.get(component)
+        if channel_index is not None:
+            mask = np.clip(image[..., channel_index].astype(np.float64), 0.0, 1.0)
+            radius = min(128, max(0, int(round(float(p.get("vismask_size", 4.0))))))
+            if radius:
+                padded = np.pad(mask, ((radius, radius), (radius, radius)), mode="edge")
+                horizontal = np.stack([padded[radius:radius + h, x:x + w] for x in range(2 * radius + 1)], axis=0).mean(axis=0)
+                padded_h = np.pad(horizontal, ((radius, radius), (0, 0)), mode="edge")
+                mask = np.stack([padded_h[y:y + h] for y in range(2 * radius + 1)], axis=0).mean(axis=0)
+            values *= mask[..., None]
     out = image.astype(np.float64)
-    out[..., :3] += (float(p.get("spark_brightness", 1.0)) * float(p.get("spark_color", 1.0)) * value)[..., None]
+    out[..., :3] += float(p.get("spark_brightness", 1.0)) * float(p.get("spark_color", 1.0)) * values
     return out.astype(np.float32)
 
 

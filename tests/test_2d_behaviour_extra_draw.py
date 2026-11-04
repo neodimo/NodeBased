@@ -422,6 +422,25 @@ class SparklesTests(unittest.TestCase):
     def test_anamorphic_stretches_the_ray_field(self):
         self.assertTrue(differs(sparkles(spark_anamorphic=2.0), sparkles()))
 
+    def test_sparkle_falloff_brings_the_sparkles_closer_to_the_origin(self):
+        lower = sparkles(spark_mode="Sparkles", spark_falloff=0.0, spark_thick=3.0)
+        higher = sparkles(spark_mode="Sparkles", spark_falloff=0.05, spark_thick=3.0)
+        self.assertTrue(differs(lower, higher))
+        self.assertGreater(along_ray(higher, 23, 0, 5)[1], along_ray(lower, 23, 0, 5)[1])
+
+    def test_chroma_shift_and_spread_change_the_rgb_ray_field(self):
+        base = sparkles(spark_ray_nb=1, spark_thick=3.0)
+        self.assertTrue(differs(base, sparkles(spark_ray_nb=1, spark_thick=3.0, spark_chroma_shift=1.5)))
+        self.assertTrue(differs(base, sparkles(spark_ray_nb=1, spark_thick=3.0, spark_chroma_spread=0.5)))
+
+    def test_visibility_channel_and_blur_limit_the_effect(self):
+        plate = texture(41, 41)
+        unmasked = sparkles(image=plate)
+        masked = sparkles(image=plate, vismask="rgba.alpha", vismask_size=0.0)
+        blurred = sparkles(image=plate, vismask="rgba.alpha", vismask_size=4.0)
+        self.assertTrue(differs(unmasked, masked))
+        self.assertTrue(differs(masked, blurred))
+
     def test_brightness_and_colour_scale_the_rays(self):
         base = sparkles()
         np.testing.assert_allclose(sparkles(spark_brightness=2.0)[..., :3], 2.0 * base[..., :3] - black(41, 41)[..., :3] * 0.0, atol=1e-5)
@@ -455,7 +474,7 @@ class SparklesTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Sparkles")]
-        self.assertEqual(labels[:14], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Anamorphic", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Ray falloff", "Seed", "Brightness", "Color"])
+        self.assertEqual(labels[:19], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Anamorphic", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Sparkle falloff", "Ray falloff", "Seed", "Brightness", "Color", "Chroma shift", "Chroma spread", "Mask", "Mask blur"])
         self.assertEqual(labels[-1], "Mix")
 
 
@@ -575,7 +594,7 @@ class RegistryTests(unittest.TestCase):
                 with self.subTest(kind=kind, param=name):
                     self.assertIn(name, SPECS[kind]["params"])
                     self.assertIn(name, laid_out)
-                    if name == "spark_mode":
+                    if name in ("spark_mode", "vismask"):
                         self.assertIn(name, core.CHOICES)
                     elif name != "fullGrain":
                         self.assertIn(name, LIMITS)
