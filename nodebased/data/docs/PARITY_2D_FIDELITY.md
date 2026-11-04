@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 94.5 / 100** (167 nodes scored, rank-weighted; 96.8 counting only the nodes NodeBased has).
+**Overall fidelity: 94.5 / 100** (167 nodes scored, rank-weighted; 96.9 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.4 (97.8 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 95.5 (97.8 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 95.8 (98.2 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 95.9 (98.2 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -509,7 +509,7 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 27 | Vectorfield (Color #21) | `Vectorfield` | 1.13 | 52.6 | primary knobs missing: `reload`, `file_type`; 4 secondary knobs missing: `gpuExtrapolate`, `output_bitdepth_id`, `normalize_output`, `format_3dl_id` |
 | 28 | RotoPaint (Draw #7) | `RotoPaint` | 1.11 | 92.2 | 14 secondary knobs missing |
 | 29 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
-| 30 | GridWarp (Transform #14) | `GridWarp` | 1.06 | 70.2 | 29 secondary knobs missing |
+| 30 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
 
 ## Formula cases
 
