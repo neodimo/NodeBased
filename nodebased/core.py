@@ -2444,7 +2444,7 @@ for _kind in (*_chrome.FILTER_CHROME, *_chrome.DRAW_CHROME):
         SPECS[_kind]["params"].setdefault(_name, _default)
 CHOICES["global_motionblur_shutter_offset_type"] = ["start", "centred", "end", "custom"]
 # Tracker's Nuke knobs (fidelity step G, nodebased/trackerknobs.py).
-LIMITS.update({**{name: (0, 1) for name in ("adjust_for_luminance_changes", "clamp_footage", "predict_track", "snap_to_markers",
+LIMITS.update({**{name: (0, 1) for name in ("adjust_for_luminance_changes", "regrab_when_offset", "retrack_on_move", "auto_regrab_pattern", "clamp_footage", "predict_track", "snap_to_markers",
                                             "hide_progress_bar", "show_error_on_track_links", "create_key_on_move",
                                             "autotracks_delete_keyframes", "livelink_transform")},
                "max_error": (0.0, 1.0), "grab_interval": (0, 100000), "grab_error_above": (0.0, 1.0),
