@@ -1,3 +1,11 @@
+## 2026-11-04 - Lane 9, step Q (Flare and Sparkles remaining controls)
+
+- **What was done:** recorded the guide's value-unspecified Flare preset buttons and the `all` action as NOT_PIXEL reasons in `tools/nuke_fidelity_requirements.py`; regenerated `docs/PARITY_2D_FIDELITY.md` and copied it byte-identically to `nodebased/data/docs/`.
+- **Evidence:** audit is unchanged: overall 95.1, Flare 79.7 (14/50 paired knobs), Sparkles 87.0 (14/32). `tests.test_nuke_fidelity_audit`, `tests.test_2d_behaviour_extra_draw`, `tests.test_knowledge`, `tests.test_knobs`, `tests.test_core`, `tests.test_tiles`, `tests.test_bypass`, `tests.test_tiers`, `tests.test_desktop.PropertiesLabelTests`, and `tests.test_desktop.FluidPropertiesPanelTests` passed.
+- **Artifacts:** source and report changes are in this worktree and will be committed; test/audit logs are deliberate scratch under `scratch/nb-lanes/run/`.
+- **State:** partial; no Flare/Sparkles pixel controls or cases implemented.
+- **Next owner + concrete artifact:** Gonzo should take the remaining controls in the step brief and extend `tests/test_2d_behaviour_extra_draw.py` plus `tools/nuke_fidelity_cases_filter.py`.
+
 ## 2026-11-04 - Lane 2 (2D behaviour), step P: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on four time and metadata nodes
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, GPT-6 Luna) (7:35 AM on 2026-11-04 PDT)
