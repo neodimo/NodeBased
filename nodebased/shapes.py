@@ -134,7 +134,9 @@ def resolve_scalar(value, frame, name=None):
 
 def validate_shape(shape, where):
     required = {"name", "mode", "opacity", "feather", "points"}
+    from . import paintknobs
     optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "source", "motion_blur", "track_link", "transform", "track_follow", "closed", "stroke_width",
+                *paintknobs.ROTO_SOURCE_FIELDS,
                 "feather_on", "falloff_power", "lifetime", "extra_matrix", "cap_start", "cap_end", *MOTION_BLUR_FIELDS}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
@@ -184,6 +186,8 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.blend_mode is unsupported")
     if shape.get("source", "color") not in ("color", "foreground", "background"):
         raise ValueError(f"{where}.source must be color, foreground or background")
+    if any(field in shape for field in paintknobs.ROTO_SOURCE_FIELDS):
+        paintknobs.validate_roto_source_fields(shape, where)
     link = shape.get("track_link")
     if link is not None and (not isinstance(link, dict) or set(link) != {"tracker_id", "track_name"}
                              or not isinstance(link["tracker_id"], str) or not link["tracker_id"]
@@ -523,6 +527,10 @@ def _resolve_shape(shape, frame, params, blur):
             resolved[field] = [resolve_scalar(channel, frame, "opacity") for channel in copy_value]
     if "source" in shape:
         resolved["source"] = shape["source"]
+    from . import paintknobs
+    for field in paintknobs.ROTO_SOURCE_FIELDS:
+        if field in shape:
+            resolved[field] = shape[field]
     # Settings added with the Nuke parity pass: each appears in the resolved shape only when it differs from the default,
     # so the resolved payload of an older document (and its cache digest) is unchanged.
     if shape.get("feather_on", True) is False:

@@ -112,12 +112,95 @@ class BlendingTests(unittest.TestCase):
 
 
 class ColourVisibleInvertTests(unittest.TestCase):
+    def checker_document(self, shape):
+        from tests.test_2d_behaviour_roto import document, render
+        doc = document([shape], output="rgba")
+        doc["nodes"]["plate"]["type"] = "Checker"
+        doc["nodes"]["plate"]["params"] = {"width": N, "height": N, "size": 4}
+        from nodebased.core import validate
+        validate(doc)
+        return doc
+
     def test_shape_background_source_uses_the_roto_bg_plate(self):
         from tests.test_2d_behaviour_roto import document, render
         shape = box(4, 4, 16, 16, source="background")
         pixels = render(document([shape], plate=(0.17, 0.38, 0.72, 1.0), output="rgba"))
         np.testing.assert_allclose(pixels[10, 10, :3], [0.17, 0.38, 0.72], atol=1e-6)
         np.testing.assert_allclose(pixels[1, 1, :3], [0.17, 0.38, 0.72], atol=1e-6)
+
+    def test_background_source_translate_and_round_sample_plate_pixels(self):
+        from tests.test_2d_behaviour_roto import render
+        shape = box(4, 4, 16, 16, source="background", source_transform_translate=[4.0, 0.0])
+        shifted = render(self.checker_document(shape))
+        color = render(self.checker_document({**shape, "source": "color"}))
+        self.assertTrue((shifted[10, 5, :3] != color[10, 5, :3]).any())
+        rounded = render(self.checker_document({**shape, "source_transform_translate": [3.5, 0.0],
+                                                "source_translate_round": True}))
+        fractional = render(self.checker_document({**shape, "source_transform_translate": [3.5, 0.0],
+                                                   "source_translate_round": False}))
+        self.assertTrue((rounded[..., :3] != fractional[..., :3]).any())
+
+    def test_background_source_transform_filter_and_black_outside_change_pixels(self):
+        from tests.test_2d_behaviour_roto import document, render
+        base = render(document([box(4, 4, 16, 16, source="background")], plate=(0.2, 0.4, 0.6, 1), output="rgba"))
+        transformed = render(document([box(4, 4, 16, 16, source="background",
+                                           source_transform_rotate=25, source_transform_scale=1.5,
+                                           source_transform_skewX=12, source_transform_skewY=-8,
+                                           source_transform_skew_order="YX", source_transform_center=[10, 10])],
+                                     plate=(0.2, 0.4, 0.6, 1), output="rgba"))
+        checker_base = render(self.checker_document(box(4, 4, 16, 16, source="background")))
+        checker_transform = render(self.checker_document(box(4, 4, 16, 16, source="background",
+                                                              source_transform_rotate=25, source_transform_scale=1.5,
+                                                              source_transform_skewX=12, source_transform_skewY=-8,
+                                                              source_transform_skew_order="YX", source_transform_center=[10, 10])))
+        self.assertTrue((checker_transform[..., :3] != checker_base[..., :3]).any())
+        np.testing.assert_allclose(transformed, base, atol=1e-6)
+        from nodebased.paintknobs import sample_roto_source
+        image = np.zeros((8, 8, 4), np.float32); image[..., 0] = 1; image[..., 3] = 1
+        sample = sample_roto_source(image, {"source_filter": "cubic", "source_black_outside": True,
+                                           "source_transform_translate": [20, 20]},
+                                    np.array([[2]], np.float32), np.array([[2]], np.float32))
+        np.testing.assert_array_equal(sample[0, 0], np.zeros(4, np.float32))
+
+    def test_background_source_filter_black_outside_and_time_offset(self):
+        from tests.test_2d_behaviour_roto import render
+        filter_base = self.checker_document(box(4, 4, 16, 16, source="background",
+                                                  source_transform_translate=[2.5, 0], source_filter="impulse"))
+        filter_cubic = copy.deepcopy(filter_base)
+        filter_cubic["node_data"]["r"]["shapes"][0]["source_filter"] = "cubic"
+        a, b = render(filter_base), render(filter_cubic)
+        self.assertTrue((a[..., :3] != b[..., :3]).any())
+        black = self.checker_document(box(4, 4, 16, 16, source="background",
+                                           source_transform_translate=[40, 0], source_black_outside=True))
+        self.assertEqual(float(render(black)[10, 10, :3].max()), 0.0)
+
+        d = Dispatcher(empty_document())
+        d.execute({"op": "create", "id": "plate", "type": "Constant", "params": {
+            "width": N, "height": N, "red": 0.0, "green": 0.0, "blue": 0.0, "alpha": 1.0}})
+        d.execute({"op": "create", "id": "r", "type": "Roto", "params": {"width": N, "height": N}})
+        d.execute({"op": "connect", "id": "r", "input": "bg", "source": "plate"})
+        d.execute({"op": "set_shapes", "id": "r", "shapes": [box(4, 4, 16, 16, source="background",
+            source_time_offset=1.0)]})
+        d.execute({"op": "view", "id": "r"})
+        from unittest.mock import patch
+        original_kernel = Evaluator._kernel
+        def frame_constant(kind, params, inputs, frame=None, data=None):
+            if kind == "Constant":
+                return np.broadcast_to(np.asarray([[(float(frame) - 1.0) / 2.0, 0.0, 0.0, 1.0]], np.float32),
+                                       (N, N, 4)).copy()
+            return original_kernel(kind, params, inputs, frame, data)
+        evaluator = Evaluator()
+        with patch.object(Evaluator, "_kernel", staticmethod(frame_constant)):
+            current = evaluator.evaluate_raster(d.document, target="plate", frame=1).pixels
+            following = evaluator.evaluate_raster(d.document, target="plate", frame=2).pixels
+            pixels = evaluator.evaluate_raster(d.document, target="r", frame=1).pixels
+            self.assertEqual(float(pixels[10, 10, 0]), float(following[10, 10, 0]))
+            self.assertEqual(float(pixels[1, 1, 0]), float(current[1, 1, 0]))
+            absolute = copy.deepcopy(d.document)
+            absolute["node_data"]["r"]["shapes"][0]["source_time_offset"] = 2.0
+            absolute["node_data"]["r"]["shapes"][0]["source_time_offset_type"] = "absolute"
+            pixels = evaluator.evaluate_raster(absolute, target="r", frame=3).pixels
+            np.testing.assert_allclose(pixels[10, 10], following[10, 10], atol=1e-6)
 
     def test_explicit_colour_source_is_bit_identical_to_legacy_shape_source(self):
         from tests.test_2d_behaviour_roto import document, render

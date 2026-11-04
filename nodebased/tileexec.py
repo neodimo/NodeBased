@@ -1103,6 +1103,11 @@ class TileExecutor:
             payload = tiers.scale_node_data("Roto", document.get("node_data", {}).get(node_id), tier)
             resolved = shapes.resolve_roto_shapes(payload, frame, document, tier, params)
             self._roto_shapes_cache[shape_key] = resolved
+        if any(shape.get("source", "color") != "color" for shape in resolved):
+            # Clone coordinates can leave the requested tile. Use the evaluator's full-frame
+            # source stage as the reference and crop its exact result for this tile.
+            full = self.evaluator.evaluate_raster(document, target=node_id, frame=frame, tier=tier)
+            return full.fit(tiers.Region(region.x, region.y, region.width, region.height)).copy()
         matte = roto.rasterise(resolved, params["width"], params["height"],
                                bool(params.get("invert", 0)),
                                region=(region.x, region.y, region.width, region.height),

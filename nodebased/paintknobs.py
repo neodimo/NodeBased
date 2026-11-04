@@ -49,6 +49,40 @@ STROKE_ITEM_FIELDS = (*COMMON_FIELDS, "effect", "dynamic_hardness", "buildup", "
                       "source_filter", "source_black_outside")
 SOURCE_TRANSFORM_DEFAULTS = {"rotate": 0.0, "scale_x": 1.0, "scale_y": 1.0, "skew_x": 0.0, "skew_y": 0.0,
                              "center_x": 0.0, "center_y": 0.0}
+ROTO_SOURCE_FIELDS = ("source_transform_translate", "source_translate_round", "source_transform_rotate",
+                      "source_transform_scale", "source_transform_skewX", "source_transform_skewY",
+                      "source_transform_skew_order", "source_transform_center", "source_filter",
+                      "source_black_outside", "source_time_offset", "source_time_offset_type")
+
+
+def roto_source_spec(shape):
+    """Adapt a Roto spline's Clone-tab knobs to the stroke source fields used by the paint engine."""
+    translate = shape.get("source_transform_translate", (0.0, 0.0))
+    center = shape.get("source_transform_center", (0.0, 0.0))
+    return {
+        "source_offset": list(translate),
+        "source_round": bool(shape.get("source_translate_round", False)),
+        "source_transform": {
+            "rotate": float(shape.get("source_transform_rotate", 0.0)),
+            "scale_x": float(shape.get("source_transform_scale", 1.0)),
+            "scale_y": float(shape.get("source_transform_scale", 1.0)),
+            "skew_x": float(shape.get("source_transform_skewX", 0.0)),
+            "skew_y": float(shape.get("source_transform_skewY", 0.0)),
+            "skew_order": shape.get("source_transform_skew_order", "XY"),
+            "center_x": float(center[0]), "center_y": float(center[1]),
+        },
+        "source_filter": str(shape.get("source_filter", "cubic")).lower(),
+        "source_black_outside": bool(shape.get("source_black_outside", False)),
+    }
+
+
+def sample_roto_source(source, shape, x, y, *, origin=(0, 0), bounds=None):
+    """Sample a Roto source image using the exact clone coordinate and filter routines used by RotoPaint."""
+    spec = roto_source_spec(shape)
+    xf, yf = clone_coordinates(spec, np.asarray(x, np.float32), np.asarray(y, np.float32))
+    return sample_source(np.asarray(source, np.float32), np.asarray(xf, np.float32), np.asarray(yf, np.float32),
+                         spec["source_filter"], origin=origin, bounds=bounds,
+                         black_outside=spec["source_black_outside"])
 
 # The node's own settings: the output mask layer and the global motion blur are Roto's (nodebased/rotoknobs.py); the premultiply
 # knob is the same `premultiply_mode` Roto has.
@@ -128,6 +162,37 @@ def validate_shape_extras(item, where):
         if field in item and field not in ("locked", "source"):
             probe[field] = item[field]
     shapes.validate_shape(probe, where)
+    validate_roto_source_fields(item, where)
+
+
+def validate_roto_source_fields(item, where):
+    """Validate Roto's Clone tab through the same shape/source validators as RotoPaint strokes."""
+    translate = item.get("source_transform_translate", [0.0, 0.0])
+    center = item.get("source_transform_center", [0.0, 0.0])
+    for name, value in (("source_transform_translate", translate), ("source_transform_center", center)):
+        if (not isinstance(value, (list, tuple)) or len(value) != 2
+                or not all(_number(component) and abs(component) <= 65536 for component in value)):
+            raise ValueError(f"{where}.{name} must contain two finite numbers")
+    for name, default in (("source_transform_rotate", 0.0), ("source_transform_scale", 1.0),
+                          ("source_transform_skewX", 0.0), ("source_transform_skewY", 0.0)):
+        value = item.get(name, default)
+        if not _number(value):
+            raise ValueError(f"{where}.{name} must be a finite number")
+    for name in ("source_translate_round", "source_black_outside"):
+        if name in item and type(item[name]) is not bool:
+            raise ValueError(f"{where}.{name} must be a boolean")
+    if "source_time_offset" in item and not _number(item["source_time_offset"]):
+        raise ValueError(f"{where}.source_time_offset must be a finite number")
+    if item.get("source_time_offset_type", "relative") not in ("relative", "absolute"):
+        raise ValueError(f"{where}.source_time_offset_type must be relative or absolute")
+    spec = roto_source_spec(item)
+    probe = {"name": "x", "mode": "union", "opacity": 1.0, "feather": 0.0,
+             "points": [{field: 0.0 for field in shapes.POINT_FIELDS}] * 3,
+             "source": item.get("source", "color"), "source_offset": spec["source_offset"],
+             "source_round": spec["source_round"], "source_filter": spec["source_filter"],
+             "source_black_outside": spec["source_black_outside"],
+             "source_transform": spec["source_transform"]}
+    validate_stroke_extras(probe, where)
 
 
 # --------------------------------------------------------------------------------------------------- resolving

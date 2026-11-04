@@ -3137,6 +3137,23 @@ class Evaluator:
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
             source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "NoTimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D", "TimeWarp") and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
+            if kind == "Roto" and not node["disabled"]:
+                input_key = node["inputs"].get("bg")
+                if input_key is not None:
+                    roto_source_fingerprints = []
+                    for shape_index, shape in enumerate(data or []):
+                        if shape.get("source", "color") == "color":
+                            continue
+                        offset = float(shape.get("source_time_offset", 0.0))
+                        source_frame = (int(round(offset)) if shape.get("source_time_offset_type", "relative") == "absolute"
+                                        else int(round(float(frame) + offset)))
+                        source_raster, source_digest = self.evaluate_raster(
+                            doc, target=input_key, cancel=cancel, frame=source_frame, tier=tier,
+                            typed=True, return_digest=True)
+                        clone_sources[shape_index] = source_raster
+                        roto_source_fingerprints.append([shape_index, source_frame, source_digest])
+                    if roto_source_fingerprints:
+                        fingerprint = ["roto_source_images", roto_source_fingerprints]
             if kind == "RotoPaint" and not node["disabled"]:
                 input_key = node["inputs"].get("image")
                 if input_key is not None:
@@ -3723,7 +3740,8 @@ class Evaluator:
                         else:
                             raster = self._windowed_kernel(
                                 kind, params, images, frame, data, cancel=cancel, progress=self,
-                                roto_rasterizer=(self._roto_matte if kind == "Roto" else None))
+                                roto_rasterizer=(self._roto_matte if kind == "Roto" else None),
+                                roto_source_images=(clone_sources if kind == "Roto" else None))
                     if raster.meta is None and not any(raster is image for image in images):
                         raster.meta = _inherited_metadata(kind, images, params)
                 if isinstance(raster, gpu2d.DeferredImage):
@@ -3771,7 +3789,7 @@ class Evaluator:
 
     @staticmethod
     def _windowed_kernel(kind, p, inputs, frame=None, data=None, cancel=None, progress=None,
-                         roto_rasterizer=None):
+                         roto_rasterizer=None, roto_source_images=None):
         """Run a node's kernel on Rasters. A filter or colour node whose shared Nuke chrome (channels, mask
         channel, invert, inject, un-premultiply by) is at its defaults runs its own kernel exactly as before;
         a changed chrome knob runs that kernel with the chrome off and applies it around the result
@@ -3782,23 +3800,23 @@ class Evaluator:
             return _chrome.run_evaluator(
                 kind, p, inputs,
                 lambda k, q, i: _chrome.run_roto(
-                    k, q, i, lambda k2, q2, i2: Evaluator._windowed_kernel_inner(k2, q2, i2, frame, data, cancel, progress, roto_rasterizer)),
+                    k, q, i, lambda k2, q2, i2: Evaluator._windowed_kernel_inner(k2, q2, i2, frame, data, cancel, progress, roto_rasterizer, roto_source_images)),
                 SPECS[kind])
         if kind in _chrome.FILTER_CHROME and kind not in _chrome.OWN_STRIP:       # TVIScale applies its own strip on the enlarged picture
             from .core import SPECS
             return _chrome.run_evaluator(
                 kind, p, inputs,
-                lambda k, q, i: Evaluator._windowed_kernel_inner(k, q, i, frame, data, cancel, progress, roto_rasterizer),
+                lambda k, q, i: Evaluator._windowed_kernel_inner(k, q, i, frame, data, cancel, progress, roto_rasterizer, roto_source_images),
                 SPECS[kind])
         if kind in ("Roto", "RotoPaint"):
             return _chrome.run_roto(
                 kind, p, inputs,
-                lambda k, q, i: Evaluator._windowed_kernel_inner(k, q, i, frame, data, cancel, progress, roto_rasterizer))
-        return Evaluator._windowed_kernel_inner(kind, p, inputs, frame, data, cancel, progress, roto_rasterizer)
+                lambda k, q, i: Evaluator._windowed_kernel_inner(k, q, i, frame, data, cancel, progress, roto_rasterizer, roto_source_images))
+        return Evaluator._windowed_kernel_inner(kind, p, inputs, frame, data, cancel, progress, roto_rasterizer, roto_source_images)
 
     @staticmethod
     def _windowed_kernel_inner(kind, p, inputs, frame=None, data=None, cancel=None, progress=None,
-                               roto_rasterizer=None):
+                               roto_rasterizer=None, roto_source_images=None):
         """Run a kernel with its inputs aligned to the output's data window.
 
         Two rules decide every case:
@@ -3962,13 +3980,24 @@ class Evaluator:
             # fails to line up with the thing it is masking.
             plate = inputs[0] if inputs else None
             def render_matte(params):
-                if roto_rasterizer is not None:
+                source_images = None
+                if plate is not None and any(shape.get("source", "color") != "color" for shape in (data or [])):
+                    source = plate.fit(plate.display)
+                    source_images = {"background": (source, (0, 0)), "foreground": (source, (0, 0))}
+                    for shape_index, source_raster in (roto_source_images or {}).items():
+                        source_pixels = source_raster.fit(plate.display)
+                        source_images[("background", shape_index)] = (source_pixels, (0, 0))
+                        source_images[("foreground", shape_index)] = (source_pixels, (0, 0))
+                    from . import roto
+                    raster = roto.rasterise(data or [], params["width"], params["height"],
+                                            bool(params.get("invert", 0)), source_images=source_images)
+                elif roto_rasterizer is not None:
                     raster = roto_rasterizer(params, data)
                 else:
                     raster = Evaluator._kernel(kind, params, [], frame, data)
                 # With no source input, Nuke's picture-source modes have no picture to reveal.
                 # Preserve the shape matte while the unavailable colour source is transparent black.
-                if any(shape.get("source", "color") != "color" for shape in (data or [])):
+                if plate is None and any(shape.get("source", "color") != "color" for shape in (data or [])):
                     raster = raster.copy()
                     raster[..., :3] = 0.0
                 return raster
@@ -3984,6 +4013,29 @@ class Evaluator:
                 # Once shapes exist, their matte owns alpha as in Nuke's default output=alpha.
                 return Raster(plate_pixels.copy(), out, out, plate.layers, plate.meta)
             pixels = plate_pixels.copy()
+            if any(shape.get("source", "color") != "color" for shape in (data or [])):
+                # Paint only picture-source shapes into the plate result; interleaved colour
+                # shapes keep the established plate behavior. Keep original per-shape source
+                # images aligned after filtering the payload.
+                source_shapes, source_images = [], {"background": (plate_pixels, (0, 0)),
+                                                    "foreground": (plate_pixels, (0, 0))}
+                for original_index, shape in enumerate(data or []):
+                    if shape.get("source", "color") == "color":
+                        continue
+                    new_index = len(source_shapes)
+                    source_shapes.append(shape)
+                    source_raster = (roto_source_images or {}).get(original_index)
+                    if source_raster is not None:
+                        source_pixels = source_raster.fit(out)
+                        source_images[("background", new_index)] = (source_pixels, (0, 0))
+                        source_images[("foreground", new_index)] = (source_pixels, (0, 0))
+                from . import roto
+                sampled = roto.rasterise(source_shapes, out.width, out.height,
+                                         bool(p.get("invert", 0)), source_images=source_images)
+                mask = sampled[..., 3] > 0
+                pixels[mask, :3] = np.divide(sampled[mask, :3], sampled[mask, 3:4],
+                                             out=np.zeros_like(sampled[mask, :3]),
+                                             where=sampled[mask, 3:4] != 0)
             pixels[..., 3] = _draw.roto_alpha(coverage, plate_pixels[..., 3], p)
             if p.get("premultiply_mode", "none") in ("rgb", "rgba"):
                 pixels[..., :3] *= coverage[..., None]

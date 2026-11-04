@@ -444,7 +444,7 @@ BLEND_OPS = {
 
 
 def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, flattened_cache=None,
-              shape_cache=None):
+              shape_cache=None, source_images=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
     h, w = int(height), int(width)
     if region is None:
@@ -478,7 +478,7 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
         rgb = np.zeros((th, tw, 3), dtype=np.float32)
     rx0, ry0, rx1, ry1 = roi[0], roi[1], roi[0] + roi[2], roi[1] + roi[3]
     painted = False                          # whether any shape has been composited into the canvas yet
-    for shape in shapes:
+    for shape_index, shape in enumerate(shapes):
         if not shape.get("visible", True):
             continue
         # A full-frame request used to allocate, fill and feather a full-frame coverage plane
@@ -562,6 +562,20 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
         else:
             alpha = cover * np.float32(shape["opacity"]) * color[3]
         source = None if fast else color[:3] * alpha[..., None]
+        selected_source = shape.get("source", "color")
+        if selected_source != "color" and (not source_images or selected_source not in source_images):
+            selected_source = "color"
+        image_record = None if not source_images else source_images.get((selected_source, shape_index), source_images.get(selected_source))
+        if selected_source in ("background", "foreground") and image_record is not None:
+            from .paintknobs import sample_roto_source
+            image, image_origin = image_record
+            if selected_source == "foreground":
+                image = canvas if fast else np.concatenate((rgb, matte[..., None]), axis=2)
+                image_origin = (x0, y0)
+            grid_y, grid_x = np.mgrid[sy0:sy1, sx0:sx1]
+            sampled = sample_roto_source(image, shape, grid_x.astype(np.float32), grid_y.astype(np.float32),
+                                         origin=image_origin)
+            source = sampled[..., :3] * alpha[..., None]
         py0, py1 = sy0 - y0, sy1 - y0
         px0, px1 = sx0 - x0, sx1 - x0
         matte_patch = matte[py0:py1, px0:px1]
@@ -585,21 +599,25 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
             # `minus` meant in graphs saved before the guide's A - B was followed (legacy_roto_shapes).
             op = BLEND_OPS[blend]
             cov = alpha[..., None]
-            rgb_patch[:] = np.clip(rgb_patch * (1.0 - cov) + cov * op(color[:3], rgb_patch), 0.0, 1.0)
+            shape_rgb = color[:3] if selected_source == "color" else np.divide(source, alpha[..., None], out=np.zeros_like(source), where=alpha[..., None] != 0)
+            rgb_patch[:] = np.clip(rgb_patch * (1.0 - cov) + cov * op(shape_rgb, rgb_patch), 0.0, 1.0)
             matte_patch[:] = np.clip(matte_patch * (1.0 - alpha) + alpha * op(np.float32(1.0), matte_patch), 0.0, 1.0)
         elif blend == "multiply":
-            rgb_patch *= 1.0 - alpha[..., None] + color[:3] * alpha[..., None]
+            shape_rgb = color[:3] if selected_source == "color" else np.divide(source, alpha[..., None], out=np.zeros_like(source), where=alpha[..., None] != 0)
+            rgb_patch *= 1.0 - alpha[..., None] + shape_rgb * alpha[..., None]
             matte_patch[:] = alpha + matte_patch * (1.0 - alpha)
         elif fast and not painted:
             # The first shape on an empty canvas: over is a plain write of colour times alpha.
             for channel in range(3):
-                np.multiply(alpha, color[channel], out=rgb_patch[..., channel])
+                shape_rgb = color[:3] if selected_source == "color" else np.divide(source, alpha[..., None], out=np.zeros_like(source), where=alpha[..., None] != 0)
+                np.multiply(alpha, shape_rgb[..., channel] if shape_rgb.ndim == 3 else shape_rgb[channel], out=rgb_patch[..., channel])
             matte_patch[...] = alpha
         elif fast:
             keep = np.float32(1.0) - alpha
             rgb_patch *= keep[..., None]
             for channel in range(3):
-                rgb_patch[..., channel] += alpha * color[channel]
+                shape_rgb = color[:3] if selected_source == "color" else np.divide(source, alpha[..., None], out=np.zeros_like(source), where=alpha[..., None] != 0)
+                rgb_patch[..., channel] += alpha * (shape_rgb[..., channel] if shape_rgb.ndim == 3 else shape_rgb[channel])
             matte_patch *= keep
             matte_patch += alpha
         else:

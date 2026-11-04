@@ -219,6 +219,64 @@ def build_panel(window, key):
         source.setCurrentIndex(max(0, source.findData(shape.get("source", "color"))))
         source.currentIndexChanged.connect(lambda index, box=source: edit("source", box.itemData(index)))
         layout.addWidget(QLabel("Shape source")); layout.addWidget(source)
+        # Nuke's Clone tab controls belong to this shape and only affect picture sources.
+        clone_box = QWidget(); clone_layout = QVBoxLayout(clone_box)
+        clone_layout.setContentsMargins(8, 2, 2, 2)
+        clone_box.setObjectName(f"roto-shape-clone-{i}")
+        clone_layout.addWidget(QLabel("Clone"))
+        def clone_edit(field, value):
+            entries = current()
+            if i < len(entries):
+                entries[i][field] = value
+                save(entries, i)
+        def clone_vec(field, part, value):
+            entries = current()
+            if i < len(entries):
+                vector = list(entries[i].get(field, [0.0, 0.0])); vector[part] = value
+                entries[i][field] = vector
+                save(entries, i)
+        for part, label in enumerate(("Translate X", "Translate Y")):
+            spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-source-transform-translate-{part}")
+            spin.setRange(-65536, 65536); spin.setValue(float(shape.get("source_transform_translate", [0, 0])[part]))
+            spin.setKeyboardTracking(False); spin.editingFinished.connect(
+                lambda p=part, w=spin: clone_vec("source_transform_translate", p, float(w.value())))
+            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+        for field, label, default in (("source_transform_rotate", "Rotate", 0.0),
+                                      ("source_transform_scale", "Scale", 1.0),
+                                      ("source_transform_skewX", "Skew X", 0.0),
+                                      ("source_transform_skewY", "Skew Y", 0.0)):
+            spin = QDoubleSpinBox(); spin.setObjectName("roto-shape-" + field)
+            spin.setRange(-1000, 1000); spin.setValue(float(shape.get(field, default))); spin.setKeyboardTracking(False)
+            spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
+            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+        for field, label, values, default in (("source_transform_skew_order", "Skew order", ("XY", "YX"), "XY"),
+                                               ("source_filter", "Filter", ("impulse", "cubic", "keys", "simon", "rifman", "mitchell", "parzen", "notch"), "cubic"),
+                                               ("source_time_offset_type", "Time offset type", ("relative", "absolute"), "relative")):
+            combo = QComboBox(); combo.setObjectName("roto-shape-" + field)
+            for value in values: combo.addItem(value.capitalize(), value)
+            combo.setCurrentIndex(max(0, combo.findData(shape.get(field, default))))
+            combo.currentIndexChanged.connect(lambda idx, f=field, w=combo: clone_edit(f, w.itemData(idx)))
+            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(combo)
+        center = shape.get("source_transform_center", [0, 0])
+        for part, label in enumerate(("Center X", "Center Y")):
+            spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-source-transform-center-{part}")
+            spin.setRange(-65536, 65536); spin.setValue(float(center[part])); spin.setKeyboardTracking(False)
+            spin.editingFinished.connect(lambda p=part, w=spin: clone_vec("source_transform_center", p, float(w.value())))
+            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+        for field, label, default in (("source_translate_round", "Round translation", False),
+                                      ("source_black_outside", "Black outside source", False)):
+            check = QCheckBox(label); check.setObjectName("roto-shape-" + field)
+            check.setChecked(bool(shape.get(field, default))); check.toggled.connect(lambda v, f=field: clone_edit(f, bool(v)))
+            clone_layout.addWidget(check)
+        for field, label in (("source_time_offset", "Source time offset"),):
+            spin = QDoubleSpinBox(); spin.setObjectName("roto-shape-" + field)
+            spin.setRange(-100000, 100000); spin.setValue(float(shape.get(field, 0))); spin.setKeyboardTracking(False)
+            spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
+            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+        layout.addWidget(clone_box)
+        clone_box.setEnabled(shape.get("source", "color") != "color")
+        source.currentIndexChanged.connect(lambda index, box=clone_box, control=source:
+                                           box.setEnabled(control.itemData(index) != "color"))
         for field, label, lo, hi, step in (("stroke_width", "Stroke width", 0, 4096, 0.5),
                                           ("feather", "Feather", -500, 500, 0.5),
                                           ("opacity", "Opacity", 0, 1, 0.05)):
