@@ -1,5 +1,24 @@
 ## 2026-11-04 - Lane 2 (2D behaviour), step P: the OCIO nodes', HSVTool's and Vectorfield's missing knobs, and Nuke's defaults on four time and metadata nodes
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:45 AM on 2026-11-04 PDT)
+
+`main` moved `41c504f8` -> `cef86472` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `cef86472` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-0635.log`, started 6:35 AM): **Ran 9290 tests in 583.678 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step S3: Nuke's rows and knob types on the third eight most-used nodes.** Commits:
+  - `0fade88d` Panel sweep S3: shared rows and measured widget types for Remove, AppendClip, CornerPin2D, BurnIn, Clamp, Blend, DirBlur and ContactSheet (layout 75 to 100, 93 to 100, 71 to 96, 75 to 100, 67 to 100, 83 to 100, 94 to 94, 68 to 100)
+  Diff: 11 files changed, 239 insertions(+), 90 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:15 AM on 2026-11-04 PDT)
 
 `main` moved `403df01b` -> `7ef94d46` (lane commits cherry-picked onto main in lane order) and then to this

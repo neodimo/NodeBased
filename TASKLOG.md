@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S3: Nuke's rows and knob types on the third eight most-used nodes (integrator tick)
+
+- **What was done:** `main` `41c504f8` -> `cef86472` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `cef86472`: Ran 9290 tests in 583.678 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S2: Nuke's rows and knob types on the next eight most-used nodes (integrator tick)
 
 - **What was done:** `main` `403df01b` -> `7ef94d46` plus this docs commit. Evidence and per-lane commit
