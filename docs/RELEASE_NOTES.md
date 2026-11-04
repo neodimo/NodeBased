@@ -1,3 +1,29 @@
+# NodeBased 0.51.0 — 2D nodes that compute what Nuke computes
+
+## What changed since 0.50.0
+
+- **The 2D nodes now do what Nuke's guide says they do, shown by pixel tests.** Two lanes went through the Color, Keyer, Channel, Filter, Transform, Draw, Time and Merge groups node by node. 95 of the 167 scored nodes now have their behaviour checked by pixel cases (30 when this work began on 11/2), and every one of the 375 paired knobs that the probe can move changes the picture (271 of 346 before; 75 did nothing). The fidelity score, re-measured under the stricter rules of 11/2 (knobs that act, Nuke's layout, per-channel values, unchecked behaviour scored 0), went from 82.1 to 95.8.
+- **Kernel fixes where NodeBased disagreed with Nuke.** Among them: ColorCorrect, Saturation, HueCorrect, HSVTool, Toe, SoftClip, Posterize, Log2Lin, PLogLin, Colorspace, ColorLookup, HueKeyer (Nuke's amount and saturation curves), ChannelMerge (the guide's fourteen operations), Transform, Reformat, CornerPin, Crop, Rectangle, Radial and Ramp (y counts up from the bottom), Noise, Grid, Grain, Dither, Defocus, ZDefocus (thin-lens blur), EdgeExtend, EdgeBlur, GodRays, DirBlur, LightWrap, Roto and RotoPaint blends, Bilateral, LensDistortion (NukeX Classic and Custom radial models), Flare, Glint, Sparkles and ScannedGrain.
+- **Nuke's missing knobs and inputs.** Denoise, MotionBlur, VectorBlur, MatchGrade, IBKGizmo, Cryptomatte and Encryptomatte, VectorCornerPin, VectorDistort, GridWarp, SplineWarp, Tracker, PointsTo3D, Reconcile3D, SmartVector, Kronos, OFlow, TimeWarp, Emboss, BumpBoss, EdgeExtend, Defocus and the motion blurs gain the knobs and inputs the guide lists. GenerateLUT also writes a .3dl.
+- **Per-channel values.** Grade, ColorCorrect, Multiply, Add, Gamma, Clamp and the size of Blur, Sharpen, Soften, Glow and Erode take one value per channel (r g b a, or width and height), with a toggle in the panel, like Nuke's colour and size knobs.
+- **Panels in Nuke's order.** The main tabs of the colour, keyer, channel, filter, transform, time and image nodes follow the Nuke 17.0 guide's knob order and labels.
+- **New nodes start at Nuke's defaults.** A new Read starts with auto alpha off, a new Write on rgb, and BurnIn, IBKColor and Keyer at the guide's values.
+- **Project settings.** Root takes name, label, project directory, lock connections and lock range.
+- **Older documents keep their pictures.** Every behaviour change sits behind a per-node legacy flag, so a graph saved before renders exactly as it did. The document schema moves to 29.
+- **Two hangs fixed.** Closing the Queue panel ends the running loop instead of waiting forever, a chain cancelled before it was queued now ends cancelled, and the GPU display no longer waits on the GUI thread for its offscreen surface.
+
+## Known limits
+
+- Nothing here has been compared with a real Nuke render. The pixel cases check what the guide states or Nuke's long-standing form; pixel truth stays unmeasured until someone with Nuke runs the reference pack (`tools/make_nuke_reference_pack.py`).
+- 72 scored nodes still have no pixel case, mostly because the guide states no behaviour that can be checked without guessing; each is listed `not scored` with its reason.
+- Some knobs are listed unsupported with a reason (for example VectorDistort's Frame Distance, Reconcile3D's picture-resampling knobs, several BumpBoss lighting knobs).
+- Root's proxy and format settings are not done yet.
+
+## Moved to 0.52.0
+
+- Root's proxy and format, and the knobs left out of the last 2D behaviour step (Emboss, BumpBoss, motion blurs, EdgeExtend, Defocus finish).
+- Carried from 0.50.0: a field-of-view limit for generated footage, re-anchored generation in shorter pieces, more scenes and seeds for the camera-following benchmark, real curls in the fire's smoke, the next GPU playback bottleneck toward 24 fps, and measuring the 2D nodes against real Nuke renders.
+
 # NodeBased 0.50.0 — A local video model that follows the shot's camera
 
 ## What changed since 0.49.0
