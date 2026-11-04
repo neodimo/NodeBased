@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step P of 2: GridWarp and SplineWarp's remaining knobs, Flare, Sparkles and VolumeRays' secondary knobs, and VectorDistort's blur (integrator tick)
+
+- **What was done:** `main` `de6037a0` -> `6aa0dfa1` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `6aa0dfa1`: Ran 9120 tests in 596.504 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-03 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step N of 2: Kronos, OFlow and TimeWarp get Nuke's remaining retime knobs and inputs, and the project settings' proxy and format, Lane 9 (2D behaviour B, Claude Sonnet 5.5) step O of 2: BumpBoss, Emboss, the motion blurs, EdgeExtend and Defocus get Nuke's missing knobs and defaults (finish 1) (integrator tick)
 
 - **What was done:** `main` `b0df0d96` -> `fb67e53d` plus this docs commit. Evidence and per-lane commit
