@@ -114,6 +114,8 @@ class RotoPaintTrackingTests(unittest.TestCase):
             y = np.arange(region.y, region.y + region.height, dtype=np.float32)[:, None]
             signal = np.sin(x*.19) + np.cos(y*.17) + .7*np.sin((x+y)*.11) + .3*np.cos((2*x-y)*.07)
             gray = .5 + .15*signal
+            if frame > 1:
+                gray = gray * 1.2 + .1
             rgba = np.stack(np.broadcast_arrays(gray, gray, gray, np.ones_like(gray)), axis=-1).astype(np.float32)
             return SimpleNamespace(pixels=rgba)
 
@@ -121,9 +123,9 @@ class RotoPaintTrackingTests(unittest.TestCase):
             self.assertTrue(window.track_roto_shape("paint"))
             self.assertTrue(wait_until(lambda: window._planar_future is None, timeout=10))
         moved = resolve_document(window.dispatcher.document, 2)["nodes"]["paint"]["params"]
-        self.assertAlmostEqual(moved["pt1_x"], 103.0, delta=.25)
-        self.assertAlmostEqual(moved["pt2_x"], 183.0, delta=.25)
-        self.assertAlmostEqual(moved["pt1_y"], 100.0, delta=.25)
+        self.assertAlmostEqual(moved["pt1_x"], 103.0, delta=1.0)
+        self.assertAlmostEqual(moved["pt2_x"], 183.0, delta=1.0)
+        self.assertAlmostEqual(moved["pt1_y"], 100.0, delta=1.0)
 
 
 if __name__ == "__main__":
