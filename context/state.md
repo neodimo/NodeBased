@@ -1,5 +1,26 @@
 ## 2026-11-04 — Lane 9, step X: RotoPaint tracking, ZSlice mask chrome, Reconcile3D 2D transform
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (6:16 PM on 2026-11-04 PDT)
+
+`main` moved `4dad47b4` -> `acb5b4b7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `acb5b4b7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-1756.log`, started 5:56 PM): **Ran 9356 tests in 649.150 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: cut the decoder's Python time and the Transform set-up per frame.** Commits:
+  - `5e43d036` Document Lane 8 playback optimization partial
+  - `51c404b3` Skip identity conversion for native linear EXRs
+  - `3768a446` Cache static GPU Transform staging plans
+  Diff: 6 files changed, 61 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (5:46 PM on 2026-11-04 PDT)
 
 `main` moved `12474895` -> `40797b5a` (lane commits cherry-picked onto main in lane order) and then to this

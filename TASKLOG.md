@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: cut the decoder's Python time and the Transform set-up per frame (integrator tick)
+
+- **What was done:** `main` `4dad47b4` -> `acb5b4b7` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `acb5b4b7`: Ran 9356 tests in 649.150 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: measure where the slow frames' time goes (integrator tick)
 
 - **What was done:** `main` `12474895` -> `40797b5a` plus this docs commit. Evidence and per-lane commit
