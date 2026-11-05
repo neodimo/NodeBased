@@ -138,6 +138,14 @@ class MediaTests(unittest.TestCase):
         write_exr(path, source)
         np.testing.assert_allclose(read_media(str(path)), source, rtol=2.0 ** -11, atol=0.0)
 
+    def test_native_linear_associated_exr_skips_identity_working_conversion(self):
+        path = self.dir / 'native-linear.exr'
+        source = np.array([[[0.125, 2.0, -0.25, 0.5]]], np.float32)
+        write_exr(path, source)
+        with patch.object(media, 'to_working', side_effect=AssertionError('identity conversion ran')):
+            actual = read_media_raster(path, colorspace='Raw', alpha_mode='Premultiplied')
+        np.testing.assert_array_equal(actual.pixels, source.astype(np.float16).astype(np.float32))
+
     def test_exr_output_defaults_to_half_zips_linear_rgba(self):
         path = self.dir / 'spec.exr'
         write_exr(path, np.zeros((2, 3, 4), np.float32))

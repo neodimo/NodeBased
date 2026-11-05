@@ -468,7 +468,13 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
                 if alpha is not None:
                     rgba[..., 3] = pixels[..., alpha - first]
             associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
-            rgba = to_working(rgba, space, associated, in_place=True)
+            # Native EXR values already in the working space and stored as
+            # associated alpha need no colour or alpha operation.  Besides being
+            # an identity, sending them through ``to_working`` scans alpha and
+            # divides/multiplies the whole HD image before the GPU uploader scans
+            # it again for its half-float fast path.
+            if not (space in color.PASSTHROUGH and associated):
+                rgba = to_working(rgba, space, associated, in_place=True)
             if alpha is None and not auto_alpha:
                 rgba[..., 3] = 0.0          # Nuke's Read without "auto alpha": a file with no alpha channel reads as alpha 0
         # Both windows in display-window-relative coordinates: the display window is rebased to
