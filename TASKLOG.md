@@ -1889,3 +1889,10 @@
 - **Artifacts:** code, tests and byte-identical fidelity reports are in this worktree; report path is in `scratch/nb-lanes/run/report-L9.md` (outside this repository by instruction).
 - **State:** Done; no schema bump. Full suite, Windows CI, integration and real-display QA remain unverified.
 - **Next owner + artifact:** Gonzo can integrate this branch and run the stacked suite; use `openclaw/nb-2d-behaviour`.
+## 2026-11-04 — Lane 8 GPU playback slow-frame profile
+
+- **What was done — evidence:** Split the three archived Radeon 8060S one-worker/two-frame-lead 48-frame traces at the 41.67 ms interval gate: 106 slow and 32 fast frames. Slow frames averaged 46.945 ms versus 39.729 ms. Their largest extra stage was preview-thread Python between instrumented stages (12.284 versus 9.533 ms); Transform preparation was 5.315 versus 3.860 ms. Decoded-source wait was lower on slow frames (7.384 versus 8.514 ms). An isolated warm-cache native-half 1080p playback decode measured 20.270 ms with one thread, 19.533 with two, and 20.661 with three, so it does not serialize by itself.
+- **Artifacts:** Committed `benchmarks/2d-gpu/R6-1/playback-profile-1104.json`. Raw archive and new probe are deliberate local scratch at `scratch/nb-lanes/run/bench-L8-decode-workers-1031/` and `scratch/nb-lanes/run/bench-L8-profile-1104/`; neither is committed.
+- **State:** Done as analysis only. The archived Radeon p95 is 53.634 ms against a 41.67 ms gate. The measured independent tail differences total about 2.9 ms, below the 5.275 ms required; no fresh Radeon pass, Windows run, or 240-frame inference was made.
+- **Next owner + concrete artifact:** Gonzo; use `benchmarks/2d-gpu/R6-1/playback-profile-1104.json` to decide whether to instrument the live preview scheduler around Transform/Roto/source handoffs.
+- **Failure mode:** The earlier higher decode-worker busy time did not establish raw decoder GIL or memory-bandwidth contention; the isolated exact decoder holds steady across two and three threads.

@@ -10428,3 +10428,12 @@ Roto shape `source` is stored/validated, shown in the shape panel, and `shape_so
 Roto's Tracking controls share `trackerknobs` preparation and the planar analyzer. The selected shape's reference-frame point bounds seed a four-corner region; the resulting curves are stored on Roto and export to relative, absolute, stabilize CornerPin, or four-track Tracker. A 3 px/frame synthetic move with a brightness ramp tracked within 0.25 px. CornerPin link mode uses expressions for the moving corners; baked mode writes curves. Legacy NodeBased `channels` continues to gate render output; `tracking_channels` carries Nuke's Tracking-tab channels to avoid changing old graphs without a schema migration. Roto's four confirmed unsupported knobs remain `key`, `view`, `stereo_offset`, and `source_view`.
 
 Evidence: targeted Roto, planar tracking, Tracker, RotoPaint, knob, core, tiers, knowledge, fidelity audit, desktop label and fluid panel modules passed in the project Python environment. Audit: Roto 18.0% (9/50) → 26.8% (15/56); overall 95.3 → 95.5, previous formula 95.9 → 96.1. The report and bundled copy match byte-for-byte. Full suite, integration, Windows CI and real-display QA remain outstanding.
+## 2026-11-04 — Lane 8: GPU playback slow-frame profile
+
+**Evidence.** The archived Radeon winner's slow displayed intervals have 2.751 ms more preview-thread Python time than fast intervals, with 1.455 ms more Transform preparation. Source readiness wait is lower on slow frames. The identical warm-cache native-half playback decoder takes 20.270 ms alone, 19.533 ms with two synchronized threads, and 20.661 ms with three; raw decode contention therefore does not explain the live trace.
+
+**State.** Analysis complete, no defaults or optimization changed. The proposed measured savings do not plausibly close the 53.634 ms to 41.67 ms p95 gap. Linux/Radeon, archived 48-frame evidence only.
+
+**Artifacts.** `benchmarks/2d-gpu/R6-1/playback-profile-1104.json` is committed; probe files remain deliberate scratch at `scratch/nb-lanes/run/bench-L8-profile-1104/`.
+
+**Next owner.** Gonzo decides whether a bounded scheduler/Transform handoff trace is justified from `playback-profile-1104.json`.

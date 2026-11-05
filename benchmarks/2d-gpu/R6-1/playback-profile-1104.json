@@ -1,0 +1,93 @@
+{
+  "method": {
+    "archived_trace": "Three 48-frame Radeon 8060S passes from 2026-10-31, one decode worker and two-frame lead. A slow displayed interval is greater than 41.67 ms; the frame split uses consecutive shown timestamps.",
+    "decode_probe": "Warm-page-cache 1080p native-half EXR. The playback read_media_raster decoder ran in synchronized batches for 10 rounds at each worker count. OpenImageIO-only decode and a concurrent 256 MiB NumPy copy were diagnostic controls."
+  },
+  "gate": {
+    "fps_at_least": 24,
+    "interval_p95_ms_at_most": 41.67,
+    "archived_winner": {
+      "fps": 21.806,
+      "interval_p95_ms": 53.634
+    }
+  },
+  "slow_fast_stage_means_ms": {
+    "slow_frames": 106,
+    "fast_frames": 32,
+    "slow": {
+      "interval": 46.945,
+      "wait_for_decoded_source": 7.384,
+      "upload": 3.782,
+      "gpu_kernels_total": 4.719,
+      "download": 3.044,
+      "display_present": 3.592,
+      "python_between_stages": 12.284,
+      "gpu_stage_prepare": {
+        "Transform": 5.315,
+        "ColorCorrect": 0.119,
+        "Grade": 0.067,
+        "Merge": 0.064,
+        "Blur": 0.05
+      }
+    },
+    "fast": {
+      "interval": 39.729,
+      "wait_for_decoded_source": 8.514,
+      "upload": 4.66,
+      "gpu_kernels_total": 4.577,
+      "download": 2.919,
+      "display_present": 2.699,
+      "python_between_stages": 9.533,
+      "gpu_stage_prepare": {
+        "Transform": 3.86,
+        "ColorCorrect": 0.107,
+        "Grade": 0.064,
+        "Merge": 0.061,
+        "Blur": 0.046
+      }
+    },
+    "largest_slow_minus_fast_difference": {
+      "stage": "python_between_stages",
+      "ms": 2.751,
+      "supporting_transform_prepare_difference_ms": 1.455,
+      "interpretation": "Slow frames spend more time in preview-thread Python orchestration and Transform staging. Decoded-source waiting is 1.130 ms lower on slow frames, so it does not bind this p95 tail."
+    }
+  },
+  "ranked_slow_frame_costs_ms": [
+    {"rank": 1, "stage": "Python between instrumented stages", "mean_ms": 12.284},
+    {"rank": 2, "stage": "Waiting for decoded source", "mean_ms": 7.384},
+    {"rank": 3, "stage": "GPU kernels", "mean_ms": 4.719}
+  ],
+  "decode_contention_probe_ms": {
+    "playback_read_media_raster_median_per_decode": {"one_thread": 20.27, "two_threads": 19.533, "three_threads": 20.661},
+    "openimageio_only_median_per_decode": {"one_thread": 2.305, "two_threads": 3.455, "three_threads": 4.839},
+    "playback_decode_with_independent_256_mib_numpy_copy": {"decode_median_ms": 19.225, "copy_median_ms": 16.814},
+    "verdict": "The full playback decoder does not serialize in isolation: two and three concurrent decodes remain within 2 percent of its one-thread median. The playback slowdown therefore needs the live preview's Roto/source/scheduling contention; raw EXR decode alone is neither a GIL nor a memory-bandwidth explanation. OpenImageIO-only work slows under concurrency, but that smaller component does not reproduce full decoder behavior."
+  },
+  "proposed_fixes": [
+    {
+      "cost": "Python between instrumented stages",
+      "proposal": "Trace and remove preview-thread head-of-line work around Transform preparation; cache immutable Transform setup or move it into the island encoder.",
+      "expected_saving_ms": 2.751,
+      "reason": "This is the largest slow-minus-fast difference, with Transform preparation adding 1.455 ms inside it."
+    },
+    {
+      "cost": "Waiting for decoded source",
+      "proposal": "Measure and decouple live Roto/source scheduling from decode-ahead readiness before changing decode-worker counts.",
+      "expected_saving_ms": 0,
+      "reason": "Slow frames wait less than fast frames, and isolated full decodes scale across threads; a worker-count change has no measured tail saving."
+    },
+    {
+      "cost": "GPU kernels",
+      "proposal": "Profile the Transform kernel separately and reduce its dispatch/encode preparation only after the preview-thread trace identifies the shared delay.",
+      "expected_saving_ms": 0.142,
+      "reason": "GPU kernel time rises only 0.142 ms on slow frames, so kernel tuning cannot close this tail by itself."
+    }
+  ],
+  "gate_verdict": "No. The independent measured tail differences total about 2.9 ms, below the 5.275 ms needed to bring the archived 53.634 ms p95 to 41.67 ms; the proposed items also overlap. A larger live scheduling or full-frame pipeline change needs evidence before claiming the gate is reachable.",
+  "artifacts": {
+    "raw_traces": "/home/omid/.openclaw/workspace/scratch/nb-lanes/run/bench-L8-decode-workers-1031/",
+    "new_probe_scratch": "/home/omid/.openclaw/workspace/scratch/nb-lanes/run/bench-L8-profile-1104/"
+  },
+  "limits": ["Linux Radeon 8060S only", "48-frame behavior only", "No fresh playback pass", "No Windows or 240-frame inference"]
+}
