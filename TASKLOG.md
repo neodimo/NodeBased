@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: measure where the slow frames' time goes (integrator tick)
+
+- **What was done:** `main` `12474895` -> `40797b5a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `40797b5a`: Ran 9354 tests in 632.434 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step Y: LensDistortion's lens-model options (integrator tick)
 
 - **What was done:** `main` `0bb1b079` -> `399bf8f2` plus this docs commit. Evidence and per-lane commit
