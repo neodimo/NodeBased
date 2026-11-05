@@ -252,7 +252,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 17 | PointsTo3D | `PointsTo3D` | supported | 84.4 | 87.5 | 100 (9/9) | - | 25 | 100 | - | - | 81 | - | no fixture |
 | 18 | Reconcile3D | `Reconcile3D` | supported | 73.1 | 68.9 | 53 (7/14) | - | 100 | 100 | - | - | 79 | - | no fixture |
 | 19 | TVIScale | `TVIScale` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
-| 20 | LensDistortion | `Undistort` | supported | 82.9 | 82.7 | 63 (36/58) | - | 100 | 100 | - | 100 (7/7) | 65 | - | unmeasured |
+| 20 | LensDistortion | `Undistort` | supported | 83.0 | 82.7 | 63 (36/58) | - | 100 | 100 | - | 100 (7/7) | 65 | - | unmeasured |
 
 ### Metadata
 
@@ -510,7 +510,7 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 22 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
 | 23 | PointsTo3D (Transform #17) | `PointsTo3D` | 0.92 | 84.4 | nothing missing that the guide lists |
 | 24 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
-| 25 | LensDistortion (Transform #20) | `Undistort` | 0.86 | 82.9 | 22 secondary knobs missing; knob order differs from Nuke's (26 of 33 in order) |
+| 25 | LensDistortion (Transform #20) | `Undistort` | 0.85 | 83.0 | 22 secondary knobs missing; knob order differs from Nuke's (27 of 33 in order) |
 | 26 | Blur (Filter #1) | `Blur` | 0.80 | 99.2 | nothing missing that the guide lists |
 | 27 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
 | 28 | Sharpen (Filter #2) | `Sharpen` | 0.77 | 98.5 | nothing missing that the guide lists |
@@ -1438,7 +1438,7 @@ Labels below are NodeBased's, then the guide's.
 
 - GenerateLUT (`GenerateLUT`): `file` reads "3D LUT (.cube or .3dl)", Nuke "output file"
 - ZMerge (`ZMerge`): `z_channel` reads "Depth layer", Nuke "Z channel"
-- LensDistortion (`Undistort`): 26 of 33 paired knobs in Nuke's order
+- LensDistortion (`Undistort`): 27 of 33 paired knobs in Nuke's order
 
 ### Split knobs
 
