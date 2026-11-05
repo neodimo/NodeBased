@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step X: RotoPaint's Tracking tab, ZSlice's mask strip, Reconcile3D's 2D transform (integrator tick)
+
+- **What was done:** `main` `bef72ccc` -> `09b4db47` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `09b4db47`: Ran 9352 tests in 629.083 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 # Lane task log
 
 ## 2026-11-04 — Lane 9, step X (partial)

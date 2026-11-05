@@ -1,5 +1,26 @@
 ## 2026-11-04 — Lane 9, step X: RotoPaint tracking, ZSlice mask chrome, Reconcile3D 2D transform
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (4:26 PM on 2026-11-04 PDT)
+
+`main` moved `bef72ccc` -> `09b4db47` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `09b4db47` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-1606.log`, started 4:06 PM): **Ran 9352 tests in 629.083 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step X: RotoPaint's Tracking tab, ZSlice's mask strip, Reconcile3D's 2D transform.** Commits:
+  - `82f6a41b` Document Lane 9 step X partial handoff
+  - `97bb1277` Test RotoPaint tracking across exposure changes
+  - `c41558c8` Add RotoPaint tracking and ZSlice chrome parity
+  Diff: 13 files changed, 343 insertions(+), 68 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ### Evidence
 
 - Lane 9 step X commits `c41558c8` and `97bb1277` add RotoPaint selected-shape/stroke tracking and exports, defaults for older documents, plus ZSlice's shared channel and mask strip without double-applying its existing mask.
