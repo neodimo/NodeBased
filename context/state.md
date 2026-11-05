@@ -1,5 +1,24 @@
 ## 2026-11-04 — Lane 9, step X: RotoPaint tracking, ZSlice mask chrome, Reconcile3D 2D transform
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (5:16 PM on 2026-11-04 PDT)
+
+`main` moved `0bb1b079` -> `399bf8f2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `399bf8f2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-1656.log`, started 4:56 PM): **Ran 9354 tests in 646.273 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step Y: LensDistortion's lens-model options.** Commits:
+  - `1ab5b3e9` LensDistortion: add anamorphic twist and scale controls
+  Diff: 11 files changed, 196 insertions(+), 39 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (4:26 PM on 2026-11-04 PDT)
 
 `main` moved `bef72ccc` -> `09b4db47` (lane commits cherry-picked onto main in lane order) and then to this

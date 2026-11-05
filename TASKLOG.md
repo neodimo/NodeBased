@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step Y: LensDistortion's lens-model options (integrator tick)
+
+- **What was done:** `main` `0bb1b079` -> `399bf8f2` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `399bf8f2`: Ran 9354 tests in 646.273 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step X: RotoPaint's Tracking tab, ZSlice's mask strip, Reconcile3D's 2D transform (integrator tick)
 
 - **What was done:** `main` `bef72ccc` -> `09b4db47` plus this docs commit. Evidence and per-lane commit
