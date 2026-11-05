@@ -1,3 +1,9 @@
+## 2026-11-04 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: cut the decoder's Python time and the Transform set-up per frame (finish 1) (integrator tick)
+
+- **What was done:** `main` `604fc222` -> `550adeaf` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `550adeaf`: Ran 9356 tests in 630.540 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-04 — Lane 8 finish 1 (partial): decoder/Transform verification
 
 - **What was done:** Compared the pre-L8 `4dad47b4` decode path with the merged lane code. Ten playback EXRs plus a data-window-smaller-than-display EXR, and rendered frames 1/12/24/36/48, are bit-identical. Three interleaved Radeon passes at default and one-worker/two-frame lead, plus an RTX pass, completed.

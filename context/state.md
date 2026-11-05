@@ -1,5 +1,24 @@
 ## 2026-11-04 — Lane 8 finish 1 (partial): decoder/Transform verification
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (6:56 PM on 2026-11-04 PDT)
+
+`main` moved `604fc222` -> `550adeaf` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `550adeaf` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1104-1836.log`, started 6:36 PM): **Ran 9356 tests in 630.540 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: cut the decoder's Python time and the Transform set-up per frame (finish 1).** Commits:
+  - `a77d40a2` Document Lane 8 decoder verification partial
+  Diff: 2 files changed, 12 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Fixture EXR decoder arrays, an overscan EXR, and five rendered playback frames compare bit-identically against `4dad47b4`. Fresh Radeon default p95 improved to 52.156–56.637 ms from 61.421–64.693 ms, while the 41.670 ms gate remains unmet. The warm decoder median is 13.412 ms (pre-L8 14.900 ms); NumPy `astype` is the largest remaining cProfile block at 8.086 ms/decode. The RTX pair was effectively flat at 10.008 -> 9.857 fps. Float-only decoding reached 5.733 ms but regressed RTX playback to 6.090 fps, so that experiment was reverted. Scratch evidence: `scratch/nb-lanes/run/bench-L8-decode-python-1104/`. Gonzo owns a compact-sample/widening redesign.
 
 ## 2026-11-04 — Lane 9, step X: RotoPaint tracking, ZSlice mask chrome, Reconcile3D 2D transform
