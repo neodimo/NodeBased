@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -2417,6 +2417,14 @@ CHOICES.update({"distortionModelPreset": list(_lensdistortion.PRESETS), "lens_ty
                 "bboxType": list(_lensdistortion.BBOX_TYPES), "outputFormatType": list(_lensdistortion.FORMAT_TYPES),
                 "distortionScalingType": list(_lensdistortion.SCALING_TYPES),
                 "lens_format": list(REFORMAT_FORMATS), "lens_scaling_format": list(REFORMAT_FORMATS)})
+CHOICES.update({"distortionModelType": list(_lensdistortion.MODEL_TYPES), "normalisationType": list(_lensdistortion.NORMALISATIONS),
+                "projection": list(_lensdistortion.PROJECTIONS)})
+LIMITS.update({name: (0, 1) for name in ("distortInFisheyeSpace", "useFisheye", "enableBeamSplitter")})
+LIMITS.update({"anamorphicTwist": (-180.0, 180.0), "anamorphicScale_x": (0.01, 100.0), "anamorphicScale_y": (0.01, 100.0),
+               "distortionOrder_x": (0, 8), "distortionOrder_y": (0, 8),
+               "distortionExponent_x": (1, 8), "distortionExponent_y": (1, 8),
+               "focal": (0.1, 1000.0), "sensorSize_x": (0.1, 1000.0), "sensorSize_y": (0.1, 1000.0),
+               "beamSplitterDirection": (-180.0, 180.0), "beamSplitterBending": (-1.0, 1.0)})
 CHOICES["upres_factor"] = ["1", "2", "4"]
 CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
 CHOICES["whitewater_backend"] = ["auto", "cpu", "gpu"]
@@ -3075,6 +3083,24 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _older_defaults(doc["nodes"])
         doc["version"] = 32
+    if isinstance(doc, dict) and doc.get("version") == 32:
+        # v32 -> v33 adds LensDistortion controls with defaults that retain the prior warp.
+        def _lens_options(scope):
+            for node in scope.values():
+                if not isinstance(node, dict):
+                    continue
+                if node.get("type") in ("Undistort", "Redistort"):
+                    params = node.setdefault("params", {})
+                    lens_defaults = _lensdistortion.upgrade_params(node["type"])
+                    for name, value in lens_defaults.items():
+                        if name == "lens_output" and node.get("type") == "Redistort":
+                            continue
+                        params.setdefault(name, value)
+                graph = node.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _lens_options(graph["nodes"])
+        _lens_options(doc.get("nodes", {}))
+        doc["version"] = 33
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

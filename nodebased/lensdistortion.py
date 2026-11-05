@@ -45,13 +45,22 @@ DIRECTIONS = ("Forward", "Backward")
 BBOX_TYPES = ("Auto", "Input", "Manual")
 FORMAT_TYPES = ("Input", "Format", "BBox")
 SCALING_TYPES = ("Scale to Input Format", "Format")
+MODEL_TYPES = ("Radial Standard", "Radial Asymmetric", "Radial-Tangential (Coupled)", "Radial-Tangential (Uncoupled)")
+NORMALISATIONS = ("Maximum", "Width", "Height", "Diagonal")
+PROJECTIONS = ("None (Rectilinear)", "Stereographic", "Equidistant", "Equisolid", "Orthographic")
 
 KINDS = ("Undistort", "Redistort")
 _COMMON = {"distortionModelPreset": CLASSIC, "lens_type": "Spherical", "distortionNumerator0": 0.0, "distortionNumerator1": 0.0,
            "distortionDenominator0": 0.0, "distortionDenominator1": 0.0, "centre_x": 0.0, "centre_y": 0.0,
            "distortionModelDirection": "Forward", "bboxType": "Auto", "bbox_x": 0.0, "bbox_y": 0.0, "bbox_r": 1920.0, "bbox_t": 1080.0,
            "outputFormatType": "Input", "lens_format": "HD_1080", "distortionScalingType": "Scale to Input Format",
-           "lens_scaling_format": "HD_1080"}
+           "lens_scaling_format": "HD_1080", "anamorphicTwist": 0.0, "anamorphicScale_x": 1.0, "anamorphicScale_y": 1.0,
+           "distortionModelType": "Radial Standard", "distortionOrder_x": 0, "distortionOrder_y": 2,
+           "distortionExponent_x": 2, "distortionExponent_y": 2, "normalisationType": "Maximum",
+           "distortInFisheyeSpace": 1, "projection": "None (Rectilinear)", "focal": 9.0, "sensorSize_x": 36.0,
+           "sensorSize_y": 24.0, "useFisheye": 1, "enableBeamSplitter": 0, "beamSplitterDirection": 0.0,
+           "beamSplitterBending": 0.0, "distortionModelDisplayX": "xu = xd / (1 + k0 * rd^2 + k1 * rd^4)",
+           "distortionModelDisplayY": "yu = yd / (1 + k0 * rd^2 + k1 * rd^4)"}
 NEW = {"Undistort": {**_COMMON, "lens_output": "Undistort"}, "Redistort": dict(_COMMON)}
 
 
@@ -100,13 +109,17 @@ def build_lens(p, display, lensmodel):
                                   squeeze=float(p.get("anamorphic_squeeze", 1.0)) or 1.0)
         return lens, frame
     half = max(float(fh), 1.0) / 2.0
-    squeeze = (float(p.get("anamorphic_squeeze", 1.0)) or 1.0) if p.get("lens_type", "Spherical") == "Anamorphic" else 1.0
+    anamorphic = p.get("lens_type", "Spherical") == "Anamorphic"
+    squeeze = (float(p.get("anamorphic_squeeze", 1.0)) or 1.0) if anamorphic else 1.0
     numerator = (float(p.get("distortionNumerator0", 0.0)), float(p.get("distortionNumerator1", 0.0))) if preset == CUSTOM else (0.0, 0.0)
     lens = lensmodel.RationalLens(numerator[0], numerator[1], float(p.get("distortionDenominator0", 0.0)),
                                   float(p.get("distortionDenominator1", 0.0)),
                                   p.get("distortionModelDirection", "Forward") == "Forward" if preset == CUSTOM else True,
                                   float(p.get("centre_x", 0.0)) / half, float(p.get("centre_y", 0.0)) / half, squeeze,
-                                  float(fh) / max(float(fw), float(fh), 1.0))
+                                  float(fh) / max(float(fw), float(fh), 1.0),
+                                  float(p.get("anamorphicTwist", 0.0)) if anamorphic else 0.0,
+                                  float(p.get("anamorphicScale_x", 1.0)) if anamorphic else 1.0,
+                                  float(p.get("anamorphicScale_y", 1.0)) if anamorphic else 1.0)
     return lens, frame
 
 

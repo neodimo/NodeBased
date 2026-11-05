@@ -52,6 +52,9 @@ class Lens:
     cx: float = 0.0
     cy: float = 0.0
     squeeze: float = 1.0
+    twist: float = 0.0
+    scale_x: float = 1.0
+    scale_y: float = 1.0
 
     @property
     def is_identity(self):
@@ -84,6 +87,9 @@ class RationalLens:
     cy: float = 0.0
     squeeze: float = 1.0
     ratio: float = 1.0
+    twist: float = 0.0
+    scale_x: float = 1.0
+    scale_y: float = 1.0
 
     @property
     def is_identity(self):
@@ -94,7 +100,17 @@ class RationalLens:
         return (1.0 + r2 * (self.n0 + r2 * self.n1)) / (1.0 + r2 * (self.d0 + r2 * self.d1))
 
     def _centred(self, x, y):
-        return np.asarray(x, np.float64) / self.squeeze - self.cx, np.asarray(y, np.float64) - self.cy
+        dx = np.asarray(x, np.float64) / self.squeeze - self.cx
+        dy = np.asarray(y, np.float64) - self.cy
+        angle = np.deg2rad(self.twist)
+        return ((dx * np.cos(angle) - dy * np.sin(angle)) * self.scale_x,
+                (dx * np.sin(angle) + dy * np.cos(angle)) * self.scale_y)
+
+    def _uncentre(self, x, y):
+        x = np.asarray(x, np.float64) / self.scale_x
+        y = np.asarray(y, np.float64) / self.scale_y
+        angle = np.deg2rad(self.twist)
+        return (x * np.cos(angle) + y * np.sin(angle), -x * np.sin(angle) + y * np.cos(angle))
 
     def _apply(self, dx, dy):
         k = self._scale(dx * dx + dy * dy)
@@ -118,11 +134,13 @@ class RationalLens:
     def distort(self, x, y):
         dx, dy = self._centred(x, y)
         xd, yd = self._invert(dx, dy) if self.forward else self._apply(dx, dy)
+        xd, yd = self._uncentre(xd, yd)
         return (xd + self.cx) * self.squeeze, yd + self.cy
 
     def undistort(self, xd, yd):
         dx, dy = self._centred(xd, yd)
         xu, yu = self._apply(dx, dy) if self.forward else self._invert(dx, dy)
+        xu, yu = self._uncentre(xu, yu)
         return (xu + self.cx) * self.squeeze, yu + self.cy
 
 

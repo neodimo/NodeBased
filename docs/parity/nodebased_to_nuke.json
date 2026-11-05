@@ -4057,7 +4057,23 @@
     {"nodebased": ["outputFormatType"], "nuke": ["outputFormatType"], "kind": "same"},
     {"nodebased": ["lens_format"], "nuke": ["format"], "kind": "renamed", "reason": "same control (a named format) under another name; the name `format` belongs to Reformat and Read with other meanings"},
     {"nodebased": ["distortionScalingType"], "nuke": ["distortionScalingType"], "kind": "same"},
-    {"nodebased": ["lens_scaling_format"], "nuke": ["outputFormat"], "kind": "renamed", "reason": "same control (the format the distortion is scaled to) under another name"}
+    {"nodebased": ["lens_scaling_format"], "nuke": ["outputFormat"], "kind": "renamed", "reason": "same control (the format the distortion is scaled to) under another name"},
+    {"nodebased": ["anamorphicTwist"], "nuke": ["anamorphicTwist"], "kind": "same", "reason": "same control and units"},
+    {"nodebased": ["anamorphicScale_x", "anamorphicScale_y"], "nuke": ["anamorphicScale"], "kind": "components", "reason": "split x and y fields of Nuke's pair"},
+    {"nodebased": ["distortionModelType"], "nuke": ["distortionModelType"], "kind": "same", "reason": "same model selector"},
+    {"nodebased": ["distortionOrder_x", "distortionOrder_y"], "nuke": ["distortionOrder"], "kind": "components", "reason": "split numerator and denominator terms"},
+    {"nodebased": ["distortionExponent_x", "distortionExponent_y"], "nuke": ["distortionExponent"], "kind": "components", "reason": "split numerator and denominator exponents"},
+    {"nodebased": ["normalisationType"], "nuke": ["normalisationType"], "kind": "same", "reason": "same normalization selector"},
+    {"nodebased": ["distortInFisheyeSpace"], "nuke": ["distortInFisheyeSpace"], "kind": "same", "reason": "same operation-order switch"},
+    {"nodebased": ["projection"], "nuke": ["projection"], "kind": "same", "reason": "same projection selector"},
+    {"nodebased": ["focal"], "nuke": ["focal"], "kind": "same", "reason": "same focal-length control"},
+    {"nodebased": ["sensorSize_x", "sensorSize_y"], "nuke": ["sensorSize"], "kind": "components", "reason": "split x and y sensor dimensions"},
+    {"nodebased": ["useFisheye"], "nuke": ["useFisheye"], "kind": "same", "reason": "same output switch"},
+    {"nodebased": ["enableBeamSplitter"], "nuke": ["enableBeamSplitter"], "kind": "same", "reason": "same beam splitter switch"},
+    {"nodebased": ["beamSplitterDirection"], "nuke": ["beamSplitterDirection"], "kind": "same", "reason": "same direction control"},
+    {"nodebased": ["beamSplitterBending"], "nuke": ["beamSplitterBending"], "kind": "same", "reason": "same bending control"},
+    {"nodebased": ["distortionModelDisplayX"], "nuke": ["distortionModelDisplayX"], "kind": "same", "reason": "equation display field"},
+    {"nodebased": ["distortionModelDisplayY"], "nuke": ["distortionModelDisplayY"], "kind": "same", "reason": "equation display field"}
    ]
   },
   "ViewMetaData": {

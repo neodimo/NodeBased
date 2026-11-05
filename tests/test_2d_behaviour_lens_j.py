@@ -284,10 +284,11 @@ class KnobsActTests(unittest.TestCase):
 
     def test_each_paired_knob_acts(self):
         moves = {"distortionModelPreset": "NukeX Classic", "lens_type": "Spherical", "anamorphic_squeeze": 2.0,
+                 "anamorphicTwist": 23.0, "anamorphicScale_x": 1.2, "anamorphicScale_y": 0.8,
                  "distortionDenominator0": 0.09, "distortionDenominator1": 0.03, "distortionNumerator0": 0.07, "distortionNumerator1": 0.03,
                  "centre_x": 4.0, "centre_y": -3.0, "lens_output": "Redistort", "distortionModelDirection": "Backward",
                  "bboxType": "Input", "outputFormatType": "Format", "distortionScalingType": "Format", "filter": "impulse"}
-        base = {**self.BASE, "anamorphic_squeeze": 1.5}
+        base = {**self.BASE, "anamorphic_squeeze": 1.5, "anamorphicScale_x": 1.4, "anamorphicScale_y": 0.7}
         for name, value in moves.items():
             with self.subTest(knob=name):
                 a, b = raster(graph(**base)), raster(graph(**{**base, name: value}))
@@ -311,13 +312,30 @@ class KnobsActTests(unittest.TestCase):
             raster(d)
         self.assertIn("Brown-Conrady", str(caught.exception))
 
+    def test_v32_documents_gain_anamorphic_defaults_without_changing_the_legacy_lens(self):
+        d = graph(distortionDenominator0=0.04)
+        old = copy.deepcopy(d.document)
+        old["version"] = 32
+        params = old["nodes"]["lens"]["params"]
+        for name in ("distortionModelPreset", "anamorphicTwist", "anamorphicScale_x", "anamorphicScale_y"):
+            params.pop(name, None)
+        d.document["nodes"]["lens"]["params"].pop("distortionModelPreset", None)
+        before = raster(d).pixels.copy()
+        upgraded = upgrade_document(old)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
+        self.assertEqual(upgraded["nodes"]["lens"]["params"]["distortionModelPreset"], BROWN)
+        self.assertEqual(upgraded["nodes"]["lens"]["params"]["anamorphicScale_x"], 1.0)
+        after = Evaluator().evaluate_raster(upgraded, "lens", frame=1, tier=1).pixels
+        np.testing.assert_array_equal(before, after)
+
 
 class LayoutTests(unittest.TestCase):
     def test_main_tab_order_follows_the_guide(self):
         from nodebased.knobs import KNOB_LAYOUT
         order = [g.label for g in KNOB_LAYOUT["Undistort"]]
-        wanted = ["Model Preset", "Lens Type", "Squeeze", "Denominator s", "Centre", "Mode", "Filter", "BBox", "Output Format",
-                  "Distortion Scaling", "Direction", "Numerator s"]
+        wanted = ["Model Preset", "Lens Type", "Squeeze", "Denominator s", "Centre", "Mode", "Use Fisheye", "Filter", "BBox", "Output Format",
+                  "Distortion Scaling", "Distortion Type", "Order", "Exponent", "Direction", "Normalisation", "Distort in Fisheye Space",
+                  "Numerator s"]
         positions = [order.index(label) for label in wanted]
         self.assertEqual(positions, sorted(positions))
 
@@ -342,6 +360,17 @@ class RationalLensTests(unittest.TestCase):
         lens = lensmodel.RationalLens(0.0, 0.0, -5.0, 0.0, True)
         ux, _ = lens.distort(np.array([3.0]), np.array([0.0]))
         self.assertTrue(np.isnan(ux).all() or np.isfinite(ux).all())
+
+    def test_anamorphic_transform_round_trips_and_default_is_legacy(self):
+        x, y = np.array([-0.8, 0.0, 0.7]), np.array([0.3, -0.4, 0.1])
+        legacy = lensmodel.RationalLens(0.02, 0.0, 0.08, 0.01, True, 0.03, -0.02, 1.5, 1.0)
+        defaulted = lensmodel.RationalLens(0.02, 0.0, 0.08, 0.01, True, 0.03, -0.02, 1.5, 1.0, 0.0, 1.0, 1.0)
+        for a, b in zip(legacy.distort(x, y), defaulted.distort(x, y)):
+            np.testing.assert_array_equal(a, b)
+        transformed = lensmodel.RationalLens(0.02, 0.0, 0.08, 0.01, True, 0.03, -0.02, 1.5, 1.0, 17.0, 1.2, 0.8)
+        ux, uy = transformed.undistort(*transformed.distort(x, y))
+        np.testing.assert_allclose(ux, x, atol=1e-7)
+        np.testing.assert_allclose(uy, y, atol=1e-7)
 
 
 if __name__ == "__main__":

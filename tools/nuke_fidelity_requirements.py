@@ -57,6 +57,23 @@ NOT_PIXEL = {
     "Tracker": {name: "viewer display only (Nuke 17.0 Tracker reference guide)" for name in (
         "zoom_window_behavior", "zoom_window_size", "zoom_magnification_size", "zoom_window_filter_behaviour",
         "keyframe_display", "keyframe_size", "max_number_of_keyframe_tracks_to_display")},
+    # Lane 9 step Y (11/4): these controls are exposed/mapped, but their formulas are absent or their behavior is descriptive only.
+    "LensDistortion": {
+        "distortionModelDisplayX": "equation display only (Nuke 17.0 LensDistortion reference guide)",
+        "distortionModelDisplayY": "equation display only (Nuke 17.0 LensDistortion reference guide)",
+        "distortionModelType": "the guide names Radial Asymmetric and Radial-Tangential variants without equations; only Radial Standard is specified",
+        "distortionOrder": "the guide describes polynomial order but gives no general coefficient-series formula",
+        "distortionExponent": "the guide describes polynomial exponents but gives no general coefficient-series formula",
+        "normalisationType": "the guide names normalization modes but gives no conversion factors",
+        "projection": "the guide lists fisheye projection families but gives no projection equations",
+        "focal": "projection parameter has no documented pixel-mapping equation in the guide",
+        "sensorSize": "projection parameter has no documented pixel-mapping equation in the guide",
+        "distortInFisheyeSpace": "the guide describes operation order but does not define the projection conversion",
+        "useFisheye": "the guide describes operation order but does not define the projection conversion",
+        "enableBeamSplitter": "the guide describes beam-splitter controls without a pixel equation",
+        "beamSplitterDirection": "the guide describes beam-splitter controls without a pixel equation",
+        "beamSplitterBending": "the guide describes beam-splitter controls without a pixel equation",
+    },
     "Flare": {"chroma_shift_angle_add": "adds the image-centre-to-Position angle only when the flare is off-centre and chroma shift is non-zero; verified by FlareTests, while the one-knob audit fixture is centred",
               "vis_in": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",
               "vis_out": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",
