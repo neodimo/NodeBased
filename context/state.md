@@ -10456,3 +10456,8 @@ Evidence: targeted Roto, planar tracking, Tracker, RotoPaint, knob, core, tiers,
 **Artifacts.** `benchmarks/2d-gpu/R6-1/playback-profile-1104.json` is committed; probe files remain deliberate scratch at `scratch/nb-lanes/run/bench-L8-profile-1104/`.
 
 **Next owner.** Gonzo decides whether a bounded scheduler/Transform handoff trace is justified from `playback-profile-1104.json`.
+## 2026-11-04 — Lane 8: decoder and Transform setup partial
+
+**Evidence.** `3768a446` caches parameter/window-identical GPU Transform plans and tests animated-translate invalidation. `51c404b3` skips an identity native-linear EXR conversion. Targeted GPU2D and media/Read/source-pool/cache tests passed; logs are deliberate workspace scratch.
+
+**Limits.** Fixture-wide decoded/rendered `np.array_equal` comparison and the requested Radeon/RTX fresh playback passes remain unverified. Linux-only lane.

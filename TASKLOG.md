@@ -1902,3 +1902,9 @@
 - **State:** Done as analysis only. The archived Radeon p95 is 53.634 ms against a 41.67 ms gate. The measured independent tail differences total about 2.9 ms, below the 5.275 ms required; no fresh Radeon pass, Windows run, or 240-frame inference was made.
 - **Next owner + concrete artifact:** Gonzo; use `benchmarks/2d-gpu/R6-1/playback-profile-1104.json` to decide whether to instrument the live preview scheduler around Transform/Roto/source handoffs.
 - **Failure mode:** The earlier higher decode-worker busy time did not establish raw decoder GIL or memory-bandwidth contention; the isolated exact decoder holds steady across two and three threads.
+## 2026-11-04 — Lane 8: GPU playback decoder and Transform setup (partial)
+
+- **What was done (evidence):** Cached GPU Transform plans by every parameter and source/output window, so unchanged playback Transform tables are reused while an animated translate creates a new plan. Native linear, premultiplied EXRs now skip the redundant working-space conversion.
+- **Artifacts:** `3768a446` and `51c404b3`; local test logs at `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L8-gpu2d-cache.log` and `L8-media-fastpath.log`.
+- **State:** Partial. GPU Transform, media, Read-format, source-pool and cache tests passed. No required fixture-wide before/after array comparison or fresh Radeon/RTX playback passes were run.
+- **Next owner + concrete artifact:** Gonzo; use `tools/benchmark_gpu2d.py playback` with the 10/31 fixture command and write `benchmarks/2d-gpu/R6-1/playback-decode-python-1104.json`.
