@@ -1,3 +1,13 @@
+# Lane task log
+
+## 2026-11-04 — Lane 9, step X (partial)
+
+- **What was done (evidence):** RotoPaint now uses Roto's planar analysis and export flow for selected shapes or strokes, including linked or baked CornerPin output and Tracker export. Older documents receive tracking defaults. ZSlice now has the shared channel and mask strip; the kernel's existing mask path is bypassed only when the generic strip takes over. The fidelity audit measured overall 95.5 -> 95.6, RotoPaint 92.2 -> 95.3 (74/88 -> 84/88 paired), ZSlice 81.0 -> 98.0, and Reconcile3D remained 73.1.
+- **Artifacts:** commit c41558c8 implements RotoPaint/ZSlice and regenerates docs/PARITY_2D_FIDELITY.md with its byte-identical bundled copy; commit 97bb1277 strengthens the RotoPaint exposure-change tracking test. Targeted test and audit logs are in workspace scratch/nb-lanes/run/, local scratch.
+- **State:** Partial. RotoPaint and ZSlice pass their targeted behavior, audit, compatibility, panel, knowledge and source-pool/GPU/cache checks. Reconcile3D's Nuke guide places filter, clamp, black outside and motion-blur controls on the node's picture output. NodeBased currently returns a track-only result. Graph output typing permits only one output kind per node (with a special second output path for ShuffleCopy), so adding the resampled picture while preserving the track needs an output-model change; no Reconcile3D controls were added.
+- **Next owner + concrete artifact:** Gonzo; extend the graph output contract around nodebased/core.py output typing and nodebased/imaging.py's Reconcile3D evaluator so Reconcile3D can expose both its track and its Transform-resampled img, then cover the seven guide controls with pixel tests. docs/parity/nodebased_to_nuke.json currently records these controls unsupported because only the track is exposed.
+- **Failure mode:** the earlier track-only output model cannot represent both of Nuke's Reconcile3D results as independently typed graph connections.
+
 ## 2026-11-04 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step W: the Tracker's last controls (integrator tick)
 
 - **What was done:** `main` `a9f4fb1f` -> `40788b33` plus this docs commit. Evidence and per-lane commit

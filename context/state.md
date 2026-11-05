@@ -1,3 +1,15 @@
+## 2026-11-04 — Lane 9, step X: RotoPaint tracking, ZSlice mask chrome, Reconcile3D 2D transform
+
+### Evidence
+
+- Lane 9 step X commits `c41558c8` and `97bb1277` add RotoPaint selected-shape/stroke tracking and exports, defaults for older documents, plus ZSlice's shared channel and mask strip without double-applying its existing mask.
+- Targeted audit changed overall fidelity 95.5 -> 95.6, RotoPaint 92.2 -> 95.3 and ZSlice 81.0 -> 98.0. Reconcile3D remained 73.1.
+- RotoPaint, ZSlice, Tracker, Transform, 3D-track, audit, knowledge, panel, cache, source-pool and GPU2D checks passed on the local Linux/RTX 3080 Ti environment. Logs live in workspace scratch/nb-lanes/run/.
+
+### Limits / next owner
+
+Step X is partial. The Nuke guide documents Reconcile3D's filter, clamp, black-outside and motion-blur controls on its moved-picture output. NodeBased currently exposes only a track result; core graph output typing has one kind per node, with a special secondary output only for ShuffleCopy. Gonzo owns the follow-up: add a dual image/track output contract for Reconcile3D, run its image through shared Transform resampling, and add per-family pixel tests. Mapping remains explicitly unsupported pending that capability.
+
 ## 2026-11-04 — Lane 9, step W: the Tracker's last controls
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (3:35 PM on 2026-11-04 PDT)
