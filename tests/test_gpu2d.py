@@ -461,6 +461,19 @@ class NoHardwareTests(unittest.TestCase):
         backend.release_all()
         self.assertEqual(counters.live_bytes, 0)
 
+    def test_transform_stage_reuses_static_plan_and_invalidates_animated_knob(self):
+        backend, _ = fake_backend()
+        source = self.data.image(64, 48)
+        static = params("Transform", filter="cubic", translate_x=3.37)
+        first = backend.stage("Transform", static, [source])
+        second = backend.stage("Transform", dict(static), [source])
+        animated = backend.stage("Transform", params("Transform", filter="cubic", translate_x=4.37), [source])
+        self.assertIs(first.plan, second.plan)
+        self.assertIsNot(first.plan, animated.plan)
+        self.assertTrue(first.plan.tables.flags.writeable is False)
+        backend.release_all()
+        self.assertEqual(backend._transform_plans, {})
+
     def test_over_budget_is_refused_before_anything_is_submitted_and_leaks_nothing(self):
         backend, device = fake_backend(budget=200 << 10)
         root, _ = self.chain(backend, (48, 48))

@@ -53,6 +53,7 @@ DEFAULT_BUDGET_BYTES = 1 << 30
 PARAM_SLOT = 256            # uniform bindings start at multiples of the largest alignment in use
 PARAM_SLOTS = 32
 WORKGROUP = 8
+_TRANSFORM_PLAN_CACHE_SIZE = 64
 
 
 class Unsupported(Exception):
@@ -951,6 +952,11 @@ class GPU2D:
         self._flags = None
         self._zero = None
         self._staging = {}
+        # A playback graph stages a fresh DeferredImage for each frame, although the
+        # Transform's map tables only depend on its knobs and the two windows.  Keep
+        # those CPU-built tables with the backend instead of rebuilding several
+        # megabytes of coordinate/weight arrays on the preview thread every frame.
+        self._transform_plans = OrderedDict()
         self._lock = threading.Lock()
         limits = getattr(self.device, "limits", None) or {}
         self.max_binding = int(limits.get("max-storage-buffer-binding-size", 128 << 20))
@@ -1085,6 +1091,7 @@ class GPU2D:
         for buffer in self._staging.values():
             buffer.destroy()
         self._staging.clear()
+        self._transform_plans.clear()
 
     def invalidate(self, reason):
         """Device loss: every resident image is stale; the whole affected frame reruns on the CPU."""
@@ -1193,7 +1200,21 @@ class GPU2D:
         node = DeferredImage(kind, params, images, keys, data, display, node_id)
         node.meta = inherited_meta(kind, images)
         if kind == "Transform":      # build the plan now so an unsupported mode is reported at staging
-            node.plan = map_transform(params, images[0].data, data)
+            plan_key = (tuple(sorted((str(name), repr(value)) for name, value in params.items())),
+                        images[0].data, data)
+            node.plan = self._transform_plans.get(plan_key)
+            if node.plan is None:
+                node.plan = map_transform(params, images[0].data, data)
+                # Plans contain immutable scalar state plus a table we only upload.
+                # Marking the table read-only makes accidental cross-frame mutation fail
+                # loudly instead of corrupting a later playback frame.
+                if node.plan.tables is not None:
+                    node.plan.tables.flags.writeable = False
+                self._transform_plans[plan_key] = node.plan
+                if len(self._transform_plans) > _TRANSFORM_PLAN_CACHE_SIZE:
+                    self._transform_plans.popitem(last=False)
+            else:
+                self._transform_plans.move_to_end(plan_key)
         elif kind == "ColorCorrect":
             node.plan = map_color_correct(params)["plan"]
         return node
