@@ -1,3 +1,7 @@
+## 2026-11-04 — Lane 8 finish 1 (partial): decoder/Transform verification
+
+Fixture EXR decoder arrays, an overscan EXR, and five rendered playback frames compare bit-identically against `4dad47b4`. Fresh Radeon default p95 improved to 52.156–56.637 ms from 61.421–64.693 ms, while the 41.670 ms gate remains unmet. The warm decoder median is 13.412 ms (pre-L8 14.900 ms); NumPy `astype` is the largest remaining cProfile block at 8.086 ms/decode. The RTX pair was effectively flat at 10.008 -> 9.857 fps. Float-only decoding reached 5.733 ms but regressed RTX playback to 6.090 fps, so that experiment was reverted. Scratch evidence: `scratch/nb-lanes/run/bench-L8-decode-python-1104/`. Gonzo owns a compact-sample/widening redesign.
+
 ## 2026-11-04 — Lane 9, step X: RotoPaint tracking, ZSlice mask chrome, Reconcile3D 2D transform
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (6:16 PM on 2026-11-04 PDT)

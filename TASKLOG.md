@@ -1,3 +1,11 @@
+## 2026-11-04 — Lane 8 finish 1 (partial): decoder/Transform verification
+
+- **What was done:** Compared the pre-L8 `4dad47b4` decode path with the merged lane code. Ten playback EXRs plus a data-window-smaller-than-display EXR, and rendered frames 1/12/24/36/48, are bit-identical. Three interleaved Radeon passes at default and one-worker/two-frame lead, plus an RTX pass, completed.
+- **Artifacts:** Scratch evidence is `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/bench-L8-decode-python-1104/`; the final diagnostic repeat whose float-only experiment was deliberately discarded is `bench-L8-decode-python-1104-final2/`. Both are local deliberate scratch. No new repository artifact was committed.
+- **State:** Partial. The merged decoder measured 13.412 ms median per warm cached fixture decode (pre-L8 14.900 ms); cProfile's largest remaining block is NumPy `astype`, 8.086 ms per decode. Radeon default p95 improved from 61.421–64.693 ms to 52.156–56.637 ms, still above 41.670 ms. RTX was effectively unchanged in one pair (10.008 -> 9.857 fps).
+- **Next owner + concrete artifact:** Gonzo; use `decode-profile.json` and the raw timelines in the scratch directory to retain compact samples or move widening off the decode thread without making the RTX upload path regress.
+- **Failure mode:** A float-only experiment reached 5.733 ms decoder median but made the RTX playback pass fall from 10.586 to 6.090 fps by removing its compact upload; it was reverted.
+
 ## 2026-11-04 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: cut the decoder's Python time and the Transform set-up per frame (integrator tick)
 
 - **What was done:** `main` `4dad47b4` -> `acb5b4b7` plus this docs commit. Evidence and per-lane commit
