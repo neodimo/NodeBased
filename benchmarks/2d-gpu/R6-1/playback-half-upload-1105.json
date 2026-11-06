@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-06",
+  "scope": "1080p native-half EXR compact upload follow-up",
+  "options": {
+    "current_compact_upload": {
+      "decode_median_ms": 13.412,
+      "detail": "Native-half OpenImageIO decode, CPU float32 Raster widening, then half upload and GPU widening."
+    },
+    "direct_float32": {
+      "decode_median_ms": 5.733,
+      "detail": "OpenImageIO float32 avoids NumPy astype, but the archived RTX playback comparison fell from 10.586 to 6.090 fps after compact upload was removed."
+    },
+    "retain_half_until_gpu": {
+      "status": "not implemented",
+      "detail": "Raster currently requires float32 pixels, so moving the widening off the decode thread needs a lazy compact-source representation with explicit CPU-consumer widening."
+    }
+  },
+  "correctness": {
+    "cpu_targeted": "86 tests passed",
+    "gpu_adapters": ["NVIDIA GeForce RTX 3080 Ti", "AMD Radeon 8060S Graphics", "llvmpipe (LLVM 22.1.8, 256 bits)"],
+    "gpu_targeted": "101 tests passed on each adapter"
+  },
+  "verdict": "The direct-float decode winner is unsafe for playback. Preserve the existing compact upload until a lazy half source can retain CPU fallback semantics and receive a fresh before/after playback comparison.",
+  "artifacts": {
+    "prior_measurements": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/bench-L8-decode-python-1104/",
+    "current_test_logs": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L8-1105-*.log"
+  }
+}

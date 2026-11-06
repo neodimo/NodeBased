@@ -1,3 +1,11 @@
+## 2026-11-06 — Lane 8: half-sample upload follow-up (partial)
+
+**Evidence.** The existing compact half-upload path passed focused media, Read, source/cache and GPU checks on RTX 3080 Ti, AMD Radeon 8060S and llvmpipe. The direct OpenImageIO float32 alternative is faster in decode-only evidence (5.733 ms versus 13.412 ms) but previously reduced RTX playback from 10.586 to 6.090 fps by losing the compact transfer.
+
+**State.** Partial. A real half-through-decode queue needs a lazy compact Raster source and a defined float32 materialization boundary for CPU consumers. No playback claim was made without fresh interleaved before/after passes. Details: `benchmarks/2d-gpu/R6-1/playback-half-upload-1105.json`.
+
+**Next owner.** Gonzo: define the compact Raster contract, then rerun the required Radeon/RTX playback matrix and bit-identical fixture comparison.
+
 ## 2026-11-04 — Lane 8 finish 1 (partial): decoder/Transform verification
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (6:56 PM on 2026-11-04 PDT)

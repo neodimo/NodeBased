@@ -1,3 +1,11 @@
+## 2026-11-06 — Lane 8: half-sample upload follow-up (partial)
+
+- **What was done:** Rechecked the compact EXR upload route and recorded its decision evidence. The direct float32 OpenImageIO decode is faster alone, while the prior playback fixture showed that it loses the compact transfer advantage. RTX 3080 Ti, AMD Radeon 8060S and llvmpipe all passed the focused GPU checks.
+- **Artifacts:** `benchmarks/2d-gpu/R6-1/playback-half-upload-1105.json` is committed evidence. Current logs live at `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L8-1105-*.log` as deliberate local scratch; earlier comparison artifacts are under `bench-L8-decode-python-1104/`.
+- **State:** Partial. The present `Raster` constructor materializes float32, so true queue-to-GPU half retention requires a lazy compact-source representation and explicit CPU fallback widening. Fresh interleaved playback and the fixture bit-identical comparison remain unrun.
+- **Next owner + concrete artifact:** Gonzo; start with `benchmarks/2d-gpu/R6-1/playback-half-upload-1105.json`, define the compact Raster contract, then run the required Radeon and RTX playback matrix.
+- **Failure mode:** Replacing compact upload with float32 solely because it improves decode time cut the archived RTX playback result from 10.586 to 6.090 fps.
+
 ## 2026-11-04 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: cut the decoder's Python time and the Transform set-up per frame (finish 1) (integrator tick)
 
 - **What was done:** `main` `604fc222` -> `550adeaf` plus this docs commit. Evidence and per-lane commit
