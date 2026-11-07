@@ -29,7 +29,7 @@ CONTEXT_CONFIG = """ocio_profile_version: 2
 
 environment:
   LUT: ident
-search_path: "{directory}"
+search_path: "."
 strictparsing: true
 luma: [0.2126, 0.7152, 0.0722]
 name: nodebased-context-fixture
@@ -72,8 +72,9 @@ class Config(unittest.TestCase):
         (directory / "ident.cube").write_text(IDENT_CUBE, encoding="utf-8")
         (directory / "bent.cube").write_text(fixture.CUBE, encoding="utf-8")
         cls.context_config = str(directory / "context.ocio")
-        # Forward slashes: a Windows temp path in a double-quoted YAML string reads \U... as a unicode escape.
-        Path(cls.context_config).write_text(CONTEXT_CONFIG.format(directory=directory.as_posix()), encoding="utf-8")
+        # Relative search path: OCIO resolves it against the config file's own folder. An absolute Windows path
+        # breaks twice: a backslash reads as a YAML escape, and OCIO splits "C:/..." at the drive colon.
+        Path(cls.context_config).write_text(CONTEXT_CONFIG.format(), encoding="utf-8")
 
     @classmethod
     def tearDownClass(cls):
