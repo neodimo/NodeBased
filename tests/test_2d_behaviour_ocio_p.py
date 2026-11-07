@@ -72,7 +72,8 @@ class Config(unittest.TestCase):
         (directory / "ident.cube").write_text(IDENT_CUBE, encoding="utf-8")
         (directory / "bent.cube").write_text(fixture.CUBE, encoding="utf-8")
         cls.context_config = str(directory / "context.ocio")
-        Path(cls.context_config).write_text(CONTEXT_CONFIG.format(directory=cls._dir.name), encoding="utf-8")
+        # Forward slashes: a Windows temp path in a double-quoted YAML string reads \U... as a unicode escape.
+        Path(cls.context_config).write_text(CONTEXT_CONFIG.format(directory=directory.as_posix()), encoding="utf-8")
 
     @classmethod
     def tearDownClass(cls):
