@@ -36,10 +36,10 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 97.1 | 96.9 | 98.1 | 6 |
 | Draw | 94.4 | 86.2 | 95.1 | 17 |
-| Time | 99.4 | 96.7 | 99.2 | 13 |
+| Time | 99.4 | 96.8 | 99.2 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
-| Color | 97.4 | 90.8 | 97.1 | 34 |
-| Filter | 96.9 | 92.3 | 96.5 | 32 |
+| Color | 97.4 | 91.0 | 97.1 | 34 |
+| Filter | 97.0 | 92.6 | 96.5 | 32 |
 | Keyer | 93.2 | 80.3 | 93.1 | 11 |
 | Merge | 99.7 | 99.3 | 99.7 | 12 |
 | Transform | 97.5 | 94.3 | 97.4 | 20 |
@@ -84,9 +84,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 10 | MarkerRemoval | - | supported | 0.0 | 0.0 | 0 (0/5) | - | - | 0 | - | - | - | - | no fixture |
 | 11 | Flare | `Flare` | supported | 95.5 | 93.7 | 87 (43/50) | 97 (24/25) | 98 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 11 | Glint | `Glint` | supported | 94.0 | 90.8 | 77 (10/13) | 100 (10/10) | 100 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
-| 11 | Sparkles | `Sparkles` | supported | 97.0 | 95.4 | 91 (28/32) | 100 (20/20) | 96 | 100 | - | 100 (9/9) | 99 | - | unmeasured |
+| 11 | Sparkles | `Sparkles` | supported | 97.1 | 95.4 | 91 (28/32) | 100 (20/20) | 96 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 12 | Dither | `Dither` | supported | 99.3 | 99.2 | 100 (4/4) | 100 (3/3) | 92 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 13 | Grid | `Grid` | supported | 99.0 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 97 | - | unmeasured |
+| 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 
 ### Time
 
@@ -103,7 +103,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
 | 8 | Kronos | `Kronos` | supported | 83.2 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 98 | - | unmeasured |
 | 8 | OFlow | `OFlow` | supported | 85.2 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 98 | - | unmeasured |
-| 8 | SmartVector | `SmartVector` | supported | 94.2 | 94.4 | 94 (10/11) | - | 90 | 100 | - | - | 93 | - | no fixture |
+| 8 | SmartVector | `SmartVector` | supported | 94.8 | 94.4 | 94 (10/11) | - | 90 | 100 | - | - | 96 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
@@ -134,12 +134,12 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 11 | Exposure | `Exposure` | supported | 95.7 | 93.6 | 86 (6/7) | 100 (6/6) | 93 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 12 | HSVTool | `HSVTool` | partial | 96.8 | 94.8 | 89 (22/25) | 100 (14/14) | 100 | 100 | - | 100 (11/11) | 100 | - | unmeasured |
 | 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 14 | Colorspace | `Colorspace` | supported | 94.9 | 95.6 | 89 (8/9) | 100 (8/8) | 100 | 100 | 100 | 100 (21/21) | 75 | - | unmeasured |
+| 14 | Colorspace | `Colorspace` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (8/8) | 100 | 100 | 100 | 100 (21/21) | 100 | - | unmeasured |
 | 14 | OCIOColorspace | `OCIOColorspace` | supported | 100.0 | 100.0 | 100 (11/11) | 100 (3/3) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 14 | OCIODisplay | `OCIODisplay` | supported | 95.0 | 93.4 | 92 (16/17) | 100 (8/8) | 75 | 100 | - | 100 (5/5) | 95 | - | unmeasured |
-| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 97.6 | 98.3 | 100 (4/4) | 100 (2/2) | 83 | 100 | 100 | 100 (2/2) | 89 | - | unmeasured |
+| 14 | OCIODisplay | `OCIODisplay` | supported | 95.4 | 93.4 | 92 (16/17) | 100 (8/8) | 75 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
+| 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 98.6 | 98.3 | 100 (4/4) | 100 (2/2) | 83 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 99.3 | 100.0 | 100 (14/14) | 100 (4/4) | 100 | 100 | 100 | 100 (3/3) | 92 | - | unmeasured |
+| 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 100.0 | 100.0 | 100 (14/14) | 100 (4/4) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 15 | PLogLin | `PLogLin` | supported | 97.1 | 96.7 | 100 (5/5) | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 16 | ColorTransfer | - | supported | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
@@ -176,9 +176,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 12 | DegrainSimple | `DegrainSimple` | supported | 95.2 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 100 | - | no fixture |
 | 12 | Denoise | `Denoise` | supported | 99.6 | 99.6 | 100 (37/37) | - | 97 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 13 | MotionBlur | `MotionBlur` | supported | 93.3 | 93.3 | 100 (6/6) | - | 60 | 100 | - | - | 100 | - | no fixture |
-| 13 | MotionBlur2D | `MotionBlur2D` | supported | 83.3 | 83.3 | 75 (3/4) | - | 100 | 100 | - | - | 75 | - | no fixture |
-| 13 | MotionBlur3D | `MotionBlur3D` | supported | 70.8 | 66.7 | 50 (3/6) | - | 100 | 100 | - | - | 75 | - | no fixture |
-| 13 | VectorBlur | `VectorBlur` | supported | 89.3 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 94 | - | no fixture |
+| 13 | MotionBlur2D | `MotionBlur2D` | supported | 87.5 | 83.3 | 75 (3/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 13 | MotionBlur3D | `MotionBlur3D` | supported | 75.0 | 66.7 | 50 (3/6) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 13 | VectorBlur | `VectorBlur` | supported | 89.7 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 97 | - | no fixture |
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 15 | Convolve | `Convolve` | supported | 98.4 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 89 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -312,9 +312,9 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | MarkerRemoval | — | — | 0 |
 | Flare | 100.0% (14/14) | 100.0% (42/42) | 7 |
 | Glint | — | 100.0% (10/10) | 0 |
-| Sparkles | — | 96.3% (26/27) | 1 |
+| Sparkles | — | 100.0% (27/27) | 1 |
 | Dither | — | 100.0% (4/4) | 0 |
-| Grid | — | 91.7% (11/12) | 2 |
+| Grid | — | 100.0% (12/12) | 2 |
 | TimeOffset | — | 100.0% (4/4) | 3 |
 | FrameHold | — | 100.0% (4/4) | 3 |
 | Retime | 100.0% (8/8) | 100.0% (12/12) | 4 |
@@ -326,7 +326,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | TimeWarp | — | 100.0% (3/3) | 2 |
 | Kronos | 100.0% (2/2) | 92.9% (13/14) | 6 |
 | OFlow | 100.0% (2/2) | 91.7% (11/12) | 4 |
-| SmartVector | — | 77.8% (7/9) | 3 |
+| SmartVector | — | 88.9% (8/9) | 3 |
 | VectorToMotion | — | — | 0 |
 | NoTimeBlur | — | 100.0% (2/2) | 0 |
 | Shuffle | 100.0% (4/4) | 100.0% (2/2) | 4 |
@@ -347,12 +347,12 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Exposure | — | 100.0% (5/5) | 1 |
 | HSVTool | — | 100.0% (17/17) | 8 |
 | ColorMatrix | — | 100.0% (2/2) | 0 |
-| Colorspace | 0.0% (0/6) | 100.0% (1/1) | 8 |
+| Colorspace | 100.0% (6/6) | 100.0% (1/1) | 8 |
 | OCIOColorspace | — | 100.0% (2/2) | 9 |
-| OCIODisplay | — | 85.7% (6/7) | 9 |
-| OCIOFileTransform | — | 66.7% (2/3) | 1 |
+| OCIODisplay | — | 100.0% (7/7) | 9 |
+| OCIOFileTransform | — | 100.0% (3/3) | 1 |
 | OCIOLogConvert | — | 100.0% (1/1) | 0 |
-| OCIOLookTransform | — | 75.0% (3/4) | 10 |
+| OCIOLookTransform | — | 100.0% (4/4) | 10 |
 | Log2Lin | — | 100.0% (5/5) | 3 |
 | PLogLin | — | 100.0% (5/5) | 0 |
 | ColorTransfer | — | — | 1 |
@@ -384,9 +384,9 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | DegrainSimple | — | 100.0% (3/3) | 0 |
 | Denoise | — | 100.0% (29/29) | 10 |
 | MotionBlur | — | 100.0% (5/5) | 2 |
-| MotionBlur2D | 0.0% (0/2) | 100.0% (3/3) | 0 |
-| MotionBlur3D | 0.0% (0/2) | 100.0% (3/3) | 0 |
-| VectorBlur | — | 83.3% (10/12) | 2 |
+| MotionBlur2D | 100.0% (2/2) | 100.0% (3/3) | 0 |
+| MotionBlur3D | 100.0% (2/2) | 100.0% (3/3) | 0 |
+| VectorBlur | — | 91.7% (11/12) | 2 |
 | Bilateral | — | 100.0% (5/5) | 1 |
 | Convolve | — | 66.7% (2/3) | 2 |
 | Matrix | — | 100.0% (1/1) | 1 |
@@ -475,9 +475,11 @@ Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were place
 
 Panel sweep S4 (2026-11-04) baseline for its nodes, before rows were placed on one row and the count and fraction knobs were listed: TimeBlur rows 0/2; TimeEcho types 2/3; ZDefocus types 24/25; IBKGizmo types 13/14; Encryptomatte rows 0/2; Kronos rows 0/2, types 12/14; IBKColor types 1/5; OFlow rows 0/2, types 10/12; CopyRectangle rows 0/4; TimeDissolve types 0/2; RotoPaint types 9/62. Current: TimeBlur rows 2/2, types 4/4; TimeEcho rows 0/0, types 3/3; ZDefocus rows 0/0, types 25/25; IBKGizmo rows 0/0, types 14/14; Encryptomatte rows 2/2, types 1/1; Kronos rows 2/2, types 13/14; IBKColor rows 0/0, types 1/3; OFlow rows 2/2, types 11/12; CopyRectangle rows 4/4, types 5/5; TimeDissolve rows 0/0, types 2/2; RotoPaint rows 0/0, types 13/65. RotoPaint stays as it is: 52 of its 53 mismatches are per-shape and per-stroke knobs (colour, blending mode, brush size, feather, transform) that have no knob on the node's panel, and the last, `global_motionblur` (a number in the guide, a samples count beside an on/off switch here), would change how the node renders. Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.
 
+Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on one row and the count knobs were listed: Grid types 11/12; Colorspace rows 0/6; MotionBlur2D and MotionBlur3D rows 0/2; SmartVector types 7/9; VectorBlur types 10/12; OCIODisplay types 6/7; OCIOFileTransform types 2/3; OCIOLookTransform types 3/4; Sparkles types 26/27. Current: Grid rows 0/0, types 12/12; Colorspace rows 6/6, types 1/1; MotionBlur2D rows 2/2, types 3/3; MotionBlur3D rows 2/2, types 3/3; SmartVector rows 0/0, types 8/9; VectorBlur rows 0/0, types 11/12; OCIODisplay rows 0/0, types 7/7; OCIOFileTransform rows 0/0, types 3/3; OCIOLookTransform rows 0/0, types 4/4; Sparkles rows 0/0, types 27/27. Grid's Number is one row of two whole-number fields; Colorspace's Input and Output are one row each of three menus; MotionBlur's shutter offset menu and custom offset share a row. OCIODisplay's, OCIOFileTransform's and OCIOLookTransform's Invert direction is a check box over the stored direction text (forward or inverse), as CornerPin2D's Invert is. SmartVector's matteDilation, VectorBlur's grow_bbox and Sparkles's ray_nb are listed as counting knobs. Root is the Project Settings dialog, not a node panel, and the ruler reads node panels only, so its frame-range and proxy rows are not measured here. SmartVector's `vectorDetailReg` (a fraction in the guide, an integer 1 to 6 here) needs a change to the kernel, and VectorBlur's `uv` (a layer picker in the guide, a layer name field here) stays: it is the same field STMap and IDistort share.
+
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
-**Lowest shared-row scores:** Colorspace (0.0%); GenerateLUT (0.0%); LensDistortion (0.0%); MotionBlur2D (0.0%); MotionBlur3D (0.0%).
+**Lowest shared-row scores:** GenerateLUT (0.0%); LensDistortion (0.0%); Root (0.0%); Write (0.0%); BurnIn (100.0%).
 **Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); ViewMetaData (0.0%).
 
 ## The 30 largest gaps

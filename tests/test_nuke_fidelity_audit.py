@@ -66,6 +66,8 @@ FULL_PANEL_SHAPE = (
     'DirBlur',
     # Panel sweep S4 (2026-11-04)
     'CopyRectangle', 'Encryptomatte', 'IBKGizmo', 'TimeBlur', 'TimeDissolve', 'TimeEcho', 'ZDefocus',
+    # Panel sweep S5 (2026-11-07)
+    'Colorspace', 'Grid', 'MotionBlur2D', 'MotionBlur3D', 'OCIODisplay', 'OCIOFileTransform', 'OCIOLookTransform', 'Sparkles',
 )
 
 
@@ -104,6 +106,9 @@ class PanelShapeMetricTests(unittest.TestCase):
         self.assertIn(("TimeEcho", "framesbehind"), audit._COUNT_KNOBS)
         self.assertIn(("ZDefocus", "blades"), audit._COUNT_KNOBS)
         self.assertIn(("Kronos", "timingFrame2"), audit._FLOAT_KNOBS)
+        self.assertIn(("SmartVector", "matteDilation"), audit._COUNT_KNOBS)
+        self.assertIn(("VectorBlur", "grow_bbox"), audit._COUNT_KNOBS)
+        self.assertIn(("Sparkles", "ray_nb"), audit._COUNT_KNOBS)
 
     def test_tracker_viewer_and_components_are_measured(self):
         def metrics(key):

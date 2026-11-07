@@ -1,7 +1,7 @@
 """Lane 2 panel sweep (2026-11-04): knobs the Nuke guide gives one label share one row, and number knobs that count are integer fields.
 
 Each test builds the node's Properties panel and asserts the shared rows and widget kinds the ruler (tools/audit_nuke_fidelity.py)
-measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer (step S1); Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, ScreenKeyer and Reformat (step S2); Remove, AppendClip, CornerPin2D, BurnIn, Clamp, Blend, DirBlur and ContactSheet (step S3); TimeBlur, TimeEcho, ZDefocus, IBKGizmo, Encryptomatte, Kronos and IBKColor, with OFlow, CopyRectangle and TimeDissolve in place of RotoPaint (step S4)."""
+measures: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant and HueKeyer (step S1); Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, ScreenKeyer and Reformat (step S2); Remove, AppendClip, CornerPin2D, BurnIn, Clamp, Blend, DirBlur and ContactSheet (step S3); TimeBlur, TimeEcho, ZDefocus, IBKGizmo, Encryptomatte, Kronos and IBKColor, with OFlow, CopyRectangle and TimeDissolve in place of RotoPaint (step S4); Grid, MotionBlur2D, MotionBlur3D, Colorspace, SmartVector, VectorBlur, OCIODisplay and Sparkles, with OCIOFileTransform and OCIOLookTransform (step S5)."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import unittest
@@ -437,6 +437,67 @@ class PanelSweepTests(unittest.TestCase):
         rows, types = metrics("IBKColor")
         self.assertEqual([m[0] for m in types["missed"]], ["off", "mult"])      # single numbers here, RGB triples in Nuke
         self.assertEqual(types["unknown"], 3)
+
+    def test_grid_number_is_one_row_of_whole_numbers(self):
+        panel = self.panel("Grid")
+        self.assertOneRow(panel, "number_x-field", "number_y-field")
+        for name in ("number_x-field", "number_y-field"):
+            self.widget(panel, name, QSpinBox)
+            self.assertNoSlider(panel, name)
+
+    def test_motionblur_shutter_offset_row(self):
+        for kind in ("MotionBlur2D", "MotionBlur3D"):
+            panel = self.panel(kind)
+            self.assertOneRow(panel, "shutter_offset-choice", "custom_offset-field")
+            self.widget(panel, "shutter_offset-choice", QComboBox)
+            self.widget(panel, "custom_offset-field", QDoubleSpinBox)
+            self.widget(panel, "samples-field", QSpinBox)      # the sample count stays a whole number; the node renders as before
+
+    def test_colorspace_input_and_output_rows(self):
+        panel = self.panel("Colorspace")
+        self.assertOneRow(panel, "transfer_in-choice", "whitepoint_in-choice", "primaries_in-choice")
+        self.assertOneRow(panel, "transfer_out-choice", "whitepoint_out-choice", "primaries_out-choice")
+        for name in ("transfer_in-choice", "whitepoint_out-choice"):
+            self.widget(panel, name, QComboBox)
+
+    def test_smartvector_matte_dilation_is_a_whole_number(self):
+        panel = self.panel("SmartVector")
+        self.widget(panel, "matte_dilation-field", QSpinBox)
+        self.assertNoSlider(panel, "matte_dilation-field")
+        # vector_detail (an integer 1 to 6 here, a fraction in the guide) stays: the ruler still lists it as the one mismatch
+        rows, types = self.measure("SmartVector")
+        self.assertEqual([m[0] for m in types["missed"]], ["vectorDetailReg"])
+
+    def test_vectorblur_expand_bbox_is_a_whole_number(self):
+        panel = self.panel("VectorBlur")
+        self.widget(panel, "grow_bbox-field", QSpinBox)
+        self.assertNoSlider(panel, "grow_bbox-field")
+        rows, types = self.measure("VectorBlur")
+        self.assertEqual([m[0] for m in types["missed"]], ["uv"])      # a layer picker in the guide, a layer name field here
+
+    def test_sparkles_ray_count_is_a_whole_number(self):
+        panel = self.panel("Sparkles")
+        self.widget(panel, "spark_ray_nb-field", QSpinBox)
+        self.assertNoSlider(panel, "spark_ray_nb-field")
+
+    def test_ocio_invert_direction_is_a_check_box_over_the_direction_text(self):
+        for kind in ("OCIODisplay", "OCIOFileTransform", "OCIOLookTransform"):
+            key = "sweep-" + kind
+            panel = self.panel(kind)
+            self.assertFalse(self.has_menu(panel, "forward", "inverse"), kind)
+            box = self.widget(panel, "transform_direction-switch", QCheckBox)
+            self.assertFalse(box.isChecked())
+            self.assertEqual(self.window.graph_nodes()[key]["params"]["transform_direction"], "forward")
+            box.click()
+            self.assertTrue(wait_until(lambda: self.window.graph_nodes()[key]["params"]["transform_direction"] == "inverse"), kind)
+            self.assertTrue(self.widget(self.panel(kind), "transform_direction-switch", QCheckBox).isChecked())
+            self.widget(self.panel(kind), "transform_direction-switch", QCheckBox).click()
+            self.assertTrue(wait_until(lambda: self.window.graph_nodes()[key]["params"]["transform_direction"] == "forward"), kind)
+
+    def measure(self, key):
+        pair = audit.load_json(audit.MAP_JSON)["pairs"][key]
+        nuke = audit.load_json(audit.NUKE_JSON)["nodes"][key]
+        return audit.panel_shape_metrics(nuke, pair, pair["nodebased"], key)
 
     def test_row_edits_reach_the_document(self):
         panel = self.panel("Constant")

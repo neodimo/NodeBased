@@ -413,6 +413,9 @@ _COUNT_KNOBS = {("Tracker", "smoothT"), ("Tracker", "smoothR"), ("Tracker", "smo
 # screen range (a multiplier, default 1), Kronos's timingFrame2 is the frame the timing curve asks for, where a fractional frame is interpolated.
 # TimeDissolve's in and out are the first and last frame of the dissolve (defaults 1 and 10).
 _COUNT_KNOBS |= {("TimeEcho", "framesbehind"), ("ZDefocus", "blades"), ("TimeDissolve", "in"), ("TimeDissolve", "out")}
+# Panel sweep S5 (2026-11-07): SmartVector's matteDilation and VectorBlur's grow_bbox are whole pixels (Int_Knobs in Nuke), the guide's defaults 50 and 0 being
+# the only hint; Sparkles's ray_nb ("rays Nb", default 50) is a count of rays. All three already show as integer fields.
+_COUNT_KNOBS |= {("SmartVector", "matteDilation"), ("VectorBlur", "grow_bbox"), ("Sparkles", "ray_nb")}
 _FLOAT_KNOBS = {("IBKGizmo", "level"), ("Kronos", "timingFrame2"), ("OFlow", "timingFrame2")}
 # Knobs whose Nuke widget the guide's default cannot tell: IBKColor's Size (a pixel size, default 10) and multi ("patch black", default 0, which
 # the gizmo may show as a check box or a number). Left unmeasured and counted as such, as the rule asks.
@@ -784,6 +787,19 @@ def build_report(reference_dir=None):
       "Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) "
       "stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. "
       "TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.")
+    w("")
+    s5 = ("Grid", "Colorspace", "MotionBlur2D", "MotionBlur3D", "SmartVector", "VectorBlur", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Sparkles")
+    w("Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on one row and the count knobs were listed: "
+      "Grid types 11/12; Colorspace rows 0/6; MotionBlur2D and MotionBlur3D rows 0/2; SmartVector types 7/9; VectorBlur types 10/12; "
+      "OCIODisplay types 6/7; OCIOFileTransform types 2/3; OCIOLookTransform types 3/4; Sparkles types 26/27. "
+      "Current: " + "; ".join(
+          f"{n} rows {sweep[n]['panel_rows']['matched']}/{sweep[n]['panel_rows']['total']}, types {sweep[n]['panel_types']['matched']}/{sweep[n]['panel_types']['total']}"
+          for n in s5 if n in sweep) + ". "
+      "Grid's Number is one row of two whole-number fields; Colorspace's Input and Output are one row each of three menus; MotionBlur's shutter offset menu and custom offset share a row. "
+      "OCIODisplay's, OCIOFileTransform's and OCIOLookTransform's Invert direction is a check box over the stored direction text (forward or inverse), as CornerPin2D's Invert is. "
+      "SmartVector's matteDilation, VectorBlur's grow_bbox and Sparkles's ray_nb are listed as counting knobs. "
+      "Root is the Project Settings dialog, not a node panel, and the ruler reads node panels only, so its frame-range and proxy rows are not measured here. "
+      "SmartVector's `vectorDetailReg` (a fraction in the guide, an integer 1 to 6 here) needs a change to the kernel, and VectorBlur's `uv` (a layer picker in the guide, a layer name field here) stays: it is the same field STMap and IDistort share.")
     w("")
     read_unit = next((u for u in units if u["name"] == "Read"), None)
     if read_unit:
