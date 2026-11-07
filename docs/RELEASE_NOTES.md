@@ -1,3 +1,33 @@
+# NodeBased 0.52.0-preview.1
+
+Preview build of 0.52.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.52.0 release that follows.
+
+## What changed since 0.51.0
+
+- **Panels laid out the way Nuke lays them out.** The layout score now counts rows and widget types as well as knob order, and four sweeps brought 32 nodes onto Nuke's rows: knobs that share a row in Nuke share one here (Constant's frame range, Tracker's shutter offset, Kronos's and OFlow's input range, CopyRectangle's area), whole-number knobs are integer fields, and on/off knobs such as CornerPin2D's Invert are check boxes. 143 of 177 nodes now match Nuke's rows and types exactly. Covered: Shuffle, Transform, FrameHold, Text, Difference, Retime, Constant, HueKeyer, Tracker, Viewer, Switch, TimeClip, FrameRange, Glow, Keylight, Reformat, Remove, AppendClip, CornerPin2D, BurnIn, Clamp, Blend, DirBlur, ContactSheet, TimeBlur, TimeEcho, ZDefocus, IBKGizmo, Encryptomatte, Kronos, IBKColor, OFlow, CopyRectangle and TimeDissolve.
+- **A Node tab on every node.** Font, bold, italic, font and tile colour, hide input, cached, lifetime, dope sheet and bookmark flags, and Disable in Nuke's sense. The bookmark list and dope sheet docks read those flags, and cached nodes show an underline.
+- **The Read panel in Nuke's shape.** Grouped rows and tabs, plus format-specific controls and EXR options. EXR edge pixels keep the data window when no edge is repeated.
+- **Tracking.** Tracker matches patterns with a warp model, re-grabs offset patterns, retracks keys you move, and can re-grab adaptively when the error grows; the regrab and retrack behaviours are on/off switches. Roto gains planar tracking with exports, and RotoPaint can track across exposure changes. Roto Clone sampling is finished and Roto takes shape sources (partial).
+- **Lens and light effects.** LensDistortion takes anamorphic twist and scale on Undistort and Redistort. Flare gains offset, chroma, visibility, shape and repeated-copy controls; Sparkles gains ray modes, per-ray shape, broken rays, directional clipping, chroma and visibility controls. GridWarp's transform and render controls are complete, and the warp nodes' remaining displacement controls are in.
+- **More of Nuke's knobs.** SmartVector (strength, flicker compensation, RGB weights, inpaint matte region, matte dilation), the OCIO nodes, HSVTool, Vectorfield and Colorspace gain their missing knobs. Root gains a project format, proxy type and format, the read-proxy-files setting and a script directory. VectorDistort's blur smooths the motion map before sampling. Four time nodes start at the guide's defaults.
+- **GPU playback, faster set-up.** Static GPU Transform staging plans are cached, native linear EXRs skip the identity colour conversion, and slow frames can be profiled.
+- **Older documents keep their pictures.** New behaviour sits behind per-node legacy flags; the document schema moves from 29 to 33.
+- **Windows fixes.** The OCIO context test and the DPX byte-order test pass on Windows again.
+
+## Known limits
+
+- Still no comparison with a real Nuke render; pixel truth stays unmeasured until the reference pack (`tools/make_nuke_reference_pack.py`) is run in Nuke.
+- GPU playback still misses 24 fps on the Radeon test machine (p95 about 52 to 57 ms a frame) and the decoder is at 13.4 ms against an 8 ms target.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0 (Linux reads it correctly; big-endian, the default, is unaffected).
+- LensDistortion's polynomial, fisheye and beam-splitter models and its grid solve stay unsupported; RotoPaint's per-shape knobs have no panel row yet.
+- Knob classes beyond Read are inferred from the guide's defaults until a `nuke -t` dump is available.
+
+## Moved to 0.53.0
+
+- The decoder redesign aimed at 24 fps GPU playback.
+- Panel sweeps for the remaining nodes, including RotoPaint.
+- Carried: a field-of-view limit for generated footage, re-anchored generation in shorter pieces, more camera-following benchmark scenes, real curls in the fire's smoke, and measuring the 2D nodes against real Nuke renders.
+
 # NodeBased 0.51.0 — 2D nodes that compute what Nuke computes
 
 ## What changed since 0.50.0
