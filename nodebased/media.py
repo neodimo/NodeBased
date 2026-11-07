@@ -426,6 +426,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
                 layers_only = True
             else:
                 raise ValueError('No RGB channels for this layer. Available: ' + ', '.join(names[:32]))
+        lazy_half = False
         if layers_only:
             rgba = np.zeros((spec.height, spec.width, 4), dtype=np.float32)
         else:
@@ -458,16 +459,18 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
                 pixels = np.ascontiguousarray(pixels, dtype=np.float16)
             direct_rgba = (native_half and pixels.shape[-1] == 4
                            and rgb == [first, first + 1, first + 2] and alpha == first + 3)
-            if direct_rgba:
-                # The hot path: exactly one widening allocation and the same contiguous half
-                # buffer becomes Raster.half below.
-                rgba = pixels.astype(np.float32)
+            associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
+            # Keep an opaque, native RGBA EXR compact until a CPU consumer asks for it. This is
+            # exact because there is no channel reshuffle, colour operation or alpha operation.
+            lazy_half = (direct_rgba and associated and alpha is not None and edge_pixels == 'black'
+                         and bool(np.all(pixels[..., 3] == np.float16(1))))
+            if lazy_half:
+                rgba = None
             else:
                 rgba = np.ones((spec.height, spec.width, 4), dtype=np.float32)
                 rgba[..., :3] = _select_rgb(pixels, rgb, first)
                 if alpha is not None:
                     rgba[..., 3] = pixels[..., alpha - first]
-            associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
             # Native EXR values already in the working space and stored as
             # associated alpha need no colour or alpha operation.  Besides being
             # an identity, sending them through ``to_working`` scans alpha and
@@ -528,7 +531,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             from .metadata import header_entry
             meta = dict(entry for a in spec.extra_attribs
                         if (entry := header_entry(a.name, a.value, noprefix=noprefix)) is not None) or None
-        raster = Raster(np.ascontiguousarray(rgba), data, display, layers, meta)
+        raster = Raster(None, data, display, layers, meta, half=pixels) if lazy_half else Raster(np.ascontiguousarray(rgba), data, display, layers, meta)
         # Uploading the original half words is exact only when decoding neither changes colour
         # nor unpremultiplies a partial-alpha image. Keep the optional compact copy on the decode
         # thread; every derived Raster starts with ``half = None`` in Raster.__init__.
@@ -537,7 +540,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         # only when colour/alpha processing cannot have changed a word.  Derived Rasters still
         # clear the hint in Raster.__init__.
         if (not layers_only and native_half):
-            opaque = bool(np.all(rgba[..., 3] == 1.0))
+            opaque = lazy_half or bool(np.all(rgba[..., 3] == 1.0))
             if opaque:
                 half_rgba = pixels if direct_rgba else np.ones((spec.height, spec.width, 4), dtype=np.float16)
                 if not direct_rgba:

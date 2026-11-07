@@ -27,14 +27,23 @@ class Raster:
     because every downstream alignment silently produces garbage once it drifts.
     """
 
-    __slots__ = ("pixels", "data", "display", "layers", "meta", "half")
+    __slots__ = ("_pixels", "data", "display", "layers", "meta", "half")
 
     def __init__(self, pixels, data: Region | None = None, display: Region | None = None, layers: dict | None = None,
-                 meta: dict | None = None):
-        pixels = np.asarray(pixels, dtype=np.float32)
-        if pixels.ndim != 3 or pixels.shape[2] != 4:
-            raise ValueError(f"Raster expects an HxWx4 array, got {pixels.shape}")
-        height, width = pixels.shape[:2]
+                 meta: dict | None = None, *, half=None):
+        if half is not None:
+            half = np.ascontiguousarray(half, dtype=np.float16)
+            if pixels is not None:
+                raise ValueError("Raster compact source cannot also supply float pixels")
+            shape = half.shape
+            stored = None
+        else:
+            pixels = np.asarray(pixels, dtype=np.float32)
+            shape = pixels.shape
+            stored = pixels
+        if len(shape) != 3 or shape[2] != 4:
+            raise ValueError(f"Raster expects an HxWx4 array, got {shape}")
+        height, width = shape[:2]
         if data is None:
             data = Region(0, 0, width, height)
         if (data.width, data.height) != (width, height):
@@ -42,12 +51,19 @@ class Raster:
                 f"Data window {data} does not match pixel extent {(width, height)}")
         self.layers = layers
         self.meta = meta   # header attributes that ride with the layers (the Cryptomatte manifest)
-        # Set only by media.read_media_raster when the source bytes can be recovered exactly from
-        # half precision. Derived, cropped and copied rasters deliberately lose this hint.
-        self.half = None
-        self.pixels = pixels
+        # A Read may retain exact half words until a CPU consumer asks for pixels. Derived,
+        # cropped and copied rasters deliberately lose that compact source.
+        self.half = half
+        self._pixels = stored
         self.data = data
         self.display = data if display is None else display
+
+    @property
+    def pixels(self):
+        """Float32 pixels, materialized only at a CPU-consumer boundary."""
+        if self._pixels is None:
+            self._pixels = self.half.astype(np.float32)
+        return self._pixels
 
     # -- construction helpers ---------------------------------------------------------------
 
@@ -64,11 +80,12 @@ class Raster:
 
     @property
     def nbytes(self) -> int:
-        return self.pixels.nbytes + sum(layer.nbytes for layer in (self.layers or {}).values())
+        source = self.half if self._pixels is None else self._pixels
+        return source.nbytes + sum(layer.nbytes for layer in (self.layers or {}).values())
 
     @property
     def shape(self):
-        return self.pixels.shape
+        return (self.half if self._pixels is None else self._pixels).shape
 
     @property
     def has_overscan(self) -> bool:

@@ -1143,9 +1143,15 @@ class GPU2D:
                 return image
             self._input_bytes -= image.nbytes
         started = time.perf_counter()
-        pixels = np.ascontiguousarray(raster.pixels[..., 3] if plane else raster.pixels, dtype=np.float32)
-        buffer, nbytes = self._acquire(pixels.nbytes)
         half = getattr(raster, "half", None) if not plane else None
+        if half is not None:
+            height, width = half.shape[:2]
+            pixel_bytes = height * width * 16
+        else:
+            pixels = np.ascontiguousarray(raster.pixels[..., 3] if plane else raster.pixels, dtype=np.float32)
+            height, width = pixels.shape[:2]
+            pixel_bytes = pixels.nbytes
+        buffer, nbytes = self._acquire(pixel_bytes)
         if half is not None:
             if add_params is None or passes is None or held is None:
                 raise Unsupported("half upload needs an island command encoder")
@@ -1155,9 +1161,9 @@ class GPU2D:
             packed, packed_bytes = self._acquire(words.nbytes)
             held.append((packed, packed_bytes))
             self.device.queue.write_buffer(packed, 0, words)
-            slot = add_params(_params(i0=(pixels.shape[0] * pixels.shape[1], 0, 0, 0)))
+            slot = add_params(_params(i0=(height * width, 0, 0, 0)))
             passes.append((self._pipeline("widen"), [(0, packed, packed_bytes), (1, buffer, nbytes)],
-                           slot, (-(-(pixels.shape[0] * pixels.shape[1]) // 64), 1, 1), 2))
+                           slot, (-(-(height * width) // 64), 1, 1), 2))
             sent = words.nbytes
         else:
             self.device.queue.write_buffer(buffer, 0, pixels)

@@ -48,6 +48,14 @@ class HalfEligibilityTests(unittest.TestCase):
                                                        space="Linear Rec.709 (sRGB)"))).half)
         self.assertIsNone(read_media_raster(str(self.write("plain.png", pixels, oiio.UINT8))).half)
 
+    def test_opaque_native_half_stays_compact_until_cpu_pixels_are_requested(self):
+        pixels = np.array([[[.3, .5, .75, 1.]]], np.float16)
+        raster = read_media_raster(str(self.write("lazy.exr", pixels, oiio.HALF)))
+        self.assertIsNone(raster._pixels)
+        self.assertEqual(raster.nbytes, pixels.nbytes)
+        np.testing.assert_array_equal(raster.pixels, pixels.astype(np.float32))
+        self.assertIsNotNone(raster._pixels)
+
     def test_compact_hint_is_on_by_default_and_can_be_disabled_for_comparison(self):
         pixels = np.array([[[.3, .5, .75, 1.]]], np.float32)
         half = self.write("default.exr", pixels, oiio.HALF)
@@ -120,6 +128,13 @@ class HalfUploadTests(unittest.TestCase):
         expected = self.backend.run(self.backend.stage("Grade", p, [plain]))
         np.testing.assert_array_equal(got.pixels, expected.pixels)
         self.assertEqual(sent, pixels.nbytes // 2)
+
+    def test_compact_source_upload_does_not_materialize_cpu_pixels(self):
+        half = np.array([[[.5, .25, .125, 1.], [.1, .2, .3, 1.]]], np.float16)
+        compact = Raster(None, half=half)
+        p = dict(SPECS["Grade"]["params"], exposure=.5)
+        self.backend.run(self.backend.stage("Grade", p, [compact]))
+        self.assertIsNone(compact._pixels)
 
     def test_derived_raster_drops_the_compact_hint(self):
         raster = Raster(np.ones((2, 3, 4), np.float32)); raster.half = raster.pixels.astype(np.float16)
