@@ -1,23 +1,44 @@
 {
-  "schema": 1,
+  "schema": 2,
   "source_pages": [
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/adding_motionblur.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/connecting_rotopaint.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/copy_cut_paste_stroke.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
     "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html",
     "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_shape_attrs.html",
     "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_attributes.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
     "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_shape_attrs.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/rotopaint_and_stereo.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
     "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/adding_motionblur.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/copy_cut_paste_stroke.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_blur_tool.html",
     "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_brush_tool.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/connecting_rotopaint.html",
-    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/rotopaint_and_stereo.html"
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_burn_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_clone_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_dodge_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_eraser_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_reveal_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_rotopaint.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_sharpen_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_smear_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+    "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=187",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=215",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=221",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=222",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223",
+    "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
   ],
   "toolbar": [
     {
@@ -49,52 +70,65 @@
           "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
         }
       ],
-      "default": null,
-      "cycle_shortcut": "Q"
+      "default_tool": null,
+      "default_status": "No fixed per-group default is stated; the settings page lists tools an artist may choose as the startup tool.",
+      "default_tools_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "cycle_shortcut": "Q",
+      "cycle_source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "cycle": {
+        "name": "Select tool cycle",
+        "shortcut": "Q",
+        "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+      },
+      "group_source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "group": "Points",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
       "tools": [
         {
           "name": "Add Points",
-          "shortcut": null,
+          "shortcut": "Ctrl+Alt+LMB on spline",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
         },
         {
           "name": "Remove Points",
-          "shortcut": null,
+          "shortcut": "Delete",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
         },
         {
           "name": "Cusp Points",
-          "shortcut": null,
+          "shortcut": "Shift+Z",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
         },
         {
           "name": "Smooth Points",
-          "shortcut": null,
+          "shortcut": "Z",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
         },
         {
           "name": "Remove Feather",
-          "shortcut": null,
+          "shortcut": "Shift+E",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
         },
         {
           "name": "Open/Close Curve",
-          "shortcut": null,
+          "shortcut": "Return/Enter; Esc leaves it open",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
         }
       ],
-      "default": null,
-      "cycle_shortcut": null
+      "default_tool": null,
+      "default_status": "No fixed per-group default is stated; the settings page lists tools an artist may choose as the startup tool.",
+      "default_tools_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "cycle_shortcut": null,
+      "cycle_source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "group_source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "group": "Shapes",
@@ -104,13 +138,13 @@
           "name": "Bezier",
           "shortcut": "V",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html"
         },
         {
           "name": "Cusped Bezier",
           "shortcut": "V",
           "availability": "Roto and RotoPaint",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html"
         },
         {
           "name": "B-Spline",
@@ -143,8 +177,17 @@
           "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
         }
       ],
-      "default": null,
-      "cycle_shortcut": "V"
+      "default_tool": null,
+      "default_status": "No fixed per-group default is stated; the settings page lists tools an artist may choose as the startup tool.",
+      "default_tools_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "cycle_shortcut": "V",
+      "cycle_source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html",
+      "cycle": {
+        "name": "Shapes tool cycle",
+        "shortcut": "V",
+        "source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html"
+      },
+      "group_source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "group": "Brushes",
@@ -154,17 +197,26 @@
           "name": "Brush",
           "shortcut": "N",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_brush_tool.html"
         },
         {
           "name": "Eraser",
           "shortcut": "N",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_eraser_tool.html"
         }
       ],
-      "default": null,
-      "cycle_shortcut": "N"
+      "default_tool": null,
+      "default_status": "No fixed per-group default is stated; the settings page lists tools an artist may choose as the startup tool.",
+      "default_tools_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "cycle_shortcut": "N",
+      "cycle_source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html",
+      "cycle": {
+        "name": "Brushes tool cycle",
+        "shortcut": "N",
+        "source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html"
+      },
+      "group_source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "group": "Clone/Reveal",
@@ -174,17 +226,26 @@
           "name": "Clone",
           "shortcut": "C",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_clone_tool.html"
         },
         {
           "name": "Reveal",
           "shortcut": "C",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_reveal_tool.html"
         }
       ],
-      "default": null,
-      "cycle_shortcut": "C"
+      "default_tool": null,
+      "default_status": "No fixed per-group default is stated; the settings page lists tools an artist may choose as the startup tool.",
+      "default_tools_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "cycle_shortcut": "C",
+      "cycle_source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html",
+      "cycle": {
+        "name": "Clone/Reveal tool cycle",
+        "shortcut": "C",
+        "source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html"
+      },
+      "group_source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "group": "Blur/Sharpen/Smear",
@@ -194,23 +255,32 @@
           "name": "Blur",
           "shortcut": "X",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_blur_tool.html"
         },
         {
           "name": "Sharpen",
           "shortcut": "X",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_sharpen_tool.html"
         },
         {
           "name": "Smear",
           "shortcut": "X",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_smear_tool.html"
         }
       ],
-      "default": null,
-      "cycle_shortcut": "X"
+      "default_tool": null,
+      "default_status": "No fixed per-group default is stated; the settings page lists tools an artist may choose as the startup tool.",
+      "default_tools_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "cycle_shortcut": "X",
+      "cycle_source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html",
+      "cycle": {
+        "name": "Blur/Sharpen/Smear tool cycle",
+        "shortcut": "X",
+        "source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html"
+      },
+      "group_source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "group": "Dodge/Burn",
@@ -220,285 +290,1704 @@
           "name": "Dodge",
           "shortcut": "D",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_dodge_tool.html"
         },
         {
           "name": "Burn",
           "shortcut": "D",
           "availability": "RotoPaint only",
-          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_burn_tool.html"
         }
       ],
-      "default": null,
-      "cycle_shortcut": "D"
+      "default_tool": null,
+      "default_status": "No fixed per-group default is stated; the settings page lists tools an artist may choose as the startup tool.",
+      "default_tools_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+      "cycle_shortcut": "D",
+      "cycle_source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html",
+      "cycle": {
+        "name": "Dodge/Burn tool cycle",
+        "shortcut": "D",
+        "source_page": "https://learn.foundry.com/nuke/content/misc/hotkeys_studio.html"
+      },
+      "group_source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     }
   ],
   "tool_settings": [
     {
-      "name": "Select All",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select All."
+      "tool": "Select All",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Label points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Show paint stroke splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles on move",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Constant selection mode",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Select Splines",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select Splines."
+      "tool": "Select Splines",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Label points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Show paint stroke splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles on move",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Constant selection mode",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Select Points",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select Points."
+      "tool": "Select Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Label points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Show paint stroke splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles on move",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Constant selection mode",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Select Feather Points",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select Feather Points."
+      "tool": "Select Feather Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Label points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Show paint stroke splines",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Hide transform handles on move",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Constant selection mode",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Add Points",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Add Points."
+      "tool": "Add Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        }
+      ]
     },
     {
-      "name": "Remove Points",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Remove Points."
+      "tool": "Remove Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        }
+      ]
     },
     {
-      "name": "Cusp Points",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Cusp Points."
+      "tool": "Cusp Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        }
+      ]
     },
     {
-      "name": "Smooth Points",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Smooth Points."
+      "tool": "Smooth Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        }
+      ]
     },
     {
-      "name": "Remove Feather",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Remove Feather."
+      "tool": "Remove Feather",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        }
+      ]
     },
     {
-      "name": "Open/Close Curve",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Open/Close Curve."
+      "tool": "Open/Close Curve",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "controls": [
+        {
+          "label": "Hide points",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        }
+      ]
     },
     {
-      "name": "Bezier",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Bezier."
+      "tool": "Bezier",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Source",
+          "widget_kind": "dropdown",
+          "default": "color",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Blending mode",
+          "widget_kind": "dropdown",
+          "default": "over",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209"
+        },
+        {
+          "label": "Feather",
+          "widget_kind": "slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Feather on",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather falloff",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather type",
+          "widget_kind": "dropdown",
+          "default": "linear",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "all frames",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Cusped Bezier",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Cusped Bezier."
+      "tool": "Cusped Bezier",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Source",
+          "widget_kind": "dropdown",
+          "default": "color",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Blending mode",
+          "widget_kind": "dropdown",
+          "default": "over",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209"
+        },
+        {
+          "label": "Feather",
+          "widget_kind": "slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Feather on",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather falloff",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather type",
+          "widget_kind": "dropdown",
+          "default": "linear",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "all frames",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "B-Spline",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for B-Spline."
+      "tool": "B-Spline",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Source",
+          "widget_kind": "dropdown",
+          "default": "color",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Blending mode",
+          "widget_kind": "dropdown",
+          "default": "over",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209"
+        },
+        {
+          "label": "Feather",
+          "widget_kind": "slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Feather on",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather falloff",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather type",
+          "widget_kind": "dropdown",
+          "default": "linear",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "all frames",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Ellipse",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Ellipse."
+      "tool": "Ellipse",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Source",
+          "widget_kind": "dropdown",
+          "default": "color",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Blending mode",
+          "widget_kind": "dropdown",
+          "default": "over",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209"
+        },
+        {
+          "label": "Feather",
+          "widget_kind": "slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Feather on",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather falloff",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather type",
+          "widget_kind": "dropdown",
+          "default": "linear",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "all frames",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Rectangle",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Rectangle."
+      "tool": "Rectangle",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Source",
+          "widget_kind": "dropdown",
+          "default": "color",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Blending mode",
+          "widget_kind": "dropdown",
+          "default": "over",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209"
+        },
+        {
+          "label": "Feather",
+          "widget_kind": "slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Feather on",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather falloff",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather type",
+          "widget_kind": "dropdown",
+          "default": "linear",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "all frames",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Cusped Rectangle",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Cusped Rectangle."
+      "tool": "Cusped Rectangle",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Source",
+          "widget_kind": "dropdown",
+          "default": "color",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Blending mode",
+          "widget_kind": "dropdown",
+          "default": "over",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209"
+        },
+        {
+          "label": "Feather",
+          "widget_kind": "slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Feather on",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather falloff",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather type",
+          "widget_kind": "dropdown",
+          "default": "linear",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "all frames",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Open Spline",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Open Spline."
+      "tool": "Open Spline",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Source",
+          "widget_kind": "dropdown",
+          "default": "color",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Blending mode",
+          "widget_kind": "dropdown",
+          "default": "over",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=209"
+        },
+        {
+          "label": "Feather",
+          "widget_kind": "slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Feather on",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather falloff",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather type",
+          "widget_kind": "dropdown",
+          "default": "linear",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Feather link",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "all frames",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "label": "Autokey",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+        }
+      ]
     },
     {
-      "name": "Brush",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Brush."
+      "tool": "Brush",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_brush_tool.html",
+      "controls": [
+        {
+          "label": "Color",
+          "widget_kind": "colour swatch",
+          "default": "RGBA 1 (white)",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Pressure alters opacity",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Pressure alters size",
+          "widget_kind": "toggle",
+          "default": false,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Pressure alters hardness",
+          "widget_kind": "toggle",
+          "default": false,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Build up",
+          "widget_kind": "toggle",
+          "default": true,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        }
+      ]
     },
     {
-      "name": "Eraser",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Eraser."
+      "tool": "Eraser",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_eraser_tool.html",
+      "controls": [
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        }
+      ]
     },
     {
-      "name": "Clone",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Clone."
+      "tool": "Clone",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_clone_tool.html",
+      "controls": [
+        {
+          "label": "Clone source transform translate X/Y",
+          "widget_kind": "field",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=221"
+        },
+        {
+          "label": "Rotate",
+          "widget_kind": "field",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=221"
+        },
+        {
+          "label": "Scale",
+          "widget_kind": "field",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=221"
+        },
+        {
+          "label": "Skew X",
+          "widget_kind": "field",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=222"
+        },
+        {
+          "label": "Skew Y",
+          "widget_kind": "field",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=222"
+        },
+        {
+          "label": "Skew order",
+          "widget_kind": "dropdown",
+          "default": "XY",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=222"
+        },
+        {
+          "label": "Center X/Y",
+          "widget_kind": "field",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=222"
+        },
+        {
+          "label": "Round to pixel",
+          "widget_kind": "toggle",
+          "default": false,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=222"
+        },
+        {
+          "label": "Filter",
+          "widget_kind": "dropdown",
+          "default": "Cubic",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Black outside",
+          "widget_kind": "toggle",
+          "default": false,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Time offset",
+          "widget_kind": "slider/field",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Time offset type",
+          "widget_kind": "dropdown",
+          "default": "relative",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "View",
+          "widget_kind": "dropdown",
+          "default": "current",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224",
+          "detail": "Only shown when project has multiple views."
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        }
+      ]
     },
     {
-      "name": "Reveal",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Reveal."
+      "tool": "Reveal",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_reveal_tool.html",
+      "controls": [
+        {
+          "label": "Paint source",
+          "widget_kind": "dropdown",
+          "default": null,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=208"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Time offset",
+          "widget_kind": "slider/field",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Time offset type",
+          "widget_kind": "dropdown",
+          "default": "relative",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+        },
+        {
+          "label": "Onion skin",
+          "widget_kind": "toggle",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_reveal_tool.html"
+        },
+        {
+          "label": "Onion skin opacity",
+          "widget_kind": "slider/field",
+          "default": null,
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_reveal_tool.html"
+        }
+      ]
     },
     {
-      "name": "Blur",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Blur."
+      "tool": "Blur",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_blur_tool.html",
+      "controls": [
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Effect",
+          "widget_kind": "field/slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        }
+      ]
     },
     {
-      "name": "Sharpen",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Sharpen."
+      "tool": "Sharpen",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_sharpen_tool.html",
+      "controls": [
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        },
+        {
+          "label": "Effect",
+          "widget_kind": "field/slider",
+          "default": 0,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        }
+      ]
     },
     {
-      "name": "Smear",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Smear."
+      "tool": "Smear",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_smear_tool.html",
+      "controls": [
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        }
+      ]
     },
     {
-      "name": "Dodge",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Dodge."
+      "tool": "Dodge",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_dodge_tool.html",
+      "controls": [
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        }
+      ]
     },
     {
-      "name": "Burn",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
-      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Burn."
+      "tool": "Burn",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_burn_tool.html",
+      "controls": [
+        {
+          "label": "Opacity",
+          "widget_kind": "slider",
+          "default": 1,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush size",
+          "widget_kind": "field/slider",
+          "default": 25,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush spacing",
+          "widget_kind": "field/slider",
+          "default": 0.05,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Brush hardness",
+          "widget_kind": "slider",
+          "default": 0.2,
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=220"
+        },
+        {
+          "label": "Lifetime type",
+          "widget_kind": "dropdown",
+          "default": "single frame",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+        }
+      ]
     }
   ],
   "shape_list": [
     {
       "name": "Name",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Unique item name; newest items are on top."
+      "order_in_list": 1,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Unique editable item/group name.",
+      "cannot_match_reason": null
     },
     {
       "name": "Visible",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Hides item while preserving editable overlay."
+      "order_in_list": 2,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Show or hide while retaining editability.",
+      "cannot_match_reason": null
     },
     {
       "name": "Lock",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Prevents item editing."
+      "order_in_list": 3,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Prevent editing.",
+      "cannot_match_reason": null
     },
     {
-      "name": "Overlay",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Sets viewer outline color."
+      "name": "Overlay color",
+      "order_in_list": 4,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Color of the outline in the Viewer.",
+      "cannot_match_reason": null
     },
     {
       "name": "Color",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Sets item color."
+      "order_in_list": 5,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Rendered color.",
+      "cannot_match_reason": null
     },
     {
       "name": "Invert",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Toggles shape inversion."
+      "order_in_list": 6,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Invert shape/stroke/group.",
+      "cannot_match_reason": null
     },
     {
       "name": "Blending",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Sets blending mode."
+      "order_in_list": 7,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Blending mode.",
+      "cannot_match_reason": null
     },
     {
       "name": "Motion blur",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Toggles shape motion blur."
+      "order_in_list": 8,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Whether shape motion blur is applied.",
+      "cannot_match_reason": null
     },
     {
-      "name": "Life",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Controls lifetime."
+      "name": "View",
+      "order_in_list": 9,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Views where item appears; only for multi-view projects.",
+      "cannot_match_reason": "Stereo-only column; NodeBased has no multi-view project support."
     },
     {
-      "name": "Groups/folders",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Add creates Layer1; grouped items move together and have a group transform overlay."
+      "name": "Lifetime",
+      "order_in_list": 10,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Frames during which item is visible.",
+      "cannot_match_reason": null
     },
     {
-      "name": "Context menu",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
-      "fact": "Duplicate, curve/spline copy-cut-paste, planar track, and lifetime commands."
+      "name": "Source",
+      "order_in_list": 11,
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "Source selected in Shape, Stroke, or RotoPaint controls.",
+      "cannot_match_reason": null
+    },
+    {
+      "name": "Context menu commands",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
+      "commands": [
+        {
+          "name": "Add new layer",
+          "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212"
+        },
+        {
+          "name": "Duplicate",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html"
+        },
+        {
+          "name": "Copy > Curve",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html"
+        },
+        {
+          "name": "Cut > Curve",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html"
+        },
+        {
+          "name": "Paste > Spline",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html"
+        },
+        {
+          "name": "Delete",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+        },
+        {
+          "name": "Set lifetime / frame range",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+        },
+        {
+          "name": "Planar-track",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        }
+      ]
+    },
+    {
+      "name": "Layers and folders",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212",
+      "fact": "The list shows hierarchy; Add new layer creates a folder; drag/drop reorders and moves items among groups; groups can be transformed together; newest items sit on top."
     }
   ],
   "viewer_editing": [
     {
       "name": "Add point",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
-      "fact": "Add Points tool, click selected spline."
-    },
-    {
-      "name": "Move point",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
-      "fact": "Drag point; numeric keypad arrows nudge one pixel."
+      "binding": "Ctrl/Cmd+Alt+LMB on spline",
+      "fact": "Adds points to an existing shape.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "name": "Delete point",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
-      "fact": "Remove Points tool."
+      "binding": "Delete",
+      "fact": "Deletes selected point(s).",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
-      "name": "Feather",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_shape_attrs.html",
-      "fact": "E increases point feather; Shift+E resets."
+      "name": "Move point",
+      "binding": "LMB drag",
+      "fact": "Drag selected point(s) or point handles.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
-      "name": "Tangent handles",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
-      "fact": "Drag to make handles; Shift moves both; Ctrl/Cmd breaks angle."
+      "name": "Select several points",
+      "binding": "Ctrl/Cmd+LMB or marquee",
+      "fact": "Select multiple points.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
     },
     {
-      "name": "Close shape",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
-      "fact": "Return, click first point, or switch tool."
+      "name": "Select all points",
+      "binding": "Ctrl+A",
+      "fact": "Select all points.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Feather add",
+      "binding": "E; Ctrl/Cmd+drag point",
+      "fact": "Increase feather or set individual feather vector.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+    },
+    {
+      "name": "Feather drag",
+      "binding": "LMB drag feather handle",
+      "fact": "Adjust feather handle; feather is linked by default.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+    },
+    {
+      "name": "Feather reset",
+      "binding": "Shift+E",
+      "fact": "Remove feather on selected point(s).",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=223"
+    },
+    {
+      "name": "Tangent create",
+      "binding": "LMB drag while placing Bezier point",
+      "fact": "Pull out Bezier tangent handles.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Tangent move both",
+      "binding": "Shift+drag tangent handle",
+      "fact": "Set the opposite handle to the same length.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Break tangent",
+      "binding": "Ctrl/Cmd+drag tangent handle",
+      "fact": "Move handle independently.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Cusp point",
+      "binding": "Shift+Z",
+      "fact": "Cusp selected point.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Smooth point",
+      "binding": "Z",
+      "fact": "Increase smoothness of selected point.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
       "name": "Transform box",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
-      "fact": "Select points and use transform box; T toggles handles."
+      "binding": "T with Select tool; Shift+LMB points",
+      "fact": "Show jack/box or produce a transform box for selected points.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
-      "name": "Shape motion blur",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/adding_motionblur.html",
-      "fact": "Per-shape enable and sample-count control."
+      "name": "Transform-box center/pivot",
+      "binding": "Drag transform handle",
+      "fact": "Translate/rotate/scale through transform handle.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212"
     },
     {
-      "name": "Copy/cut/paste spline positions",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/copy_cut_paste_stroke.html",
-      "fact": "Context-menu curve operations act on current keyframe positions."
+      "name": "Transform-box pivot modify",
+      "binding": "Ctrl/Cmd+Shift+drag handle",
+      "fact": "Adjust pivot/center.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212"
+    },
+    {
+      "name": "Nudge point",
+      "binding": "Numeric keypad arrow",
+      "fact": "Move selected point one pixel.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+    },
+    {
+      "name": "Draw Bezier/B-Spline freely",
+      "binding": "Ctrl/Cmd+drag",
+      "fact": "Sketch a shape.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Bezier/B-Spline handles/tension",
+      "binding": "Drag while placing; Ctrl/Cmd+Alt+drag point for B-Spline tension",
+      "fact": "Create handles or adjust B-Spline tension.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Sharp exit while drawing",
+      "binding": "Shift+LMB",
+      "fact": "Create a sharp exit on previous point.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "B-Spline tension",
+      "binding": "Ctrl/Cmd+Alt+drag point",
+      "fact": "Adjust tension.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Close shape",
+      "binding": "Click first point or Return",
+      "fact": "Close shape.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Leave shape open",
+      "binding": "Esc",
+      "fact": "Finish as an open spline.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Tool change",
+      "binding": "Select another toolbar tool",
+      "fact": "Changing tool closes a shape per procedure page.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html"
+    },
+    {
+      "name": "Escape to selection",
+      "binding": "Esc",
+      "fact": "Return to current Select tool outside shape drawing.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Brush size",
+      "binding": "Shift+drag",
+      "fact": "Change brush size.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Clone offset",
+      "binding": "Ctrl/Cmd+LMB drag; Ctrl/Cmd+Shift+LMB drag resets",
+      "fact": "Set/reset clone offset.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Reveal onion skin",
+      "binding": "T on Clone/Reveal source viewer",
+      "fact": "Toggle source as onion skin with transform jack.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
+    },
+    {
+      "name": "Selection tool cycle",
+      "binding": "Q",
+      "fact": "Toggle Select tools.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+    },
+    {
+      "name": "Tool mode cycle",
+      "binding": "S with Viewer focus",
+      "fact": "Cycle selected tool modes.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html"
+    },
+    {
+      "name": "Paint tool cycles",
+      "binding": "N/C/X/D",
+      "fact": "Cycle Brush/Eraser, Clone/Reveal, Blur/Sharpen/Smear, Dodge/Burn.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     }
   ],
   "timing_animation": [
     {
-      "name": "Lifetime types",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
-      "fact": "All, frame-to-end, single-frame, start-to-frame, frame range."
-    },
-    {
       "name": "Autokey",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
-      "fact": "On by default; edits create keys."
+      "binding_or_values": "Default enabled",
+      "fact": "Changes on subsequent frames create spline/attribute keys.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
     },
     {
-      "name": "Set key",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
-      "fact": "Context menu sets spline, transform, or attribute keys."
+      "name": "Set key: spline",
+      "binding_or_values": "Spline key control / click",
+      "fact": "Quick access shows current/total keys, navigation and set/delete.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=187"
     },
     {
-      "name": "Delete key",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
-      "fact": "Animation context-menu operation."
+      "name": "Delete key: spline",
+      "binding_or_values": "Spline key control / click",
+      "fact": "The spline key control can set or delete spline keys.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=187"
+    },
+    {
+      "name": "Set/delete point keys",
+      "binding_or_values": "Point key control / click",
+      "fact": "Spline keys apply to points; individual keyed properties are edited in the control panel.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=187"
+    },
+    {
+      "name": "Set key: transform",
+      "binding_or_values": "Key control for transform fields",
+      "fact": "Per-field keyframe controls are listed in the RotoPaint transform panel.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=212"
+    },
+    {
+      "name": "Lifetime types",
+      "binding_or_values": "All; start to frame; single frame; to end; range",
+      "fact": "RotoPaint lifetime default is single frame; shape default is all frames.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
+    },
+    {
+      "name": "Lifetime endpoints",
+      "binding_or_values": "From and To fields",
+      "fact": "From applies to single/to-end/range; To applies to start-to/range.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=224"
     },
     {
       "name": "Ripple editing",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
-      "fact": "No fact identified in inspected page."
+      "binding_or_values": "Not stated in the traversed Nuke 17 guide pages",
+      "fact": "No ripple timing operation is specified in the official RotoPaint chapter or reference pages.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
     },
     {
-      "name": "Per-shape keys",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
-      "fact": "Multi-frame strokes/shapes can animate."
+      "name": "Per-shape keyframe controls",
+      "binding_or_values": "All, spline, transform, attributes",
+      "fact": "Shape/stroke keys can be scoped; key controls are available in the control panel.",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html"
+    },
+    {
+      "name": "Motion blur keys",
+      "binding_or_values": "Motion blur samples, shutter, offset controls",
+      "fact": "Per-shape motion-blur settings and shutter timing are listed in the Shape/Motion Blur panels.",
+      "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=215"
     }
-  ]
+  ],
+  "reference_notes": {
+    "group_default": "Guide offers configurable startup tools but does not specify one fixed tool default per group.",
+    "list_order": "Exact Nuke 17.0 list order comes from the official control reference table, page 212.",
+    "stereo_only": "The View list column and clone source view control appear only for multi-view/stereoscopic projects.",
+    "ripple": "Ripple editing is referenced in a third-party course description but is not described by the linked official Nuke 17 chapter/reference pages; not scored as a documented control."
+  },
+  "reference_version_note": "Facts use the Nuke 17.0 chapter help pages plus the official Nuke 17.0v3 Reference Guide page references for defaults, list columns and key controls. No guide prose is copied."
 }

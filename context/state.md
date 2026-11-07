@@ -1,3 +1,7 @@
+## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
+
+The original partial’s gaps are closed: per-tool control/default inventory and settings, ordered list columns, gesture/key inventory, and source-verified NodeBased locations for every measured entry. The 17.0v3 source set is recorded in `docs/parity/nuke_roto_ui.json`; the complete per-entry mapping is in `docs/parity/nodebased_roto_ui.json`; the weighted score and 274-row gap ledger are in `docs/ROTO_NUKE_UI.md` (bundled copy byte-identical). Score: toolbar 42.2, settings 35.8, list 30.0, viewer editing 51.6, timing/animation 45.0, overall 38.2. Official-source scope caveats: ripple editing is not documented in the checked sources; the stereo View column cannot match current NodeBased UI. No UI/behavior changes. Reference, knowledge, Roto UI (19), and RotoPaint UI (17) modules passed. Screenshots are deliberate local scratch in `/var/home/omid/.openclaw/workspace/scratch/nb-qa/1107-roto-r0/`. Next: Lane 9 R1 from `docs/ROTO_NUKE_UI.md`.
+
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (partial)
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (3:25 PM on 2026-11-07 PDT)

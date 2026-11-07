@@ -1,3 +1,10 @@
+## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
+
+- **What was done (evidence):** Completed the source inventory for 17.0v3 toolbar/tool settings, list columns and order, viewer gestures/keys, and timing controls. Mapped every reference entry to a NodeBased status and implementation location. The score is toolbar 42.2, tool settings 35.8, stroke/shape list 30.0, viewer editing 51.6, timing/animation 45.0; overall 38.2. Ripple editing is undocumented in the official sources checked; stereo View is outside current NodeBased scope.
+- **Artifacts:** `docs/parity/nuke_roto_ui.json`, `docs/parity/nodebased_roto_ui.json`, `tools/audit_roto_ui.py`, `tests/test_nuke_roto_ui_reference.py`, `docs/ROTO_NUKE_UI.md` and byte-identical bundled copy. Screenshots remain deliberate local scratch at `/var/home/omid/.openclaw/workspace/scratch/nb-qa/1107-roto-r0/{roto,rotopaint}.png`. Test logs are local scratch under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`.
+- **State:** Done. Reference, knowledge, Roto UI and RotoPaint UI targeted modules pass. No product UI/behavior changes. Linked guide pages loaded; guessed keyboard aliases 404, while the official keyboard page loaded.
+- **Next owner + concrete artifact:** Lane 9 can start R1 from the ranked gap ledger and proposed steps in `docs/ROTO_NUKE_UI.md`.
+
 ## 2026-11-07 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R0: Nuke's Roto and RotoPaint tools and UI, recorded and measured (integrator tick)
 
 - **What was done:** `main` `249bce22` -> `e99f8e4d` plus this docs commit. Evidence and per-lane commit

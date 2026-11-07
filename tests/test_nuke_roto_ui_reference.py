@@ -1,40 +1,44 @@
 import json
-import tempfile
 import unittest
-from pathlib import Path
 
-from tools.audit_roto_ui import ROOT, SECTIONS, score
+from tools.audit_roto_ui import ROOT, SECTIONS, entries_for, score
+
+
+def walk(value):
+    if isinstance(value, dict):
+        if 'source_page' in value:
+            yield value
+        for child in value.values():
+            yield from walk(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from walk(child)
+
 
 class NukeRotoReferenceTests(unittest.TestCase):
-    def test_reference_and_measured_entries_are_sourced_and_nonempty(self):
+    def test_reference_is_sourced_nonempty_and_tools_unique_per_node(self):
         ref = json.loads((ROOT / 'docs/parity/nuke_roto_ui.json').read_text())
         measured = json.loads((ROOT / 'docs/parity/nodebased_roto_ui.json').read_text())
-        self.assertTrue(ref['source_pages'])
-        source = set(ref['source_pages'])
+        sources = set(ref['source_pages'])
+        self.assertTrue(sources)
         for section in SECTIONS:
             self.assertTrue(ref[section])
-            self.assertEqual(len(ref[section]), len(measured[section]))
-            names = []
-            for entry in ref[section]:
-                self.assertIn(entry['source_page'], source)
-                if section == 'toolbar':
-                    for tool in entry['tools']:
-                        self.assertIn(tool['source_page'], source)
-                        names.append(tool['name'])
-            if section == 'toolbar':
-                self.assertEqual(len(names), len(set(names)))
-                measured_entries = [tool for group in measured[section] for tool in group['tools']]
-            else:
-                measured_entries = measured[section]
-            for entry in measured_entries:
-                self.assertIn(entry['status'], ('match', 'differs', 'missing'))
-                self.assertTrue(entry['location'])
+            self.assertEqual(len(entries_for(section, ref)), len(entries_for(section, measured)))
+            for item in walk(ref[section]):
+                self.assertIn(item['source_page'], sources)
+            for item in entries_for(section, measured):
+                self.assertIn(item['status'], ('match', 'differs', 'missing'))
+                self.assertTrue(item.get('location'))
+        for node in ('Roto', 'RotoPaint'):
+            names = [tool['name'] for group in ref['toolbar'] for tool in group['tools']
+                     if tool['availability'] in (node, 'Roto and RotoPaint')]
+            self.assertEqual(len(names), len(set(names)))
 
-    def test_score_is_recomputed_from_status(self):
+    def test_score_recomputes_and_changes_when_a_status_changes(self):
+        ref = json.loads((ROOT / 'docs/parity/nuke_roto_ui.json').read_text())
         measured = json.loads((ROOT / 'docs/parity/nodebased_roto_ui.json').read_text())
-        before = score({}, measured)
+        before = score(ref, measured)
         first = measured['toolbar'][0]['tools'][0]
         old = first['status']
         first['status'] = 'missing' if old != 'missing' else 'match'
-        after = score({}, measured)
-        self.assertNotEqual(before, after)
+        self.assertNotEqual(before, score(ref, measured))

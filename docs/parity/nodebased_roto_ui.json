@@ -1,537 +1,1871 @@
 {
-  "schema": 1,
+  "schema": 3,
   "toolbar": [
     {
-      "name": "Select",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
-      "difference": "Current grouped controls and placement differ from the guide.",
+      "group": "Select",
       "tools": [
         {
           "name": "Select All",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.mousePressEvent`; `Viewer.keyPressEvent` Ctrl+A",
+          "difference": "The selection behavior exists without Nuke\u2019s dedicated Select All toolbar mode."
         },
         {
           "name": "Select Splines",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list`",
+          "difference": "Point/shape selection and edits exist without the corresponding toolbar mode."
         },
         {
           "name": "Select Points",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list`",
+          "difference": "Point/shape selection and edits exist without the corresponding toolbar mode."
         },
         {
           "name": "Select Feather Points",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list`",
+          "difference": "Point/shape selection and edits exist without the corresponding toolbar mode."
         }
-      ]
+      ],
+      "cycle": {
+        "status": "differs",
+        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
+        "difference": "No Nuke-equivalent toolbar group cycle key."
+      }
     },
     {
-      "name": "Points",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
-      "difference": "Current grouped controls and placement differ from the guide.",
+      "group": "Points",
       "tools": [
         {
           "name": "Add Points",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer._insert_roto_point`; `Viewer._delete_roto_points`; `Viewer.keyPressEvent`",
+          "difference": "The operation is available as a gesture/key, without a dedicated toolbar mode."
         },
         {
           "name": "Remove Points",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer._insert_roto_point`; `Viewer._delete_roto_points`; `Viewer.keyPressEvent`",
+          "difference": "The operation is available as a gesture/key, without a dedicated toolbar mode."
         },
         {
           "name": "Cusp Points",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.keyPressEvent` \u2192 `Viewer._set_roto_tangent_mode`",
+          "difference": "The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent."
         },
         {
           "name": "Smooth Points",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.keyPressEvent` \u2192 `Viewer._set_roto_tangent_mode`",
+          "difference": "The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent."
         },
         {
           "name": "Remove Feather",
-          "status": "missing",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-reset-feather-points`",
+          "difference": "Feather reset is a properties button rather than a toolbar tool."
         },
         {
           "name": "Open/Close Curve",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.finish_roto_draw`; `RotoPanel.build_panel` / closed field",
+          "difference": "Open/close is controlled by drawing gesture or selected-item properties; no toolbar mode."
         }
-      ]
+      ],
+      "cycle": null
     },
     {
-      "name": "Shapes",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
-      "difference": "Current grouped controls and placement differ from the guide.",
+      "group": "Shapes",
       "tools": [
         {
           "name": "Bezier",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape\u2026",
+          "difference": "Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ."
         },
         {
           "name": "Cusped Bezier",
-          "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "status": "missing",
+          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
+          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
         },
         {
           "name": "B-Spline",
-          "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "status": "missing",
+          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
+          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
         },
         {
           "name": "Ellipse",
-          "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "status": "missing",
+          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
+          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
         },
         {
           "name": "Rectangle",
-          "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "status": "missing",
+          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
+          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
         },
         {
           "name": "Cusped Rectangle",
           "status": "missing",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
+          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
         },
         {
           "name": "Open Spline",
-          "status": "missing",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "status": "differs",
+          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape\u2026",
+          "difference": "Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ."
         }
-      ]
+      ],
+      "cycle": {
+        "status": "differs",
+        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
+        "difference": "No Nuke-equivalent toolbar group cycle key."
+      }
     },
     {
-      "name": "Brushes",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
-      "difference": "Current grouped controls and placement differ from the guide.",
+      "group": "Brushes",
       "tools": [
         {
           "name": "Brush",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         },
         {
           "name": "Eraser",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         }
-      ]
+      ],
+      "cycle": {
+        "status": "differs",
+        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
+        "difference": "No Nuke-equivalent toolbar group cycle key."
+      }
     },
     {
-      "name": "Clone/Reveal",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
-      "difference": "Current grouped controls and placement differ from the guide.",
+      "group": "Clone/Reveal",
       "tools": [
         {
           "name": "Clone",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         },
         {
           "name": "Reveal",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         }
-      ]
+      ],
+      "cycle": {
+        "status": "differs",
+        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
+        "difference": "No Nuke-equivalent toolbar group cycle key."
+      }
     },
     {
-      "name": "Blur/Sharpen/Smear",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
-      "difference": "Current grouped controls and placement differ from the guide.",
+      "group": "Blur/Sharpen/Smear",
       "tools": [
         {
           "name": "Blur",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         },
         {
           "name": "Sharpen",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         },
         {
           "name": "Smear",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         }
-      ]
+      ],
+      "cycle": {
+        "status": "differs",
+        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
+        "difference": "No Nuke-equivalent toolbar group cycle key."
+      }
     },
     {
-      "name": "Dodge/Burn",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
-      "difference": "Current grouped controls and placement differ from the guide.",
+      "group": "Dodge/Burn",
       "tools": [
         {
           "name": "Dodge",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         },
         {
           "name": "Burn",
           "status": "differs",
-          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
-          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
+          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
         }
-      ]
+      ],
+      "cycle": {
+        "status": "differs",
+        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
+        "difference": "No Nuke-equivalent toolbar group cycle key."
+      }
     }
   ],
   "tool_settings": [
     {
-      "name": "Select All",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Select All",
+      "controls": [
+        {
+          "label": "Label points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Show paint stroke splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles on move",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Constant selection mode",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Select Splines",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Select Splines",
+      "controls": [
+        {
+          "label": "Label points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Show paint stroke splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles on move",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Constant selection mode",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Select Points",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Select Points",
+      "controls": [
+        {
+          "label": "Label points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Show paint stroke splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles on move",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Constant selection mode",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Select Feather Points",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Select Feather Points",
+      "controls": [
+        {
+          "label": "Label points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Show paint stroke splines",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Hide transform handles on move",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Constant selection mode",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Add Points",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Add Points",
+      "controls": [
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        }
+      ]
     },
     {
-      "name": "Remove Points",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Remove Points",
+      "controls": [
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        }
+      ]
     },
     {
-      "name": "Cusp Points",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Cusp Points",
+      "controls": [
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        }
+      ]
     },
     {
-      "name": "Smooth Points",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Smooth Points",
+      "controls": [
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        }
+      ]
     },
     {
-      "name": "Remove Feather",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Remove Feather",
+      "controls": [
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        }
+      ]
     },
     {
-      "name": "Open/Close Curve",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Open/Close Curve",
+      "controls": [
+        {
+          "label": "Hide points",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        }
+      ]
     },
     {
-      "name": "Bezier",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Bezier",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Source",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Blending mode",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather on",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather falloff",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather type",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Cusped Bezier",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Cusped Bezier",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Source",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Blending mode",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather on",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather falloff",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather type",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "B-Spline",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "B-Spline",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Source",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Blending mode",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather on",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather falloff",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather type",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Ellipse",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Ellipse",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Source",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Blending mode",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather on",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather falloff",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather type",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Rectangle",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Rectangle",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Source",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Blending mode",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather on",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather falloff",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather type",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Cusped Rectangle",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Cusped Rectangle",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Source",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Blending mode",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather on",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather falloff",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather type",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Open Spline",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Open Spline",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Source",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Blending mode",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather on",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather falloff",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather type",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Feather link",
+          "status": "missing",
+          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "difference": ""
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Autokey",
+          "status": "differs",
+          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
+          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+        }
+      ]
     },
     {
-      "name": "Brush",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Brush",
+      "controls": [
+        {
+          "label": "Color",
+          "status": "differs",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Pressure alters opacity",
+          "status": "missing",
+          "location": "No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls.",
+          "difference": ""
+        },
+        {
+          "label": "Pressure alters size",
+          "status": "missing",
+          "location": "No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls.",
+          "difference": ""
+        },
+        {
+          "label": "Pressure alters hardness",
+          "status": "missing",
+          "location": "No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls.",
+          "difference": ""
+        },
+        {
+          "label": "Build up",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / no build-up control",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     },
     {
-      "name": "Eraser",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Eraser",
+      "controls": [
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     },
     {
-      "name": "Clone",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Clone",
+      "controls": [
+        {
+          "label": "Clone source transform translate X/Y",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Rotate",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Scale",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Skew X",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Skew Y",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Skew order",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Center X/Y",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Round to pixel",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Filter",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Black outside",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
+          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
+        },
+        {
+          "label": "Time offset",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+        },
+        {
+          "label": "Time offset type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+        },
+        {
+          "label": "View",
+          "status": "missing",
+          "location": "No multiview source-view selector; NodeBased has no stereo/multi-view project mode.",
+          "difference": ""
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     },
     {
-      "name": "Reveal",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Reveal",
+      "controls": [
+        {
+          "label": "Paint source",
+          "status": "missing",
+          "location": "No matching NodeBased RotoPaint tool-setting control identified.",
+          "difference": ""
+        },
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Time offset",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+        },
+        {
+          "label": "Time offset type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+        },
+        {
+          "label": "Onion skin",
+          "status": "missing",
+          "location": "No source onion-skin overlay/toggle in `Viewer.paint_overlays` or `Viewer.keyPressEvent`.",
+          "difference": ""
+        },
+        {
+          "label": "Onion skin opacity",
+          "status": "missing",
+          "location": "No source onion-skin overlay/toggle in `Viewer.paint_overlays` or `Viewer.keyPressEvent`.",
+          "difference": ""
+        }
+      ]
     },
     {
-      "name": "Blur",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Blur",
+      "controls": [
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Effect",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-effect` for existing stroke only",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     },
     {
-      "name": "Sharpen",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Sharpen",
+      "controls": [
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Effect",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / `rotopaint-layer-effect` for existing stroke only",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     },
     {
-      "name": "Smear",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Smear",
+      "controls": [
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     },
     {
-      "name": "Dodge",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Dodge",
+      "controls": [
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     },
     {
-      "name": "Burn",
-      "status": "missing",
-      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "tool": "Burn",
+      "controls": [
+        {
+          "label": "Opacity",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
+          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+        },
+        {
+          "label": "Brush size",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush spacing",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Brush hardness",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "differs",
+          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
+          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+        }
+      ]
     }
   ],
   "shape_list": [
     {
       "name": "Name",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-list`, `roto-shape-row-name-*`; `Window.build_node_panel` / `rotopaint-layer-list`, `rotopaint-layer-name`",
+      "difference": "Editable names appear in vertical lists rather than ordered table columns."
     },
     {
       "name": "Visible",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-row-visible-*`; `Window.build_node_panel` / `rotopaint-layer-visible`",
+      "difference": "Toggle exists outside a list column."
     },
     {
       "name": "Lock",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-row-locked-*`; `Window.build_node_panel` / `rotopaint-layer-locked`",
+      "difference": "Toggle exists outside a list column."
     },
     {
-      "name": "Overlay",
-      "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "name": "Overlay color",
+      "status": "missing",
+      "location": "No per-item outline-color column/control in `RotoPanel.build_panel` or `Window.build_node_panel`.",
+      "difference": ""
     },
     {
       "name": "Color",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-color`; paint item `Window.build_node_panel` / `rotopaint-layer-color`",
+      "difference": "Picker exists in selected-item properties; no overview color column."
     },
     {
       "name": "Invert",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-invert`; paint item `Window.build_node_panel` / `rotopaint-layer-invert`",
+      "difference": "Checkbox exists in selected-item properties, not the list overview."
     },
     {
       "name": "Blending",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-blend_mode`; `Window.build_node_panel` / `rotopaint-layer-blend`",
+      "difference": "Combo exists in properties; not a list column; NodeBased paint blend options are a subset."
     },
     {
       "name": "Motion blur",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / motion-blur fields; `Window.build_node_panel` / `rotopaint-layer-motion-blur`",
+      "difference": "Motion blur exists in properties, not a list column."
     },
     {
-      "name": "Life",
-      "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "name": "View",
+      "status": "missing",
+      "location": "No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`.",
+      "difference": ""
     },
     {
-      "name": "Groups/folders",
+      "name": "Lifetime",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-lifetime-type`; `Window.build_node_panel` / `rotopaint-layer-lifetime`",
+      "difference": "Lifetime is edited in properties, not in a list column."
     },
     {
-      "name": "Context menu",
+      "name": "Source",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / `roto-shape-source`; `Window.build_node_panel` / `rotopaint-layer-source`",
+      "difference": "Source is edited in properties, not a list column."
+    },
+    {
+      "name": "Layers and folders",
+      "status": "missing",
+      "location": "`Window.build_node_panel` / flat `rotopaint-layer-list`; no nested folders/groups or group transform overlay.",
+      "difference": ""
+    },
+    {
+      "name": "Add new layer",
+      "status": "missing",
+      "location": "No add-group/folder control in `Window.build_node_panel` / `rotopaint-layer-list`.",
+      "difference": ""
+    },
+    {
+      "name": "Duplicate",
+      "status": "missing",
+      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
+      "difference": ""
+    },
+    {
+      "name": "Copy > Curve",
+      "status": "missing",
+      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
+      "difference": ""
+    },
+    {
+      "name": "Cut > Curve",
+      "status": "missing",
+      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
+      "difference": ""
+    },
+    {
+      "name": "Paste > Spline",
+      "status": "missing",
+      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
+      "difference": ""
+    },
+    {
+      "name": "Delete",
+      "status": "differs",
+      "location": "`Window.build_node_panel` / `rotopaint-layer-delete`; `RotoPanel.build_panel` / `roto-shape-delete`",
+      "difference": "Delete is a button, not a context menu command."
+    },
+    {
+      "name": "Set lifetime / frame range",
+      "status": "differs",
+      "location": "`Window.build_node_panel` / `rotopaint-layer-lifetime`; `RotoPanel.build_panel` / `roto-shape-lifetime-type`",
+      "difference": "Lifetime control exists in properties, not the list menu."
+    },
+    {
+      "name": "Planar-track",
+      "status": "differs",
+      "location": "`RotoPanel.add_tracking_actions` / `roto-track-shape`",
+      "difference": "Tracking can be started from the panel, not a layer-list menu."
     }
   ],
   "viewer_editing": [
     {
       "name": "Add point",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "status": "match",
+      "location": "`Viewer.mousePressEvent` \u2192 `Viewer._insert_roto_point`.",
+      "difference": ""
+    },
+    {
+      "name": "Delete point",
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` \u2192 `Viewer._delete_roto_points`.",
+      "difference": ""
     },
     {
       "name": "Move point",
       "status": "match",
-      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
-      "difference": "Same core interaction; point details and full Nuke animation controls are not represented here."
+      "location": "`Viewer.mousePressEvent`, `Viewer.mouseMoveEvent`, `Viewer._commit_roto_drag`.",
+      "difference": ""
     },
     {
-      "name": "Delete point",
+      "name": "Select several points",
       "status": "differs",
-      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`Viewer.mousePressEvent`, `_roto_box_result`; NodeBased uses Shift+LMB and box selection rather than Ctrl/Cmd+LMB/marquee.",
+      "difference": ""
     },
     {
-      "name": "Feather",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
-    },
-    {
-      "name": "Tangent handles",
-      "status": "differs",
-      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
-    },
-    {
-      "name": "Close shape",
+      "name": "Select all points",
       "status": "match",
-      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
-      "difference": "Same core interaction; point details and full Nuke animation controls are not represented here."
+      "location": "`Viewer.keyPressEvent` Ctrl+A branch.",
+      "difference": ""
+    },
+    {
+      "name": "Feather add",
+      "status": "differs",
+      "location": "`Viewer.mousePressEvent` / feather-handle and Ctrl-drag branches; no E key.",
+      "difference": ""
+    },
+    {
+      "name": "Feather drag",
+      "status": "match",
+      "location": "`Viewer.mousePressEvent` feather-handle branch; `Viewer._commit_roto_drag`.",
+      "difference": ""
+    },
+    {
+      "name": "Feather reset",
+      "status": "differs",
+      "location": "`RotoPanel.build_panel` / `roto-reset-feather-points`; no Shift+E.",
+      "difference": ""
+    },
+    {
+      "name": "Tangent create",
+      "status": "match",
+      "location": "`Viewer.mouseReleaseEvent` point-draw drag; `Viewer.finish_roto_draw`.",
+      "difference": ""
+    },
+    {
+      "name": "Tangent move both",
+      "status": "differs",
+      "location": "`Viewer.mouseMoveEvent` / tangent branch mirrors handles by default; Nuke Shift snaps opposite tangent lengths.",
+      "difference": ""
+    },
+    {
+      "name": "Break tangent",
+      "status": "match",
+      "location": "`Viewer.mousePressEvent` tangent branch records Ctrl; `Viewer._commit_roto_drag`.",
+      "difference": ""
+    },
+    {
+      "name": "Cusp point",
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` Shift+Z \u2192 `Viewer._set_roto_tangent_mode(True)`.",
+      "difference": ""
+    },
+    {
+      "name": "Smooth point",
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` Z \u2192 `Viewer._set_roto_tangent_mode(False)`.",
+      "difference": ""
     },
     {
       "name": "Transform box",
       "status": "differs",
-      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`Viewer._roto_box_geometry`, `_roto_box_action`, `_roto_box_result`; no T toggle.",
+      "difference": ""
     },
     {
-      "name": "Shape motion blur",
+      "name": "Transform-box center/pivot",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint layer editor and item edit actions",
-      "difference": "The reduced layer editor does not expose Nuke-equivalent per-shape motion-blur controls or spline clipboard context commands."
+      "location": "`Viewer._roto_box_result`; `RotoPanel.build_panel` shape transform center controls; interaction differs from Nuke handles.",
+      "difference": ""
     },
     {
-      "name": "Copy/cut/paste spline positions",
+      "name": "Transform-box pivot modify",
       "status": "differs",
-      "location": "nodebased/app.py: RotoPaint layer editor and item edit actions",
-      "difference": "The reduced layer editor does not expose Nuke-equivalent per-shape motion-blur controls or spline clipboard context commands."
+      "location": "`Viewer._roto_box_action`, `_roto_box_result`; Nuke Ctrl/Cmd+Shift handle gesture is absent.",
+      "difference": ""
+    },
+    {
+      "name": "Nudge point",
+      "status": "missing",
+      "location": "No numeric-keypad nudge branch in `Viewer.keyPressEvent`.",
+      "difference": ""
+    },
+    {
+      "name": "Draw Bezier/B-Spline freely",
+      "status": "differs",
+      "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; no Ctrl/Cmd sketch mode or B-Spline implementation.",
+      "difference": ""
+    },
+    {
+      "name": "Bezier/B-Spline handles/tension",
+      "status": "differs",
+      "location": "`Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag.",
+      "difference": ""
+    },
+    {
+      "name": "Sharp exit while drawing",
+      "status": "missing",
+      "location": "No Shift+LMB sharp-exit branch in `Viewer.mousePressEvent`.",
+      "difference": ""
+    },
+    {
+      "name": "B-Spline tension",
+      "status": "missing",
+      "location": "No B-Spline model or tension interaction in Viewer code.",
+      "difference": ""
+    },
+    {
+      "name": "Close shape",
+      "status": "differs",
+      "location": "`Viewer.finish_roto_draw`, `Viewer.mouseReleaseEvent`; Enter/first point close, but shape-mode semantics differ.",
+      "difference": ""
+    },
+    {
+      "name": "Leave shape open",
+      "status": "differs",
+      "location": "`Viewer.keyPressEvent` Escape \u2192 `Viewer.cancel_roto_edit`; NodeBased cancels instead of committing an open spline.",
+      "difference": ""
+    },
+    {
+      "name": "Tool change",
+      "status": "missing",
+      "location": "No Roto tool-mode group in Viewer to switch away while drawing.",
+      "difference": ""
+    },
+    {
+      "name": "Escape to selection",
+      "status": "differs",
+      "location": "`Viewer.keyPressEvent` Escape cancels Roto editing rather than switching to Select.",
+      "difference": ""
+    },
+    {
+      "name": "Brush size",
+      "status": "missing",
+      "location": "`Window.build_node_panel` brush size field only; no Shift+drag resize in Viewer.",
+      "difference": ""
+    },
+    {
+      "name": "Clone offset",
+      "status": "differs",
+      "location": "`Window.build_node_panel` Clone source offset fields; no Ctrl/Cmd+drag offset gesture.",
+      "difference": ""
+    },
+    {
+      "name": "Reveal onion skin",
+      "status": "missing",
+      "location": "No onion-skin overlay in `Viewer.paint_overlays` or T binding in `Viewer.keyPressEvent`.",
+      "difference": ""
+    },
+    {
+      "name": "Selection tool cycle",
+      "status": "missing",
+      "location": "No Q selection-mode cycle in `Viewer.keyPressEvent`.",
+      "difference": ""
+    },
+    {
+      "name": "Tool mode cycle",
+      "status": "missing",
+      "location": "No S tool-mode cycle in `Viewer.keyPressEvent`.",
+      "difference": ""
+    },
+    {
+      "name": "Paint tool cycles",
+      "status": "differs",
+      "location": "`Viewer.keyPressEvent` handles B/E/C; other paint operations use `Window.build_node_panel` / `rotopaint-tool`.",
+      "difference": ""
     }
   ],
   "timing_animation": [
     {
-      "name": "Lifetime types",
-      "status": "differs",
-      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
-    },
-    {
       "name": "Autokey",
       "status": "differs",
-      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`Viewer._roto_scalar_at_frame`; no autokey toggle. New shapes are static; movement keys only if animation is present.",
+      "difference": ""
     },
     {
-      "name": "Set key",
+      "name": "Set key: spline",
       "status": "differs",
-      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / shape key button; `Window.make_key_button` and `Window.build_curve_menu`.",
+      "difference": ""
     },
     {
-      "name": "Delete key",
+      "name": "Delete key: spline",
       "status": "differs",
-      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`Window.build_curve_menu` / Delete key at frame; `Window.make_key_button`. Key control presentation differs.",
+      "difference": ""
+    },
+    {
+      "name": "Set/delete point keys",
+      "status": "differs",
+      "location": "`RotoPanel.build_panel` `key_shape` keys the selected shape\u2019s point scalars together; no individual point key control.",
+      "difference": ""
+    },
+    {
+      "name": "Set key: transform",
+      "status": "differs",
+      "location": "`RotoPanel.build_panel` per-transform key buttons; no RotoPaint spline-key control.",
+      "difference": ""
+    },
+    {
+      "name": "Lifetime types",
+      "status": "differs",
+      "location": "`RotoPanel.build_panel` / `roto-shape-lifetime-type`; `Window.build_node_panel` / `rotopaint-layer-lifetime`.",
+      "difference": ""
+    },
+    {
+      "name": "Lifetime endpoints",
+      "status": "differs",
+      "location": "Roto shape lifetime start/end fields; RotoPaint panel exposes range endpoints, with different control placement.",
+      "difference": ""
     },
     {
       "name": "Ripple editing",
-      "status": "differs",
-      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "status": "missing",
+      "location": "No ripple timing operation in `RotoPanel.build_panel` or `Window.build_node_panel`; Nuke chapter has no such workflow page.",
+      "difference": ""
     },
     {
-      "name": "Per-shape keys",
+      "name": "Per-shape keyframe controls",
       "status": "differs",
-      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
-      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+      "location": "`RotoPanel.build_panel` / shape key button and scalar key controls; no same selected-item key scope menu.",
+      "difference": ""
+    },
+    {
+      "name": "Motion blur keys",
+      "status": "differs",
+      "location": "`RotoPanel.build_panel` / motion blur samples/shutter/offset controls; `Window.build_node_panel` selected-item fields.",
+      "difference": ""
     }
   ]
 }
