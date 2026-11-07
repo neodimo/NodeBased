@@ -1,5 +1,29 @@
 ## 2026-11-07 — Lane 8 finish 1: native-half source retention
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D on the GPU, GPT-5.6 Terra) (2:55 PM on 2026-11-07 PDT)
+
+`main` moved `043c43e1` -> `07b3cfdb` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `07b3cfdb` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1107-1435.log`, started 2:35 PM): **Ran 9365 tests in 634.889 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step S5: Nuke's rows and knob types on the fifth eight most-used nodes.** Commits:
+  - `11974def` Panel sweep S5: shared rows and measured widget types for Grid, Colorspace, MotionBlur2D, MotionBlur3D, SmartVector, VectorBlur, OCIODisplay, Sparkles, OCIOFileTransform and OCIOLookTransform (layout 97 to 100, 75 to 100, 75 to 100, 75 to 100, 93 to 96, 94 to 97, 95 to 100, 99 to 100, 89 to 100, 92 to 100)
+  Diff: 7 files changed, 147 insertions(+), 53 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: keep EXR samples at half precision until the card (finish 1).** Commits:
+  - `89cd2789` Record Lane 8 compact upload playback evidence
+  - `75dd48f2` Keep native-half Read sources compact until upload
+  Diff: 7 files changed, 101 insertions(+), 45 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 **Evidence.** Read now keeps eligible opaque native-half EXRs compact through decode-ahead accounting and the GPU upload boundary. CPU consumers materialize the same float32 pixels lazily. Playback fixture arrays, an overscan EXR and rendered frames 1/12/24/36/48 matched `main` bit-for-bit. GPU checks passed on RTX 3080 Ti, Radeon 8060S and llvmpipe.
 
 **Playback.** Three interleaved Radeon passes averaged 49.348 ms default p95 after versus 49.527 ms before; one-worker/two-frame-lead averaged 48.274 ms after versus 51.446 ms before. Decoder time fell to 14.637 ms and 9.932 ms respectively. The 41.670 ms gate remains unmet. The RTX pair held near 10 fps while decoder time fell 36.861 -> 17.982 ms.
