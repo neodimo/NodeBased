@@ -1202,7 +1202,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("create_matte",)), KnobGroup("float", ("matt_limit",), label="Dilate"),
         KnobGroup("enum", ("extrapolated",), label="Extrapolate channels"), KnobGroup("bool", ("gradient_extrapolate",))),
     "VectorBlur": _groups(
-        KnobGroup("string", ("uv_layer",), label="UV channels"),
+        KnobGroup("enum", ("uv_layer",), label="UV channels"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
         KnobGroup("enum", ("vector_output",), label="Output", help="Result is the blurred picture, UVs the vectors it follows (u in red, v in green)."),
         KnobGroup("enum", ("blur_uv",), label="Blur UV", help="Blur the vectors themselves before they blur the picture: uniform is a small average, linear a wider one."),

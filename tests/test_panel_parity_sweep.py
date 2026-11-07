@@ -473,7 +473,20 @@ class PanelSweepTests(unittest.TestCase):
         self.widget(panel, "grow_bbox-field", QSpinBox)
         self.assertNoSlider(panel, "grow_bbox-field")
         rows, types = self.measure("VectorBlur")
-        self.assertEqual([m[0] for m in types["missed"]], ["uv"])      # a layer picker in the guide, a layer name field here
+        self.assertEqual(types["missed"], [])
+
+    def test_vectorblur_uv_channels_is_a_layer_picker(self):
+        key = "sweep-VectorBlur"
+        panel = self.panel("VectorBlur")
+        picker = self.widget(panel, "uv_layer-choice", QComboBox)
+        self.assertTrue(picker.isEditable())
+        offered = [picker.itemText(i) for i in range(picker.count())]
+        self.assertIn("motion.forward", offered)
+        self.assertEqual(self.window.graph_nodes()[key]["params"]["uv_layer"], "")      # the stored layer name and its default are unchanged
+        picker.setCurrentText("custom.vectors")
+        picker.lineEdit().editingFinished.emit()
+        self.assertTrue(wait_until(lambda: self.window.graph_nodes()[key]["params"]["uv_layer"] == "custom.vectors"))
+        self.assertEqual(self.widget(self.panel("VectorBlur"), "uv_layer-choice", QComboBox).currentText(), "custom.vectors")
 
     def test_sparkles_ray_count_is_a_whole_number(self):
         panel = self.panel("Sparkles")

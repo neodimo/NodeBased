@@ -158,6 +158,9 @@ UNPREMULT_CHOICES = ["none", "rgba.alpha", "rgba.red", "rgba.green", "rgba.blue"
 PREMULT_BY_CHOICES = ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue", "rgba.luminance"]       # Premult / Unpremult: there is always a divisor
 MERGE_CHANNEL_CHOICES = ["rgba", "rgb", "alpha", "none", "red", "green", "blue"]
 OUTPUT_CHOICES = ["rgba", "rgb", "alpha", "red", "green", "blue", "none"]
+# The layers VectorBlur's UV channels offer: the empty word takes the uv input's own channels, the others are the names the motion and
+# SmartVector nodes write their vectors under (nodebased/flow_nodes.py).
+UV_LAYER_CHOICES = ["", "motion.forward", "motion.backward", "vector.forward", "vector.backward", "smartvector.forward", "smartvector.backward"]
 MERGE_OPEN_CHOICES = ("Achannels", "Bchannels", "merge_output", "also_merge")
 OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult", "width_channel", "blur_channel",
                                 "filter_channel"})
@@ -189,6 +192,8 @@ def is_open_choice(kind, name):
     """Is `name` on `kind` one of the chrome knobs that takes a layer or channel name as well as a listed word?"""
     if kind == "Write" and name == "channels":
         return True              # Write's channels (fidelity step C) take a layer name too
+    if kind == "VectorBlur" and name == "uv_layer":
+        return True              # VectorBlur's UV channels (Nuke's channel picker, panel sweep S5 finish) name a layer the image carries
     if name == "premult_by":
         return kind in ("Premult", "Unpremult")
     if kind in ("Merge", "AddMix") and name in MERGE_OPEN_CHOICES:
@@ -207,7 +212,7 @@ def suggestions(name):
             "width_channel": MASK_CHANNEL_CHOICES, "blur_channel": MASK_CHANNEL_CHOICES,
             "filter_channel": PREMULT_BY_CHOICES,          # Convolve: the filter always needs a channel, so no "none"
             "Achannels": MERGE_CHANNEL_CHOICES, "Bchannels": MERGE_CHANNEL_CHOICES, "merge_output": MERGE_CHANNEL_CHOICES,
-            "also_merge": ["none", "all"]}[name]
+            "also_merge": ["none", "all"], "uv_layer": UV_LAYER_CHOICES}[name]
 
 
 def step_c_params(kind):

@@ -799,7 +799,7 @@ def build_report(reference_dir=None):
       "OCIODisplay's, OCIOFileTransform's and OCIOLookTransform's Invert direction is a check box over the stored direction text (forward or inverse), as CornerPin2D's Invert is. "
       "SmartVector's matteDilation, VectorBlur's grow_bbox and Sparkles's ray_nb are listed as counting knobs. "
       "Root is the Project Settings dialog, not a node panel, and the ruler reads node panels only, so its frame-range and proxy rows are not measured here. "
-      "SmartVector's `vectorDetailReg` (a fraction in the guide, an integer 1 to 6 here) needs a change to the kernel, and VectorBlur's `uv` (a layer picker in the guide, a layer name field here) stays: it is the same field STMap and IDistort share.")
+      "SmartVector's `vectorDetailReg` (a fraction in the guide, an integer 1 to 6 here) needs a change to the kernel, and that stays the one types mismatch on SmartVector. VectorBlur's `uv` (a layer picker in the guide) is an editable menu of the motion and SmartVector layer names over the same stored layer name (panel sweep S5 finish); STMap and IDistort keep their layer name field.")
     w("")
     read_unit = next((u for u in units if u["name"] == "Read"), None)
     if read_unit:

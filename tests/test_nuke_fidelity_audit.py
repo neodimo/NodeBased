@@ -68,6 +68,8 @@ FULL_PANEL_SHAPE = (
     'CopyRectangle', 'Encryptomatte', 'IBKGizmo', 'TimeBlur', 'TimeDissolve', 'TimeEcho', 'ZDefocus',
     # Panel sweep S5 (2026-11-07)
     'Colorspace', 'Grid', 'MotionBlur2D', 'MotionBlur3D', 'OCIODisplay', 'OCIOFileTransform', 'OCIOLookTransform', 'Sparkles',
+    # Panel sweep S5 finish (2026-11-07): VectorBlur UV channels
+    'VectorBlur',
 )
 
 
