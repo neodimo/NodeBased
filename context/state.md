@@ -1,3 +1,11 @@
+## 2026-11-07 — Lane 8 finish 1: native-half source retention
+
+**Evidence.** Read now keeps eligible opaque native-half EXRs compact through decode-ahead accounting and the GPU upload boundary. CPU consumers materialize the same float32 pixels lazily. Playback fixture arrays, an overscan EXR and rendered frames 1/12/24/36/48 matched `main` bit-for-bit. GPU checks passed on RTX 3080 Ti, Radeon 8060S and llvmpipe.
+
+**Playback.** Three interleaved Radeon passes averaged 49.348 ms default p95 after versus 49.527 ms before; one-worker/two-frame-lead averaged 48.274 ms after versus 51.446 ms before. Decoder time fell to 14.637 ms and 9.932 ms respectively. The 41.670 ms gate remains unmet. The RTX pair held near 10 fps while decoder time fell 36.861 -> 17.982 ms.
+
+**State.** Done. Committed evidence: `benchmarks/2d-gpu/R6-1/playback-half-upload-1105.json`; raw runs are deliberate local scratch under `scratch/nb-lanes/run/bench-L8-half-upload-1107/`.
+
 ## 2026-11-06 — Lane 8: half-sample upload follow-up (partial)
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (8:03 PM on 2026-11-06 PDT)

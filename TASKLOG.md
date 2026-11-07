@@ -4,6 +4,13 @@
   list in the dated `context/state.md` section. Full suite at `c669e7a4`: Ran 9356 tests in 622.235 s, OK (skipped=38), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
+## 2026-11-07 — Lane 8 finish 1: native-half source retention
+
+- **What was done:** Eligible opaque half-float EXRs now remain compact from Read/decode-ahead through GPU upload. Accessing a decoded source from the CPU lazily materializes the exact float32 array. The first GPU kernel widens the original words, preserving the resident float32 island contract.
+- **Artifacts:** `benchmarks/2d-gpu/R6-1/playback-half-upload-1105.json` is committed. Raw fixture, equality and playback evidence remains deliberate local scratch at `scratch/nb-lanes/run/bench-L8-half-upload-1107/`.
+- **State:** Done. Fixture arrays, an overscan EXR, and five rendered frames are bit-identical against main. Focused Read/media/source/cache/playback and GPU tests passed; GPU checks covered RTX 3080 Ti, Radeon 8060S and llvmpipe. Radeon default p95 is 49.348 ms, leaving a 7.678 ms gap to 41.670 ms.
+- **Next owner + concrete artifact:** Gonzo; use `benchmarks/2d-gpu/R6-1/playback-half-upload-1105.json` to target decoded-source wait and the wider playback pipeline.
+
 ## 2026-11-06 — Lane 8: half-sample upload follow-up (partial)
 
 - **What was done:** Rechecked the compact EXR upload route and recorded its decision evidence. The direct float32 OpenImageIO decode is faster alone, while the prior playback fixture showed that it loses the compact transfer advantage. RTX 3080 Ti, AMD Radeon 8060S and llvmpipe all passed the focused GPU checks.

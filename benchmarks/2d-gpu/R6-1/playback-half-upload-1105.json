@@ -1,28 +1,28 @@
 {
-  "date": "2026-11-06",
+  "date": "2026-11-07",
   "scope": "1080p native-half EXR compact upload follow-up",
-  "options": {
-    "current_compact_upload": {
-      "decode_median_ms": 13.412,
-      "detail": "Native-half OpenImageIO decode, CPU float32 Raster widening, then half upload and GPU widening."
-    },
-    "direct_float32": {
-      "decode_median_ms": 5.733,
-      "detail": "OpenImageIO float32 avoids NumPy astype, but the archived RTX playback comparison fell from 10.586 to 6.090 fps after compact upload was removed."
-    },
-    "retain_half_until_gpu": {
-      "status": "not implemented",
-      "detail": "Raster currently requires float32 pixels, so moving the widening off the decode thread needs a lazy compact-source representation with explicit CPU-consumer widening."
-    }
-  },
+  "implementation": "Opaque native RGBA EXRs retain float16 words in Raster until a CPU consumer requests pixels; the GPU upload consumes those words directly and widens in its first kernel.",
   "correctness": {
-    "cpu_targeted": "86 tests passed",
-    "gpu_adapters": ["NVIDIA GeForce RTX 3080 Ti", "AMD Radeon 8060S Graphics", "llvmpipe (LLVM 22.1.8, 256 bits)"],
-    "gpu_targeted": "101 tests passed on each adapter"
+    "fixture_decode_arrays": "bit-identical for all 96 playback EXRs",
+    "overscan_decode": "bit-identical for one EXR with a data window smaller than its display window",
+    "rendered_frames": "bit-identical for frames 1, 12, 24, 36 and 48",
+    "gpu_adapters": ["NVIDIA GeForce RTX 3080 Ti", "AMD Radeon 8060S Graphics", "llvmpipe (LLVM 22.1.8, 256 bits)"]
   },
-  "verdict": "The direct-float decode winner is unsafe for playback. Preserve the existing compact upload until a lazy half source can retain CPU fallback semantics and receive a fresh before/after playback comparison.",
-  "artifacts": {
-    "prior_measurements": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/bench-L8-decode-python-1104/",
-    "current_test_logs": "/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L8-1105-*.log"
-  }
+  "playback": {
+    "radeon_default_three_pass_mean": {
+      "before": {"fps": 21.142, "interval_p95_ms": 49.527, "decoded_source_wait_p95_ms": 25.691, "decode_ms": 21.736, "upload_ms": 5.126},
+      "after": {"fps": 21.173, "interval_p95_ms": 49.348, "decoded_source_wait_p95_ms": 25.423, "decode_ms": 14.637, "upload_ms": 4.565}
+    },
+    "radeon_one_worker_two_frame_lead_three_pass_mean": {
+      "before": {"fps": 20.501, "interval_p95_ms": 51.446, "decoded_source_wait_p95_ms": 24.283, "decode_ms": 19.081, "upload_ms": 4.347},
+      "after": {"fps": 21.307, "interval_p95_ms": 48.274, "decoded_source_wait_p95_ms": 24.553, "decode_ms": 9.932, "upload_ms": 4.201}
+    },
+    "rtx_one_pass": {
+      "before": {"fps": 10.349, "interval_p95_ms": 107.1, "decoded_source_wait_p95_ms": 40.294, "decode_ms": 36.861, "upload_ms": 44.282},
+      "after": {"fps": 9.879, "interval_p95_ms": 108.302, "decoded_source_wait_p95_ms": 29.658, "decode_ms": 17.982, "upload_ms": 45.068}
+    },
+    "gate": {"interval_p95_ms_at_most": 41.67, "met": false, "remaining_radeon_default_gap_ms": 7.678}
+  },
+  "verdict": "Compact source retention removes most decoder widening time and preserves GPU upload behavior. Radeon misses the 24 fps interval gate; the remaining binding evidence is decoded-source waiting and the wider playback pipeline.",
+  "artifacts": {"scratch": "scratch/nb-lanes/run/bench-L8-half-upload-1107/"}
 }
