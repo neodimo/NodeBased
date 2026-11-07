@@ -1,0 +1,504 @@
+{
+  "schema": 1,
+  "source_pages": [
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_shape_attrs.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_attributes.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/default_tools_settings.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/adding_motionblur.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/copy_cut_paste_stroke.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_brush_tool.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/connecting_rotopaint.html",
+    "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/rotopaint_and_stereo.html"
+  ],
+  "toolbar": [
+    {
+      "group": "Select",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "tools": [
+        {
+          "name": "Select All",
+          "shortcut": "Q",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "name": "Select Splines",
+          "shortcut": "Q",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "name": "Select Points",
+          "shortcut": "Q",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        },
+        {
+          "name": "Select Feather Points",
+          "shortcut": "Q",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html"
+        }
+      ],
+      "default": null,
+      "cycle_shortcut": "Q"
+    },
+    {
+      "group": "Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
+      "tools": [
+        {
+          "name": "Add Points",
+          "shortcut": null,
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+        },
+        {
+          "name": "Remove Points",
+          "shortcut": null,
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+        },
+        {
+          "name": "Cusp Points",
+          "shortcut": null,
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+        },
+        {
+          "name": "Smooth Points",
+          "shortcut": null,
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+        },
+        {
+          "name": "Remove Feather",
+          "shortcut": null,
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+        },
+        {
+          "name": "Open/Close Curve",
+          "shortcut": null,
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html"
+        }
+      ],
+      "default": null,
+      "cycle_shortcut": null
+    },
+    {
+      "group": "Shapes",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html",
+      "tools": [
+        {
+          "name": "Bezier",
+          "shortcut": "V",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        },
+        {
+          "name": "Cusped Bezier",
+          "shortcut": "V",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        },
+        {
+          "name": "B-Spline",
+          "shortcut": "V",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        },
+        {
+          "name": "Ellipse",
+          "shortcut": "V",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        },
+        {
+          "name": "Rectangle",
+          "shortcut": "V",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        },
+        {
+          "name": "Cusped Rectangle",
+          "shortcut": "V",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        },
+        {
+          "name": "Open Spline",
+          "shortcut": "V",
+          "availability": "Roto and RotoPaint",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_shapes.html"
+        }
+      ],
+      "default": null,
+      "cycle_shortcut": "V"
+    },
+    {
+      "group": "Brushes",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html",
+      "tools": [
+        {
+          "name": "Brush",
+          "shortcut": "N",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        },
+        {
+          "name": "Eraser",
+          "shortcut": "N",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        }
+      ],
+      "default": null,
+      "cycle_shortcut": "N"
+    },
+    {
+      "group": "Clone/Reveal",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html",
+      "tools": [
+        {
+          "name": "Clone",
+          "shortcut": "C",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        },
+        {
+          "name": "Reveal",
+          "shortcut": "C",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        }
+      ],
+      "default": null,
+      "cycle_shortcut": "C"
+    },
+    {
+      "group": "Blur/Sharpen/Smear",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html",
+      "tools": [
+        {
+          "name": "Blur",
+          "shortcut": "X",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        },
+        {
+          "name": "Sharpen",
+          "shortcut": "X",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        },
+        {
+          "name": "Smear",
+          "shortcut": "X",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        }
+      ],
+      "default": null,
+      "cycle_shortcut": "X"
+    },
+    {
+      "group": "Dodge/Burn",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html",
+      "tools": [
+        {
+          "name": "Dodge",
+          "shortcut": "D",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        },
+        {
+          "name": "Burn",
+          "shortcut": "D",
+          "availability": "RotoPaint only",
+          "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/drawing_paint_strokes.html"
+        }
+      ],
+      "default": null,
+      "cycle_shortcut": "D"
+    }
+  ],
+  "tool_settings": [
+    {
+      "name": "Select All",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select All."
+    },
+    {
+      "name": "Select Splines",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select Splines."
+    },
+    {
+      "name": "Select Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select Points."
+    },
+    {
+      "name": "Select Feather Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Select Feather Points."
+    },
+    {
+      "name": "Add Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Add Points."
+    },
+    {
+      "name": "Remove Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Remove Points."
+    },
+    {
+      "name": "Cusp Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Cusp Points."
+    },
+    {
+      "name": "Smooth Points",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Smooth Points."
+    },
+    {
+      "name": "Remove Feather",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Remove Feather."
+    },
+    {
+      "name": "Open/Close Curve",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Open/Close Curve."
+    },
+    {
+      "name": "Bezier",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Bezier."
+    },
+    {
+      "name": "Cusped Bezier",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Cusped Bezier."
+    },
+    {
+      "name": "B-Spline",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for B-Spline."
+    },
+    {
+      "name": "Ellipse",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Ellipse."
+    },
+    {
+      "name": "Rectangle",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Rectangle."
+    },
+    {
+      "name": "Cusped Rectangle",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Cusped Rectangle."
+    },
+    {
+      "name": "Open Spline",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Open Spline."
+    },
+    {
+      "name": "Brush",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Brush."
+    },
+    {
+      "name": "Eraser",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Eraser."
+    },
+    {
+      "name": "Clone",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Clone."
+    },
+    {
+      "name": "Reveal",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Reveal."
+    },
+    {
+      "name": "Blur",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Blur."
+    },
+    {
+      "name": "Sharpen",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Sharpen."
+    },
+    {
+      "name": "Smear",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Smear."
+    },
+    {
+      "name": "Dodge",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Dodge."
+    },
+    {
+      "name": "Burn",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_toolbars.html",
+      "fact": "Controls are tool-dependent; the guide identifies this as the top-of-viewer settings bar for Burn."
+    }
+  ],
+  "shape_list": [
+    {
+      "name": "Name",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Unique item name; newest items are on top."
+    },
+    {
+      "name": "Visible",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Hides item while preserving editable overlay."
+    },
+    {
+      "name": "Lock",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Prevents item editing."
+    },
+    {
+      "name": "Overlay",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Sets viewer outline color."
+    },
+    {
+      "name": "Color",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Sets item color."
+    },
+    {
+      "name": "Invert",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Toggles shape inversion."
+    },
+    {
+      "name": "Blending",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Sets blending mode."
+    },
+    {
+      "name": "Motion blur",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Toggles shape motion blur."
+    },
+    {
+      "name": "Life",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Controls lifetime."
+    },
+    {
+      "name": "Groups/folders",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Add creates Layer1; grouped items move together and have a group transform overlay."
+    },
+    {
+      "name": "Context menu",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/working_stroke_shape_list.html",
+      "fact": "Duplicate, curve/spline copy-cut-paste, planar track, and lifetime commands."
+    }
+  ],
+  "viewer_editing": [
+    {
+      "name": "Add point",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
+      "fact": "Add Points tool, click selected spline."
+    },
+    {
+      "name": "Move point",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
+      "fact": "Drag point; numeric keypad arrows nudge one pixel."
+    },
+    {
+      "name": "Delete point",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_splines.html",
+      "fact": "Remove Points tool."
+    },
+    {
+      "name": "Feather",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_shape_attrs.html",
+      "fact": "E increases point feather; Shift+E resets."
+    },
+    {
+      "name": "Tangent handles",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
+      "fact": "Drag to make handles; Shift moves both; Ctrl/Cmd breaks angle."
+    },
+    {
+      "name": "Close shape",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/using_bezier_tools.html",
+      "fact": "Return, click first point, or switch tool."
+    },
+    {
+      "name": "Transform box",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/selecting_strokes_shapes.html",
+      "fact": "Select points and use transform box; T toggles handles."
+    },
+    {
+      "name": "Shape motion blur",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/adding_motionblur.html",
+      "fact": "Per-shape enable and sample-count control."
+    },
+    {
+      "name": "Copy/cut/paste spline positions",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/copy_cut_paste_stroke.html",
+      "fact": "Context-menu curve operations act on current keyframe positions."
+    }
+  ],
+  "timing_animation": [
+    {
+      "name": "Lifetime types",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
+      "fact": "All, frame-to-end, single-frame, start-to-frame, frame range."
+    },
+    {
+      "name": "Autokey",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
+      "fact": "On by default; edits create keys."
+    },
+    {
+      "name": "Set key",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
+      "fact": "Context menu sets spline, transform, or attribute keys."
+    },
+    {
+      "name": "Delete key",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
+      "fact": "Animation context-menu operation."
+    },
+    {
+      "name": "Ripple editing",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html",
+      "fact": "No fact identified in inspected page."
+    },
+    {
+      "name": "Per-shape keys",
+      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/animating_strokes_shapes.html",
+      "fact": "Multi-frame strokes/shapes can animate."
+    }
+  ]
+}

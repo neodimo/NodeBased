@@ -1,3 +1,11 @@
+## 2026-11-07 — Lane 9 step R0, Roto UI reference (partial)
+
+- **What was done (evidence):** Cached 18 linked pages in the Nuke 17 RotoPaint chapter under `/tmp/nuke-roto-guide/`. Added a sourced preliminary reference inventory, measured NodeBased entries, a computed section/overall score (32.7), a ranked ledger and R1–R5 proposals. Captured selected Roto and RotoPaint window screenshots. The initial viewer UI checks passed.
+- **Artifacts:** `docs/parity/nuke_roto_ui.json`, `docs/parity/nodebased_roto_ui.json`, `tools/audit_roto_ui.py`, `tests/test_nuke_roto_ui_reference.py`, `docs/ROTO_NUKE_UI.md`, bundled byte-identical `nodebased/data/docs/ROTO_NUKE_UI.md`; screenshots are local scratch at `scratch/nb-qa/1107-roto-r0/{roto,rotopaint}.png`. Repo artifacts are committed in this step; screenshots remain deliberate local scratch.
+- **State:** Partial. Reference and knowledge checks plus existing Roto and RotoPaint UI modules passed. Exact per-tool settings controls/defaults, exact list column order, the full gesture/key inventory and complete implementation-location verification remain unfinished. No guide fetch failures among the 18 pages; no dedicated viewer-shortcuts page was found in the traversed chapter links. Score is provisional.
+- **Next owner + concrete artifact:** Gonzo; finish the missing guide extraction and revalidate the ledger in `docs/ROTO_NUKE_UI.md` using `docs/parity/nuke_roto_ui.json` and `docs/parity/nodebased_roto_ui.json`.
+- **Failure mode:** No prior failure corrected.
+
 ## 2026-11-07 — Lane 8 finish 1: native-half source retention
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 8 (2D on the GPU, GPT-5.6 Terra) (2:55 PM on 2026-11-07 PDT)

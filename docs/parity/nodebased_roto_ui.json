@@ -1,0 +1,537 @@
+{
+  "schema": 1,
+  "toolbar": [
+    {
+      "name": "Select",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
+      "difference": "Current grouped controls and placement differ from the guide.",
+      "tools": [
+        {
+          "name": "Select All",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Select Splines",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Select Points",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Select Feather Points",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        }
+      ]
+    },
+    {
+      "name": "Points",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
+      "difference": "Current grouped controls and placement differ from the guide.",
+      "tools": [
+        {
+          "name": "Add Points",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Remove Points",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Cusp Points",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Smooth Points",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Remove Feather",
+          "status": "missing",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Open/Close Curve",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        }
+      ]
+    },
+    {
+      "name": "Shapes",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
+      "difference": "Current grouped controls and placement differ from the guide.",
+      "tools": [
+        {
+          "name": "Bezier",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Cusped Bezier",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "B-Spline",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Ellipse",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Rectangle",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Cusped Rectangle",
+          "status": "missing",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Open Spline",
+          "status": "missing",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        }
+      ]
+    },
+    {
+      "name": "Brushes",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
+      "difference": "Current grouped controls and placement differ from the guide.",
+      "tools": [
+        {
+          "name": "Brush",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Eraser",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        }
+      ]
+    },
+    {
+      "name": "Clone/Reveal",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
+      "difference": "Current grouped controls and placement differ from the guide.",
+      "tools": [
+        {
+          "name": "Clone",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Reveal",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        }
+      ]
+    },
+    {
+      "name": "Blur/Sharpen/Smear",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
+      "difference": "Current grouped controls and placement differ from the guide.",
+      "tools": [
+        {
+          "name": "Blur",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Sharpen",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Smear",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        }
+      ]
+    },
+    {
+      "name": "Dodge/Burn",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer.paint_tool and Properties panel builder; no grouped vertical toolbar",
+      "difference": "Current grouped controls and placement differ from the guide.",
+      "tools": [
+        {
+          "name": "Dodge",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        },
+        {
+          "name": "Burn",
+          "status": "differs",
+          "location": "nodebased/app.py: Viewer.paint_tool and Roto/Properties viewer handlers; no Nuke-equivalent toolbar tool button",
+          "difference": "Tool is selected through a reduced properties-panel control or has no matching dedicated tool button."
+        }
+      ]
+    }
+  ],
+  "tool_settings": [
+    {
+      "name": "Select All",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Select Splines",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Select Points",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Select Feather Points",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Add Points",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Remove Points",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Cusp Points",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Smooth Points",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Remove Feather",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Open/Close Curve",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Bezier",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Cusped Bezier",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "B-Spline",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Ellipse",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Rectangle",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Cusped Rectangle",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Open Spline",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Brush",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Eraser",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Clone",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Reveal",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Blur",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Sharpen",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Smear",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Dodge",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Burn",
+      "status": "missing",
+      "location": "nodebased/app.py: Properties panel builder; no top-of-viewer per-tool settings bar",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    }
+  ],
+  "shape_list": [
+    {
+      "name": "Name",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Visible",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Lock",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Overlay",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Color",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Invert",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Blending",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Motion blur",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Life",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Groups/folders",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Context menu",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint properties builder, rotoppaint-layer-list and layer edit widgets; no columnar Stroke/Shape list",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    }
+  ],
+  "viewer_editing": [
+    {
+      "name": "Add point",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Move point",
+      "status": "match",
+      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
+      "difference": "Same core interaction; point details and full Nuke animation controls are not represented here."
+    },
+    {
+      "name": "Delete point",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Feather",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Tangent handles",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Close shape",
+      "status": "match",
+      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
+      "difference": "Same core interaction; point details and full Nuke animation controls are not represented here."
+    },
+    {
+      "name": "Transform box",
+      "status": "differs",
+      "location": "nodebased/app.py: Viewer keyPressEvent, mousePressEvent/mouseMoveEvent and Roto overlay handlers",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Shape motion blur",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint layer editor and item edit actions",
+      "difference": "The reduced layer editor does not expose Nuke-equivalent per-shape motion-blur controls or spline clipboard context commands."
+    },
+    {
+      "name": "Copy/cut/paste spline positions",
+      "status": "differs",
+      "location": "nodebased/app.py: RotoPaint layer editor and item edit actions",
+      "difference": "The reduced layer editor does not expose Nuke-equivalent per-shape motion-blur controls or spline clipboard context commands."
+    }
+  ],
+  "timing_animation": [
+    {
+      "name": "Lifetime types",
+      "status": "differs",
+      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Autokey",
+      "status": "differs",
+      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Set key",
+      "status": "differs",
+      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Delete key",
+      "status": "differs",
+      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Ripple editing",
+      "status": "differs",
+      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    },
+    {
+      "name": "Per-shape keys",
+      "status": "differs",
+      "location": "nodebased/app.py: paint lifetime combo, paint item editor and Roto point key handling",
+      "difference": "NodeBased exposes a reduced or differently placed control/gesture; see the named implementation location."
+    }
+  ]
+}
