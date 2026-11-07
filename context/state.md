@@ -1,5 +1,24 @@
 ## 2026-11-06 — Lane 8: half-sample upload follow-up (partial)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (8:03 PM on 2026-11-06 PDT)
+
+`main` moved `3bb883ab` -> `c669e7a4` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `c669e7a4` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1106-0700.log`, started 7:00 AM): **Ran 9356 tests in 622.235 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: keep EXR samples at half precision until the card.** Commits:
+  - `eecc3942` Document Lane 8 half-upload follow-up
+  Diff: 3 files changed, 44 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 **Evidence.** The existing compact half-upload path passed focused media, Read, source/cache and GPU checks on RTX 3080 Ti, AMD Radeon 8060S and llvmpipe. The direct OpenImageIO float32 alternative is faster in decode-only evidence (5.733 ms versus 13.412 ms) but previously reduced RTX playback from 10.586 to 6.090 fps by losing the compact transfer.
 
 **State.** Partial. A real half-through-decode queue needs a lazy compact Raster source and a defined float32 materialization boundary for CPU consumers. No playback claim was made without fresh interleaved before/after passes. Details: `benchmarks/2d-gpu/R6-1/playback-half-upload-1105.json`.

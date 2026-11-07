@@ -1,3 +1,9 @@
+## 2026-11-06 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: keep EXR samples at half precision until the card (integrator tick)
+
+- **What was done:** `main` `3bb883ab` -> `c669e7a4` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `c669e7a4`: Ran 9356 tests in 622.235 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-06 — Lane 8: half-sample upload follow-up (partial)
 
 - **What was done:** Rechecked the compact EXR upload route and recorded its decision evidence. The direct float32 OpenImageIO decode is faster alone, while the prior playback fixture showed that it loses the compact transfer advantage. RTX 3080 Ti, AMD Radeon 8060S and llvmpipe all passed the focused GPU checks.
