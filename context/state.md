@@ -1,5 +1,24 @@
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (partial)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (3:25 PM on 2026-11-07 PDT)
+
+`main` moved `249bce22` -> `e99f8e4d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e99f8e4d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1107-1505.log`, started 3:05 PM): **Ran 9367 tests in 633.119 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R0: Nuke's Roto and RotoPaint tools and UI, recorded and measured.** Commits:
+  - `2b5e7b1b` Document preliminary Nuke Roto UI parity baseline
+  Diff: 8 files changed, 1368 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - **What was done (evidence):** Cached 18 linked pages in the Nuke 17 RotoPaint chapter under `/tmp/nuke-roto-guide/`. Added a sourced preliminary reference inventory, measured NodeBased entries, a computed section/overall score (32.7), a ranked ledger and R1–R5 proposals. Captured selected Roto and RotoPaint window screenshots. The initial viewer UI checks passed.
 - **Artifacts:** `docs/parity/nuke_roto_ui.json`, `docs/parity/nodebased_roto_ui.json`, `tools/audit_roto_ui.py`, `tests/test_nuke_roto_ui_reference.py`, `docs/ROTO_NUKE_UI.md`, bundled byte-identical `nodebased/data/docs/ROTO_NUKE_UI.md`; screenshots are local scratch at `scratch/nb-qa/1107-roto-r0/{roto,rotopaint}.png`. Repo artifacts are committed in this step; screenshots remain deliberate local scratch.
 - **State:** Partial. Reference and knowledge checks plus existing Roto and RotoPaint UI modules passed. Exact per-tool settings controls/defaults, exact list column order, the full gesture/key inventory and complete implementation-location verification remain unfinished. No guide fetch failures among the 18 pages; no dedicated viewer-shortcuts page was found in the traversed chapter links. Score is provisional.

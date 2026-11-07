@@ -1,3 +1,9 @@
+## 2026-11-07 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R0: Nuke's Roto and RotoPaint tools and UI, recorded and measured (integrator tick)
+
+- **What was done:** `main` `249bce22` -> `e99f8e4d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `e99f8e4d`: Ran 9367 tests in 633.119 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (partial)
 
 - **What was done (evidence):** Cached 18 linked pages in the Nuke 17 RotoPaint chapter under `/tmp/nuke-roto-guide/`. Added a sourced preliminary reference inventory, measured NodeBased entries, a computed section/overall score (32.7), a ranked ledger and R1–R5 proposals. Captured selected Roto and RotoPaint window screenshots. The initial viewer UI checks passed.
