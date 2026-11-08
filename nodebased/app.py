@@ -14362,6 +14362,22 @@ class Window(QMainWindow):
                         target[path[-1]] = value
                         self.command({"op": "set_paint_items", "id": k, "items": entries})
 
+                    def update_layer_animated(path, value, name, default, k=key, idx=selected):
+                        entries = current_layer_items(k)
+                        if idx >= len(entries): return
+                        target = entries[idx]
+                        for step in path[:-1]: target = target.setdefault(step, {})
+                        old = target.get(path[-1], default)
+                        if isinstance(old, dict) and old.get("curve"):
+                            frame = int(self.dispatcher.document["time"]["current"])
+                            curve = copy.deepcopy(old["curve"])
+                            curve["keys"] = [item for item in curve["keys"] if item["frame"] != frame]
+                            curve["keys"].append({"frame": frame, "value": float(value)})
+                            curve["keys"].sort(key=lambda item: item["frame"])
+                            target[path[-1]] = {"value": old["value"], "curve": curve}
+                        else: target[path[-1]] = float(value)
+                        self.command({"op": "set_paint_items", "id": k, "items": entries})
+
                     def toggle_layer_transform_key(name, default, k=key, idx=selected):
                         entries = current_layer_items(k)
                         if idx >= len(entries): return
@@ -14412,11 +14428,12 @@ class Window(QMainWindow):
                     layer_blend.currentIndexChanged.connect(
                         lambda idx2, box=layer_blend: update_layer(("blend",), box.itemData(idx2)))
                     form.addRow("Blend", layer_blend)
-                    layer_opacity_field = QDoubleSpinBox()
-                    layer_opacity_field.setObjectName("rotopaint-layer-opacity")
-                    layer_opacity_field.setRange(0.0, 1.0); layer_opacity_field.setSingleStep(0.05)
-                    layer_opacity_field.setValue(edit_item["opacity"])
-                    layer_opacity_field.valueChanged.connect(lambda value: update_layer(("opacity",), float(value)))
+                    layer_opacity_field = FloatSliderControl((0.0, 1.0), (0.0, 1.0), float(edit_item["opacity"]))
+                    layer_opacity_field.motion = self.motion; layer_opacity_field.slider.motion = self.motion
+                    layer_opacity_field.spin.setObjectName("rotopaint-layer-opacity")
+                    layer_opacity_field.spin.setSingleStep(0.05)
+                    layer_opacity_field.spin.valueChanged.connect(
+                        lambda value: update_layer_animated(("opacity",), float(value), "opacity", 1.0))
                     form.addRow("Opacity", layer_opacity_field)
                     # These are settings of the existing item.  The controls above the layer list
                     # configure the next stroke only, so keep this group deliberately explicit.
@@ -14500,15 +14517,21 @@ class Window(QMainWindow):
                             ("center_y", "Center Y", 0.0, -65536, 65536, 1.0),
                             ("skew_x", "Skew X", 0.0, -89, 89, 1.0),
                             ("skew_y", "Skew Y", 0.0, -89, 89, 1.0)):
-                        field = QDoubleSpinBox(); field.setObjectName("rotopaint-layer-transform-" + tname)
-                        field.setRange(lo, hi); field.setSingleStep(step); field.setValue(shape_model.resolve_scalar(transform.get(tname, default), current_time, tname))
-                        field.valueChanged.connect(lambda v, n=tname: update_layer(("transform", n), float(v)))
+                        field = FloatSliderControl((lo, hi), (lo, hi), shape_model.resolve_scalar(transform.get(tname, default), current_time, tname))
+                        field.motion = self.motion; field.slider.motion = self.motion
+                        field.spin.setObjectName("rotopaint-layer-transform-" + tname)
+                        field.spin.setSingleStep(step)
+                        field.spin.valueChanged.connect(lambda v, n=tname, d=default:
+                            update_layer_animated(("transform", n), float(v), n, d))
                         row = QWidget(); row_layout = QHBoxLayout(row); row_layout.setContentsMargins(0, 0, 0, 0)
                         row_layout.addWidget(field, 1)
-                        key_button = QPushButton("◇"); key_button.setFixedWidth(26)
-                        key_button.setObjectName("rotopaint-layer-key-transform-" + tname)
+                        raw = transform.get(tname)
+                        curve = raw.get("curve") if isinstance(raw, dict) else None
+                        key_button = self.make_key_button(key, f"paint-{selected}-transform-{tname}", field,
+                            curve_override=curve,
+                            on_toggle=lambda n=tname, d=default: toggle_layer_transform_key(n, d),
+                            object_name="rotopaint-layer-key-transform-" + tname)
                         key_button.setAccessibleName(label + " key")
-                        key_button.clicked.connect(lambda _=False, n=tname, d=default: toggle_layer_transform_key(n, d))
                         row_layout.addWidget(key_button); transform_form.addRow(label, row)
                     skew_order = ElidingComboBox(); skew_order.setObjectName("rotopaint-layer-transform-skew-order")
                     for value in shape_model.SKEW_ORDERS: skew_order.addItem(value, value)
@@ -14539,10 +14562,11 @@ class Window(QMainWindow):
                         mode_field.currentIndexChanged.connect(
                             lambda idx2, box=mode_field: update_layer(("mode",), box.itemData(idx2)))
                         form.addRow("Mode", mode_field)
-                        feather_field = QDoubleSpinBox()
-                        feather_field.setObjectName("rotopaint-layer-feather")
-                        feather_field.setRange(0.0, 500.0); feather_field.setValue(edit_item["feather"])
-                        feather_field.valueChanged.connect(lambda value: update_layer(("feather",), float(value)))
+                        feather_field = FloatSliderControl((0.0, 500.0), (0.0, 500.0), float(edit_item["feather"]))
+                        feather_field.motion = self.motion; feather_field.slider.motion = self.motion
+                        feather_field.spin.setObjectName("rotopaint-layer-feather")
+                        feather_field.spin.valueChanged.connect(
+                            lambda value: update_layer_animated(("feather",), float(value), "feather", 0.0))
                         form.addRow("Feather", feather_field)
                         for field_name, label, default in (("invert", "Invert", False), ("closed", "Closed", True),
                                                           ("feather_on", "Feather on", True)):

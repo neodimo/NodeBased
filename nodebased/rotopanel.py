@@ -138,6 +138,12 @@ def build_panel(window, key):
     layout = QVBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0)
     shapes = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("shapes", []))
     frame = int(window.dispatcher.document["time"]["current"])
+    def float_slider(value, lo, hi, step, name):
+        from .app import FloatSliderControl
+        control = FloatSliderControl((lo, hi), (lo, hi), float(value))
+        control.motion = window.motion; control.slider.motion = window.motion
+        control.spin.setObjectName(name); control.spin.setSingleStep(step)
+        return control
     def key_state(value):
         if isinstance(value, dict):
             curve = value.get("curve")
@@ -487,22 +493,19 @@ def build_panel(window, key):
         for field, label, lo, hi, step in (("stroke_width", "Stroke width", 0, 4096, 0.5),
                                           ("feather", "Feather", -500, 500, 0.5),
                                           ("opacity", "Opacity", 0, 1, 0.05)):
-            spin = QDoubleSpinBox()
-            spin.setObjectName("roto-shape-" + field)
-            spin.setRange(lo, hi)
-            spin.setSingleStep(step)
-            spin.setValue(float(shape_model.resolve_scalar(
-                shape.get(field, 1 if field == "stroke_width" else 0 if field == "feather" else 1), frame, field)))
-            spin.setKeyboardTracking(False)
+            shown = shape_model.resolve_scalar(
+                shape.get(field, 1 if field == "stroke_width" else 0 if field == "feather" else 1), frame, field)
+            control = float_slider(shown, lo, hi, step, "roto-shape-" + field)
+            spin = control.spin; spin.setKeyboardTracking(False)
             spin.editingFinished.connect(lambda f=field, w=spin: edit(f, float(w.value())))
             spin.setToolTip(f"Set the shape {label.lower()}")
             layout.addWidget(QLabel(label))
             row = QHBoxLayout()
-            row.addWidget(spin, 1)
+            row.addWidget(control, 1)
             field_value = shape.get(field)
             field_curve = field_value.get("curve") if isinstance(field_value, dict) else None
             key_button = window.make_key_button(
-                key, f"shape-{i}-{field}", spin, curve_override=field_curve,
+                key, f"shape-{i}-{field}", control, curve_override=field_curve,
                 on_toggle=lambda f=field: key_field(i, f),
                 object_name="roto-shape-key-" + field)
             key_button.setAccessibleName(f"{label} key")
@@ -519,15 +522,15 @@ def build_panel(window, key):
                 ("center_y", "Center Y", -65536, 65536, 1),
                 ("skew_x", "Skew X", -89, 89, 1),
                 ("skew_y", "Skew Y", -89, 89, 1)):
-            spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-transform-{field}-{i}")
-            spin.setRange(lo, hi); spin.setSingleStep(step); spin.setKeyboardTracking(False)
             default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][field]
-            spin.setValue(shape_model.resolve_scalar(transform.get(field, default), frame, field))
+            control = float_slider(shape_model.resolve_scalar(transform.get(field, default), frame, field), lo, hi,
+                                   step, f"roto-shape-transform-{field}-{i}")
+            spin = control.spin; spin.setKeyboardTracking(False)
             spin.editingFinished.connect(lambda f=field, w=spin: edit_transform(i, f, float(w.value())))
-            row = QHBoxLayout(); row.addWidget(spin, 1)
+            row = QHBoxLayout(); row.addWidget(control, 1)
             raw = transform.get(field)
             curve = raw.get("curve") if isinstance(raw, dict) else None
-            button = window.make_key_button(key, f"shape-{i}-transform-{field}", spin,
+            button = window.make_key_button(key, f"shape-{i}-transform-{field}", control,
                 curve_override=curve, on_toggle=lambda f=field: key_field(i, "transform." + f),
                 object_name=f"roto-shape-key-transform-{field}-{i}")
             button.setAccessibleName(f"{label} key"); row.addWidget(button)
