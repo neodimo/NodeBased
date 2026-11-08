@@ -1,5 +1,25 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (6:46 AM on 2026-11-08 PDT)
+
+`main` moved `cae40912` -> `8715065d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `8715065d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-0626.log`, started 6:26 AM): **Ran 9459 tests in 1102.841 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step Z: DustBust and MarkerRemoval as their own nodes (finish 1).** Commits:
+  - `75c9e507` Complete Lane 9 DustBust and MarkerRemoval step
+  - `99ac0bcf` Add standalone DustBust node and viewer spots
+  Diff: 23 files changed, 401 insertions(+), 101 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (5:36 AM on 2026-11-08 PDT)
 
 `main` moved `49a43af9` -> `d5dd01b0` (lane commits cherry-picked onto main in lane order) and then to this
