@@ -1,3 +1,9 @@
+## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R6: measure Roto and RotoPaint's per-item controls in the layout audit, then fix what it finds (integrator tick)
+
+- **What was done:** `main` `07a087cc` -> `6485687a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `6485687a`: Ran 9444 tests in 663.751 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-08 — Lane 9 step R6: Roto per-item layout measurement (partial)
 
 - **What was done:** Added reviewable `per_item` payload/widget mappings and included selected-item row/type measurements in the audit. Roto now measures 40/40 rows and 55/56 widget types; RotoPaint 51/53 and 64/66 after the existing-widget fixes. Every other node row/score was compared against the baseline: 0 of 207 changed. Updated the fidelity report and bundled copy. The selected paint tool is now an editable item combo; clone skew-order and source-time controls are exposed.

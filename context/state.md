@@ -1,5 +1,25 @@
 ## 2026-11-08 — Lane 9 step R6, Roto per-item layout measurement (partial)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (3:25 AM on 2026-11-08 PDT)
+
+`main` moved `07a087cc` -> `6485687a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `6485687a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-0305.log`, started 3:06 AM): **Ran 9444 tests in 663.751 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R6: measure Roto and RotoPaint's per-item controls in the layout audit, then fix what it finds.** Commits:
+  - `82a0bcff` Record Lane 9 R6 audit handoff
+  - `eced5dbd` Measure Roto per-item panel fidelity
+  Diff: 9 files changed, 162 insertions(+), 40 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Evidence: payload-aware measurement is committed at `eced5dbd`; Roto 40/40 rows and 55/56 types, RotoPaint 51/53 and 64/66 after existing-widget fixes. All other 207 node rows/scores remain identical to baseline. Audit/knowledge and selected-item UI tests pass. Remaining dynamic size/transparency controls lack payload fields and are blocked by the no-data/render-change constraint pending Gonzo design. Workspace report: `scratch/nb-lanes/run/report-L9.md`.
 
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
