@@ -8,7 +8,7 @@
           "name": "Select All",
           "status": "differs",
           "location": "`Viewer.mousePressEvent`; `Viewer.keyPressEvent` Ctrl+A",
-          "difference": "The selection behavior exists without Nuke\u2019s dedicated Select All toolbar mode."
+          "difference": "The selection behavior exists without Nuke’s dedicated Select All toolbar mode."
         },
         {
           "name": "Select Splines",
@@ -53,13 +53,13 @@
         {
           "name": "Cusp Points",
           "status": "differs",
-          "location": "`Viewer.keyPressEvent` \u2192 `Viewer._set_roto_tangent_mode`",
+          "location": "`Viewer.keyPressEvent` → `Viewer._set_roto_tangent_mode`",
           "difference": "The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent."
         },
         {
           "name": "Smooth Points",
           "status": "differs",
-          "location": "`Viewer.keyPressEvent` \u2192 `Viewer._set_roto_tangent_mode`",
+          "location": "`Viewer.keyPressEvent` → `Viewer._set_roto_tangent_mode`",
           "difference": "The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent."
         },
         {
@@ -83,7 +83,7 @@
         {
           "name": "Bezier",
           "status": "differs",
-          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape\u2026",
+          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape…",
           "difference": "Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ."
         },
         {
@@ -119,7 +119,7 @@
         {
           "name": "Open Spline",
           "status": "differs",
-          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape\u2026",
+          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape…",
           "difference": "Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ."
         }
       ],
@@ -545,7 +545,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -616,7 +616,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -687,7 +687,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -758,7 +758,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -829,7 +829,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -900,7 +900,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -971,7 +971,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -1042,7 +1042,7 @@
         {
           "label": "Color",
           "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour\u2026",
+          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
           "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
         },
         {
@@ -1203,13 +1203,13 @@
           "label": "Time offset",
           "status": "differs",
           "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
         },
         {
           "label": "Time offset type",
           "status": "differs",
           "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
         },
         {
           "label": "View",
@@ -1286,13 +1286,13 @@
           "label": "Time offset",
           "status": "differs",
           "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
         },
         {
           "label": "Time offset type",
           "status": "differs",
           "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke\u2019s relative/absolute time-offset controls."
+          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
         },
         {
           "label": "Onion skin",
@@ -1499,136 +1499,136 @@
   "shape_list": [
     {
       "name": "Name",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-list`, `roto-shape-row-name-*`; `Window.build_node_panel` / `rotopaint-layer-list`, `rotopaint-layer-name`",
-      "difference": "Editable names appear in vertical lists rather than ordered table columns."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Name column (`roto-shape-row-name-*`, `rotopaint-row-name-*`, `*-layer-name-*`)",
+      "difference": ""
     },
     {
       "name": "Visible",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-row-visible-*`; `Window.build_node_panel` / `rotopaint-layer-visible`",
-      "difference": "Toggle exists outside a list column."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Visible column (`roto-shape-row-visible-*`, `rotopaint-row-visible-*`, `*-layer-visible-*`)",
+      "difference": ""
     },
     {
       "name": "Lock",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-row-locked-*`; `Window.build_node_panel` / `rotopaint-layer-locked`",
-      "difference": "Toggle exists outside a list column."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Lock column (`roto-shape-row-locked-*`, `rotopaint-row-locked-*`, `*-layer-locked-*`)",
+      "difference": ""
     },
     {
       "name": "Overlay color",
-      "status": "missing",
-      "location": "No per-item outline-color column/control in `RotoPanel.build_panel` or `Window.build_node_panel`.",
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Overlay color column (`*-row-overlay-*`); stored as `overlay_color`, drawn by the Viewer outline, never rendered",
       "difference": ""
     },
     {
       "name": "Color",
       "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-color`; paint item `Window.build_node_panel` / `rotopaint-layer-color`",
-      "difference": "Picker exists in selected-item properties; no overview color column."
+      "location": "`rotolist.ShapeListTree` Color column (`*-row-color-*`)",
+      "difference": "RotoPaint shape items carry no colour of their own, so their Color cell is disabled; strokes and Roto shapes edit theirs."
     },
     {
       "name": "Invert",
       "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-invert`; paint item `Window.build_node_panel` / `rotopaint-layer-invert`",
-      "difference": "Checkbox exists in selected-item properties, not the list overview."
+      "location": "`rotolist.ShapeListTree` Invert column (`*-row-invert-*`)",
+      "difference": "A RotoPaint stroke has no invert setting, so its cell is disabled; shapes edit theirs."
     },
     {
       "name": "Blending",
       "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-blend_mode`; `Window.build_node_panel` / `rotopaint-layer-blend`",
-      "difference": "Combo exists in properties; not a list column; NodeBased paint blend options are a subset."
+      "location": "`rotolist.ShapeListTree` Blending column (`*-row-blend-*`)",
+      "difference": "Roto offers ten blending modes and RotoPaint four, a subset of Nuke's list."
     },
     {
       "name": "Motion blur",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / motion-blur fields; `Window.build_node_panel` / `rotopaint-layer-motion-blur`",
-      "difference": "Motion blur exists in properties, not a list column."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Motion blur column (`*-row-motion_blur-*`)",
+      "difference": ""
     },
     {
       "name": "View",
       "status": "missing",
       "location": "No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`.",
-      "difference": ""
+      "difference": "Stereo-only column; NodeBased has no multi-view project support, so it stays out of scope."
     },
     {
       "name": "Lifetime",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-lifetime-type`; `Window.build_node_panel` / `rotopaint-layer-lifetime`",
-      "difference": "Lifetime is edited in properties, not in a list column."
-    },
-    {
-      "name": "Source",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-source`; `Window.build_node_panel` / `rotopaint-layer-source`",
-      "difference": "Source is edited in properties, not a list column."
-    },
-    {
-      "name": "Layers and folders",
-      "status": "missing",
-      "location": "`Window.build_node_panel` / flat `rotopaint-layer-list`; no nested folders/groups or group transform overlay.",
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Lifetime column (`*-row-lifetime-*`): shows the type and range, opens the panel's lifetime editor",
       "difference": ""
     },
     {
+      "name": "Source",
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Source column (`*-row-source-*`)",
+      "difference": ""
+    },
+    {
+      "name": "Layers and folders",
+      "status": "differs",
+      "location": "`rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; `shapes.layer_states`",
+      "difference": "Group transforms of a layer and Nuke's newest-on-top ordering are not reproduced; the list order stays the render order."
+    },
+    {
       "name": "Add new layer",
-      "status": "missing",
-      "location": "No add-group/folder control in `Window.build_node_panel` / `rotopaint-layer-list`.",
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_add_layer, context menu `roto-list-add-layer`",
       "difference": ""
     },
     {
       "name": "Duplicate",
-      "status": "missing",
-      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_duplicate, context menu `roto-list-duplicate` (items and layers with their contents)",
       "difference": ""
     },
     {
       "name": "Copy > Curve",
-      "status": "missing",
-      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
-      "difference": ""
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_copy, context menu Copy > Curve",
+      "difference": "Strokes have no curve and are skipped."
     },
     {
       "name": "Cut > Curve",
-      "status": "missing",
-      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
-      "difference": ""
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_cut, context menu Cut > Curve",
+      "difference": "Strokes have no curve and are skipped."
     },
     {
       "name": "Paste > Spline",
-      "status": "missing",
-      "location": "No equivalent context-menu operation in the NodeBased Roto panels.",
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_paste, context menu Paste > Spline (pastes across Roto and RotoPaint)",
       "difference": ""
     },
     {
       "name": "Delete",
-      "status": "differs",
-      "location": "`Window.build_node_panel` / `rotopaint-layer-delete`; `RotoPanel.build_panel` / `roto-shape-delete`",
-      "difference": "Delete is a button, not a context menu command."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_delete, context menu `roto-list-delete` (a layer takes its contents with it)",
+      "difference": ""
     },
     {
       "name": "Set lifetime / frame range",
-      "status": "differs",
-      "location": "`Window.build_node_panel` / `rotopaint-layer-lifetime`; `RotoPanel.build_panel` / `roto-shape-lifetime-type`",
-      "difference": "Lifetime control exists in properties, not the list menu."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_set_lifetime, context menu dialog `roto-list-set-lifetime`",
+      "difference": ""
     },
     {
       "name": "Planar-track",
-      "status": "differs",
-      "location": "`RotoPanel.add_tracking_actions` / `roto-track-shape`",
-      "difference": "Tracking can be started from the panel, not a layer-list menu."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree`.cmd_planar_track, context menu `roto-list-planar-track` (the panel's existing track action)",
+      "difference": ""
     }
   ],
   "viewer_editing": [
     {
       "name": "Add point",
       "status": "match",
-      "location": "`Viewer.mousePressEvent` \u2192 `Viewer._insert_roto_point`.",
+      "location": "`Viewer.mousePressEvent` → `Viewer._insert_roto_point`.",
       "difference": ""
     },
     {
       "name": "Delete point",
       "status": "match",
-      "location": "`Viewer.keyPressEvent` \u2192 `Viewer._delete_roto_points`.",
+      "location": "`Viewer.keyPressEvent` → `Viewer._delete_roto_points`.",
       "difference": ""
     },
     {
@@ -1688,13 +1688,13 @@
     {
       "name": "Cusp point",
       "status": "match",
-      "location": "`Viewer.keyPressEvent` Shift+Z \u2192 `Viewer._set_roto_tangent_mode(True)`.",
+      "location": "`Viewer.keyPressEvent` Shift+Z → `Viewer._set_roto_tangent_mode(True)`.",
       "difference": ""
     },
     {
       "name": "Smooth point",
       "status": "match",
-      "location": "`Viewer.keyPressEvent` Z \u2192 `Viewer._set_roto_tangent_mode(False)`.",
+      "location": "`Viewer.keyPressEvent` Z → `Viewer._set_roto_tangent_mode(False)`.",
       "difference": ""
     },
     {
@@ -1754,7 +1754,7 @@
     {
       "name": "Leave shape open",
       "status": "differs",
-      "location": "`Viewer.keyPressEvent` Escape \u2192 `Viewer.cancel_roto_edit`; NodeBased cancels instead of committing an open spline.",
+      "location": "`Viewer.keyPressEvent` Escape → `Viewer.cancel_roto_edit`; NodeBased cancels instead of committing an open spline.",
       "difference": ""
     },
     {
@@ -1828,7 +1828,7 @@
     {
       "name": "Set/delete point keys",
       "status": "differs",
-      "location": "`RotoPanel.build_panel` `key_shape` keys the selected shape\u2019s point scalars together; no individual point key control.",
+      "location": "`RotoPanel.build_panel` `key_shape` keys the selected shape’s point scalars together; no individual point key control.",
       "difference": ""
     },
     {
