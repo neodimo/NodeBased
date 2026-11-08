@@ -1,3 +1,9 @@
+## 2026-11-07 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R1: Nuke's Roto/RotoPaint viewer toolbar and shape tools (finish 1) (integrator tick)
+
+- **What was done:** `main` `69ca268c` -> `02cce844` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `02cce844`: Ran 9415 tests in 638.329 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-07 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step R3: Nuke's stroke/shape list in the Roto and RotoPaint panels (integrator tick)
 
 - **What was done:** `main` `d90471d8` -> `5bdaa938` plus this docs commit. Evidence and per-lane commit

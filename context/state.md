@@ -1,5 +1,31 @@
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (7:45 PM on 2026-11-07 PDT)
+
+`main` moved `69ca268c` -> `02cce844` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `02cce844` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1107-1925.log`, started 7:25 PM): **Ran 9415 tests in 638.329 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R1: Nuke's Roto/RotoPaint viewer toolbar and shape tools (finish 1).** Commits:
+  - `67d5825a` Correct Roto pivot parity ledger
+  - `3ccf534d` Finish Roto viewer interaction gaps
+  - `5cb3d507` Roto UI ledger after rebasing R1 onto R3: keep R3's list rows and score (list 85.0) with R1's toolbar and viewer rows; overall 50.9
+  - `d25e9cdc` Refine Roto open-spline and tangent interactions
+  - `73abec10` Refresh R1 viewer interaction score
+  - `ba825be3` Add Roto transform toggle and point nudging
+  - `083e3d61` Update Roto UI parity ledger for R1
+  - `c93635d5` Add grouped Roto viewer tools and shape modes
+  Diff: 12 files changed, 1046 insertions(+), 342 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:45 PM on 2026-11-07 PDT)
 
 `main` moved `d90471d8` -> `5bdaa938` (lane commits cherry-picked onto main in lane order) and then to this
