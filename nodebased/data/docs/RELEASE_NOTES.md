@@ -1,3 +1,27 @@
+# NodeBased 0.53.0 — Roto's list and toolbar, the way Nuke has them
+
+## What changed since 0.52.0
+
+- **Roto and RotoPaint get Nuke's shape list.** Items sit in one tree table with Nuke's columns: Name, Visible, Lock, Overlay color, Color, Invert, Blending, Motion blur, Lifetime and Source. Each cell edits its value in one undo step. Overlay color is new; it colours only the outline in the Viewer. Right-click offers Add new layer, Duplicate, Copy/Cut curve, Paste spline, Delete, Set lifetime or frame range, and Planar-track. Layers are folders: drag and drop reorders items and moves them between layers, and a layer's Visible and Lock apply to everything inside it. The Name column keeps a fixed width with a horizontal scrollbar, so names stay readable in a narrow dock. Documents without layers load and render as before.
+- **Nuke's Roto toolbar in the Viewer.** The tool column carries Nuke's groups and keys. Draw Bezier and B-spline shapes, open or closed; add feather with E and remove it with Shift+E; set Brush size and the Clone offset; C picks Clone and N switches between Brush and Eraser. Brush is the default in RotoPaint and Bezier in Roto. Ctrl+Shift (Cmd+Shift on a Mac) edits the pivot, a toggle shows the transform box, arrow keys nudge selected points, and tangent and open-spline editing behave as in Nuke. Locked shapes and layers ignore Viewer edits.
+- **VectorBlur's UV channels** is an editable layer menu over the same stored layer name.
+- **Test stability.** An intermittent full-suite failure in the GPU device-loss test is fixed (the test now waits for the GPU nodes to finish switching on).
+
+## Known limits
+
+- Roto still lacks the transform-box centre handle, free-hand sketching, handle tension and Reveal's onion skin. Nuke's tool settings strip above the Viewer is not in yet, and neither is Roto's timing and animation work.
+- Still no comparison with a real Nuke render; pixel truth stays unmeasured until the reference pack (`tools/make_nuke_reference_pack.py`) is run in Nuke.
+- GPU playback still misses 24 fps on the Radeon test machine, and the decoder is above its 8 ms target.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0 (big-endian, the default, is unaffected).
+- LensDistortion's polynomial, fisheye and beam-splitter models and its grid solve stay unsupported.
+
+## Moved to 0.54.0
+
+- Roto: the tool settings strip, the remaining viewer gestures listed above, and timing and animation (keys, autokey, lifetimes on the timeline).
+- The decoder redesign aimed at 24 fps GPU playback.
+- Panel sweeps for the remaining nodes.
+- Carried: a field-of-view limit for generated footage, re-anchored generation in shorter pieces, more camera-following benchmark scenes, real curls in the fire's smoke, and measuring the 2D nodes against real Nuke renders.
+
 # NodeBased 0.52.0 — Nuke's panels, tracking and the Node tab
 
 ## What changed since 0.51.0
