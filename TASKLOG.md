@@ -1,3 +1,9 @@
+## 2026-11-08 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: find and cut the stage that keeps Radeon playback above 41.67 ms (integrator tick)
+
+- **What was done:** `main` `6e3b80ff` -> `3d4d4218` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `3d4d4218`: Ran 9459 tests in 1097.866 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step Z: DustBust and MarkerRemoval as their own nodes (finish 1) (integrator tick)
 
 - **What was done:** `main` `cae40912` -> `8715065d` plus this docs commit. Evidence and per-lane commit
