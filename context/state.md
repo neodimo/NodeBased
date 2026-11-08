@@ -1,5 +1,25 @@
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (1:45 AM on 2026-11-08 PDT)
+
+`main` moved `337dbfca` -> `7ab8681f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7ab8681f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-0125.log`, started 1:25 AM): **Ran 9440 tests in 660.999 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R5: Roto and RotoPaint properties panels in Nuke's layout, and motion-blur keys.** Commits:
+  - `a70df3f3` Use slider fields for Roto item controls
+  - `fb5c2cd8` Animate Roto motion blur and close RotoPaint audit gaps
+  Diff: 11 files changed, 212 insertions(+), 73 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (12:25 AM on 2026-11-08 PDT)
 
 `main` moved `daace7bd` -> `f50727e7` (lane commits cherry-picked onto main in lane order) and then to this
