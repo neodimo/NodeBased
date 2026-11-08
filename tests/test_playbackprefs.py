@@ -488,7 +488,9 @@ class IslandSettingTests(unittest.TestCase):
         messages = self.record_messages()
         window.preferences.set_gpu_nodes(True)
         window.apply_gpu_nodes()
-        self.assertTrue(wait_for(lambda: window.evaluator.gpu2d is not None))
+        # Wait for the Qt side too: the worker installs gpu2d before gpu_nodes_ready clears "pending", and
+        # _check_gpu_nodes_lost does nothing while a change is pending (an intermittent full-suite failure).
+        self.assertTrue(wait_for(lambda: window.evaluator.gpu2d is not None and not window.gpu_nodes_state["pending"]))
         backend = window.evaluator.gpu2d
         reference = Evaluator().evaluate_raster(self.doc, "colorcorrect", frame=2)
         backend.invalidate("simulated device loss")
