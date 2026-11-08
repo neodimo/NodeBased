@@ -2108,3 +2108,11 @@
 - **Next owner + concrete artifact:** Gonzo should rerun `tools/benchmark_gpu2d.py playback` with the original controlled display/CPU environment; compare its `summary-*.json` to `benchmarks/2d-playback/radeon-1108/summary.json` before accepting or discarding the allocation reuse.
 - **Failure mode:** The first queued benchmark omitted generated EXR patterns and exited before measurement; it was regenerated and rerun. The later runs used a materially slower environment, so their absolute timing is not comparable to the baseline.
 
+## 2026-11-08 — Lane 8 finish follow-up: quiet Radeon A/B of the Roto allocation reuse
+
+- **What was done — evidence:** Waited until no `integ-auto` or `unittest` process ran, then took three interleaved default-viewer Radeon passes from `main` and three from the lane worktree. Both trees were the same merged revision. Main p95s were 46.720, 46.071 and 46.055 ms; branch p95s were 46.632, 49.662 and 47.061 ms. The earlier 136–151 ms readings were suite-contaminated. The branch comparison does not show a playback saving from the feather-allocation reuse.
+- **Artifacts:** Raw JSON, timelines and logs are deliberate scratch at `scratch/nb-lanes/run/bench-L8-quiet-1216/`; the current direct stage profile is `scratch/nb-lanes/run/L8-roto-profile-quiet.json`. Tracked profiler evidence remains `tools/profile_playback_roto.py` and `benchmarks/2d-playback/roto-fixture-profile-1108.json`.
+- **State:** Partial. The profiler still identifies coverage plus box feather as the active fixture path; the branch has no new pixel change because its existing allocation reuse did not demonstrate an end-to-end win. The 41.670 ms gate remains unmet.
+- **Next owner + concrete artifact:** Gonzo should use `bench-L8-quiet-1216/*.timeline.json` and `L8-roto-profile-quiet.json` to select a larger Roto/Read overlap change; preserve the quiet-machine check for every timing claim.
+- **Failure mode:** Benchmarks taken during the integration suite inflated p95 to 136–151 ms; they are invalid for performance comparison.
+
