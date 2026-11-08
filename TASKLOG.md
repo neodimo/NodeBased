@@ -1,3 +1,9 @@
+## 2026-11-07 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S5: Nuke's rows and knob types on the fifth eight most-used nodes (finish 1), Lane 9 (2D behaviour B, GPT-6 Luna) step R0: Nuke's Roto and RotoPaint tools and UI, recorded and measured (finish 1) (integrator tick)
+
+- **What was done:** `main` `ce81f135` -> `562ba572` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `562ba572`: Ran 9368 tests in 625.134 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
 
 - **What was done (evidence):** Completed the source inventory for 17.0v3 toolbar/tool settings, list columns and order, viewer gestures/keys, and timing controls. Mapped every reference entry to a NodeBased status and implementation location. The score is toolbar 42.2, tool settings 35.8, stroke/shape list 30.0, viewer editing 51.6, timing/animation 45.0; overall 38.2. Ripple editing is undocumented in the official sources checked; stereo View is outside current NodeBased scope.

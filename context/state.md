@@ -1,5 +1,28 @@
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, GPT-6 Luna) (4:45 PM on 2026-11-07 PDT)
+
+`main` moved `ce81f135` -> `562ba572` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `562ba572` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1107-1625.log`, started 4:25 PM): **Ran 9368 tests in 625.134 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step S5: Nuke's rows and knob types on the fifth eight most-used nodes (finish 1).** Commits:
+  - `c570baab` Panel sweep S5 finish: VectorBlur UV channels is an editable layer menu over the same stored layer name (VectorBlur layout 97 to 100)
+  Diff: 7 files changed, 30 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R0: Nuke's Roto and RotoPaint tools and UI, recorded and measured (finish 1).** Commits:
+  - `a12bc78d` docs: finish Lane 9 Roto UI parity reference
+  Diff: 8 files changed, 4009 insertions(+), 744 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The original partial’s gaps are closed: per-tool control/default inventory and settings, ordered list columns, gesture/key inventory, and source-verified NodeBased locations for every measured entry. The 17.0v3 source set is recorded in `docs/parity/nuke_roto_ui.json`; the complete per-entry mapping is in `docs/parity/nodebased_roto_ui.json`; the weighted score and 274-row gap ledger are in `docs/ROTO_NUKE_UI.md` (bundled copy byte-identical). Score: toolbar 42.2, settings 35.8, list 30.0, viewer editing 51.6, timing/animation 45.0, overall 38.2. Official-source scope caveats: ripple editing is not documented in the checked sources; the stereo View column cannot match current NodeBased UI. No UI/behavior changes. Reference, knowledge, Roto UI (19), and RotoPaint UI (17) modules passed. Screenshots are deliberate local scratch in `/var/home/omid/.openclaw/workspace/scratch/nb-qa/1107-roto-r0/`. Next: Lane 9 R1 from `docs/ROTO_NUKE_UI.md`.
 
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (partial)
