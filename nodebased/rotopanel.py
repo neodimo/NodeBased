@@ -235,6 +235,27 @@ def build_panel(window, key):
                 point[field] = delete_scalar_key(point.get(field, 0.0), at) if delete else set_scalar_key(point.get(field, 0.0), field, at)
         save(entries, index)
         window.rebuild_properties_dock()
+    def edit_key_scope(index, scope, delete=False):
+        entries = current()
+        if not 0 <= index < len(entries): return
+        shape = entries[index]
+        paths = []
+        if scope in ("all", "spline"):
+            paths.extend(("points", pi, field) for pi, point in enumerate(shape.get("points", []))
+                         for field in (*shape_model.POINT_FIELDS, *shape_model.FEATHER_POINT_FIELDS))
+        if scope in ("all", "transform"):
+            transform = shape.setdefault("transform", {})
+            paths.extend(("transform", field) for field in shape_model.TRANSFORM_DEFAULTS)
+        if scope in ("all", "attributes"):
+            paths.extend((field,) for field in ("opacity", "feather"))
+            paths.extend(("color", ci) for ci in range(len(shape.get("color", []))))
+        for path in paths:
+            target = shape
+            for part in path[:-1]: target = target[part]
+            field = path[-1]
+            old = target.get(field, shape_model.TRANSFORM_DEFAULTS.get(field, 0.0)) if isinstance(target, dict) else target[field]
+            target[field] = delete_scalar_key(old, frame) if delete else set_scalar_key(old, "opacity" if path[0] == "color" else field, frame)
+        save(entries, index)
     def key_field(index, field):
         entries = current()
         if not 0 <= index < len(entries): return
@@ -343,6 +364,17 @@ def build_panel(window, key):
             button.clicked.connect(lambda _=False, idx=i, d=delete: edit_selected_point_keys(idx, d))
             point_controls.addWidget(button)
         layout.addLayout(point_controls)
+        scope_controls = QHBoxLayout()
+        scope = QComboBox(); scope.setObjectName("roto-key-scope")
+        for label, value in (("All", "all"), ("Spline", "spline"), ("Transform", "transform"), ("Attributes", "attributes")):
+            scope.addItem(label, value)
+        scope_controls.addWidget(scope)
+        for title, delete, name in (("Set item key", False, "roto-item-set-key"),
+                                    ("Delete item key", True, "roto-item-delete-key")):
+            button = QPushButton(title); button.setObjectName(name)
+            button.clicked.connect(lambda _=False, idx=i, d=delete, box=scope: edit_key_scope(idx, box.currentData(), d))
+            scope_controls.addWidget(button)
+        layout.addLayout(scope_controls)
         def edit(field,value):
             entries=current()
             if i < len(entries):

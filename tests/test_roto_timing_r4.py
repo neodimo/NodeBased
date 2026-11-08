@@ -111,6 +111,15 @@ class RotoTimingR4Tests(unittest.TestCase):
         curve = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]["curve"]
         self.assertEqual([key["frame"] for key in curve["keys"]], [5])
 
+        panel = rotopanel.build_panel(self.window, "r")
+        scope = panel.findChild(QComboBox, "roto-key-scope")
+        scope.setCurrentIndex(scope.findData("transform"))
+        before = len(self.window.dispatcher.undo_stack)
+        panel.findChild(QPushButton, "roto-item-set-key").click()
+        transform = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["transform"]
+        self.assertEqual(transform["rotate"]["curve"]["keys"], [{"frame": 1, "value": 0.0}])
+        self.assertEqual(len(self.window.dispatcher.undo_stack), before + 1)
+
     def test_lifetime_modes_and_nuke_endpoint_visibility(self):
         expected = {
             "all": [True] * 7,
