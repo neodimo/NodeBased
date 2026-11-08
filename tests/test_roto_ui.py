@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, QRectF, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QDoubleSpinBox
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QDoubleSpinBox
 
 from nodebased.app import STYLE, Window
 from nodebased.core import empty_document, Dispatcher
@@ -122,8 +122,8 @@ class RotoOverlayTests(unittest.TestCase):
         shape = triangle(); shape.update(closed=False, stroke_width=7.0)
         self.window.command({"op": "set_shapes", "id": "r", "shapes": [shape]})
         panel = build_panel(self.window, "r")
-        state = panel.findChild(QLabel, "roto-shape-row-state-0")
-        self.assertEqual(state.text(), "Open · 7 px")
+        name = panel.findChild(QLineEdit, "roto-shape-row-name-0")
+        self.assertTrue(name.toolTip().endswith("Open · 7 px"), name.toolTip())
         width = panel.findChild(QDoubleSpinBox, "roto-shape-stroke_width")
         self.assertEqual(width.value(), 7.0)
 

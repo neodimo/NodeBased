@@ -7,7 +7,7 @@ import numpy as np
 from PySide6.QtCore import QSettings, Qt, QPointF
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QListWidget, QDoubleSpinBox, QWidget, QPushButton, QLabel
+from PySide6.QtWidgets import QApplication, QCheckBox, QTreeWidget as QListWidget, QDoubleSpinBox, QWidget, QPushButton, QLabel
 
 import tests.isolation
 from tests.waiting import wait_until, settle_layout
@@ -119,17 +119,18 @@ class RotoArtistPanelTests(unittest.TestCase):
     def test_shape_list_names_fit_and_controls_are_labeled_and_described(self):
         listing = self.panel().findChild(QListWidget, "roto-shape-list")
         settle_layout(self.window, listing)
-        row = listing.itemWidget(listing.item(0))
-        name = row.findChild(QWidget, "roto-shape-row-name-0")
+        name = listing.findChild(QWidget, "roto-shape-row-name-0")
         self.assertGreaterEqual(name.width(), name.fontMetrics().horizontalAdvance(name.text()))
-        for object_name in ("roto-shape-key-0", "roto-shape-row-visible-0",
-                            "roto-shape-row-locked-0", "roto-shape-row-invert-0"):
-            control = row.findChild(QWidget, object_name)
-            self.assertIsNotNone(control)
+        for object_name in ("roto-shape-key-0", "roto-shape-row-visible-0", "roto-shape-row-locked-0",
+                            "roto-shape-row-invert-0", "roto-shape-row-overlay-0", "roto-shape-row-color-0",
+                            "roto-shape-row-blend-0", "roto-shape-row-motion_blur-0", "roto-shape-row-lifetime-0",
+                            "roto-shape-row-source-0"):
+            control = listing.findChild(QWidget, object_name)
+            self.assertIsNotNone(control, object_name)
             self.assertTrue(control.toolTip().strip(), object_name)
-        self.assertEqual([row.findChild(QCheckBox, f"roto-shape-row-{field}-0").text()
-                          for field in ("visible", "locked", "invert")],
-                         ["Visible", "Lock", "Invert"])
+        self.assertEqual([listing.headerItem().text(c) for c in range(listing.columnCount())],
+                         ["Name", "Visible", "Lock", "Overlay color", "Color", "Invert", "Blending", "Motion blur",
+                          "Lifetime", "Source"])
 
     def test_colour_swatch_tracks_the_shape_colour_after_a_change(self):
         # The linear float picker (10/18): set the floats and press OK.

@@ -139,7 +139,8 @@ def validate_shape(shape, where):
     from . import paintknobs
     optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "source", "motion_blur", "track_link", "transform", "track_follow", "closed", "stroke_width",
                 *paintknobs.ROTO_SOURCE_FIELDS,
-                "feather_on", "falloff_power", "lifetime", "extra_matrix", "cap_start", "cap_end", *MOTION_BLUR_FIELDS}
+                "feather_on", "falloff_power", "lifetime", "extra_matrix", "cap_start", "cap_end", "overlay_color", "layer",
+                *MOTION_BLUR_FIELDS}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
     if not isinstance(shape["name"], str) or not 1 <= len(shape["name"]) <= 128:
@@ -148,6 +149,7 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.mode must be one of {list(SHAPE_MODES)}")
     if "closed" in shape and type(shape["closed"]) is not bool:
         raise ValueError(f"{where}.closed must be a boolean")
+    validate_list_settings(shape, where)
     validate_scalar(shape.get("stroke_width", 1.0), "stroke_width", where)
     validate_scalar(shape["opacity"], "opacity", where)
     validate_scalar(shape["feather"], "feather", where)
@@ -224,6 +226,79 @@ def validate_shape(shape, where):
             if field not in point:
                 continue
             validate_scalar(point[field], field, f"{where}.points[{index}]")
+
+
+# ------------------------------------------------------------------------------------------------ layers and overlay colour
+def validate_overlay_color(value, where):
+    """A list item's outline colour in the Viewer: three channels between 0 and 1. It is never rendered."""
+    if (not isinstance(value, list) or len(value) != 3
+            or not all(_is_number(c) and 0.0 <= c <= 1.0 for c in value)):
+        raise ValueError(f"{where}.overlay_color must be three numbers between 0 and 1")
+
+
+def validate_list_settings(item, where):
+    """The two settings the shape/stroke list adds to an item: its overlay colour and the layer (folder) holding it."""
+    if "overlay_color" in item:
+        validate_overlay_color(item["overlay_color"], where)
+    if "layer" in item and not (isinstance(item["layer"], str) and 1 <= len(item["layer"]) <= 128):
+        raise ValueError(f"{where}.layer must name a layer of 1-128 characters")
+
+
+def validate_layers(layers, items, where, slot="items"):
+    """The payload's layers: folders in the list. A layer has a unique name, Visible and Lock flags that apply to everything
+    inside it, an optional parent layer and an optional overlay colour. Every item's `layer` must name one of them."""
+    if not isinstance(layers, list) or len(layers) > MAXIMUM_SHAPES:
+        raise ValueError(f"{where}.layers must be a list of at most {MAXIMUM_SHAPES} entries")
+    names = {}
+    for index, layer in enumerate(layers):
+        at = f"{where}.layers[{index}]"
+        if (not isinstance(layer, dict) or "name" not in layer
+                or set(layer) - {"name", "visible", "locked", "layer", "overlay_color"}):
+            raise ValueError(f"{at} defines a name and optional visible, locked, layer and overlay_color")
+        if not isinstance(layer["name"], str) or not 1 <= len(layer["name"]) <= 128:
+            raise ValueError(f"{at}.name must contain 1-128 characters")
+        if layer["name"] in names:
+            raise ValueError(f"{at}.name {layer['name']!r} is used by another layer")
+        names[layer["name"]] = layer
+        if any(k in layer and type(layer[k]) is not bool for k in ("visible", "locked")):
+            raise ValueError(f"{at}: visible and locked must be booleans")
+        validate_list_settings(layer, at)
+    for index, layer in enumerate(layers):
+        seen, parent = {layer["name"]}, layer.get("layer")
+        while parent is not None:
+            if parent not in names:
+                raise ValueError(f"{where}.layers[{index}].layer names a layer that does not exist")
+            if parent in seen:
+                raise ValueError(f"{where}.layers[{index}] sits inside itself")
+            seen.add(parent)
+            parent = names[parent].get("layer")
+    for index, item in enumerate(items):
+        if item.get("layer") is not None and item["layer"] not in names:
+            raise ValueError(f"{where}.{slot}[{index}].layer names a layer that does not exist")
+
+
+def layer_states(payload):
+    """{layer name: (visible, locked)} with each layer's own flags and those of every layer around it applied."""
+    layers = {layer["name"]: layer for layer in (payload or {}).get("layers", [])}
+    states = {}
+    for name in layers:
+        visible, locked, seen, at = True, False, set(), name
+        while at is not None and at in layers and at not in seen:
+            seen.add(at)
+            visible = visible and layers[at].get("visible", True)
+            locked = locked or layers[at].get("locked", False)
+            at = layers[at].get("layer")
+        states[name] = (visible, locked)
+    return states
+
+
+def apply_layer_state(resolved, item, states):
+    """A hidden layer hides its children and a locked one locks them. Items outside any layer are untouched."""
+    state = states.get(item.get("layer")) if states else None
+    if state is not None:
+        resolved["visible"] = bool(resolved.get("visible", True)) and state[0]
+        resolved["locked"] = bool(resolved.get("locked", False)) or state[1]
+    return resolved
 
 
 # A track's own T, R and S switches and its pattern and search areas (fidelity step G, nodebased/trackerknobs.py); absent means the node's.
@@ -303,8 +378,9 @@ def validate_payload(kind, payload, where):
         if len(destination[0]) != columns:
             raise ValueError(f"{where}: source and destination grid dimensions differ")
         return
-    if not isinstance(payload, dict) or set(payload) != {slot}:
-        raise ValueError(f"{where}: a {kind} payload defines exactly {slot!r}")
+    if not isinstance(payload, dict) or slot not in payload or set(payload) - {slot, "layers"} or (
+            "layers" in payload and slot not in ("shapes", "items")):
+        raise ValueError(f"{where}: a {kind} payload defines exactly {slot!r}" + (" and optional layers" if slot in ("shapes", "items") else ""))
     items = payload[slot]
     if slot == "items":
         if not isinstance(items, list) or len(items) > MAXIMUM_SHAPES + 10000:
@@ -374,6 +450,7 @@ def validate_payload(kind, payload, where):
                                            or not isinstance(follow["node_id"], str)
                                            or type(follow["track_index"]) is not int or follow["track_index"] < 0):
                     raise ValueError(f"{at}.follow_track must be null or identify a Tracker and track index")
+        validate_layers(payload.get("layers", []), items, where, "items")
         return
     limit = MAXIMUM_SHAPES if slot == "shapes" else MAXIMUM_TRACKS
     if not isinstance(items, list) or len(items) > limit:
@@ -381,6 +458,8 @@ def validate_payload(kind, payload, where):
     validator = validate_shape if slot == "shapes" else validate_track
     for index, item in enumerate(items):
         validator(item, f"{where}.{slot}[{index}]")
+    if slot == "shapes":
+        validate_layers(payload.get("layers", []), items, where, "shapes")
 
 
 def validate_node_data(node_data, nodes):
@@ -500,7 +579,9 @@ def resolve_shapes(payload, frame, params=None):
 
     `params` is the Roto node's own parameters; only its global motion-blur settings are read from it.
     """
-    return [_resolve_shape(shape, frame, params, blur=True) for shape in (payload or {}).get("shapes", [])]
+    states = layer_states(payload)
+    return [apply_layer_state(_resolve_shape(shape, frame, params, blur=True), shape, states)
+            for shape in (payload or {}).get("shapes", [])]
 
 
 def _resolve_shape(shape, frame, params, blur):
@@ -536,6 +617,8 @@ def _resolve_shape(shape, frame, params, blur):
             resolved[field] = [resolve_scalar(channel, frame, "opacity") for channel in copy_value]
     if "source" in shape:
         resolved["source"] = shape["source"]
+    if "overlay_color" in shape:
+        resolved["overlay_color"] = [float(c) for c in shape["overlay_color"]]     # for the Viewer outline only; never rendered
     from . import paintknobs
     for field in paintknobs.ROTO_SOURCE_FIELDS:
         if field in shape:
@@ -884,6 +967,7 @@ def resolve_paint_items(payload, frame, params=None):
     motion blur gets its points transformed and, for motion blur, one set of points per shutter sample."""
     from . import paintknobs
     items = []
+    states = layer_states(payload)
     for item in (payload or {}).get("items", []):
         resolved = dict(item)
         if item["kind"] == "shape":
@@ -896,5 +980,5 @@ def resolve_paint_items(payload, frame, params=None):
             resolved["visible"] = visible and resolved["visible"]       # outside its lifetime a shape is hidden, as in Roto
         elif paintknobs.needs_resolving(item) or (params and (params.get("global_motionblur_on", 0))):
             resolved = paintknobs.resolve_stroke(item, frame, params or {})
-        items.append(resolved)
+        items.append(apply_layer_state(resolved, item, states))
     return items

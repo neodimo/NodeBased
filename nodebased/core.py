@@ -3782,7 +3782,8 @@ class Dispatcher:
                                   "point_fields": list(shapes.POINT_FIELDS),
                                   "set_warp_data": {"id": "SplineWarp or GridWarp node id", "data": "animated warp controls"},
                                   "set_shapes": {"id": "string (Roto node id)",
-                                                 "shapes": "[{name, mode, opacity, feather, closed, stroke_width, points}] (closed defaults true; open shapes render as strokes)"},
+                                                 "shapes": "[{name, mode, opacity, feather, closed, stroke_width, points}] (closed defaults true; open shapes render as strokes)",
+                                                 "layers": "optional [{name, visible, locked, layer, overlay_color}] folders; an item's `layer` names its folder (kept when omitted)"},
                                   "set_paint_items": {"id": "string (RotoPaint node id)", "items": "ordered paint/shape layers"},
                                   "paint_tools": ["paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"],
                                   "paint_stroke": {"points": "[{x, y, pressure}]",
@@ -4126,10 +4127,20 @@ class Dispatcher:
             items = cmd[slot]
             if not isinstance(items, list):
                 raise ValueError(f"{op}: {slot!r} must be a list")
+            # The shape/stroke list's layers (folders) travel with the payload. A command that does not name `layers`
+            # (every Viewer edit) keeps the ones the node has, so a drawn or moved shape never drops the folders.
+            layers = cmd.get("layers")
+            carried = layers is None
+            if carried:
+                layers = doc["node_data"].get(key, {}).get("layers") if slot in ("shapes", "items") else None
+            if layers is not None and (not isinstance(layers, list) or (slot not in ("shapes", "items") and layers)):
+                raise ValueError(f"{op}: 'layers' must be a list")
             # An empty payload is stored as an absent entry so "no shapes" has one representation
             # in the document and two comps that look identical also serialize identically.
-            if items:
+            if items or (layers and not carried):
                 doc["node_data"][key] = {slot: copy.deepcopy(items)}
+                if layers:
+                    doc["node_data"][key]["layers"] = copy.deepcopy(layers)
             else:
                 doc["node_data"].pop(key, None)
             return {slot: len(items)}

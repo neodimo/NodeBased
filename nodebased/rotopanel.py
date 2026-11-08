@@ -1,6 +1,7 @@
 """Roto shape-list and per-shape controls, isolated from the shared properties builder."""
 import copy
 from . import shapes as shape_model
+from . import rotolist
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
@@ -39,40 +40,7 @@ def build_panel(window, key):
     selected = getattr(window.viewer, "roto_selected_shape_index", -1)
     if selected < 0 and shapes:
         selected = window.viewer.roto_selected_shape_index = 0
-    listing = QListWidget(); listing.setObjectName("roto-shape-list")
-    for index, shape in enumerate(shapes):
-        row = QListWidgetItem(); listing.addItem(row)
-        widget = QWidget(); row_layout = QHBoxLayout(widget); row_layout.setContentsMargins(2, 0, 2, 0)
-        label = QLineEdit(shape["name"]); label.setObjectName(f"roto-shape-row-name-{index}")
-        label.setToolTip("Shape name")
-        label.setFrame(False); label.editingFinished.connect(
-            lambda idx=index, field=label: row_edit(idx, "name", field.text()))
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(shape["name"]) + 10)
-        row_layout.addWidget(label, 1)
-        width = shape_model.resolve_scalar(shape.get("stroke_width", 1.0), frame, "stroke_width")
-        state = f"{'Closed' if shape.get('closed', True) else 'Open'} · {width:g} px"
-        state_label = QLabel(state); state_label.setObjectName(f"roto-shape-row-state-{index}")
-        row_layout.addWidget(state_label)
-        animated, keyed_here = key_state(shape)
-        shape_curve = {"interpolation": "smooth",
-                       "keys": [{"frame": frame}] if keyed_here else ([{"frame": -1}] if animated else [])}
-        key_button = window.make_key_button(
-            key, f"shape-{index}", label, curve_override=shape_curve,
-            on_toggle=lambda idx=index: key_shape(idx), object_name=f"roto-shape-key-{index}")
-        key_button.setAccessibleName("Shape key")
-        key_button.setToolTip("Key all shape points and controls at the current frame")
-        row_layout.addWidget(key_button)
-        for field, caption, tip in (("visible", "Visible", "Show or hide this shape"),
-                                    ("locked", "Lock", "Lock this shape's points"),
-                                    ("invert", "Invert", "Invert this shape's matte")):
-            toggle = QCheckBox(caption); toggle.setToolTip(tip)
-            toggle.setObjectName(f"roto-shape-row-{field}-{index}")
-            toggle.setChecked(shape.get(field, field == "visible"))
-            toggle.toggled.connect(lambda value, idx=index, f=field: row_edit(idx, f, bool(value)))
-            row_layout.addWidget(toggle)
-        listing.setItemWidget(row, widget)
-    if 0 <= selected < len(shapes): listing.setCurrentRow(selected)
-    layout.addWidget(QLabel("Curves")); layout.addWidget(listing)
+    layout.addWidget(QLabel("Curves")); list_slot = layout.count()
 
     def current():
         return copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("shapes", []))
@@ -161,26 +129,34 @@ def build_panel(window, key):
         window.viewer.roto_selected_shape_index = row
         window.viewer.viewport().update()
         window.rebuild_properties_dock()
-    listing.currentRowChanged.connect(select)
+    def row_extras(row_layout, index, label):
+        """The key button of the Name cell: it keys every point and control of the shape at the current frame."""
+        animated, keyed_here = key_state(shapes[index])
+        shape_curve = {"interpolation": "smooth",
+                       "keys": [{"frame": frame}] if keyed_here else ([{"frame": -1}] if animated else [])}
+        key_button = window.make_key_button(
+            key, f"shape-{index}", label, curve_override=shape_curve,
+            on_toggle=lambda idx=index: key_shape(idx), object_name=f"roto-shape-key-{index}")
+        key_button.setAccessibleName("Shape key")
+        key_button.setToolTip("Key all shape points and controls at the current frame")
+        row_layout.addWidget(key_button)
+    listing = rotolist.ShapeListTree(window, key, True, select, row_extras)
+    layout.insertWidget(list_slot, listing)
     buttons = QHBoxLayout()
     for label, delta in (("Move up", -1), ("Move down", 1)):
         b = QPushButton(label); b.setToolTip("Move the selected shape up" if delta < 0 else "Move the selected shape down"); b.setObjectName("roto-shape-up" if delta < 0 else "roto-shape-down")
-        def move(_=False, d=delta):
-            entries=current(); i=listing.currentRow(); j=i+d
-            if 0 <= i < len(entries) and 0 <= j < len(entries): entries[i],entries[j]=entries[j],entries[i]; save(entries,j)
-        b.clicked.connect(move); buttons.addWidget(b)
-    for label, action in (("Duplicate", "duplicate"), ("Delete", "delete")):
-        b=QPushButton(label); b.setObjectName("roto-shape-"+action)
+        b.clicked.connect(lambda _=False, d=delta: listing.cmd_move(d)); buttons.addWidget(b)
+    for label, action in (("Duplicate", listing.cmd_duplicate), ("Delete", listing.cmd_delete)):
+        b=QPushButton(label); b.setObjectName("roto-shape-"+label.lower())
         b.setToolTip(f"{label} the selected shape")
         def mutate(_=False, act=action):
-            entries=current(); i=listing.currentRow()
-            if not 0 <= i < len(entries): return
-            if act == "delete": del entries[i]; save(entries, min(i,len(entries)-1))
-            else:
-                item=copy.deepcopy(entries[i]); item["name"] += " copy"; entries.insert(i+1,item); save(entries,i+1)
+            index = listing.selected_index()
+            if 0 <= index < len(shapes):
+                listing.select_ids([("item", index)])
+                act()
         b.clicked.connect(mutate); buttons.addWidget(b)
     layout.addLayout(buttons)
-    i=listing.currentRow()
+    i=listing.selected_index()
     if 0 <= i < len(shapes):
         shape=shapes[i]
         def edit(field,value):

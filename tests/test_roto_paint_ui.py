@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QListWidget, QPushButton
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QTreeWidget
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
@@ -172,11 +172,11 @@ class RotoPaintLayerEditorTests(unittest.TestCase):
         return self.window.dispatcher.document["node_data"]["paint"]["items"]
 
     def test_layer_list_shows_every_item_in_order(self):
-        layer_list = self.panel().findChild(QListWidget, "rotopaint-layer-list")
+        layer_list = self.panel().findChild(QTreeWidget, "rotopaint-layer-list")
         self.assertIsNotNone(layer_list)
         self.assertEqual(layer_list.count(), 2)
-        self.assertIn("shape1", layer_list.item(0).text())
-        self.assertIn("stroke1", layer_list.item(1).text())
+        self.assertEqual(layer_list.findChild(QLineEdit, "rotopaint-row-name-0").text(), "shape1")
+        self.assertEqual(layer_list.findChild(QLineEdit, "rotopaint-row-name-1").text(), "stroke1")
 
     def test_selecting_a_stroke_shows_its_brush_and_dodge_burn_strength(self):
         self.window.viewer.paint_selected_item_index = 1

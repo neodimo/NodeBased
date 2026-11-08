@@ -42,7 +42,7 @@ from . import rotoknobs, shapes
 SOURCES = ("color", "foreground", "background")
 CLONE_FILTERS = ("impulse", "cubic", "keys", "simon", "rifman", "mitchell", "parzen", "notch")
 # Item settings both kinds take.
-COMMON_FIELDS = ("locked", "source", "transform", "extra_matrix", "motion_blur", *shapes.MOTION_BLUR_FIELDS)
+COMMON_FIELDS = ("locked", "source", "transform", "extra_matrix", "motion_blur", "overlay_color", "layer", *shapes.MOTION_BLUR_FIELDS)
 SHAPE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "feather_falloff", "feather_model", "closed", "stroke_width", "feather_on",
                      "falloff_power", "lifetime", "cap_start", "cap_end")
 STROKE_ITEM_FIELDS = (*COMMON_FIELDS, "effect", "dynamic_hardness", "buildup", "write_on", "source_transform", "source_round",
@@ -124,7 +124,7 @@ def validate_common(item, where):
         raise ValueError(f"{where}.source must be one of {list(SOURCES)}")
     probe = {"name": "x", "mode": "union", "opacity": 1.0, "feather": 0.0,
              "points": [{field: 0.0 for field in shapes.POINT_FIELDS}] * 3}
-    for field in ("transform", "extra_matrix", "motion_blur", *shapes.MOTION_BLUR_FIELDS):
+    for field in ("transform", "extra_matrix", "motion_blur", "overlay_color", "layer", *shapes.MOTION_BLUR_FIELDS):
         if field in item:
             probe[field] = item[field]
     shapes.validate_shape(probe, where)

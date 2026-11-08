@@ -47,6 +47,7 @@ from . import radialcommands
 from . import graphlook
 from . import gpu3d
 from . import roto
+from . import rotolist
 from . import gpupicture
 from .playback_trace import mark as _trace_mark, mark_frame as _trace_frame
 from . import guigc
@@ -4302,7 +4303,9 @@ class Viewer(PanZoomView):
                 is_animated = any(isinstance(value, dict) and value.get("curve")
                                   for point in context[2].get("shapes", [])[shape_index]["points"]
                                   for value in point.values())
+                overlay_color = shape.get("overlay_color")       # the list's Overlay color column; the outline only, never rendered
                 color = ("#9de7ff" if is_keyed else "#b08cff" if is_animated else
+                         QColor.fromRgbF(*[min(max(float(c), 0.0), 1.0) for c in overlay_color]).name() if overlay_color else
                          "#ff986f" if shape["mode"] == "subtract" else self.roto_handle_colour(context[1]))
                 pen = QPen(QColor(color), max(2.0, shape.get("stroke_width", 1.0) / tier) if not closed else 2)
                 if not closed:
@@ -13539,37 +13542,23 @@ class Window(QMainWindow):
                     return copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(k, {}).get("items", []))
 
                 form.addRow(QLabel("Layers"))
-                layer_list = QListWidget()
-                layer_list.setObjectName("rotopaint-layer-list")
-                for entry in layer_items:
-                    label = (f"{entry['name']} · shape · {entry['mode']}" if entry["kind"] == "shape"
-                             else f"{entry['name']} · stroke · {entry['tool']}")
-                    layer_list.addItem(label)
-                if selected is not None:
-                    layer_list.setCurrentRow(selected)
 
                 def select_layer(row, k=key):
                     self.viewer.paint_selected_item_index = row if row >= 0 else None
                     self.inspect(k)
-                layer_list.currentRowChanged.connect(select_layer)
+
+                # Nuke's stroke/shape list: one tree table (rotolist.ShapeListTree) with the drag-and-drop layers,
+                # per-cell editing and the right-click commands.
+                layer_list = rotolist.ShapeListTree(self, key, False, select_layer)
                 form.addRow(layer_list)
 
                 def move_layer(delta, k=key, idx=selected):
-                    entries = current_layer_items(k)
-                    target = None if idx is None else idx + delta
-                    if idx is None or not (0 <= idx < len(entries)) or not (0 <= target < len(entries)):
-                        return
-                    entries[idx], entries[target] = entries[target], entries[idx]
-                    self.viewer.paint_selected_item_index = target
-                    self.command({"op": "set_paint_items", "id": k, "items": entries})
+                    layer_list.cmd_move(delta)
 
                 def delete_layer(k=key, idx=selected):
-                    entries = current_layer_items(k)
-                    if idx is None or not (0 <= idx < len(entries)):
-                        return
-                    del entries[idx]
-                    self.viewer.paint_selected_item_index = None
-                    self.command({"op": "set_paint_items", "id": k, "items": entries})
+                    if idx is not None and 0 <= idx < len(layer_items):
+                        layer_list.select_ids([("item", idx)])
+                        layer_list.cmd_delete()
 
                 layer_buttons = QHBoxLayout()
                 up_button = QPushButton("Move up")
