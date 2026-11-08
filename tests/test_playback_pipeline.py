@@ -243,6 +243,11 @@ class PlaybackPipelineWindowTests(unittest.TestCase):
     def test_viewer_picture_is_unchanged_by_the_pipeline(self):
         """Direct picture off: the Viewer shows the same 8-bit picture `to_qimage` gives for the frame it holds."""
         window = self.window
+        # This assertion is about the processor conversion that the Viewer stores.  The
+        # optional render-card handoff is covered by the Direct-picture tests below and
+        # rounds a few display values independently.  Make the chosen path explicit so
+        # the result does not depend on whether an earlier test warmed that card path.
+        window.command({"op": "viewer_knobs", "use_gpu_for_viewer": False})
         window.pipeline_playback = True
         self.play(1.5)
         self.assertTrue(wait_until(lambda: window.frame is not None and not window.busy, 5.0))

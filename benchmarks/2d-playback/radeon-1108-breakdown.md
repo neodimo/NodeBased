@@ -23,3 +23,20 @@ p95).  Three frames hold the interval tail: their Roto evaluation and display
 conversion rise together.  The first targeted variant raises the Roto
 read-ahead default from two to three frames; it does not change worker counts
 or the decode lead.
+
+## Direct picture measurement (November 8)
+
+Three fresh, interleaved 48-frame Radeon 8060S passes used the same uncached
+1080p GPU-island fixture, default decode and Roto leads, and `--timeline-output`.
+The reduced first-pass interval values are below; the direct picture removed all
+8-bit conversions, yet its render-card path had a much slower node-evaluation
+tail.
+
+| viewer | p95 interval passes (ms) | median first-pass fps | 41.670 ms gate |
+| --- | --- | ---: | --- |
+| default | 49.180, 48.698, 52.407 | 23.983 | missed |
+| Direct picture | 71.122, 81.615, 80.609 | 14.674 | missed |
+
+The optional Direct picture therefore does not meet the Radeon gate on this
+fixture and remains an optional viewer.  Raw runs and the reducer output are
+deliberate local scratch at `scratch/nb-lanes/run/bench-L8-direct-1108/`.
