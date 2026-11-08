@@ -3,6 +3,7 @@ import os
 import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import Qt, QSettings
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from tests.waiting import wait_until
@@ -161,6 +162,15 @@ class RotoToolbarTests(unittest.TestCase):
         scene=viewer._roto_scene_point(handle,1)
         self.assertTrue(viewer.hit_press(scene,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
         self.assertEqual(viewer.roto_selected_points,{(0,0)})
+        viewer.setFocus(); QTest.keyClick(viewer,Qt.Key.Key_T)
+        self.assertFalse(viewer.roto_transform_box_enabled)
+        QTest.keyClick(viewer,Qt.Key.Key_T)
+        self.assertTrue(viewer.roto_transform_box_enabled)
+        before=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]
+        viewer.roto_selected_points={(0,0)}
+        viewer.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress,Qt.Key.Key_Right,Qt.KeyboardModifier.KeypadModifier))
+        after=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]
+        self.assertEqual(after,before+1.0)
         viewer.select_roto_tool("Points", "Open/Close Curve"); self.assertTrue(self.click_data(260, 80))
         self.assertFalse(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["closed"])
         viewer.setFocus(); QTest.keyClick(viewer, Qt.Key.Key_Return)

@@ -1692,6 +1692,7 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.roto_selected_points = set()
         self.roto_selected_shape_index = -1
+        self.roto_transform_box_enabled = True
         self.warp_drawing = False
         self.warp_draw_side = None
         self.warp_draw_points = []
@@ -3713,6 +3714,25 @@ class Viewer(PanZoomView):
                 self.roto_active_group = group
                 self.roto_toolbar.choose(group, tool)
                 event.accept(); return
+        if (self._has_key_focus() and not event.modifiers() and event.key() == Qt.Key.Key_T
+                and self._roto_context() is not None and self.roto_active_group in (None, "Select")):
+            self.roto_transform_box_enabled = not self.roto_transform_box_enabled
+            self.viewport().update(); event.accept(); return
+        if (self._has_key_focus() and event.modifiers() == Qt.KeyboardModifier.KeypadModifier
+                and self._roto_context() is not None and self.roto_selected_points
+                and event.key() in (Qt.Key.Key_Left,Qt.Key.Key_Right,Qt.Key.Key_Up,Qt.Key.Key_Down)):
+            dx = -1.0 if event.key()==Qt.Key.Key_Left else 1.0 if event.key()==Qt.Key.Key_Right else 0.0
+            dy = -1.0 if event.key()==Qt.Key.Key_Up else 1.0 if event.key()==Qt.Key.Key_Down else 0.0
+            key,node,payload,_=self._roto_context(); shapes=copy.deepcopy(payload.get("shapes",[]))
+            frame=int(self.window.dispatcher.document["time"]["current"])
+            for si,pi in self.roto_selected_points:
+                if si>=len(shapes) or pi>=len(shapes[si]["points"]): continue
+                point=shapes[si]["points"][pi]
+                for field,delta in (("x",dx),("y",dy)):
+                    point[field]=self._roto_scalar_at_frame(point[field],frame,
+                        shape_model.resolve_scalar(point[field],frame,field)+delta,
+                        isinstance(point[field],dict) and point[field].get("curve") is not None)
+            self._commit_roto_shapes(key,node,shapes);event.accept();return
         if (event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier
                 and self._has_key_focus() and self._roto_context() is not None):
             context = self._roto_context()
@@ -4527,7 +4547,7 @@ class Viewer(PanZoomView):
                     for feather_point in feather_points:
                         center = self._roto_scene_point(feather_point, tier)
                         painter.drawEllipse(center, radius*.75, radius*.75)
-            geometry = self._roto_box_geometry(resolved, tier)
+            geometry = self._roto_box_geometry(resolved, tier) if self.roto_transform_box_enabled else None
             if geometry is not None:
                 _, bounds, _, box_pivot = geometry
                 pad = 6.0 / max(abs(self.view_zoom()), .05)
@@ -4814,7 +4834,7 @@ class Viewer(PanZoomView):
                             self.setCursor(Qt.CursorShape.ClosedHandCursor)
                             self.viewport().update(); return True
                 self.viewport().update(); return True
-            geometry = self._roto_box_geometry(resolved, context[3])
+            geometry = self._roto_box_geometry(resolved, context[3]) if self.roto_transform_box_enabled else None
             if geometry is not None:
                 selected, bounds, _, box_pivot = geometry
                 action, handle = self._roto_box_action(scene_pos, bounds, abs(self.view_zoom()), box_pivot)
