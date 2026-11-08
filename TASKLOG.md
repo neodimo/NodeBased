@@ -1,3 +1,9 @@
+## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R4: Nuke's Roto and RotoPaint timing and animation controls (finish 1) (integrator tick)
+
+- **What was done:** `main` `daace7bd` -> `f50727e7` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `f50727e7`: Ran 9437 tests in 649.257 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-07 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R2: Nuke's tool settings strip for Roto and RotoPaint (finish 1) (integrator tick)
 
 - **What was done:** `main` `9b7d1560` -> `0a3d5066` plus this docs commit. Evidence and per-lane commit

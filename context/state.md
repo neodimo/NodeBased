@@ -1,5 +1,32 @@
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (12:25 AM on 2026-11-08 PDT)
+
+`main` moved `daace7bd` -> `f50727e7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `f50727e7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-0005.log`, started 12:05 AM): **Ran 9437 tests in 649.257 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R4: Nuke's Roto and RotoPaint timing and animation controls (finish 1).** Commits:
+  - `f846c7a9` Update Roto UI timing parity ledger
+  - `7f944025` Add Roto keyframe scope controls
+  - `eeac71a2` Add RotoPaint spline and point key controls
+  - `0db75790` Fix Roto autokey defaults and scalar fallback
+  - `68410462` Document remaining RotoPaint timing gaps
+  - `19b9999d` Verify Roto transform pivot parity
+  - `a480a1bb` Match Roto lifetimes and transform keys
+  - `7628625d` Add Roto spline and point key controls
+  - `f9c03c60` Implement node-level Roto Autokey behavior
+  Diff: 15 files changed, 844 insertions(+), 200 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (9:55 PM on 2026-11-07 PDT)
 
 `main` moved `9b7d1560` -> `0a3d5066` (lane commits cherry-picked onto main in lane order) and then to this
