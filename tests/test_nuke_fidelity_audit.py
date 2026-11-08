@@ -228,6 +228,12 @@ class ReferenceDataTests(unittest.TestCase):
 
 
 class MappingTests(unittest.TestCase):
+    def test_kronos_and_oflow_vector_detail_scale_mismatch_stays_unsupported(self):
+        for kind in ("Kronos", "OFlow"):
+            entry = next(e for e in MAPPING["pairs"][kind]["knobs"] if e.get("nuke") == ["vectorDetail"])
+            self.assertEqual(entry["kind"], "unsupported", kind)
+            self.assertIn("different motion-estimation kernel", entry["reason"], kind)
+
     def test_every_nodebased_knob_and_socket_is_listed_exactly_once(self):
         for key, pair in MAPPING["pairs"].items():
             kind = pair["nodebased"]
