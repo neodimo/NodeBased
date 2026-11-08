@@ -1,3 +1,11 @@
+## 2026-11-08 — Lane 9 step R6: Roto per-item layout measurement (partial)
+
+- **What was done:** Added reviewable `per_item` payload/widget mappings and included selected-item row/type measurements in the audit. Roto now measures 40/40 rows and 55/56 widget types; RotoPaint 51/53 and 64/66 after the existing-widget fixes. Every other node row/score was compared against the baseline: 0 of 207 changed. Updated the fidelity report and bundled copy. The selected paint tool is now an editable item combo; clone skew-order and source-time controls are exposed.
+- **Artifacts:** `tools/audit_nuke_fidelity.py`, `docs/parity/nodebased_to_nuke.json`, `nodebased/app.py`, audit tests and paint UI tests, `docs/PARITY_2D_FIDELITY.md` plus `nodebased/data/docs/PARITY_2D_FIDELITY.md`; local branch commit `eced5dbd` (not pushed). Test logs are in the workspace scratch run folder.
+- **State:** Partial. 75 sequential module logs have no failing tests; `tests/isolation.py` has no tests. Remaining RotoPaint dynamic size/transparency fields have no payload controls; adding their behavior would cross the no-data/render-change constraint. No pixel behavior changes were introduced by the UI controls.
+- **Next owner + artifact:** Needs Gonzo to define a compatible representation for the two missing controls; use `docs/parity/nodebased_to_nuke.json` and issue #9 checklist.
+- **Failure mode:** None observed.
+
 ## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R5: Roto and RotoPaint properties panels in Nuke's layout, and motion-blur keys (integrator tick)
 
 - **What was done:** `main` `337dbfca` -> `7ab8681f` plus this docs commit. Evidence and per-lane commit

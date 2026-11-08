@@ -1,3 +1,7 @@
+## 2026-11-08 — Lane 9 step R6, Roto per-item layout measurement (partial)
+
+Evidence: payload-aware measurement is committed at `eced5dbd`; Roto 40/40 rows and 55/56 types, RotoPaint 51/53 and 64/66 after existing-widget fixes. All other 207 node rows/scores remain identical to baseline. Audit/knowledge and selected-item UI tests pass. Remaining dynamic size/transparency controls lack payload fields and are blocked by the no-data/render-change constraint pending Gonzo design. Workspace report: `scratch/nb-lanes/run/report-L9.md`.
+
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (1:45 AM on 2026-11-08 PDT)
