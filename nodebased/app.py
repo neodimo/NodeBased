@@ -15662,8 +15662,8 @@ class Window(QMainWindow):
 
     def add_metadata_view(self, form, key, kind):
         """The metadata inspector on a ViewMetaData or CompareMetaData panel: a key/value table with a
-        search box that filters rows by key or value."""
-        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+        search box, and Nuke-style field selector."""
+        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QComboBox
         try:
             columns, rows = self.metadata_rows(key, kind)
             problem = ""
@@ -15671,7 +15671,11 @@ class Window(QMainWindow):
             columns, rows, problem = ("Key", "Value"), [], str(error)
         search = QLineEdit()
         search.setObjectName("metadata-search")
-        search.setPlaceholderText("Search keys and values")
+        search.setPlaceholderText("Search metadata")
+        within = QComboBox()
+        within.setObjectName("metadata-filter-mode")
+        within.addItems(("keys and values", "keys", "values"))
+        within.setCurrentText("keys and values")
         table = QTableWidget(len(rows), len(columns))
         table.setObjectName("metadata-table")
         table.setHorizontalHeaderLabels(list(columns))
@@ -15684,13 +15688,18 @@ class Window(QMainWindow):
                 item.setToolTip(str(value))
                 table.setItem(row, column, item)
 
-        def filter_rows(text):
+        def filter_rows(_text=None):
+            text = search.text()
             needle = text.strip().lower()
+            mode = within.currentText()
             for row, values in enumerate(rows):
-                table.setRowHidden(row, bool(needle) and not any(needle in str(v).lower() for v in values))
+                candidates = values if mode == "keys and values" else values[:1] if mode == "keys" else values[1:]
+                table.setRowHidden(row, bool(needle) and not any(needle in str(v).lower() for v in candidates))
         search.textChanged.connect(filter_rows)
-        form.addRow(search)
-        form.addRow(table)
+        within.currentTextChanged.connect(filter_rows)
+        form.addRow("Metadata viewer", table)
+        form.addRow("Search metadata for", search)
+        form.addRow("Within", within)
         summary = QLabel(problem or (f"{len(rows)} keys" if kind == "ViewMetaData"
                                      else f"{len(rows)} differing keys"))
         summary.setObjectName("metadata-summary")

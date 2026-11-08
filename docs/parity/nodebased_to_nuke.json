@@ -4097,9 +4097,9 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
    "knobs": [
-    {"nodebased": [], "nuke": ["shownmetadata"], "kind": "panel", "reason": "panel table of every key and value, the properties panel, not a node param (PARITY_2D.md Metadata #1)"},
-    {"nodebased": [], "nuke": ["metadatafilter"], "kind": "panel", "reason": "panel search box, the properties panel, not a node param (PARITY_2D.md Metadata #1)"},
-    {"nodebased": [], "nuke": ["metadatafiltermode"], "kind": "panel", "reason": "the search box matches key or value, the properties panel, not a node param (PARITY_2D.md Metadata #1)"}
+    {"nodebased": ["metadata_table"], "nuke": ["shownmetadata"], "kind": "panel", "reason": "the read-only metadata table in the properties panel (PARITY_2D.md Metadata #1)"},
+    {"nodebased": ["metadata_search"], "nuke": ["metadatafilter"], "kind": "panel", "reason": "the transient properties-panel search field; it filters visible metadata rows only (PARITY_2D.md Metadata #1)"},
+    {"nodebased": ["metadata_filter_mode"], "nuke": ["metadatafiltermode"], "kind": "panel", "reason": "the transient properties-panel search scope; it filters visible metadata rows only (PARITY_2D.md Metadata #1)"}
    ]
   },
   "ModifyMetaData": {

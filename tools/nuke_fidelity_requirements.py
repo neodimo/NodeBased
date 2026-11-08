@@ -449,8 +449,13 @@ def _longest_increasing(seq):
 def layout_component(kind, entries, knobs):
     """(fraction, detail): half the share of paired knobs already in Nuke's order (longest run kept in order), half the share
     of paired single-param main-tab knobs whose label reads as the guide's label or the knob's scripting name. None when fewer than two paired knobs are laid out."""
-    from nodebased.knobs import knob_layout
+    from nodebased.knobs import KnobGroup, knob_layout
     groups = knob_layout(kind)
+    if kind == "ViewMetaData":
+        # Transient panel widgets are measured here without pretending they are document params.
+        groups = (KnobGroup("table", ("metadata_table",), label="metadata viewer"),
+                  KnobGroup("string", ("metadata_search",), label="search metadata for"),
+                  KnobGroup("enum", ("metadata_filter_mode",), label="within"))
     position, label_of = {}, {}
     for i, g in enumerate(groups):
         for p in g.params:
@@ -458,7 +463,7 @@ def layout_component(kind, entries, knobs):
             label_of.setdefault(p, g.label)
     first = {}
     for e in entries:
-        if e["kind"] in PAIRED:
+        if e["kind"] in PAIRED or (kind == "ViewMetaData" and e["kind"] == "panel"):
             for n in e["nuke"]:
                 first.setdefault(n, e)
     seq, names = [], []

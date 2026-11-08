@@ -458,7 +458,7 @@ def _widget_kind(group, param):
 
 def panel_shape_metrics(nuke_node, pair, node_type, key=None):
     """Measure shared guide rows and widget-kind matches; these lines do not affect fidelity."""
-    from nodebased.knobs import knob_layout
+    from nodebased.knobs import KnobGroup, knob_layout
     from nodebased.ops2d_chrome import is_open_choice
     import nuke_fidelity_requirements as req
 
@@ -469,6 +469,11 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         for name in entry.get("nuke", []):
             mapped.setdefault(name, set()).update(entry.get("nodebased", []))
     groups = knob_layout(node_type) if node_type else ()
+    if node_type == "ViewMetaData":
+        # This node's transient properties-panel controls do not live in SPECS/params.
+        groups = (KnobGroup("table", ("metadata_table",), label="metadata viewer"),
+                  KnobGroup("string", ("metadata_search",), label="search metadata for"),
+                  KnobGroup("enum", ("metadata_filter_mode",), label="within"))
     splits = _split_table()["knobs"].get(key or "", {})
     row_sets = [set(g.params) for g in groups]
     components = {n for e in entries if e.get("kind") == "components" for n in e.get("nuke", [])}

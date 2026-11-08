@@ -8,7 +8,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QTableWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QLineEdit, QTableWidget
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
@@ -71,9 +71,16 @@ class MetadataPanelTests(unittest.TestCase):
     def test_search_filters_by_key_or_value(self):
         panel, table = self.panel("v")
         search = panel.findChild(QLineEdit, "metadata-search")
+        mode = panel.findChild(QComboBox, "metadata-filter-mode")
+        self.assertEqual(mode.currentText(), "keys and values")
         search.setText("SH010")
         shown = [table.item(r, 0).text() for r in range(table.rowCount()) if not table.isRowHidden(r)]
         self.assertEqual(shown, ["show/shot"])
+        mode.setCurrentText("keys")
+        self.assertEqual([table.item(r, 0).text() for r in range(table.rowCount()) if not table.isRowHidden(r)], [])
+        mode.setCurrentText("values")
+        self.assertEqual([table.item(r, 0).text() for r in range(table.rowCount()) if not table.isRowHidden(r)], ["show/shot"])
+        mode.setCurrentText("keys and values")
         search.setText("lens")
         shown = [table.item(r, 0).text() for r in range(table.rowCount()) if not table.isRowHidden(r)]
         self.assertEqual(shown, ["exr/lens"])

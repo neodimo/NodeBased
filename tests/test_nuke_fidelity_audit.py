@@ -151,6 +151,17 @@ class PanelShapeMetricTests(unittest.TestCase):
         for key in ("Reformat", "Glow", "Keylight"):
             self.assertEqual(metrics(key)[1]["score"], 1.0, key)
 
+    def test_view_metadata_custom_panel_controls_follow_nukes_order_and_labels(self):
+        pair = MAPPING["pairs"]["ViewMetaData"]
+        knobs = NUKE["nodes"]["ViewMetaData"]["knobs"]
+        score, detail = requirements.layout_component("ViewMetaData", pair["knobs"], knobs)
+        self.assertEqual(score, 1.0)
+        self.assertEqual(detail["layout_order"], (3, 3))
+        self.assertEqual(detail["layout_labels"], (3, 3))
+        units, _ = audit.build_units(NUKE, MAPPING)
+        node = next(item for item in units if item.get("nodebased") == "ViewMetaData")
+        self.assertEqual(node["score"], 100.0)
+
     def test_read_shared_rows_and_widget_types_are_measured(self):
         rows, types = audit.panel_shape_metrics(NUKE["nodes"]["Read"], MAPPING["pairs"]["Read"], "Read")
         self.assertEqual((rows["matched"], rows["total"], rows["score"]), (8, 8, 1.0))
@@ -223,7 +234,7 @@ class MappingTests(unittest.TestCase):
                 continue
             spec = SPECS[kind]
             with self.subTest(pair=key):
-                listed = [p for e in pair["knobs"] for p in e["nodebased"]]
+                listed = [p for e in pair["knobs"] if e["kind"] != "panel" for p in e["nodebased"]]
                 self.assertEqual(set(listed), set(spec["params"]))
                 for p in spec["params"]:
                     self.assertGreaterEqual(listed.count(p), 1, p)

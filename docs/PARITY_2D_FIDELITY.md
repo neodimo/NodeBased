@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 96.0 / 100** (167 nodes scored, rank-weighted; 98.1 counting only the nodes NodeBased has).
+**Overall fidelity: 96.7 / 100** (167 nodes scored, rank-weighted; 98.7 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.6 (98.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -43,7 +43,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Keyer | 93.2 | 80.3 | 93.1 | 11 |
 | Merge | 99.7 | 99.3 | 99.7 | 12 |
 | Transform | 97.5 | 94.3 | 97.4 | 20 |
-| Metadata | 91.2 | 96.0 | 100.0 | 5 |
+| Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 81.5 | 45.2 | 81.5 | 12 |
 
 Behaviour checked: 97 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
@@ -258,7 +258,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | ViewMetaData | `ViewMetaData` | supported | 80.0 | 100.0 | 100 (3/3) | - | - | 100 | - | - | 0 | - | no fixture |
+| 1 | ViewMetaData | `ViewMetaData` | supported | 100.0 | 100.0 | 100 (3/3) | - | - | 100 | - | - | 100 | - | no fixture |
 | 2 | ModifyMetaData | `ModifyMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | - | - | - | no fixture |
 | 3 | CopyMetaData | `CopyMetaData` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | - | 100 | - | no fixture |
 | 4 | AddTimeCode | `AddTimeCode` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | - | 100 | - | no fixture |
@@ -446,7 +446,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Reconcile3D | — | 57.1% (4/7) | 1 |
 | TVIScale | — | 100.0% (3/3) | 0 |
 | LensDistortion | 0.0% (0/10) | 79.3% (23/29) | 23 |
-| ViewMetaData | — | 0.0% (0/1) | 2 |
+| ViewMetaData | — | — | 3 |
 | ModifyMetaData | — | — | 1 |
 | CopyMetaData | — | 100.0% (1/1) | 4 |
 | AddTimeCode | — | 100.0% (5/5) | 0 |
@@ -480,7 +480,7 @@ Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on o
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
 **Lowest shared-row scores:** GenerateLUT (0.0%); LensDistortion (0.0%); MarkerRemoval (0.0%); Root (0.0%); Write (0.0%).
-**Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); ViewMetaData (0.0%).
+**Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); IBKColor (33.3%).
 
 ## The 30 largest gaps
 
@@ -488,36 +488,36 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 
 | # | Nuke node | NodeBased | Weighted gap | Fidelity | What is missing |
 |---|---|---|---|---|---|
-| 1 | ViewMetaData (Metadata #1) | `ViewMetaData` | 20.00 | 80.0 | nothing missing that the guide lists |
-| 2 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
-| 3 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 4 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
-| 5 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 6 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 7 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
-| 8 | Viewer (Image #3) | `Viewer` | 3.76 | 88.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 9 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 10 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 11 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 12 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 13 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 14 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
-| 15 | Roto (Draw #1) | `Roto` | 1.70 | 98.3 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
-| 16 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 17 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
-| 18 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
-| 19 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
-| 20 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
-| 21 | PointsTo3D (Transform #17) | `PointsTo3D` | 0.92 | 84.4 | nothing missing that the guide lists |
-| 22 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
-| 23 | LensDistortion (Transform #20) | `Undistort` | 0.85 | 83.0 | 22 secondary knobs missing; knob order differs from Nuke's (27 of 33 in order) |
-| 24 | Blur (Filter #1) | `Blur` | 0.80 | 99.2 | nothing missing that the guide lists |
-| 25 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
-| 26 | Sharpen (Filter #2) | `Sharpen` | 0.77 | 98.5 | nothing missing that the guide lists |
-| 27 | Reformat (Transform #5) | `Reformat` | 0.72 | 96.4 | primary knobs missing: `box_pixel_aspect` |
-| 28 | Sampler (Color #20) | `Sampler` | 0.68 | 45.8 | primary knobs missing: `normalize_x`, `sample_current`, `lut`; node chrome missing: channels selector |
-| 29 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
-| 30 | Remove (Channel #5) | `Remove` | 0.57 | 97.1 | nothing missing that the guide lists |
+| 1 | BlinkScript (Other #6) | - | 16.67 | 0.0 | no node: needs a Blink-equivalent runtime (PARITY_2D.md Other #6) |
+| 2 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 3 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
+| 4 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
+| 5 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
+| 6 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
+| 7 | Viewer (Image #3) | `Viewer` | 3.76 | 88.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 8 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 9 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 10 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 11 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 12 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 13 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
+| 14 | Roto (Draw #1) | `Roto` | 1.70 | 98.3 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
+| 15 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
+| 16 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
+| 17 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 18 | ChannelMerge (Channel #4) | `ChannelMerge` | 1.09 | 95.7 | node chrome missing: bbox handling |
+| 19 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
+| 20 | PointsTo3D (Transform #17) | `PointsTo3D` | 0.92 | 84.4 | nothing missing that the guide lists |
+| 21 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
+| 22 | LensDistortion (Transform #20) | `Undistort` | 0.85 | 83.0 | 22 secondary knobs missing; knob order differs from Nuke's (27 of 33 in order) |
+| 23 | Blur (Filter #1) | `Blur` | 0.80 | 99.2 | nothing missing that the guide lists |
+| 24 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
+| 25 | Sharpen (Filter #2) | `Sharpen` | 0.77 | 98.5 | nothing missing that the guide lists |
+| 26 | Reformat (Transform #5) | `Reformat` | 0.72 | 96.4 | primary knobs missing: `box_pixel_aspect` |
+| 27 | Sampler (Color #20) | `Sampler` | 0.68 | 45.8 | primary knobs missing: `normalize_x`, `sample_current`, `lut`; node chrome missing: channels selector |
+| 28 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
+| 29 | Remove (Channel #5) | `Remove` | 0.57 | 97.1 | nothing missing that the guide lists |
+| 30 | Tracker (Transform #3) | `Tracker` | 0.56 | 98.3 | nothing missing that the guide lists |
 
 ## Formula cases
 
