@@ -148,6 +148,8 @@ class PanelShapeMetricTests(unittest.TestCase):
         rows, types = metrics("Viewer")
         self.assertEqual((types["matched"], types["total"], types["unknown"]), (14, 17, 3))
         self.assertEqual([m[0] for m in types["missed"]], ["clip_warning", "downrez", "overscan"])
+        for name in audit._VIEWER_WIDGETS:
+            self.assertEqual(requirements.not_pixel_reason("Viewer", name), "viewer display only", name)
         for key in ("Reformat", "Glow", "Keylight"):
             self.assertEqual(metrics(key)[1]["score"], 1.0, key)
 

@@ -531,7 +531,7 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         # Empty `panel` pairs classified NOT_PIXEL (for example Tracker's viewer
         # presentation controls) count as paired controls, while having no node widget
         # whose type can be measured here.
-        if not params and req.not_pixel_reason(node_type, name):
+        if not params and req.not_pixel_reason(node_type, name) and not viewer:
             continue
         actual = ([_READ_NODE_WIDGETS[p] for p in params if p in _READ_NODE_WIDGETS] if read
                   else [_VIEWER_WIDGETS[name]] if viewer and name in _VIEWER_WIDGETS
