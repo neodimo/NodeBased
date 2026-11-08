@@ -1,5 +1,27 @@
 ## 2026-11-07 — Lane 9 step R0, Roto UI reference (finish)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:45 PM on 2026-11-07 PDT)
+
+`main` moved `d90471d8` -> `5bdaa938` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `5bdaa938` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1107-1725.log`, started 5:25 PM): **Ran 9401 tests in 648.151 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step R3: Nuke's stroke/shape list in the Roto and RotoPaint panels.** Commits:
+  - `ffb1fd71` Roto list: fixed-width Name column and a horizontal scrollbar so names stay readable in a narrow dock
+  - `b474dfaa` TASKLOG: Lane 2 step R3 note
+  - `b4855d31` Roto UI ledger: close the R3 list and command rows, list score 30.0 to 85.0, overall 38.2 to 42.0
+  - `5544fe1f` Roto step R3: the stroke/shape list is Nuke's tree table, with right-click commands and layers as folders
+  Diff: 14 files changed, 1443 insertions(+), 219 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, GPT-6 Luna) (4:45 PM on 2026-11-07 PDT)
 
 `main` moved `ce81f135` -> `562ba572` (lane commits cherry-picked onto main in lane order) and then to this

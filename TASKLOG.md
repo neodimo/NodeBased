@@ -1,3 +1,9 @@
+## 2026-11-07 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step R3: Nuke's stroke/shape list in the Roto and RotoPaint panels (integrator tick)
+
+- **What was done:** `main` `d90471d8` -> `5bdaa938` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `5bdaa938`: Ran 9401 tests in 648.151 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-07 — Lane 2 step R3, the Roto and RotoPaint stroke/shape list
 
 - **What was done (evidence):** `nodebased/rotolist.py` (new) is one tree table for both panels: Name, Visible, Lock, Overlay color, Color, Invert, Blending, Motion blur, Lifetime, Source; each cell edits its stored field through `set_shapes` / `set_paint_items` (one undo step). Right-click: Add new layer, Duplicate, Copy/Cut > Curve, Paste > Spline, Delete, Set lifetime / frame range, Planar-track. Layers are folders: payload gets an optional `layers` list and items an optional `layer` name (validated in `shapes.validate_layers`; `layer_states` applies a layer's Visible/Lock to its children in `resolve_shapes` / `resolve_paint_items`); a set command that names no `layers` keeps the node's own, so Viewer edits never drop folders. `overlay_color` (3 floats) is an optional item field, drawn only by the Viewer outline. No schema bump: documents without the new keys are untouched.
