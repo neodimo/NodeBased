@@ -127,7 +127,7 @@ class TransformHandleTests(unittest.TestCase):
         before, generation = np.array(self.window.frame, copy=True), self.window.frame_generation
         start = self.window.viewer.mapFromScene(self.window.viewer._transform_scene_point(300, 250))
         target = self.window.viewer.mapFromScene(self.window.viewer._transform_scene_point(340, 280))
-        self.drag(start, target, Qt.KeyboardModifier.ControlModifier)
+        self.drag(start, target, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
         self.assertTrue(wait_until(lambda: self.window.frame_generation != generation))
         p = self.window.dispatcher.document["nodes"]["t"]["params"]
         self.assertNotEqual((p["center_x"], p["center_y"]), (300, 250))

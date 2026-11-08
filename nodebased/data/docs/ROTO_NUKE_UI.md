@@ -9,9 +9,9 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Toolbar and tools | 32 | 0 | 0 | 100.0 |
 | Tool settings | 0 | 136 | 54 | 35.8 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
-| Viewer editing | 24 | 5 | 2 | 85.5 |
+| Viewer editing | 25 | 4 | 2 | 87.1 |
 | Timing and animation | 0 | 9 | 1 | 45.0 |
-| Overall | — | — | — | 52.3 |
+| Overall | — | — | — | 52.5 |
 
 ## Largest gaps
 
@@ -69,7 +69,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 20 | R1 · viewer side | Ellipse | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 21 | R1 · viewer side | Transform-box center/pivot | differs | `Viewer._roto_box_result`; `RotoPanel.build_panel` shape transform center controls; interaction differs from Nuke handles. |  |
 | 22 | R1 · viewer side | Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
-| 23 | R1 · viewer side | Transform-box pivot modify | differs | `Viewer._roto_box_action`, `_roto_box_result`; Nuke Ctrl/Cmd+Shift handle gesture is absent. |  |
+| 23 | R1 · viewer side | Transform-box pivot modify | match | `Viewer.mousePressEvent` maps Ctrl/Cmd+Shift drag on the transform handle to pivot modification. |  |
 | 24 | R1 · viewer side | Cusped Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 25 | R1 · viewer side | Nudge point | match | `Viewer.keyPressEvent` numeric keypad arrows | A keypad arrow nudges the selected point by one pixel. |
 | 26 | R1 · viewer side | Open Spline | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |

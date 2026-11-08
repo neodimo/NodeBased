@@ -1682,8 +1682,8 @@
     },
     {
       "name": "Transform-box pivot modify",
-      "status": "differs",
-      "location": "`Viewer._roto_box_action`, `_roto_box_result`; Nuke Ctrl/Cmd+Shift handle gesture is absent.",
+      "status": "match",
+      "location": "`Viewer.mousePressEvent` maps Ctrl/Cmd+Shift drag on the transform handle to pivot modification.",
       "difference": ""
     },
     {
