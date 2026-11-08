@@ -9,6 +9,117 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, Q
                                QColorDialog, QLabel, QToolButton, QSpinBox)
 
 
+def build_paint_timing_controls(window, key, index):
+    """Selected RotoPaint spline keys and key-scope controls for shape items."""
+    items = window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", [])
+    if not 0 <= index < len(items) or items[index].get("kind") != "shape":
+        return None
+    root = QWidget(); root.setObjectName("rotopaint-timing-keys")
+    layout = QVBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0)
+    frame = int(window.dispatcher.document["time"]["current"])
+    def frames_for(item):
+        found = set()
+        def walk(value):
+            if isinstance(value, dict):
+                if value.get("curve"):
+                    found.update(int(k["frame"]) for k in value["curve"].get("keys", []))
+                else:
+                    for child in value.values(): walk(child)
+            elif isinstance(value, list):
+                for child in value: walk(child)
+        walk(item)
+        return sorted(found)
+    frames = frames_for(items[index])
+    bar = QHBoxLayout()
+    count = QLabel(f"Key {frames.index(frame)+1 if frame in frames else 0} / {len(frames)}")
+    count.setObjectName("rotopaint-spline-key-count"); bar.addWidget(count)
+    for title, delta in (("Previous key", -1), ("Next key", 1)):
+        target = max((f for f in frames if f < frame), default=None) if delta < 0 else min((f for f in frames if f > frame), default=None)
+        button = QPushButton(title); button.setObjectName("rotopaint-spline-previous-key" if delta < 0 else "rotopaint-spline-next-key")
+        button.setEnabled(target is not None)
+        button.clicked.connect(lambda _=False, at=target: window.set_time(current=at) if at is not None else None)
+        bar.addWidget(button)
+    layout.addLayout(bar)
+    for title, delete, name in (("Set spline key", False, "rotopaint-spline-set-key"),
+                                ("Delete spline key", True, "rotopaint-spline-delete-key")):
+        button = QPushButton(title); button.setObjectName(name)
+        def edit_spline(_=False, remove=delete):
+            at = int(window.dispatcher.document["time"]["current"])
+            entries = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
+            if index >= len(entries): return
+            item = entries[index]
+            for point in item.get("points", []):
+                for field in (*shape_model.POINT_FIELDS, *shape_model.FEATHER_POINT_FIELDS):
+                    old = point.get(field, 0.0)
+                    point[field] = delete_scalar_key(old, at) if remove else set_scalar_key(old, field, at)
+            window.command({"op": "set_paint_items", "id": key, "items": entries})
+        button.clicked.connect(edit_spline); layout.addWidget(button)
+    for title, delete, name in (("Set selected point keys", False, "rotopaint-point-set-keys"),
+                                ("Delete selected point keys", True, "rotopaint-point-delete-keys")):
+        button = QPushButton(title); button.setObjectName(name)
+        def edit_points(_=False, remove=delete):
+            at = int(window.dispatcher.document["time"]["current"])
+            selected = {pi for si, pi in getattr(window.viewer, "roto_selected_points", set()) if si == 0}
+            entries = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
+            if index >= len(entries): return
+            item = entries[index]
+            for pi in selected:
+                if 0 <= pi < len(item.get("points", [])):
+                    point = item["points"][pi]
+                    for field in (*shape_model.POINT_FIELDS, *shape_model.FEATHER_POINT_FIELDS):
+                        old = point.get(field, 0.0)
+                        point[field] = delete_scalar_key(old, at) if remove else set_scalar_key(old, field, at)
+            if selected: window.command({"op": "set_paint_items", "id": key, "items": entries})
+        button.clicked.connect(edit_points); layout.addWidget(button)
+    scope = QComboBox(); scope.setObjectName("rotopaint-key-scope")
+    for label, value in (("All", "all"), ("Spline", "spline"), ("Transform", "transform"), ("Attributes", "attributes")):
+        scope.addItem(label, value)
+    layout.addWidget(scope)
+    for title, delete, name in (("Set item key", False, "rotopaint-item-set-key"),
+                                ("Delete item key", True, "rotopaint-item-delete-key")):
+        button = QPushButton(title); button.setObjectName(name)
+        def edit_scope(_=False, remove=delete):
+            at = int(window.dispatcher.document["time"]["current"])
+            entries = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
+            if index >= len(entries): return
+            item = entries[index]; mode = scope.currentData()
+            paths = []
+            if mode in ("all", "spline"):
+                paths.extend(("points", pi, field) for pi, point in enumerate(item.get("points", []))
+                             for field in (*shape_model.POINT_FIELDS, *shape_model.FEATHER_POINT_FIELDS))
+            if mode in ("all", "transform"):
+                item.setdefault("transform", {})
+                paths.extend(("transform", field) for field in shape_model.TRANSFORM_DEFAULTS)
+            if mode in ("all", "attributes"):
+                paths.extend((field,) for field in ("opacity", "feather"))
+                paths.extend(("color", ci) for ci in range(len(item.get("color", []))))
+            for path in paths:
+                target = item
+                for part in path[:-1]: target = target[part]
+                field = path[-1]
+                old = target.get(field, shape_model.TRANSFORM_DEFAULTS.get(field, 0.0)) if isinstance(target, dict) else target[field]
+                target[field] = delete_scalar_key(old, at) if remove else set_scalar_key(old, field, at)
+            window.command({"op": "set_paint_items", "id": key, "items": entries})
+        button.clicked.connect(edit_scope); layout.addWidget(button)
+    return root
+
+
+def set_scalar_key(value, field, at):
+    number = shape_model.resolve_scalar(value, at, field)
+    curve = copy.deepcopy(value.get("curve")) if isinstance(value, dict) and value.get("curve") else {"interpolation": "smooth", "keys": []}
+    keys = [item for item in curve["keys"] if item["frame"] != at]
+    keys.append({"frame": at, "value": number}); keys.sort(key=lambda item: item["frame"])
+    return {"value": number, "curve": {**curve, "keys": keys}}
+
+
+def delete_scalar_key(value, at):
+    if not isinstance(value, dict) or not value.get("curve"):
+        return value
+    updated = copy.deepcopy(value)
+    updated["curve"]["keys"] = [item for item in updated["curve"]["keys"] if item["frame"] != at]
+    return updated["value"] if not updated["curve"]["keys"] else updated
+
+
 def add_tracking_actions(layout, window, key):
     track = QPushButton("Track selected shape or stroke")
     track.setObjectName("roto-track-shape")

@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QTreeWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QListWidget, QPushButton, QTreeWidget, QWidget
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
@@ -178,6 +178,43 @@ class RotoPaintViewerTests(unittest.TestCase):
         self.assertAlmostEqual(point_value(item["points"][0]["x"]),30.0,delta=.2)
         self.assertEqual(len(self.window.dispatcher.undo_stack),2)
         self.assertEqual(item["kind"],"shape")
+
+    def test_roto_paint_shape_key_controls_scope_spline_and_selected_points(self):
+        points = [{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0,
+                   "out_x": 0.0, "out_y": 0.0} for x, y in ((10, 10), (90, 10), (50, 90))]
+        shape = {"kind": "shape", "name": "keyed", "mode": "union", "opacity": 1.0,
+                 "feather": 0.0, "points": points, "blend": "over", "visible": True}
+        self.window.command({"op": "set_paint_items", "id": "paint", "items": [shape]})
+        self.window.viewer.paint_selected_item_index = 0
+        self.window.viewer.roto_selected_points = {(0, 1)}
+        self.window.rebuild_properties_dock(); APP.processEvents()
+        panel = self.window.findChildren(QWidget, "rotopaint-timing-keys")[-1]
+        self.assertIsNotNone(panel)
+        baseline = len(self.window.dispatcher.undo_stack)
+        panel.findChild(QPushButton, "rotopaint-spline-set-key").click()
+        keyed_item = self.window.dispatcher.document["node_data"]["paint"]["items"][0]
+        self.assertTrue(all(p["x"]["curve"]["keys"] == [{"frame": 1, "value": p["x"]["value"]}]
+                            for p in keyed_item["points"]))
+        self.assertEqual(len(self.window.dispatcher.undo_stack), baseline + 1)
+        self.window.set_time(last=2)
+        self.window.set_time(current=2)
+        self.assertEqual(self.window.dispatcher.document["time"]["current"], 2)
+        baseline = len(self.window.dispatcher.undo_stack)
+        self.window.rebuild_properties_dock(); APP.processEvents()
+        self.window.viewer.roto_selected_points = {(0, 1)}
+        panel = self.window.findChildren(QWidget, "rotopaint-timing-keys")[-1]
+        panel.findChild(QPushButton, "rotopaint-point-set-keys").click()
+        self.assertEqual(len(self.window.dispatcher.undo_stack), baseline + 1)
+        keyed_item = self.window.dispatcher.document["node_data"]["paint"]["items"][0]
+        self.assertEqual([k["frame"] for k in keyed_item["points"][1]["x"]["curve"]["keys"]], [1, 2])
+        self.assertEqual([k["frame"] for k in keyed_item["points"][0]["x"]["curve"]["keys"]], [1])
+        self.assertEqual(len(self.window.dispatcher.undo_stack), baseline + 1)
+        scope = panel.findChild(QComboBox, "rotopaint-key-scope")
+        scope.setCurrentIndex(scope.findData("transform"))
+        panel.findChild(QPushButton, "rotopaint-item-set-key").click()
+        keyed_item = self.window.dispatcher.document["node_data"]["paint"]["items"][0]
+        self.assertEqual(keyed_item["transform"]["rotate"]["curve"]["keys"][0]["frame"], 2)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), baseline + 2)
 
 
 class RotoPaintLayerEditorTests(unittest.TestCase):

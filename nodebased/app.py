@@ -14347,6 +14347,12 @@ class Window(QMainWindow):
                 if selected is not None:
                     edit_item = layer_items[selected]
 
+                    if edit_item.get("kind") == "shape":
+                        from .rotopanel import build_paint_timing_controls
+                        timing_controls = build_paint_timing_controls(self, key, selected)
+                        if timing_controls is not None:
+                            form.addRow(timing_controls)
+
                     def update_layer(path, value, k=key, idx=selected):
                         entries = current_layer_items(k)
                         if idx >= len(entries): return
