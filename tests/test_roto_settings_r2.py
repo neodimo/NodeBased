@@ -4,7 +4,8 @@ import tempfile
 import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, QRectF, Qt
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QApplication
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, atomic_save, empty_document, load_document
@@ -172,3 +173,50 @@ class RotoSettingsR2Tests(unittest.TestCase):
         moved = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
         self.assertEqual((moved["x"], moved["y"]), (20.0,15.0))
         self.assertEqual((moved["feather_x"], moved["feather_y"]), (-5.0,-3.0))
+
+    def test_control_drag_sketches_a_closed_roto_shape(self):
+        viewer = self.window.viewer
+        points = [(10,10),(25,10),(40,25),(40,40)]
+        scenes = [viewer._roto_scene_point({"x":float(x),"y":float(y)}, 1) for x,y in points]
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        for tool in ("Bezier", "B-Spline"):
+            viewer.roto_toolbar.choose("Shapes", tool)
+            self.assertTrue(viewer.hit_press(scenes[0], Qt.MouseButton.LeftButton, ctrl))
+            for scene in scenes[1:-1]:
+                self.assertTrue(viewer.hit_move(scene, ctrl))
+            self.assertTrue(viewer.hit_release(scenes[-1], Qt.MouseButton.LeftButton, ctrl))
+            shape = self.window.dispatcher.document["node_data"]["r"]["shapes"][-1]
+            self.assertTrue(shape["closed"])
+            self.assertEqual(shape.get("curve_type", "bezier"), "bspline" if tool == "B-Spline" else "bezier")
+            self.assertGreaterEqual(len(shape["points"]), 3)
+
+    def test_reveal_onion_skin_paints_the_selected_source_with_configured_opacity(self):
+        self.window.command({"op":"create", "id":"plate", "type":"Constant"})
+        self.window.command({"op":"set", "id":"plate", "param":"width", "value":100})
+        self.window.command({"op":"set", "id":"plate", "param":"height", "value":100})
+        self.window.command({"op":"set", "id":"plate", "param":"blue", "value":1.0})
+        self.window.command({"op":"create", "id":"source", "type":"Constant"})
+        self.window.command({"op":"set", "id":"source", "param":"width", "value":100})
+        self.window.command({"op":"set", "id":"source", "param":"height", "value":100})
+        self.window.command({"op":"set", "id":"source", "param":"red", "value":1.0})
+        self.window.command({"op":"create", "id":"p", "type":"RotoPaint"})
+        self.window.command({"op":"connect", "id":"p", "input":"image", "source":"plate"})
+        self.window.command({"op":"connect", "id":"p", "input":"input2", "source":"source"})
+        self.window.command({"op":"view", "id":"p"})
+        self.window.graph.scene().clearSelection(); self.window.graph.items_by_id["p"].setSelected(True)
+        APP.processEvents()
+        viewer = self.window.viewer
+        viewer.roto_toolbar.choose("Clone/Reveal", "Reveal")
+        viewer.roto_toolbar.set_setting("p", "Reveal", "source", "foreground")
+        viewer.roto_toolbar.set_setting("p", "Reveal", "onion_skin", True)
+        viewer.roto_toolbar.set_setting("p", "Reveal", "onion_skin_opacity", 0.25)
+        image = QImage(100, 100, QImage.Format.Format_ARGB32_Premultiplied); image.fill(Qt.GlobalColor.transparent)
+        viewer._image_rect = QRectF(0, 0, 100, 100)
+        painter = QPainter(image)
+        try:
+            self.assertTrue(viewer._paint_reveal_onion(painter, viewer._roto_context()))
+        finally:
+            painter.end()
+        pixel = image.pixelColor(50, 50)
+        self.assertGreater(pixel.red(), pixel.blue())
+        self.assertGreaterEqual(pixel.alpha(), 50)

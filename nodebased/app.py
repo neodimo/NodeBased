@@ -48,6 +48,7 @@ from . import radialcommands
 from . import graphlook
 from . import gpu3d
 from . import roto
+from . import paintknobs
 from . import rotolist
 from . import gpupicture
 from .playback_trace import mark as _trace_mark, mark_frame as _trace_frame
@@ -1763,7 +1764,8 @@ class RotoViewerToolbar(QWidget):
                                      "source_skew_order":"source_transform_skew_order", "source_center":"source_transform_center"}
                     updated = copy.deepcopy(items); updated[index][source_fields[setting]] = copy.deepcopy(value)
                     self.viewer.window.command({"op": "set_paint_items", "id": key, "items": updated}, render=False)
-        if setting in {"hide_points", "hide_splines", "show_paint_stroke_splines", "hide_transform_handles"}:
+        if setting in {"hide_points", "hide_splines", "show_paint_stroke_splines", "hide_transform_handles",
+                       "onion_skin", "onion_skin_opacity"}:
             self.viewer.viewport().update()
 
     def _make_settings_widget(self, tool, control, value, key):
@@ -1902,6 +1904,8 @@ class Viewer(PanZoomView):
         self.fit_margin = 0.0          # scene units kept clear around the picture when it is fitted (show overscan)
         self._overlay_view = None      # set while render_overlay paints for the direct picture
         self._overlay_images = [None, None]
+        self._reveal_onion_cache_key = None
+        self._reveal_onion_cache_image = None
         self._hit_zoom = None          # logical pixels per scene unit while the direct picture drives the hit tests
         self._keys_from_direct = False  # true while a key the direct picture received is being handled
         self.cursor_sink = None        # called with the cursor (or None) so the direct picture shows the same shape
@@ -1911,6 +1915,7 @@ class Viewer(PanZoomView):
         # a point or a control path is painted (especially for EXR overscan and tiled previews).
         self.roto_key = None
         self.roto_drawing = False
+        self.roto_free_sketch = False
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_draw_press = None
@@ -3724,12 +3729,55 @@ class Viewer(PanZoomView):
         frame = int(document["time"]["current"])
         return shape_model.resolve_roto_shapes(payload, frame, document, context[3])
 
+    def _reveal_onion_image(self, context):
+        """Display the selected Reveal source as a cached, view-transformed viewer overlay."""
+        key, node, _payload, tier = context
+        if node["type"] != "RotoPaint" or self.paint_tool != "reveal":
+            return None
+        settings = self.roto_toolbar._tool_settings(key, "Reveal")
+        if not settings.get("onion_skin", False):
+            return None
+        slot = "input2" if settings.get("source", "background") == "foreground" else "image"
+        source = node.get("inputs", {}).get(slot)
+        if source is None:
+            return None
+        document = self.window.dispatcher.document
+        time = document.get("time", {})
+        frame = paintknobs.source_time_frame({
+            "source_time_offset": settings.get("source_time_offset", 0.0),
+            "source_time_offset_type": settings.get("source_time_offset_type", "relative")},
+            int(time.get("current", 1)), int(time.get("first", 1)), int(time.get("last", 1)))
+        channel = self.window.channels.currentText()
+        exposure = self.window.exposure.value()
+        view = self.window.effective_view(document)
+        look = self.window.look_args(document)
+        cache_key = (self.window.dispatcher.revision, key, source, frame, tier, channel,
+                     exposure, view, repr(look))
+        if cache_key != self._reveal_onion_cache_key:
+            raster = self.window.evaluator.evaluate_raster(document, target=source, frame=frame, tier=tier)
+            self._reveal_onion_cache_image = to_qimage(raster.pixels, exposure, channel,
+                background=document["settings"]["viewer"]["background"], view=view, look=look)
+            self._reveal_onion_cache_key = cache_key
+        return self._reveal_onion_cache_image
+
+    def _paint_reveal_onion(self, painter, context):
+        image = self._reveal_onion_image(context)
+        if image is None:
+            return False
+        settings = self.roto_toolbar._tool_settings(context[0], "Reveal")
+        painter.save()
+        painter.setOpacity(max(0.0, min(1.0, float(settings.get("onion_skin_opacity", 0.5)))))
+        painter.drawImage(self._image_rect, image)
+        painter.restore()
+        return True
+
     def begin_roto_draw(self, key=None):
         context = self._roto_context()
         if context is None or (key is not None and context[0] != key):
             return False
         self.roto_key = context[0]
         self.roto_drawing = True
+        self.roto_free_sketch = False
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_drag = None
@@ -3742,6 +3790,7 @@ class Viewer(PanZoomView):
 
     def cancel_roto_edit(self):
         self.roto_drawing = False
+        self.roto_free_sketch = False
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_drag = None
@@ -3948,8 +3997,8 @@ class Viewer(PanZoomView):
         else:
             old_x = shape_model.resolve_scalar(point["x"], frame, "x")
             old_y = shape_model.resolve_scalar(point["y"], frame, "y")
-            active_tool = (self.roto_toolbar.tool_by_group.get("Points")
-                           if self.roto_active_group == "Points" else self.roto_selection_tool)
+            active_tool = (self.roto_toolbar.tool_by_group.get(self.roto_active_group)
+                           if self.roto_active_group in ("Points", "Shapes") else self.roto_selection_tool)
             linked = self.roto_toolbar._tool_settings(key, active_tool).get("feather_link", True)
             if not linked:
                 local_dx, local_dy = shape_model.unresolve_feather_vector((old_x - x, old_y - y),
@@ -4043,6 +4092,13 @@ class Viewer(PanZoomView):
                 self.roto_active_group = group
                 self.roto_toolbar.choose(group, tool)
                 event.accept(); return
+        if (self._has_key_focus() and not event.modifiers() and event.key() == Qt.Key.Key_T
+                and self._roto_context() is not None and self._paint_context() is not None
+                and self.paint_tool == "reveal" and self.roto_active_group == "Clone/Reveal"):
+            settings = self.roto_toolbar._tool_settings(self._roto_context()[0], "Reveal")
+            self.roto_toolbar.set_setting(self._roto_context()[0], "Reveal", "onion_skin",
+                                          not settings.get("onion_skin", False))
+            event.accept(); return
         if (self._has_key_focus() and not event.modifiers() and event.key() == Qt.Key.Key_T
                 and self._roto_context() is not None and self.roto_active_group in (None, "Select")):
             self.roto_transform_box_enabled = not self.roto_transform_box_enabled
@@ -4230,6 +4286,16 @@ class Viewer(PanZoomView):
             self.viewport().update()
             return True
         if button == Qt.MouseButton.LeftButton and self.roto_drawing:
+            if self.roto_free_sketch:
+                context = self._roto_context()
+                if context is not None:
+                    end = self._roto_data_point(scene_pos, context[1], context[3])
+                    if not self.roto_draw_points or (scene_pos-self.roto_draw_points[-1]["scene"]).manhattanLength() >= 3:
+                        self.roto_draw_points.append({"x":end[0],"y":end[1],"in_x":0.0,"in_y":0.0,
+                                                      "out_x":0.0,"out_y":0.0,"scene":scene_pos})
+                    self.roto_free_sketch = False
+                    self.finish_roto_draw(closed=True)
+                return True
             if self.roto_draw_cursor is not None:
                 context = self._roto_context()
                 if context is not None:
@@ -4810,6 +4876,7 @@ class Viewer(PanZoomView):
         context = self._roto_context()
         if context is not None:
             _, _, payload, tier = context
+            self._paint_reveal_onion(painter, context)
             overlay_tool = (self.roto_toolbar.tool_by_group.get("Points")
                             if self.roto_active_group == "Points" else self.roto_selection_tool)
             select_settings = payload.get("tool_settings", {}).get(overlay_tool, {})
@@ -5179,6 +5246,11 @@ class Viewer(PanZoomView):
             if self.roto_active_group == "Shapes":
                 if self.begin_roto_draw(context[0]):
                     self.roto_draw_cursor = scene_pos; self.roto_draw_press = scene_pos
+                    if modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
+                        self.roto_free_sketch = True
+                        x, y = self._roto_data_point(scene_pos, context[1], context[3])
+                        self.roto_draw_points.append({"x":x,"y":y,"in_x":0.0,"in_y":0.0,
+                                                      "out_x":0.0,"out_y":0.0,"scene":scene_pos})
                     return True
             if (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)) == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier):
                 if self._insert_roto_point(scene_pos, context): return True
@@ -5460,6 +5532,13 @@ class Viewer(PanZoomView):
             return True
         if self.roto_drawing:
             self.roto_draw_cursor = scene_pos
+            if self.roto_free_sketch:
+                context = self._roto_context()
+                if context is not None and (not self.roto_draw_points or
+                        (scene_pos-self.roto_draw_points[-1]["scene"]).manhattanLength() >= 3):
+                    x, y = self._roto_data_point(scene_pos, context[1], context[3])
+                    self.roto_draw_points.append({"x":x,"y":y,"in_x":0.0,"in_y":0.0,
+                                                  "out_x":0.0,"out_y":0.0,"scene":scene_pos})
             self.viewport().update()
             return True
         if self.warp_drawing:
