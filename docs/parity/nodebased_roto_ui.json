@@ -240,9 +240,9 @@
         },
         {
           "label": "Constant selection mode",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.hit_press",
+          "difference": ""
         },
         {
           "label": "Autokey",
@@ -293,9 +293,9 @@
         },
         {
           "label": "Constant selection mode",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.hit_press",
+          "difference": ""
         },
         {
           "label": "Autokey",
@@ -346,9 +346,9 @@
         },
         {
           "label": "Constant selection mode",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.hit_press",
+          "difference": ""
         },
         {
           "label": "Autokey",
@@ -399,9 +399,9 @@
         },
         {
           "label": "Constant selection mode",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.hit_press",
+          "difference": ""
         },
         {
           "label": "Autokey",
@@ -422,9 +422,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         }
       ]
     },
@@ -439,9 +439,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         }
       ]
     },
@@ -456,9 +456,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         }
       ]
     },
@@ -473,9 +473,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         }
       ]
     },
@@ -490,9 +490,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         }
       ]
     },
@@ -507,9 +507,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         }
       ]
     },
@@ -566,9 +566,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
@@ -637,9 +637,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
@@ -708,9 +708,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
@@ -779,9 +779,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
@@ -850,9 +850,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
@@ -921,9 +921,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
@@ -992,9 +992,9 @@
         },
         {
           "label": "Feather link",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
@@ -1228,9 +1228,9 @@
       "controls": [
         {
           "label": "Paint source",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._finish_paint; Viewer._reveal_onion_image",
+          "difference": ""
         },
         {
           "label": "Opacity",
@@ -1270,15 +1270,15 @@
         },
         {
           "label": "Onion skin",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._paint_reveal_onion",
+          "difference": ""
         },
         {
           "label": "Onion skin opacity",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer._paint_reveal_onion",
+          "difference": ""
         }
       ]
     },
@@ -1693,9 +1693,9 @@
     },
     {
       "name": "Draw Bezier/B-Spline freely",
-      "status": "differs",
-      "location": "`Viewer.begin_roto_draw` and `Viewer.finish_roto_draw`; B-Spline geometry is supported, Ctrl/Cmd sketch-draw mode remains absent.",
-      "difference": ""
+      "status": "match",
+      "location": "Viewer.hit_press; Viewer.hit_move; Viewer.hit_release; Viewer.finish_roto_draw",
+      "difference": "Ctrl/Cmd+drag commits a closed freehand spline."
     },
     {
       "name": "Bezier/B-Spline handles/tension",
@@ -1748,9 +1748,9 @@
     },
     {
       "name": "Reveal onion skin",
-      "status": "differs",
-      "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
-      "difference": "The Reveal toggle and opacity are exposed; the onion-skin overlay is still absent."
+      "status": "match",
+      "location": "RotoViewerToolbar.settings_strip; Viewer._paint_reveal_onion",
+      "difference": "The selected Reveal source appears as an opacity-controlled overlay."
     },
     {
       "name": "Selection tool cycle",

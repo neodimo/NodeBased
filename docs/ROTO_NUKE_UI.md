@@ -7,23 +7,20 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Section | Match | Differs | Missing | Score |
 |---|---:|---:|---:|---:|
 | Toolbar and tools | 32 | 0 | 0 | 100.0 |
-| Tool settings | 158 | 32 | 0 | 91.6 |
+| Tool settings | 178 | 12 | 0 | 96.8 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
-| Viewer editing | 25 | 5 | 1 | 88.7 |
+| Viewer editing | 27 | 3 | 1 | 91.9 |
 | Timing and animation | 0 | 9 | 1 | 45.0 |
-| Overall | — | — | — | 90.1 |
-
+| Overall | — | — | — | 94.0 |
 ## Largest gaps
 
 1. Transform-box center/pivot behavior still differs from Nuke.
-2. Freehand sketch drawing and B-Spline tension/handle workflows remain open.
-3. Reveal onion-skin display is still absent; its controls now have a settings-strip slot.
-4. Timing and animation controls do not reproduce Nuke’s complete per-shape/per-point workflow.
-5. Selection labels, constant-selection mode, transform-handle-on-move and the Autokey behavior remain incomplete.
-6. Clone view selection and Reveal paint-source/onion-skin behavior need follow-up.
-7. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
-8. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
-
+2. B-Spline tension gestures remain open; the official guide names the gesture but does not specify a tension mapping.
+3. Autokey behavior remains owned by Lane 2 step R4; its toolbar slot is reserved.
+4. Clone view selection depends on multi-view projects, which NodeBased does not support.
+5. Timing and animation controls do not reproduce Nuke’s complete per-shape/per-point workflow.
+6. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
+7. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
 ## Proposed implementation steps
 
 | Step | Side | Scope |
@@ -73,7 +70,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 24 | R1 · viewer side | Cusped Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 25 | R1 · viewer side | Nudge point | match | `Viewer.keyPressEvent` numeric keypad arrows | A keypad arrow nudges the selected point by one pixel. |
 | 26 | R1 · viewer side | Open Spline | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
-| 27 | R1 · viewer side | Draw Bezier/B-Spline freely | differs | `Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; no Ctrl/Cmd sketch mode or B-Spline implementation. |  |
+| 27 | R1 · viewer side | Draw Bezier/B-Spline freely | match | Viewer.hit_press; Viewer.hit_move; Viewer.hit_release; Viewer.finish_roto_draw | Ctrl/Cmd+drag sketches and closes the selected Bezier or B-Spline. |
 | 28 | R1 · viewer side | Shapes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 29 | R1 · viewer side | Bezier/B-Spline handles/tension | differs | `Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag. |  |
 | 30 | R1 · viewer side | Brush | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
@@ -93,7 +90,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 44 | R1 · viewer side | Sharpen | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 45 | R1 · viewer side | Clone offset | match | `Viewer.hit_press`, `Viewer.hit_move`, `Viewer.hit_release`; Ctrl/Cmd+drag sets the offset; Ctrl/Cmd+Shift resets it. |  |
 | 46 | R1 · viewer side | Smear | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 47 | R1 · viewer side | Reveal onion skin | differs | `RotoViewerToolbar.settings_strip`; `Viewer.paint_overlays` | The Reveal toggle and opacity are exposed; the onion-skin overlay is still absent. |
+| 47 | R1 · viewer side | Reveal onion skin | match | RotoViewerToolbar.settings_strip; Viewer._reveal_onion_image; Viewer._paint_reveal_onion | The selected Reveal input is shown at the configured onion opacity; T toggles it. |
 | 48 | R1 · viewer side | Blur/Sharpen/Smear tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 49 | R1 · viewer side | Selection tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar shortcut selects the group and repeated presses cycle its tools. |
 | 50 | R1 · viewer side | Dodge | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
@@ -107,7 +104,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 58 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 59 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 60 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 61 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 61 | R2 · viewer side | tool · Constant selection mode | match | RotoViewerToolbar.settings_strip; Viewer.hit_press | Empty-space clicks preserve a selection while constant selection mode is enabled. |
 | 62 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 63 | R2 · viewer side | tool · Label points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 64 | R2 · viewer side | tool · Hide splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
@@ -115,7 +112,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 66 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 67 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 68 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 69 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 69 | R2 · viewer side | tool · Constant selection mode | match | RotoViewerToolbar.settings_strip; Viewer.hit_press | Empty-space clicks preserve a selection while constant selection mode is enabled. |
 | 70 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 71 | R2 · viewer side | tool · Label points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 72 | R2 · viewer side | tool · Hide splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
@@ -123,7 +120,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 74 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 75 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 76 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 77 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 77 | R2 · viewer side | tool · Constant selection mode | match | RotoViewerToolbar.settings_strip; Viewer.hit_press | Empty-space clicks preserve a selection while constant selection mode is enabled. |
 | 78 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 79 | R2 · viewer side | tool · Label points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 80 | R2 · viewer side | tool · Hide splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
@@ -131,20 +128,20 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 82 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 83 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
 | 84 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 85 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 85 | R2 · viewer side | tool · Constant selection mode | match | RotoViewerToolbar.settings_strip; Viewer.hit_press | Empty-space clicks preserve a selection while constant selection mode is enabled. |
 | 86 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 87 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 88 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 88 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 89 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 90 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 90 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 91 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 92 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 92 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 93 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 94 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 94 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 95 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 96 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 96 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 97 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
-| 98 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 98 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 99 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 100 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 101 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -153,7 +150,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 104 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 105 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 106 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 107 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 107 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 108 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 109 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 110 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -164,7 +161,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 115 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 116 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 117 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 118 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 118 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 119 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 120 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 121 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -175,7 +172,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 126 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 127 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 128 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 129 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 129 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 130 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 131 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 132 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -186,7 +183,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 137 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 138 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 139 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 140 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 140 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 141 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 142 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 143 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -197,7 +194,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 148 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 149 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 150 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 151 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 151 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 152 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 153 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 154 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -208,7 +205,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 159 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 160 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 161 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 162 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 162 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 163 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 164 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 165 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -219,7 +216,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 170 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 171 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 172 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 173 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 173 | R2 · viewer side | tool · Feather link | match | RotoViewerToolbar.settings_strip; Viewer._commit_roto_drag | With feather link off, moving a shape point keeps its feather point in place. |
 | 174 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 175 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
 | 176 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -255,15 +252,15 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 206 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 207 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 208 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 209 | R2 · viewer side | tool · Paint source | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 209 | R2 · viewer side | tool · Paint source | match | RotoViewerToolbar.settings_strip; Viewer._finish_paint | Paint source applies to new strokes and the selected stroke. |
 | 210 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 211 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 212 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 213 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 214 | R2 · viewer side | tool · Time offset | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 215 | R2 · viewer side | tool · Time offset type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 216 | R2 · viewer side | tool · Onion skin | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
-| 217 | R2 · viewer side | tool · Onion skin opacity | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 216 | R2 · viewer side | tool · Onion skin | match | RotoViewerToolbar.settings_strip; Viewer._paint_reveal_onion | Reveal displays the selected source input as an onion-skin overlay. |
+| 217 | R2 · viewer side | tool · Onion skin opacity | match | RotoViewerToolbar.settings_strip; Viewer._paint_reveal_onion | Onion-skin opacity controls the overlay opacity. |
 | 218 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 219 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 220 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
