@@ -275,6 +275,20 @@ class RotoPaintLayerEditorTests(unittest.TestCase):
         field.setCurrentIndex(field.findData("blur"))
         self.assertEqual(self.items()[1]["tool"], "blur")
 
+    def test_dynamic_size_and_transparency_are_selected_stroke_checkboxes(self):
+        self.window.viewer.paint_selected_item_index = 1
+        panel = self.panel()
+        size = panel.findChild(QCheckBox, "rotopaint-layer-dynamic-size")
+        transparency = panel.findChild(QCheckBox, "rotopaint-layer-dynamic-transparency")
+        self.assertIsNotNone(size)
+        self.assertIsNotNone(transparency)
+        self.assertTrue(size.isChecked())
+        self.assertTrue(transparency.isChecked())
+        size.setChecked(False)
+        transparency.setChecked(False)
+        self.assertFalse(self.items()[1]["dynamic_size"])
+        self.assertFalse(self.items()[1]["dynamic_transparency"])
+
     def test_selecting_a_shape_shows_its_mode_and_feather_instead_of_brush_fields(self):
         self.window.viewer.paint_selected_item_index = 0
         panel = self.panel()

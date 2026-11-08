@@ -313,6 +313,23 @@ class StrokeTabTests(unittest.TestCase):
         self.assertFalse(np.array_equal(fixed, dynamic))
         np.testing.assert_array_equal(fixed[:, :8], dynamic[:, :8])              # at full pressure the two agree
 
+    def test_dynamic_size_and_transparency_are_per_stroke_and_legacy_defaults_match(self):
+        pts = [pt(6.5, 16.5, 1.0), pt(24.5, 16.5, 0.45)]
+        brush = {"size": 10.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.2, "strength": 0.2}
+        baseline = render(graph([stroke(points=pts, brush=brush)])).pixels
+        legacy_explicit = render(graph([stroke(points=pts, brush=brush, pressure_size=True,
+                                                   pressure_opacity=True)])).pixels
+        np.testing.assert_array_equal(baseline, legacy_explicit)
+        size_off = render(graph([stroke(points=pts, brush=brush, dynamic_size=False,
+                                        dynamic_transparency=True)])).pixels
+        opacity_off = render(graph([stroke(points=pts, brush=brush, dynamic_size=True,
+                                           dynamic_transparency=False)])).pixels
+        both_off = render(graph([stroke(points=pts, brush=brush, dynamic_size=False,
+                                        dynamic_transparency=False)])).pixels
+        self.assertFalse(np.array_equal(baseline, size_off))
+        self.assertFalse(np.array_equal(baseline, opacity_off))
+        self.assertFalse(np.array_equal(baseline, both_off))
+
     def test_write_on_draws_only_the_chosen_stretch_of_the_path(self):
         pts = [pt(4.5, 16.5), pt(28.5, 16.5)]
         part = render(graph([stroke(points=pts, write_on={"start": 0.25, "end": 0.75})])).pixels

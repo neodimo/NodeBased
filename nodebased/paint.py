@@ -90,8 +90,9 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
     tool, blend = stroke["tool"], stroke["blend"]
     dynamic = bool(stroke.get("dynamic_hardness", False))
     buildup = bool(stroke.get("buildup", False))
-    pressure_size = bool(stroke.get("pressure_size", True))
-    pressure_opacity = bool(stroke.get("pressure_opacity", True))
+    # Legacy strokes used pressure for both dimensions; keep that exact default.
+    pressure_size = bool(stroke.get("dynamic_size", stroke.get("pressure_size", True)))
+    pressure_opacity = bool(stroke.get("dynamic_transparency", stroke.get("pressure_opacity", True)))
     paint_source = stroke.get("source", "color")
     if tool == "paint" and blend == "over" and paint_source == "color":
         # Most brush marks touch a small part of a tile. Rasterise and composite only that

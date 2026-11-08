@@ -1,3 +1,7 @@
+## 2026-11-08 — Lane 9 step R6 finish: RotoPaint dynamic stroke controls
+
+The two omitted RotoPaint per-stroke controls are implemented. Each stroke accepts `dynamic_size` and `dynamic_transparency`; the selected-stroke panel exposes checkboxes, and newly drawn strokes seed them from the R2 pressure size/opacity settings. `paint.apply_stroke` falls back through the legacy `pressure_size` / `pressure_opacity` values to `True`, preserving old documents pixel-exactly. Pixel tests cover each toggle on/off with varying pressure and old-document equivalence; UI tests cover checkbox editing. Audit final rows/types: Roto 40/40 and 55/56; RotoPaint 53/54 and 66/67. Generated audit diff changes zero other node rows. Required named tests and grep-matched Roto/direct-viewer modules pass. Full suite, Windows, and visual QA were not run for this finish step.
+
 ## 2026-11-08 — Lane 9 step R6, Roto per-item layout measurement (partial)
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (3:25 AM on 2026-11-08 PDT)

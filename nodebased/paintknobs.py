@@ -51,7 +51,7 @@ SHAPE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "feather_falloff", "feather_model
                      "falloff_power", "lifetime", "cap_start", "cap_end", "color", "blend_mode", *ROTO_SOURCE_FIELDS)
 STROKE_ITEM_FIELDS = (*COMMON_FIELDS, "effect", "dynamic_hardness", "buildup", "write_on", "source_transform", "source_round",
                       "source_filter", "source_black_outside", "source_time_offset", "source_time_offset_type",
-                      "pressure_opacity", "pressure_size")
+                      "pressure_opacity", "pressure_size", "dynamic_size", "dynamic_transparency")
 SOURCE_TRANSFORM_DEFAULTS = {"rotate": 0.0, "scale_x": 1.0, "scale_y": 1.0, "skew_x": 0.0, "skew_y": 0.0,
                              "center_x": 0.0, "center_y": 0.0}
 def roto_source_spec(shape):
@@ -149,7 +149,8 @@ def validate_stroke_extras(item, where):
     validate_common(item, where)
     if "effect" in item and not (_number(item["effect"]) and 0.0 <= item["effect"] <= 4096.0):
         raise ValueError(f"{where}.effect must be a number between 0 and 4096")
-    for field in ("dynamic_hardness", "buildup", "source_round", "source_black_outside", "pressure_opacity", "pressure_size"):
+    for field in ("dynamic_hardness", "buildup", "source_round", "source_black_outside", "pressure_opacity", "pressure_size",
+                  "dynamic_size", "dynamic_transparency"):
         if field in item and type(item[field]) is not bool:
             raise ValueError(f"{where}.{field} must be a boolean")
     if "write_on" in item:

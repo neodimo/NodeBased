@@ -1,3 +1,11 @@
+## 2026-11-08 — Lane 9 step R6 finish: dynamic RotoPaint stroke controls
+
+- **What was done:** Added per-stroke `dynamic_size` and `dynamic_transparency` payload booleans, selected-stroke checkboxes, and seeding from the R2 pressure size/opacity tool settings. Legacy render fallback remains pressure-on for both, matching `paint.apply_stroke` before this change. Added pressure-varying pixel and UI tests. The audit now measures both fields; final rows/types: Roto 40/40 and 55/56, RotoPaint 53/54 and 66/67. Other node rows are byte-for-byte unchanged in the generated report comparison (0 changed).
+- **Artifacts:** `nodebased/app.py`, `nodebased/paint.py`, `nodebased/paintknobs.py`, `docs/parity/nodebased_to_nuke.json`, both copies of `docs/PARITY_2D_FIDELITY.md`, and two test modules. All changes are local to this lane branch until integrated.
+- **State:** Done for the two left-out controls. Targeted audit, parity knowledge, UI, pixel, knob, core, and all grep-matched Roto/direct-viewer modules passed. Legacy render equivalence passed pixel-exactly. No Windows or real-display visual run was part of this step.
+- **Next owner + concrete artifact:** Integrator takes this branch; use `tools/audit_nuke_fidelity.py --write` and the final report at `scratch/nb-lanes/run/report-L9.md`.
+- **Failure mode:** The earlier partial handoff paused because these two controls lacked per-stroke payload fields. Existing strokes require the renderer's previous pressure-on default; the new fields preserve it when absent.
+
 ## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R6: measure Roto and RotoPaint's per-item controls in the layout audit, then fix what it finds (integrator tick)
 
 - **What was done:** `main` `07a087cc` -> `6485687a` plus this docs commit. Evidence and per-lane commit

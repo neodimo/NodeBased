@@ -1727,6 +1727,7 @@ class RotoViewerToolbar(QWidget):
                        "source_time_offset_type": "source_time_offset_type", "source_round": "source_round",
                        "source_black_outside": "source_black_outside", "source_filter": "source_filter",
                        "pressure_opacity": "pressure_opacity", "pressure_size": "pressure_size",
+                       "dynamic_size": "dynamic_size", "dynamic_transparency": "dynamic_transparency",
                        "pressure_hardness": "dynamic_hardness", "buildup": "buildup"}
         payload = self.viewer.window.dispatcher.document.get("node_data", {}).get(key, {})
         if context[1]["type"] == "Roto":
@@ -2861,6 +2862,8 @@ class Viewer(PanZoomView):
         item["dynamic_hardness"] = bool(tool_settings.get("pressure_hardness", False))
         item["pressure_opacity"] = bool(tool_settings.get("pressure_opacity", True))
         item["pressure_size"] = bool(tool_settings.get("pressure_size", True))
+        item["dynamic_transparency"] = item["pressure_opacity"]
+        item["dynamic_size"] = item["pressure_size"]
         self.dustbust_preset = False
         self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
@@ -14624,10 +14627,14 @@ class Window(QMainWindow):
                             form.addRow(title, field)
                         item_spin("effect", "Effect", 0, 4096, .1, 0, ("effect",))
                         for field_name, label in (("dynamic_hardness", "Dynamic hardness"), ("buildup", "Build up"),
+                                                  ("dynamic_size", "Dynamic size"),
+                                                  ("dynamic_transparency", "Dynamic transparency"),
                                                   ("source_round", "Round clone source"),
                                                   ("source_black_outside", "Black outside clone source")):
                             field = QCheckBox(label); field.setObjectName("rotopaint-layer-" + field_name.replace("_", "-"))
-                            field.setChecked(edit_item.get(field_name, False))
+                            fallback = {"dynamic_size": edit_item.get("pressure_size", True),
+                                        "dynamic_transparency": edit_item.get("pressure_opacity", True)}
+                            field.setChecked(edit_item.get(field_name, fallback.get(field_name, False)))
                             field.toggled.connect(lambda value, n=field_name: update_layer((n,), bool(value)))
                             form.addRow(field)
                         # Validation requires the two write-on ends together, so changing either
