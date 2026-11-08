@@ -10,14 +10,14 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Tool settings | 189 | 1 | 0 | 99.7 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
 | Viewer editing | 27 | 3 | 1 | 91.9 |
-| Timing and animation | 4 | 5 | 1 | 65.0 |
-| Overall | — | — | — | 96.6 |
+| Timing and animation | 7 | 2 | 1 | 80.0 |
+| Overall | — | — | — | 97.2 |
 ## Largest gaps
 
 1. Transform-box center/pivot behavior still differs from Nuke.
 2. B-Spline tension gestures remain open; the official guide names the gesture but does not specify a tension mapping.
 3. Clone view selection depends on multi-view projects, which NodeBased does not support.
-4. Timing and animation controls still lack per-field transform keys and complete per-shape key scopes.
+4. Timing still lacks the full per-shape key scope menu and motion-blur keys; ripple editing remains undocumented in the traversed guide.
 5. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
 6. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
 ## Proposed implementation steps
@@ -311,9 +311,9 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 266 | R4 · panel side | Set key: spline | match | `RotoPanel.build_panel`; creates keys on every selected shape point and shows current/total count. |  |
 | 267 | R4 · panel side | Delete key: spline | match | `RotoPanel.build_panel`; removes selected spline point keys at the current frame. |  |
 | 268 | R4 · panel side | Set/delete point keys | match | `RotoPanel.build_panel`; set/delete affects only selected points and their point scalars. |  |
-| 269 | R4 · panel side | Set key: transform | differs | `RotoPanel.build_panel` per-transform key buttons; no RotoPaint spline-key control. |  |
-| 270 | R4 · panel side | Lifetime types | differs | `RotoPanel.build_panel` / `roto-shape-lifetime-type`; `Window.build_node_panel` / `rotopaint-layer-lifetime`. |  |
-| 271 | R4 · panel side | Lifetime endpoints | differs | Roto shape lifetime start/end fields; RotoPaint panel exposes range endpoints, with different control placement. |  |
+| 269 | R4 · panel side | Set key: transform | match | `RotoPanel.build_panel` and `Window.build_node_panel`; per-field keys on Roto and RotoPaint transforms. |  |
+| 270 | R4 · panel side | Lifetime types | match | Roto and RotoPaint panels expose All, Start to, Single, To end and Range for shapes and strokes. |  |
+| 271 | R4 · panel side | Lifetime endpoints | match | Roto and RotoPaint panels show From/To only when used by the selected lifetime mode. |  |
 | 272 | R4 · panel side | Ripple editing | missing | No ripple timing operation in `RotoPanel.build_panel` or `Window.build_node_panel`; Nuke chapter has no such workflow page. |  |
 | 273 | R4 · panel side | Per-shape keyframe controls | differs | `RotoPanel.build_panel` / shape key button and scalar key controls; no same selected-item key scope menu. |  |
 | 274 | R4 · panel side | Motion blur keys | differs | `RotoPanel.build_panel` / motion blur samples/shutter/offset controls; `Window.build_node_panel` selected-item fields. |  |

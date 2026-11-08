@@ -244,14 +244,21 @@ def _choose_paint_color(viewer):
                                     lambda rgba: setattr(viewer, "paint_color", list(rgba)))
 
 
-def _lifetime_for_mode(mode, current, frame):
+def _lifetime_for_mode(mode, current, frame, *, shape=False):
     """Rebuild a paint item's lifetime dict for a new mode, keeping its existing frame numbers
     where they still apply so switching modes in the layer editor never invents new ones."""
-    if mode == "range":
-        first = int(current.get("first", frame))
-        return {"mode": "range", "first": first, "last": max(first, int(current.get("last", first)))}
-    if mode in ("single", "from_current"):
-        return {"mode": mode, "first": int(current.get("first", frame))}
+    if shape:
+        first = int(current.get("start", frame)); last = int(current.get("end", frame))
+        if mode == "range": return {"type": mode, "start": first, "end": max(first, last)}
+        if mode == "single": return {"type": mode, "start": first}
+        if mode == "start_to": return {"type": mode, "end": last}
+        if mode == "to_end": return {"type": mode, "start": first}
+        return {"type": "all"}
+    first = int(current.get("first", frame)); last = int(current.get("last", frame))
+    if mode == "range": return {"mode": mode, "first": first, "last": max(first, last)}
+    if mode == "single": return {"mode": mode, "first": first}
+    if mode == "start_to": return {"mode": mode, "last": last}
+    if mode == "to_end": return {"mode": mode, "first": first}
     return {"mode": "all"}
 
 
@@ -3552,6 +3559,11 @@ class Viewer(PanZoomView):
                 "translate_y": values["translate_y"] + m10*dx + m11*dy}
 
     def _commit_roto_shapes(self, key, node, shapes):
+        """Commit a viewer shape edit through the common payload/undo boundary.
+
+        Coordinate changes are prepared by `_roto_scalar_at_frame`, which reads the node-level
+        Autokey switch before this single commit path records them.
+        """
         if node["type"] == "RotoPaint":
             items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
             shape_items = [i for i, item in enumerate(items) if item.get("kind") == "shape"]
@@ -4034,15 +4046,7 @@ class Viewer(PanZoomView):
             point["x"] = self._roto_scalar_at_frame(point["x"], frame, x, animated)
             point["y"] = self._roto_scalar_at_frame(point["y"], frame, y, animated)
         self.roto_drag = None
-        if node["type"] == "RotoPaint":
-            items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
-            shape_items = [i for i, item in enumerate(items) if item.get("kind") == "shape"]
-            if shape_index >= len(shape_items): return False
-            target = items[shape_items[shape_index]]
-            target.update(shapes[shape_index])
-            self.window.command({"op": "set_paint_items", "id": key, "items": items})
-        else:
-            self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
+        self._commit_roto_shapes(key, node, shapes)
         return True
 
     def _preview_document_drag(self, drag_attribute, commit):
@@ -14347,6 +14351,22 @@ class Window(QMainWindow):
                         target[path[-1]] = value
                         self.command({"op": "set_paint_items", "id": k, "items": entries})
 
+                    def toggle_layer_transform_key(name, default, k=key, idx=selected):
+                        entries = current_layer_items(k)
+                        if idx >= len(entries): return
+                        frame = int(self.dispatcher.document["time"]["current"])
+                        transform = entries[idx].setdefault("transform", {})
+                        old = transform.get(name, default)
+                        value = shape_model.resolve_scalar(old, frame, name)
+                        curve = copy.deepcopy(old.get("curve")) if isinstance(old, dict) and old.get("curve") else {"interpolation": "smooth", "keys": []}
+                        keys = [item for item in curve["keys"] if item["frame"] != frame]
+                        if isinstance(old, dict) and old.get("curve") and len(keys) != len(curve["keys"]):
+                            transform[name] = old["value"] if not keys else {"value": old["value"], "curve": {**curve, "keys": keys}}
+                        else:
+                            keys.append({"frame": frame, "value": value}); keys.sort(key=lambda item: item["frame"])
+                            transform[name] = {"value": value, "curve": {**curve, "keys": keys}}
+                        self.command({"op": "set_paint_items", "id": k, "items": entries})
+
                     form.addRow(QLabel(f"Edit layer: {edit_item['name']}"))
                     name_field = QLineEdit(edit_item["name"])
                     name_field.setObjectName("rotopaint-layer-name")
@@ -14420,9 +14440,15 @@ class Window(QMainWindow):
                             ("skew_x", "Skew X", 0.0, -89, 89, 1.0),
                             ("skew_y", "Skew Y", 0.0, -89, 89, 1.0)):
                         field = QDoubleSpinBox(); field.setObjectName("rotopaint-layer-transform-" + tname)
-                        field.setRange(lo, hi); field.setSingleStep(step); field.setValue(float(transform.get(tname, default)))
+                        field.setRange(lo, hi); field.setSingleStep(step); field.setValue(shape_model.resolve_scalar(transform.get(tname, default), current_time, tname))
                         field.valueChanged.connect(lambda v, n=tname: update_layer(("transform", n), float(v)))
-                        transform_form.addRow(label, field)
+                        row = QWidget(); row_layout = QHBoxLayout(row); row_layout.setContentsMargins(0, 0, 0, 0)
+                        row_layout.addWidget(field, 1)
+                        key_button = QPushButton("◇"); key_button.setFixedWidth(26)
+                        key_button.setObjectName("rotopaint-layer-key-transform-" + tname)
+                        key_button.setAccessibleName(label + " key")
+                        key_button.clicked.connect(lambda _=False, n=tname, d=default: toggle_layer_transform_key(n, d))
+                        row_layout.addWidget(key_button); transform_form.addRow(label, row)
                     skew_order = ElidingComboBox(); skew_order.setObjectName("rotopaint-layer-transform-skew-order")
                     for value in shape_model.SKEW_ORDERS: skew_order.addItem(value, value)
                     skew_order.setCurrentIndex(skew_order.findData(transform.get("skew_order", "XY")))
@@ -14463,6 +14489,23 @@ class Window(QMainWindow):
                             field.setChecked(edit_item.get(field_name, default))
                             field.toggled.connect(lambda value, n=field_name: update_layer((n,), bool(value)))
                             form.addRow(field)
+                        life = edit_item.get("lifetime", {"type": "all"})
+                        life_type = ElidingComboBox(); life_type.setObjectName("rotopaint-layer-lifetime")
+                        for title, value in (("All frames", "all"), ("Start to frame", "start_to"),
+                                             ("Single frame", "single"), ("Frame to end", "to_end"),
+                                             ("Frame range", "range")):
+                            life_type.addItem(title, value)
+                        life_type.setCurrentIndex(life_type.findData(life.get("type", "all")))
+                        life_type.currentIndexChanged.connect(lambda idx2, box=life_type, current=life:
+                            update_layer(("lifetime",), _lifetime_for_mode(box.itemData(idx2), current, current_time, shape=True)))
+                        form.addRow("Lifetime", life_type)
+                        for title, field_name in (("From", "start"), ("To", "end")):
+                            field = QSpinBox(); field.setObjectName("rotopaint-layer-lifetime-" + field_name)
+                            field.setRange(-1000000, 1000000); field.setValue(int(life.get(field_name, current_time)))
+                            field.valueChanged.connect(lambda value, part=field_name, kind=life.get("type", "all"):
+                                update_layer(("lifetime",), _lifetime_for_mode(kind, {**current_layer_items(key)[selected].get("lifetime", {}), part: int(value)}, current_time, shape=True)))
+                            visible = life.get("type", "all") in (("single", "to_end", "range") if field_name == "start" else ("start_to", "range"))
+                            field.setVisible(visible); form.addRow(title, field)
                         item_spin("stroke-width", "Stroke width", 0, 4096, .5, 1, ("stroke_width",))
                         item_spin("falloff-power", "Feather falloff", 0, 16, .1, 1, ("falloff_power",))
                         for name, label, values, default in (
@@ -14540,22 +14583,28 @@ class Window(QMainWindow):
                             form.addRow(color_button)
                         layer_lifetime = ElidingComboBox()
                         layer_lifetime.setObjectName("rotopaint-layer-lifetime")
-                        for label2, value in (("Single frame", "single"), ("All frames", "all"),
-                                              ("Frame range", "range"), ("From current frame", "from_current")):
+                        for label2, value in (("All frames", "all"), ("Start to frame", "start_to"),
+                                              ("Single frame", "single"), ("Frame to end", "to_end"),
+                                              ("Frame range", "range")):
                             layer_lifetime.addItem(label2, value)
-                        layer_lifetime.setCurrentIndex(layer_lifetime.findData(edit_item["lifetime"]["mode"]))
+                        old_mode = edit_item["lifetime"]["mode"]
+                        if old_mode == "from_current": old_mode = "to_end"
+                        layer_lifetime.setCurrentIndex(layer_lifetime.findData(old_mode))
                         layer_lifetime.currentIndexChanged.connect(
                             lambda idx2, box=layer_lifetime, current=edit_item["lifetime"]: update_layer(
                                 ("lifetime",), _lifetime_for_mode(box.itemData(idx2), current, current_time)))
                         form.addRow("Lifetime", layer_lifetime)
-                        if edit_item["lifetime"]["mode"] == "range":
-                            for title, lkey in (("First frame", "first"), ("Last frame", "last")):
+                        mode = old_mode
+                        if mode in ("range", "single", "to_end", "start_to"):
+                            fields = (("first", "From"),) if mode in ("single", "to_end") else (("last", "To"),) if mode == "start_to" else (("first", "From"), ("last", "To"))
+                            for lkey, title in fields:
                                 range_field = QSpinBox()
                                 range_field.setObjectName(f"rotopaint-layer-lifetime-{lkey}")
                                 range_field.setRange(-1000000, 1000000)
-                                range_field.setValue(int(edit_item["lifetime"][lkey]))
+                                range_field.setValue(int(edit_item["lifetime"].get(lkey, current_time)))
                                 range_field.valueChanged.connect(
-                                    lambda value, lk=lkey: update_layer(("lifetime", lk), int(value)))
+                                    lambda value, lk=lkey, current=edit_item["lifetime"], selected_mode=mode: update_layer(
+                                        ("lifetime",), _lifetime_for_mode(selected_mode, {**current_layer_items(key)[selected].get("lifetime", {}), lk: int(value)}, current_time)))
                                 form.addRow(title, range_field)
                 mix_body = QWidget()
                 mix_body.setObjectName("rotopaint-mix-body")

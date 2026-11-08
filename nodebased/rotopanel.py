@@ -425,7 +425,9 @@ def build_panel(window, key):
         plain_spin("motion_blur_offset", "Motion blur custom offset", -8.0, 8.0, 0.05, 0.0)
         life = shape.get("lifetime") or {"type": "all"}
         def set_life(part, value):
-            now = dict(shape.get("lifetime") or {"type": "all"})
+            live_entries = current()
+            if i >= len(live_entries): return
+            now = dict(live_entries[i].get("lifetime") or {"type": "all"})
             now[part] = value
             if now["type"] == "range" and now.get("end", now.get("start", 1)) < now.get("start", 1):
                 now["end"] = now["start"]
@@ -435,13 +437,30 @@ def build_panel(window, key):
         life_type = QComboBox(); life_type.setObjectName("roto-shape-lifetime-type")
         for val in shape_model.LIFETIME_TYPES: life_type.addItem(val.replace("_", " ").capitalize(), val)
         life_type.setCurrentIndex(max(0, life_type.findData(life.get("type", "all"))))
-        life_type.currentIndexChanged.connect(lambda idx: set_life("type", life_type.itemData(idx)))
+        life_from_label = QLabel("From"); life_from_label.setObjectName("roto-shape-lifetime-from-label")
+        life_to_label = QLabel("To"); life_to_label.setObjectName("roto-shape-lifetime-to-label")
+        def update_lifetime_type(idx):
+            kind = life_type.itemData(idx)
+            set_life("type", kind)
+            from_visible = kind in ("single", "to_end", "range")
+            to_visible = kind in ("start_to", "range")
+            life_from_label.setVisible(from_visible); spin_from.setVisible(from_visible)
+            life_to_label.setVisible(to_visible); spin_to.setVisible(to_visible)
+        life_type.currentIndexChanged.connect(update_lifetime_type)
         layout.addWidget(QLabel("Lifetime")); layout.addWidget(life_type)
-        for part, label in (("start", "Lifetime from"), ("end", "Lifetime to")):
-            spin = QSpinBox(); spin.setRange(-100000, 100000); spin.setObjectName("roto-shape-lifetime-" + part)
-            spin.setValue(int(life.get(part, 1))); spin.setKeyboardTracking(False)
-            spin.editingFinished.connect(lambda p_=part, w=spin: set_life(p_, int(w.value())))
-            layout.addWidget(QLabel(label)); layout.addWidget(spin)
+        spin_from = QSpinBox(); spin_from.setRange(-100000, 100000); spin_from.setObjectName("roto-shape-lifetime-start")
+        spin_from.setValue(int(life.get("start", 1))); spin_from.setKeyboardTracking(False)
+        spin_from.editingFinished.connect(lambda w=spin_from: set_life("start", int(w.value())))
+        spin_to = QSpinBox(); spin_to.setRange(-100000, 100000); spin_to.setObjectName("roto-shape-lifetime-end")
+        spin_to.setValue(int(life.get("end", 1))); spin_to.setKeyboardTracking(False)
+        spin_to.editingFinished.connect(lambda w=spin_to: set_life("end", int(w.value())))
+        for label, widget in ((life_from_label, spin_from), (life_to_label, spin_to)):
+            layout.addWidget(label); layout.addWidget(widget)
+        kind = life.get("type", "all")
+        from_visible = kind in ("single", "to_end", "range")
+        to_visible = kind in ("start_to", "range")
+        life_from_label.setVisible(from_visible); spin_from.setVisible(from_visible)
+        life_to_label.setVisible(to_visible); spin_to.setVisible(to_visible)
         if shape.get("closed", True) is False:
             plain_combo("cap_start", "Start cap", shape_model.END_CAPS, "rounded")
             plain_combo("cap_end", "End cap", shape_model.END_CAPS, "rounded")

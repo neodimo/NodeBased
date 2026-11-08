@@ -450,10 +450,11 @@ def validate_payload(kind, payload, where):
                                 and 0 <= brush["strength"] <= 1)):
                     raise ValueError(f"{at}.brush values are out of range")
                 life = item["lifetime"]
-                if not isinstance(life, dict) or life.get("mode") not in ("single", "range", "all", "from_current"):
+                if not isinstance(life, dict) or life.get("mode") not in ("single", "range", "all", "from_current", "start_to", "to_end"):
                     raise ValueError(f"{at}.lifetime is invalid")
                 expected_life = ({"mode", "first", "last"} if life["mode"] == "range" else
-                                 {"mode", "first"} if life["mode"] in ("single", "from_current") else {"mode"})
+                                 {"mode", "last"} if life["mode"] == "start_to" else
+                                 {"mode", "first"} if life["mode"] in ("single", "from_current", "to_end") else {"mode"})
                 if set(life) != expected_life:
                     raise ValueError(f"{at}.lifetime has unexpected frame fields")
                 if life["mode"] in ("single", "range", "from_current") and type(life.get("first")) is not int:

@@ -6,14 +6,15 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QPushButton, QSpinBox, QComboBox
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document, upgrade_document
 from nodebased import shapes
 from nodebased.imaging import Evaluator
-from nodebased import rotopanel
+from nodebased import paint, rotopanel
 from tests.test_roto_ui import roto_document
+from tests.test_roto_paint import stroke
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle("Fusion"); APP.setStyleSheet(STYLE)
@@ -109,4 +110,98 @@ class RotoTimingR4Tests(unittest.TestCase):
         panel.findChild(QPushButton, "roto-spline-delete-key").click()
         curve = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]["curve"]
         self.assertEqual([key["frame"] for key in curve["keys"]], [5])
+
+    def test_lifetime_modes_and_nuke_endpoint_visibility(self):
+        expected = {
+            "all": [True] * 7,
+            "single": [False, False, True, False, False, False, False],
+            "start_to": [True, True, True, True, True, False, False],
+            "to_end": [False, False, True, True, True, True, True],
+            "range": [False, False, True, True, True, False, False],
+        }
+        for kind, outcomes in expected.items():
+            life = {"type": kind, "start": 3, "end": 5}
+            self.assertEqual([shapes.in_lifetime(life, frame) for frame in range(1, 8)], outcomes)
+        shape = {"name": "life", "mode": "union", "opacity": 1.0, "feather": 0.0,
+                 "lifetime": {"type": "all"}, "points": [
+                     {"x": 1.0, "y": 1.0, "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0},
+                     {"x": 2.0, "y": 1.0, "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0},
+                     {"x": 2.0, "y": 2.0, "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0}]}
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": [shape]}, render=False)
+        panel = rotopanel.build_panel(self.window, "r")
+        self.assertTrue(panel.findChild(QSpinBox, "roto-shape-lifetime-start").isHidden())
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": [{**shape, "lifetime": {"type": "range", "start": 3, "end": 5}}]}, render=False)
+        panel = rotopanel.build_panel(self.window, "r")
+        self.assertFalse(panel.findChild(QSpinBox, "roto-shape-lifetime-start").isHidden())
+        self.assertFalse(panel.findChild(QSpinBox, "roto-shape-lifetime-end").isHidden())
+        self.assertEqual(self.window.viewer.paint_lifetime, "single")
+        stroke_lifetimes = {
+            "all": {"mode": "all"},
+            "single": {"mode": "single", "first": 3},
+            "start_to": {"mode": "start_to", "last": 5},
+            "to_end": {"mode": "to_end", "first": 3},
+            "range": {"mode": "range", "first": 3, "last": 5},
+        }
+        for life in stroke_lifetimes.values():
+            outcomes = [paint.active({"lifetime": life}, frame) for frame in range(1, 8)]
+            if life["mode"] == "all": self.assertEqual(outcomes, [True] * 7)
+            elif life["mode"] == "single": self.assertEqual(outcomes, [False, False, True, False, False, False, False])
+            elif life["mode"] == "start_to": self.assertEqual(outcomes, [True, True, True, True, True, False, False])
+            elif life["mode"] == "to_end": self.assertEqual(outcomes, [False, False, True, True, True, True, True])
+            else: self.assertEqual(outcomes, [False, False, True, True, True, False, False])
+
+    def test_rotopaint_stroke_lifetime_modes_validate(self):
+        dispatcher = Dispatcher(empty_document())
+        dispatcher.execute({"op": "create", "id": "paint", "type": "RotoPaint"})
+        lives = ({"mode": "all"}, {"mode": "start_to", "last": 5},
+                 {"mode": "single", "first": 3}, {"mode": "to_end", "first": 3},
+                 {"mode": "range", "first": 3, "last": 5})
+        for life in lives:
+            dispatcher.execute({"op": "set_paint_items", "id": "paint",
+                                "items": [stroke(lifetime=life)]})
+
+    def test_rotopaint_shape_lifetime_panel_has_nuke_modes_and_endpoints(self):
+        self.window.command({"op": "create", "id": "p", "type": "RotoPaint"})
+        self.window.command({"op": "connect", "id": "p", "input": "image", "source": "r"})
+        self.window.command({"op": "set_paint_items", "id": "p", "items": [{
+            "kind": "shape", "name": "paint-shape", "mode": "union", "opacity": 1.0,
+            "feather": 0.0, "points": [{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0,
+                                         "out_x": 0.0, "out_y": 0.0}
+                                        for x, y in ((10, 10), (90, 10), (50, 90))],
+            "blend": "over", "visible": True, "lifetime": {"type": "all"}}]})
+        self.window.command({"op": "view", "id": "p"})
+        self.window.viewer.paint_selected_item_index = 0
+        panel = self.window.build_node_panel("p")
+        combo = panel.findChild(QComboBox, "rotopaint-layer-lifetime")
+        self.assertIsNotNone(combo)
+        self.assertEqual(combo.findData("all"), combo.currentIndex())
+        self.assertEqual([combo.itemData(i) for i in range(combo.count())],
+                         ["all", "start_to", "single", "to_end", "range"])
+        combo.setCurrentIndex(combo.findData("range"))
+        life = self.window.dispatcher.document["node_data"]["p"]["items"][0]["lifetime"]
+        self.assertEqual(life, {"type": "range", "start": 1, "end": 1})
+        panel = self.window.build_node_panel("p")
+        before = len(self.window.dispatcher.undo_stack)
+        panel.findChild(QPushButton, "rotopaint-layer-key-transform-scale_x").click()
+        item = self.window.dispatcher.document["node_data"]["p"]["items"][0]
+        self.assertEqual(item["transform"]["scale_x"]["curve"]["keys"], [{"frame": 1, "value": 1.0}])
+        self.assertEqual(len(self.window.dispatcher.undo_stack), before + 1)
+
+    def test_rotopaint_stroke_lifetime_panel_edits_from_and_to(self):
+        self.window.command({"op": "create", "id": "p", "type": "RotoPaint"})
+        self.window.command({"op": "connect", "id": "p", "input": "image", "source": "r"})
+        self.window.command({"op": "set_paint_items", "id": "p", "items": [stroke(lifetime={"mode": "all"})]})
+        self.window.command({"op": "view", "id": "p"})
+        self.window.viewer.paint_selected_item_index = 0
+        panel = self.window.build_node_panel("p")
+        combo = panel.findChild(QComboBox, "rotopaint-layer-lifetime")
+        self.assertEqual([combo.itemData(i) for i in range(combo.count())],
+                         ["all", "start_to", "single", "to_end", "range"])
+        combo.setCurrentIndex(combo.findData("start_to"))
+        panel = self.window.build_node_panel("p")
+        endpoint = panel.findChild(QSpinBox, "rotopaint-layer-lifetime-last")
+        self.assertIsNotNone(endpoint)
+        endpoint.setValue(5)
+        self.assertEqual(self.window.dispatcher.document["node_data"]["p"]["items"][0]["lifetime"],
+                         {"mode": "start_to", "last": 5})
 

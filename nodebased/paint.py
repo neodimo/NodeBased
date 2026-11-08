@@ -15,6 +15,10 @@ def active(stroke, frame):
         return True
     if mode == "single":
         return frame == life["first"]
+    if mode == "start_to":
+        return frame <= life["last"]
+    if mode == "to_end":
+        return frame >= life["first"]
     if mode == "range":
         return life["first"] <= frame <= life["last"]
     return frame >= life["first"]

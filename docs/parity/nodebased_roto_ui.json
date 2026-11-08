@@ -1796,20 +1796,20 @@
     },
     {
       "name": "Set key: transform",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` per-transform key buttons; no RotoPaint spline-key control.",
+      "status": "match",
+      "location": "`RotoPanel.build_panel` and `Window.build_node_panel`; per-field keys for Roto and RotoPaint transforms.",
       "difference": ""
     },
     {
       "name": "Lifetime types",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-shape-lifetime-type`; `Window.build_node_panel` / `rotopaint-layer-lifetime`.",
+      "status": "match",
+      "location": "Roto and RotoPaint property panels expose All, Start to, Single, To end and Range for shapes and strokes.",
       "difference": ""
     },
     {
       "name": "Lifetime endpoints",
-      "status": "differs",
-      "location": "Roto shape lifetime start/end fields; RotoPaint panel exposes range endpoints, with different control placement.",
+      "status": "match",
+      "location": "Roto and RotoPaint panels show From/To fields only for the selected lifetime mode and preserve existing endpoint payloads.",
       "difference": ""
     },
     {
