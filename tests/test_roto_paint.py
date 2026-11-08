@@ -228,7 +228,9 @@ class RotoPaintRenderTests(unittest.TestCase):
         old = copy.deepcopy(d.document)
         old["version"] = 12
         upgraded = upgrade_document(old)
-        self.assertEqual(upgraded["node_data"], old["node_data"])
+        expected = copy.deepcopy(old["node_data"])
+        expected["r"] = {"shapes": [], "tool_settings": {"__global__": {"autokey": False}}}
+        self.assertEqual(upgraded["node_data"], expected)
         self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         shapes.validate_node_data(upgraded["node_data"], upgraded["nodes"])
 

@@ -17,11 +17,16 @@ from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QDoubleSpinBox
 
 from nodebased.app import STYLE, Window
 from nodebased.core import empty_document, Dispatcher
+from nodebased import shapes as shape_model
 
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle("Fusion")
 APP.setStyleSheet(STYLE)
+
+
+def point_value(value, frame=1, field=None):
+    return shape_model.resolve_scalar(value, frame, field)
 
 
 
@@ -104,9 +109,9 @@ class RotoOverlayTests(unittest.TestCase):
         request, _cancel = self.window.preview_queue.take()
         self.assertEqual(request.tier, 8)
         preview_point = request.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertEqual((preview_point["x"], preview_point["y"]), (25.0, 30.0))
+        self.assertEqual((point_value(preview_point["x"]), point_value(preview_point["y"])), (25.0, 30.0))
         stored_point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertEqual((stored_point["x"], stored_point["y"]), (10.0, 10.0))
+        self.assertEqual((point_value(stored_point["x"]), point_value(stored_point["y"])), (10.0, 10.0))
         self.assertEqual(len(self.window.dispatcher.undo_stack), before)
         self.assertIs(viewer.roto_drag, drag)
 
@@ -162,8 +167,8 @@ class RotoOverlayTests(unittest.TestCase):
         QTest.mouseMove(viewer.viewport(), target, 20)
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=target)
         point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertAlmostEqual(point["feather_x"], 4.0, delta=self.scene_pixel_tolerance())
-        self.assertAlmostEqual(point["feather_y"], 3.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(point["feather_x"], field="feather_x"), 4.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(point["feather_y"], field="feather_y"), 3.0, delta=self.scene_pixel_tolerance())
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
         self.window.command({"op": "undo"})
         self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0].get("feather_x", 0), 0)
@@ -176,8 +181,8 @@ class RotoOverlayTests(unittest.TestCase):
         QTest.mouseMove(viewer.viewport(), target, 20)
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=target)
         point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertAlmostEqual(point["feather_x"], 4.0, delta=self.scene_pixel_tolerance())
-        self.assertAlmostEqual(point["feather_y"], -3.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(point["feather_x"], field="feather_x"), 4.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(point["feather_y"], field="feather_y"), -3.0, delta=self.scene_pixel_tolerance())
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
         self.window.command({"op": "undo"})
         self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0].get("feather_y", 0), 0)
@@ -214,8 +219,8 @@ class RotoOverlayTests(unittest.TestCase):
             "start_data": viewer._roto_data_point(start, viewer._roto_context()[1], 1.0), "moved": True}
         viewer._commit_roto_drag()
         moved = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
-        self.assertAlmostEqual(moved[0]["x"], 15.0, delta=self.scene_pixel_tolerance())
-        self.assertAlmostEqual(moved[0]["y"], 17.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(moved[0]["x"]), 15.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(moved[0]["y"]), 17.0, delta=self.scene_pixel_tolerance())
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
 
     def test_transform_box_scales_rotates_moves_pivot_and_alt_edits_shape_transform(self):
@@ -237,8 +242,8 @@ class RotoOverlayTests(unittest.TestCase):
             "initial":{(si,pi):dict(resolved[si]["points"][pi]) for si,pi in selected}, "alt_shape":None}
         viewer._commit_roto_drag()
         points = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
-        self.assertEqual((points[0]["x"], points[0]["y"]), (-30.0, -30.0))
-        self.assertEqual(points[0]["out_x"], 6.0)
+        self.assertEqual((point_value(points[0]["x"]), point_value(points[0]["y"])), (-30.0, -30.0))
+        self.assertEqual(point_value(points[0]["out_x"], field="out_x"), 6.0)
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
 
         context = viewer._roto_context(); resolved = viewer._roto_resolved(context)
@@ -251,8 +256,8 @@ class RotoOverlayTests(unittest.TestCase):
             "initial":initial, "alt_shape":None}
         viewer._commit_roto_drag()
         points = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
-        self.assertAlmostEqual(points[0]["x"], 130.0, places=6)
-        self.assertAlmostEqual(points[0]["y"], -30.0, places=6)
+        self.assertAlmostEqual(point_value(points[0]["x"]), 130.0, places=6)
+        self.assertAlmostEqual(point_value(points[0]["y"]), -30.0, places=6)
         self.assertEqual(len(self.window.dispatcher.undo_stack), 2)
 
         before = [dict(p) for p in points]
@@ -265,7 +270,7 @@ class RotoOverlayTests(unittest.TestCase):
         viewer._commit_roto_drag()
         stored = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
         self.assertEqual(stored["points"], before)
-        self.assertAlmostEqual(stored["transform"]["rotate"], 90.0, places=6)
+        self.assertAlmostEqual(point_value(stored["transform"]["rotate"], field="rotate"), 90.0, places=6)
         self.assertEqual(len(self.window.dispatcher.undo_stack), 3)
 
         before = [dict(p) for p in stored["points"]]
@@ -305,8 +310,8 @@ class RotoOverlayTests(unittest.TestCase):
                            pos=viewer.mapFromScene(finish))
         APP.processEvents()
         points = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
-        self.assertAlmostEqual(points[0]["x"], -10.0, delta=self.scene_pixel_tolerance())
-        self.assertAlmostEqual(points[0]["y"], -10.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(points[0]["x"]), -10.0, delta=self.scene_pixel_tolerance())
+        self.assertAlmostEqual(point_value(points[0]["y"]), -10.0, delta=self.scene_pixel_tolerance())
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
         self.window.command({"op": "undo"})
         self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0], shape)
@@ -387,8 +392,8 @@ class RotoOverlayTests(unittest.TestCase):
         points=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
         self.assertEqual(len(points),3)
         pixel_tolerance = self.scene_pixel_tolerance()
-        self.assertAlmostEqual(points[0]["out_x"],10.0,delta=pixel_tolerance)
-        self.assertAlmostEqual(points[0]["in_x"],-10.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(point_value(points[0]["out_x"], field="out_x"),10.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(point_value(points[0]["in_x"], field="in_x"),-10.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),1)
 
     def test_ctrl_alt_outline_insert_preserves_rendered_matte_and_is_one_undo(self):
@@ -413,15 +418,15 @@ class RotoOverlayTests(unittest.TestCase):
         viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(20,10)),"broken":False}
         viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
         pixel_tolerance = self.scene_pixel_tolerance()
-        self.assertAlmostEqual(point["out_x"],10.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-5.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(point_value(point["out_x"], field="out_x"),10.0,delta=pixel_tolerance); self.assertAlmostEqual(point_value(point["in_x"], field="in_x"),-5.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),1)
         viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(25,10)),"broken":False,"shift":True}
         viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertAlmostEqual(point["out_x"],15.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-15.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(point_value(point["out_x"], field="out_x"),15.0,delta=pixel_tolerance); self.assertAlmostEqual(point_value(point["in_x"], field="in_x"),-15.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),2)
         viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(30,10)),"broken":True,"shift":True}
         viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertAlmostEqual(point["out_x"],20.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-15.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(point_value(point["out_x"], field="out_x"),20.0,delta=pixel_tolerance); self.assertAlmostEqual(point_value(point["in_x"], field="in_x"),-15.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),3)
 
     def test_deleting_selected_point_enforces_minimum_and_is_one_undo(self):

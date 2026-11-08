@@ -91,7 +91,7 @@ class RotoSettingsR2Tests(unittest.TestCase):
         dispatcher.execute({"op":"view", "id":"r"})
         old = dispatcher.document
         old["version"] = 33
-        old["node_data"]["r"].pop("tool_settings", None)
+        old["node_data"]["r"] = {"shapes": []}
         old = upgrade_document(old)
         self.assertFalse(old["node_data"]["r"]["tool_settings"]["__global__"]["autokey"])
         loaded = Dispatcher(old)

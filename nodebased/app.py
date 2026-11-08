@@ -1701,7 +1701,7 @@ class RotoViewerToolbar(QWidget):
         values = {self._setting_key(c["label"]): stored.get(self._setting_key(c["label"]), self._setting_default(c))
                 for c in TOOL_CONTROLS.get(tool, [])}
         if "autokey" in values:
-            values["autokey"] = payload.get("tool_settings", {}).get("__global__", {}).get("autokey", False)
+            values["autokey"] = payload.get("tool_settings", {}).get("__global__", {}).get("autokey", True)
         return values
 
     def set_setting(self, key, tool, setting, value):
@@ -1715,7 +1715,11 @@ class RotoViewerToolbar(QWidget):
                                         "tool": "__global__", "settings": global_settings}, render=False)
             return
         values = self._tool_settings(key, tool); values[setting] = value
-        self.viewer.window.command({"op": "set_roto_tool_settings", "id": key, "tool": tool, "settings": values}, render=False)
+        defaults = {self._setting_key(c["label"]): self._setting_default(c)
+                    for c in TOOL_CONTROLS.get(tool, [])}
+        stored = {name: item for name, item in values.items()
+                  if name not in defaults or item != defaults[name]}
+        self.viewer.window.command({"op": "set_roto_tool_settings", "id": key, "tool": tool, "settings": stored}, render=False)
         item_fields = {"opacity": "opacity", "feather": "feather", "feather_on": "feather_on",
                        "falloff_power": "falloff_power", "feather_falloff": "feather_falloff",
                        "blend": "blend_mode", "source": "source", "color": "color",
@@ -3744,6 +3748,7 @@ class Viewer(PanZoomView):
                 return float(replacement)
             keys.append({"frame": int(frame), "value": float(replacement)})
             keys.sort(key=lambda key: key["frame"])
+            updated["value"] = float(replacement)
             return updated
         if not isinstance(value, dict) or "curve" not in value or value.get("curve") is None:
             if not auto_key:

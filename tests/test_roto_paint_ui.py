@@ -12,10 +12,15 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
+from nodebased import shapes as shape_model
 
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle("Fusion"); APP.setStyleSheet(STYLE)
+
+
+def point_value(value, frame=1, field=None):
+    return shape_model.resolve_scalar(value, frame, field)
 
 
 
@@ -170,7 +175,7 @@ class RotoPaintViewerTests(unittest.TestCase):
         viewer.roto_drag={"point":(0,0),"kind":"point","scene":viewer.mapToScene(self.position(30,30))}
         self.assertTrue(viewer._commit_roto_drag())
         item=self.window.dispatcher.document["node_data"]["paint"]["items"][0]
-        self.assertAlmostEqual(item["points"][0]["x"],30.0,delta=.2)
+        self.assertAlmostEqual(point_value(item["points"][0]["x"]),30.0,delta=.2)
         self.assertEqual(len(self.window.dispatcher.undo_stack),2)
         self.assertEqual(item["kind"],"shape")
 

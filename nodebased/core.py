@@ -3107,6 +3107,7 @@ def upgrade_document(document):
         for node_id, node in doc.get("nodes", {}).items():
             if node.get("type") in ("Roto", "RotoPaint"):
                 payload = doc.setdefault("node_data", {}).setdefault(node_id, {})
+                payload.setdefault("shapes" if node["type"] == "Roto" else "items", [])
                 settings = payload.setdefault("tool_settings", {})
                 settings.setdefault("__global__", {}).setdefault("autokey", False)
         doc["version"] = 34
@@ -3897,9 +3898,6 @@ class Dispatcher:
                           "inputs": {slot: None for slot in
                                      list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))},
                           "pos": cmd.get("pos", [0, 0]), "disabled": False}
-            if kind in ("Roto", "RotoPaint"):
-                doc["node_data"][key] = {"shapes" if kind == "Roto" else "items": [],
-                                         "tool_settings": {"__global__": {"autokey": True}}}
             if kind == "Group":
                 from .groups import group_slots, new_group_graph
                 nodes[key]["graph"] = new_group_graph()
@@ -4170,8 +4168,20 @@ class Dispatcher:
             slot = "items" if node["type"] == "RotoPaint" else "shapes"
             payload.setdefault(slot, [])
             values = payload.setdefault("tool_settings", {})
-            values[tool] = copy.deepcopy(settings)
-            doc["node_data"][key] = payload
+            settings = copy.deepcopy(settings)
+            if tool == "__global__" and settings.get("autokey") is True:
+                settings.pop("autokey")
+            if settings:
+                values[tool] = settings
+            else:
+                values.pop(tool, None)
+            if not values:
+                payload.pop("tool_settings", None)
+            slot = "items" if node["type"] == "RotoPaint" else "shapes"
+            if not payload.get(slot) and not payload.get("layers") and not payload.get("tool_settings"):
+                doc["node_data"].pop(key, None)
+            else:
+                doc["node_data"][key] = payload
             return copy.deepcopy(settings)
         elif op == "disable":
             # A node with nothing `bypass_slot` can name (a pure generator: Read, Constant,
