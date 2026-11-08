@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audit_nuke_fidelity as audit  # noqa: E402
 import make_nuke_reference_pack as pack  # noqa: E402
 import nuke_fidelity_cases as cases  # noqa: E402
+import nuke_fidelity_requirements as requirements  # noqa: E402
 from nodebased.core import SPECS  # noqa: E402
 
 NUKE = json.loads(audit.NUKE_JSON.read_text(encoding="utf-8"))
@@ -261,6 +262,14 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(res["detail"]["missing_secondary"], ["gamma"])
         res = self.fake(knobs, pair_knobs=pair + [{"nodebased": ["offset"], "nuke": ["gamma"], "kind": "renamed", "reason": "x"}])
         self.assertAlmostEqual(res["components"]["knobs"], 3 / 5)
+
+    def test_rotopaint_stereo_and_inherited_format_are_explicit_not_pixel_gaps(self):
+        pair = MAPPING["pairs"]["RotoPaint"]
+        score = audit.score_pair("RotoPaint", pair, NUKE["nodes"]["RotoPaint"])
+        self.assertEqual(score["detail"]["missing_secondary"], [])
+        reasons = {name: requirements.not_pixel_reason("RotoPaint", name)
+                   for name in ("format", "view", "stereo_offset", "source_view")}
+        self.assertTrue(all(reason and "cannot change" in reason for reason in reasons.values()), reasons)
 
     def test_chrome_and_sockets_are_their_own_components(self):
         knobs = [self.knob("mix", default=1, role="chrome:mix"), self.knob("channels", default="rgb", role="chrome:channels")]

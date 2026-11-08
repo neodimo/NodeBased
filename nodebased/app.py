@@ -14378,6 +14378,21 @@ class Window(QMainWindow):
                             transform[name] = {"value": value, "curve": {**curve, "keys": keys}}
                         self.command({"op": "set_paint_items", "id": k, "items": entries})
 
+                    def toggle_layer_motion_key(name, default, k=key, idx=selected):
+                        entries = current_layer_items(k)
+                        if idx >= len(entries): return
+                        frame = int(self.dispatcher.document["time"]["current"])
+                        old = entries[idx].get(name, default)
+                        value = shape_model.resolve_scalar(old, frame, name)
+                        curve = copy.deepcopy(old.get("curve")) if isinstance(old, dict) and old.get("curve") else {"interpolation": "smooth", "keys": []}
+                        keys = [item for item in curve["keys"] if item["frame"] != frame]
+                        if isinstance(old, dict) and old.get("curve") and len(keys) != len(curve["keys"]):
+                            entries[idx][name] = old["value"] if not keys else {"value": old["value"], "curve": {**curve, "keys": keys}}
+                        else:
+                            keys.append({"frame": frame, "value": value}); keys.sort(key=lambda item: item["frame"])
+                            entries[idx][name] = {"value": value, "curve": {**curve, "keys": keys}}
+                        self.command({"op": "set_paint_items", "id": k, "items": entries})
+
                     form.addRow(QLabel(f"Edit layer: {edit_item['name']}"))
                     name_field = QLineEdit(edit_item["name"])
                     name_field.setObjectName("rotopaint-layer-name")
@@ -14418,17 +14433,52 @@ class Window(QMainWindow):
                     locked_field.toggled.connect(lambda value: update_layer(("locked",), bool(value)))
                     form.addRow(locked_field)
 
-                    def item_spin(name, label, lo, hi, step, default, path=None):
-                        field = QDoubleSpinBox()
+                    def item_spin(name, label, lo, hi, step, default, path=None, *, whole=False, animatable=False):
+                        if whole:
+                            field = QSpinBox()
+                        else:
+                            field = FloatSliderControl((lo, hi), (lo, hi), float(default))
+                            field.motion = self.motion; field.slider.motion = self.motion
                         field.setObjectName("rotopaint-layer-" + name)
-                        field.setRange(lo, hi); field.setSingleStep(step)
+                        editor = field if whole else field.spin
+                        editor.setObjectName("rotopaint-layer-" + name)
+                        if whole: field.setRange(int(lo), int(hi))
+                        else: editor.setSingleStep(step)
                         route = path or (name,)
                         value = edit_item
                         for part in route:
                             value = value.get(part, {}) if isinstance(value, dict) else {}
-                        field.setValue(float(value if isinstance(value, (int, float)) else default))
-                        field.valueChanged.connect(lambda v, p=route: update_layer(p, float(v)))
-                        form.addRow(label, field)
+                        shown = (shape_model.resolve_scalar(value, current_time, route[-1])
+                                 if isinstance(value, dict) and "value" in value else value)
+                        editor.setValue(int(round(shown if isinstance(shown, (int, float)) else default)) if whole
+                                        else float(shown if isinstance(shown, (int, float)) else default))
+                        def edit_value(v, p=route, n=route[-1], d=default):
+                            entries = current_layer_items(key)
+                            if selected >= len(entries): return
+                            target = entries[selected]
+                            for part in p[:-1]: target = target.setdefault(part, {})
+                            old = target.get(p[-1], d)
+                            number = int(v) if whole else float(v)
+                            if isinstance(old, dict) and old.get("curve"):
+                                curve = copy.deepcopy(old["curve"])
+                                curve["keys"] = [item for item in curve["keys"] if item["frame"] != current_time]
+                                curve["keys"].append({"frame": current_time, "value": number})
+                                curve["keys"].sort(key=lambda item: item["frame"])
+                                target[p[-1]] = {"value": old["value"], "curve": curve}
+                            else: target[p[-1]] = number
+                            self.command({"op": "set_paint_items", "id": key, "items": entries})
+                        editor.valueChanged.connect(edit_value)
+                        if animatable:
+                            row = QWidget(); row_layout = QHBoxLayout(row); row_layout.setContentsMargins(0, 0, 0, 0)
+                            row_layout.addWidget(field, 1)
+                            curve = value.get("curve") if isinstance(value, dict) else None
+                            key_button = self.make_key_button(key, f"paint-{selected}-{route[-1]}", field,
+                                curve_override=curve,
+                                on_toggle=lambda n=route[-1], d=default: toggle_layer_motion_key(n, d),
+                                object_name="rotopaint-layer-key-" + route[-1])
+                            key_button.setAccessibleName(label + " key"); row_layout.addWidget(key_button)
+                            form.addRow(label, row)
+                        else: form.addRow(label, field)
 
                     transform = edit_item.get("transform", {})
                     transform_toggle = QToolButton()
@@ -14472,15 +14522,15 @@ class Window(QMainWindow):
                     motion_blur.setChecked(edit_item.get("motion_blur", False))
                     motion_blur.toggled.connect(lambda value: update_layer(("motion_blur",), bool(value)))
                     form.addRow(motion_blur)
-                    item_spin("motion-blur-samples", "Motion blur samples", 1, 64, 1, 1, ("motion_blur_samples",))
-                    item_spin("motion-blur-shutter", "Motion blur shutter", 0, 8, .05, .5, ("motion_blur_shutter",))
+                    item_spin("motion-blur-samples", "Motion blur samples", 1, 64, 1, 1, ("motion_blur_samples",), whole=True, animatable=True)
+                    item_spin("motion-blur-shutter", "Motion blur shutter", 0, 8, .05, .5, ("motion_blur_shutter",), animatable=True)
                     blur_offset = ElidingComboBox(); blur_offset.setObjectName("rotopaint-layer-motion-blur-offset-type")
                     for value in shape_model.OFFSET_TYPES: blur_offset.addItem(value.replace("_", " ").title(), value)
                     blur_offset.setCurrentIndex(blur_offset.findData(edit_item.get("motion_blur_offset_type", "start")))
                     blur_offset.currentIndexChanged.connect(
                         lambda idx2, box=blur_offset: update_layer(("motion_blur_offset_type",), box.itemData(idx2)))
                     form.addRow("Motion blur offset", blur_offset)
-                    item_spin("motion-blur-offset", "Custom motion blur offset", -8, 8, .05, 0, ("motion_blur_offset",))
+                    item_spin("motion-blur-offset", "Custom motion blur offset", -8, 8, .05, 0, ("motion_blur_offset",), animatable=True)
                     if edit_item["kind"] == "shape":
                         mode_field = ElidingComboBox()
                         mode_field.setObjectName("rotopaint-layer-mode")

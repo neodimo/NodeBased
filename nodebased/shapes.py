@@ -50,6 +50,8 @@ SHAPE_LIMITS = {
     "scale_y": (-1000.0, 1000.0), "center_x": (-65536.0, 65536.0),
     "center_y": (-65536.0, 65536.0),
     "skew_x": (-89.0, 89.0), "skew_y": (-89.0, 89.0),
+    "motion_blur_samples": (1.0, 64.0), "motion_blur_shutter": (0.0, 8.0),
+    "motion_blur_offset": (-8.0, 8.0),
 }
 TRANSFORM_DEFAULTS = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                      "scale_x": 1.0, "scale_y": 1.0, "center_x": 0.0, "center_y": 0.0,
@@ -166,14 +168,16 @@ def validate_shape(shape, where):
     for field in ("cap_start", "cap_end"):
         if shape.get(field, "rounded") not in END_CAPS:
             raise ValueError(f"{where}.{field} must be one of {list(END_CAPS)}")
-    if "motion_blur_samples" in shape and not (type(shape["motion_blur_samples"]) is int and 1 <= shape["motion_blur_samples"] <= 64):
-        raise ValueError(f"{where}.motion_blur_samples must be a whole number between 1 and 64")
-    if "motion_blur_shutter" in shape and not (_is_number(shape["motion_blur_shutter"]) and 0.0 <= shape["motion_blur_shutter"] <= 8.0):
-        raise ValueError(f"{where}.motion_blur_shutter must be a number between 0 and 8")
+    if "motion_blur_samples" in shape:
+        validate_scalar(shape["motion_blur_samples"], "motion_blur_samples", where)
+        if not isinstance(shape["motion_blur_samples"], dict) and type(shape["motion_blur_samples"]) is not int:
+            raise ValueError(f"{where}.motion_blur_samples must be a whole number between 1 and 64")
     if shape.get("motion_blur_offset_type", "start") not in OFFSET_TYPES:
         raise ValueError(f"{where}.motion_blur_offset_type must be one of {list(OFFSET_TYPES)}")
-    if "motion_blur_offset" in shape and not (_is_number(shape["motion_blur_offset"]) and -8.0 <= shape["motion_blur_offset"] <= 8.0):
-        raise ValueError(f"{where}.motion_blur_offset must be a number between -8 and 8")
+    if "motion_blur_shutter" in shape:
+        validate_scalar(shape["motion_blur_shutter"], "motion_blur_shutter", where)
+    if "motion_blur_offset" in shape:
+        validate_scalar(shape["motion_blur_offset"], "motion_blur_offset", where)
     life = shape.get("lifetime")
     if life is not None:
         if (not isinstance(life, dict) or life.get("type") not in LIFETIME_TYPES
@@ -536,7 +540,7 @@ def empty_payload(kind):
     return {slot: []} if slot else None
 
 
-def motion_blur_plan(shape, params=None):
+def motion_blur_plan(shape, params=None, frame=1):
     """The motion-blur settings that apply to one shape, or None when it is sharp.
 
     Nuke's Motion Blur tab has per-shape settings and global ones. The node's `shape_motionblur_on` (default on) lets the
@@ -549,10 +553,10 @@ def motion_blur_plan(shape, params=None):
     if own:
         if not any(key in shape for key in MOTION_BLUR_FIELDS):
             return {"legacy": True}
-        return {"samples": int(shape.get("motion_blur_samples", MOTION_BLUR_DEFAULTS["samples"])),
-                "shutter": float(shape.get("motion_blur_shutter", MOTION_BLUR_DEFAULTS["shutter"])),
+        return {"samples": int(round(resolve_scalar(shape.get("motion_blur_samples", MOTION_BLUR_DEFAULTS["samples"]), frame, "motion_blur_samples"))),
+                "shutter": resolve_scalar(shape.get("motion_blur_shutter", MOTION_BLUR_DEFAULTS["shutter"]), frame, "motion_blur_shutter"),
                 "offset_type": shape.get("motion_blur_offset_type", MOTION_BLUR_DEFAULTS["offset_type"]),
-                "offset": float(shape.get("motion_blur_offset", MOTION_BLUR_DEFAULTS["offset"]))}
+                "offset": resolve_scalar(shape.get("motion_blur_offset", MOTION_BLUR_DEFAULTS["offset"]), frame, "motion_blur_offset")}
     if params.get("global_motionblur_on", 0) and not shape.get("motion_blur", False):
         return {"samples": int(params.get("global_motionblur", 1)),
                 "shutter": float(params.get("global_motionblur_shutter", 0.5)),
@@ -667,7 +671,7 @@ def _resolve_shape(shape, frame, params, blur):
         resolved["stroke_soft"] = True           # an open spline's edge is a one-pixel ramp, so its width is the width stated
     if not in_lifetime(shape.get("lifetime"), frame):
         resolved["visible"] = False
-    plan = motion_blur_plan(shape, params) if blur else None
+    plan = motion_blur_plan(shape, params, frame) if blur else None
     if plan is not None and plan.get("legacy"):
         # A compact one-frame shutter centered on the current frame. Static shapes naturally
         # collapse to one sample; keyed shapes acquire temporal coverage in the same raster path.

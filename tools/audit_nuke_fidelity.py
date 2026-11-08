@@ -416,6 +416,8 @@ _COUNT_KNOBS |= {("TimeEcho", "framesbehind"), ("ZDefocus", "blades"), ("TimeDis
 # Panel sweep S5 (2026-11-07): SmartVector's matteDilation and VectorBlur's grow_bbox are whole pixels (Int_Knobs in Nuke), the guide's defaults 50 and 0 being
 # the only hint; Sparkles's ray_nb ("rays Nb", default 50) is a count of rays. All three already show as integer fields.
 _COUNT_KNOBS |= {("SmartVector", "matteDilation"), ("VectorBlur", "grow_bbox"), ("Sparkles", "ray_nb")}
+# Roto's Motion Blur tab exposes sample counts (whole-number knobs), as do the per-shape settings.
+_COUNT_KNOBS |= {(kind, "global_motionblur") for kind in ("Roto", "RotoPaint")}
 _FLOAT_KNOBS = {("IBKGizmo", "level"), ("Kronos", "timingFrame2"), ("OFlow", "timingFrame2")}
 # Knobs whose Nuke widget the guide's default cannot tell: IBKColor's Size (a pixel size, default 10) and multi ("patch black", default 0, which
 # the gizmo may show as a check box or a number). Left unmeasured and counted as such, as the rule asks.

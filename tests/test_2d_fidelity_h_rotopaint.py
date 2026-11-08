@@ -200,6 +200,13 @@ class NodeMotionBlurTests(unittest.TestCase):
         np.testing.assert_array_equal(b, render(graph([self.slider()]), 3).pixels)
         self.assertGreater(float(np.abs(a - b).sum()), 1.0)
 
+    def test_keyed_per_item_shutter_changes_paint_blur_at_the_rendered_frame(self):
+        animated = self.slider(motion_blur=True, motion_blur_samples=8,
+                               motion_blur_shutter=slide(0.0, 2.0), motion_blur_offset_type="centred")
+        np.testing.assert_array_equal(render(graph([animated]), 1).pixels, render(graph([self.slider()]), 1).pixels)
+        self.assertGreater(float(np.abs(render(graph([animated]), 3).pixels -
+                                      render(graph([self.slider()]), 3).pixels).sum()), 1.0)
+
     def test_a_blurred_shape_averages_its_samples(self):
         moving = shape(transform={"translate_x": slide(0.0, 8.0)}, motion_blur=True, motion_blur_samples=2, motion_blur_shutter=1.0,
                        motion_blur_offset_type="start")

@@ -385,6 +385,8 @@ def build_panel(window, key):
                                        for channel,replacement in zip(old,value)]
                 elif field == "feather_model":
                     entries[i][field] = value
+                elif field == "motion_blur_samples":
+                    entries[i][field] = value_at_frame(old, int(value), field) if isinstance(old, dict) and old.get("curve") else int(value)
                 else:
                     entries[i][field]=value_at_frame(old,value,field)
                 save(entries,i)
@@ -552,13 +554,36 @@ def build_panel(window, key):
             combo.currentIndexChanged.connect(lambda idx, f=field, c=combo: (setter or plain)(f, c.itemData(idx)))
             layout.addWidget(QLabel(label)); layout.addWidget(combo)
         def plain_spin(field, label, lo, hi, step, default, whole=False):
+            raw = shape.get(field, default)
+            shown = shape_model.resolve_scalar(raw, frame, field) if isinstance(raw, dict) else raw
             if whole:
-                spin = QSpinBox(); spin.setRange(int(lo), int(hi)); spin.setValue(int(shape.get(field, default)))
+                spin = QSpinBox(); spin.setRange(int(lo), int(hi)); spin.setValue(int(round(shown)))
             else:
-                spin = QDoubleSpinBox(); spin.setRange(lo, hi); spin.setSingleStep(step); spin.setValue(float(shape.get(field, default)))
-            spin.setObjectName("roto-shape-" + field); spin.setKeyboardTracking(False)
-            spin.editingFinished.connect(lambda f=field, w=spin: plain(f, int(w.value()) if whole else float(w.value())))
-            layout.addWidget(QLabel(label)); layout.addWidget(spin)
+                from .app import FloatSliderControl
+                spin = FloatSliderControl((lo, hi), (lo, hi), float(shown))
+                spin.motion = window.motion; spin.slider.motion = window.motion
+                spin.spin.setSingleStep(step); spin.spin.setKeyboardTracking(False)
+            editor = spin if whole else spin.spin
+            editor.setObjectName("roto-shape-" + field); editor.setKeyboardTracking(False)
+            editor.editingFinished.connect(lambda f=field, w=editor: edit(f, int(w.value()) if whole else float(w.value())))
+            layout.addWidget(QLabel(label))
+            row = QHBoxLayout(); row.addWidget(spin, 1)
+            if field in ("motion_blur_samples", "motion_blur_shutter", "motion_blur_offset"):
+                curve = raw.get("curve") if isinstance(raw, dict) else None
+                def toggle_motion_key(f=field):
+                    entries = current()
+                    if i >= len(entries): return
+                    old = entries[i].get(f, default)
+                    if isinstance(old, dict) and old.get("curve") and any(k["frame"] == frame for k in old["curve"]["keys"]):
+                        entries[i][f] = delete_scalar_key(old, frame)
+                    else:
+                        entries[i][f] = set_scalar_key(old, f, frame)
+                    save(entries, i); window.rebuild_properties_dock()
+                button = window.make_key_button(key, f"shape-{i}-{field}", spin, curve_override=curve,
+                    on_toggle=toggle_motion_key, object_name="roto-shape-key-" + field)
+                button.setAccessibleName(f"{label} key")
+                row.addWidget(button)
+            layout.addLayout(row)
         plain_combo("skew_order", "Skew order", ("XY", "YX"), "XY", plain_transform)
         plain_check("feather_on", "Feather on", True)
         plain_spin("falloff_power", "Feather falloff", 0.0, 16.0, 0.1, 1.0)

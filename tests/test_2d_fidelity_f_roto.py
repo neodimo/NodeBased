@@ -196,6 +196,15 @@ class MotionBlurTests(unittest.TestCase):
         np.testing.assert_allclose(blurred, want, atol=1e-5)
         self.assertGreater(float(np.abs(blurred - alpha([moving()], 2)).sum()), 5.0)
 
+    def test_keyed_shutter_changes_motion_blur_at_the_rendered_frame(self):
+        animated = moving(motion_blur=True, motion_blur_samples=8, motion_blur_offset_type="centred",
+                          motion_blur_shutter={"value": 0.0, "curve": {"interpolation": "linear", "keys": [
+                              {"frame": 1, "value": 0.0}, {"frame": 5, "value": 2.0}]}})
+        sharp_first = alpha([moving()], 1)
+        np.testing.assert_array_equal(alpha([animated], 1), sharp_first)
+        sharp_middle = alpha([moving()], 3)
+        self.assertGreater(float(np.abs(alpha([animated], 3) - sharp_middle).sum()), 5.0)
+
     def test_the_four_shutter_offsets(self):
         for kind, offset, times in (("centred", 0.0, [1.5, 2.0, 2.5]), ("start", 0.0, [2.0, 2.5, 3.0]),
                                     ("end", 0.0, [1.0, 1.5, 2.0]), ("custom", -0.5, [1.5, 2.0, 2.5]),
