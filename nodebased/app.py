@@ -4296,6 +4296,22 @@ class Viewer(PanZoomView):
 
     def hit_release(self, scene_pos, button, modifiers, pressure=1.0):
         """A release at a scene point. True when it ended or finished a drag."""
+        if button == Qt.MouseButton.LeftButton:
+            graph = getattr(self.window, "graph", None)
+            key = graph.selected_id() if graph is not None else None
+            doc = self.window.dispatcher.document
+            node = doc["nodes"].get(key) if key else None
+            if node is not None and node["type"] == "DustBust" and doc.get("view") == key:
+                tier = getattr(getattr(self.window, "proxy", None), "currentData", lambda: 1)()
+                try: tier = max(1, int(tier))
+                except (TypeError, ValueError): tier = 1
+                x, y = self._roto_data_point(scene_pos, node, tier)
+                spots = copy.deepcopy(doc.get("node_data", {}).get(key, {}).get("spots", []))
+                spots.append({"frame": int(doc["time"]["current"]), "x": x*tier, "y": y*tier,
+                              "radius": float(self.paint_size) * tier})
+                self.window.command({"op": "set_dustbust_spots", "id": key, "spots": spots})
+                self.window.statusBar().showMessage("DustBust: spot added", 2500)
+                return True
         if button == Qt.MouseButton.LeftButton and self.paint_size_drag is not None:
             self.paint_size_drag = None
             return True
@@ -14122,6 +14138,11 @@ class Window(QMainWindow):
                 hint = QLabel("Drag yellow destination points; cyan points show the source grid.")
                 hint.setWordWrap(True)
                 form.addRow(hint)
+            if node["type"] == "DustBust":
+                brush_size = QDoubleSpinBox(); brush_size.setObjectName("dustbust-brush-size")
+                brush_size.setRange(0.1, 4096); brush_size.setValue(self.viewer.paint_size)
+                brush_size.valueChanged.connect(lambda value: setattr(self.viewer, "paint_size", float(value)))
+                form.addRow("Brush size", brush_size)
             if node["type"] == "RotoPaint":
                 from . import paintknobs
                 from .rotopanel import add_tracking_actions

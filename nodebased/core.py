@@ -37,7 +37,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
-                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "MarkerRemoval", "RotoPaint",
+                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "MarkerRemoval", "DustBust", "RotoPaint",
                                        "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
@@ -942,6 +942,7 @@ SPECS = {
     "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte", "detail"],
                 "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "fillRegion": "Matte Alpha", "smoothness": 1.0, "LABColourSpace": 0, "stretchAmount": 0.0, "stretchDirection": 0.0, "detailSource": "Source", "detailAmount": 0.0, "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0, "center_x": 480.0, "center_y": 270.0, "channels": "rgb", "mix": 1.0}},
     "MarkerRemoval": {"inputs": ["image"], "params": {"enabled": 1, "mode": "bilinear", "linearsearch": 100, "ctrlMask": "rgba.alpha", "x_offset": 0, "y_offset": 0}},
+    "DustBust": {"inputs": ["image"], "params": {"enable": 1, "frame_offset": 1, "edge_hardness": 0.5, "view_source": 0, "maskchannel": "none"}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0,
                   "autocrop_mode": "alpha", "autocrop_color_r": 0.0, "autocrop_color_g": 0.0, "autocrop_color_b": 0.0, "autocrop_tolerance": 0.1,
@@ -2578,6 +2579,9 @@ LIMITS.update(_motionblurknobs.LIMITS)
 CHOICES.update(_vectorblurknobs.CHOICES)
 LIMITS.update(_vectorblurknobs.LIMITS)
 LIMITS["invert_uv"] = (0, 1)      # VectorBlur
+LIMITS["enable"] = (0, 1)          # DustBust
+LIMITS["edge_hardness"] = (0.0, 1.0)
+LIMITS["view_source"] = (0, 1)
 CHOICES.update(_warpknobs.CHOICES)
 LIMITS.update(_warpknobs.LIMITS)
 CHOICES["guide_channels"] = list(_bilateralknobs.GUIDE_CHANNELS)
@@ -3799,6 +3803,7 @@ class Dispatcher:
                                                  "shapes": "[{name, mode, opacity, feather, closed, stroke_width, points}] (closed defaults true; open shapes render as strokes)",
                                                  "layers": "optional [{name, visible, locked, layer, overlay_color}] folders; an item's `layer` names its folder (kept when omitted)"},
                                   "set_paint_items": {"id": "string (RotoPaint node id)", "items": "ordered paint/shape layers"},
+                                  "set_dustbust_spots": {"id": "DustBust node id", "spots": "[{frame, x, y, radius}]"},
                                   "set_roto_tool_settings": {"id": "Roto or RotoPaint node id", "tool": "tool name", "settings": "per-tool setting object"},
                                   "paint_tools": ["paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"],
                                   "paint_stroke": {"points": "[{x, y, pressure}]",
@@ -3824,7 +3829,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "node_tab", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "viewer_knobs", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_roto_tool_settings", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "node_tab", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "viewer_knobs", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_dustbust_spots", "set_roto_tool_settings", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -4131,6 +4136,17 @@ class Dispatcher:
                 raise ValueError("set_warp_data: data must be a warp-control object")
             doc["node_data"][key] = copy.deepcopy(payload)
             return copy.deepcopy(payload)
+        elif op == "set_dustbust_spots":
+            if node["type"] != "DustBust":
+                raise ValueError("set_dustbust_spots: expected a DustBust node")
+            spots = cmd.get("spots")
+            if not isinstance(spots, list): raise ValueError("spots must be a list")
+            for spot in spots:
+                if not isinstance(spot, dict) or set(spot) != {"frame", "x", "y", "radius"} or type(spot.get("frame")) is not int or any(type(spot.get(k)) not in (float, int) or not math.isfinite(spot[k]) for k in ("x", "y", "radius")) or spot["radius"] <= 0:
+                    raise ValueError("each DustBust spot needs an integer frame, finite coordinates and positive radius")
+            if spots: doc["node_data"][key] = {"spots": copy.deepcopy(spots)}
+            else: doc["node_data"].pop(key, None)
+            return {"spots": len(spots)}
         elif op in ("set_shapes", "set_tracks", "set_paint_items"):
             # Whole-payload replacement, validated by `validate` like any other edit and taking one
             # undo slot. There is no per-key op: keying a single point goes through the animation

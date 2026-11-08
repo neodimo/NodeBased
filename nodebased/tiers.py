@@ -675,7 +675,7 @@ REGION_RULES = {
     "TimeEcho": _identity,
     "NoTimeBlur": _identity,
     "MotionBlur": _identity, "Kronos": _identity, "OFlow": _identity, "VectorToMotion": _identity, "VectorGenerator": _identity, "MotionBlur2D": _identity, "MotionBlur3D": _identity, "CurveTool": _identity, "ContactSheet": _identity,
-    "SmartVector": _identity, "VectorDistort": _identity, "VectorCornerPin": _identity, "Inpaint": _identity, "MarkerRemoval": _identity,
+    "SmartVector": _identity, "VectorDistort": _identity, "VectorCornerPin": _identity, "Inpaint": _identity, "MarkerRemoval": _identity, "DustBust": _identity,
     # TVIScale (like TimeBlur/TimeEcho/Inpaint above) is solved whole and sliced by
     # `tileexec._temporal_tile`, not per-tile, so its own spatial ROI need is the identity; Assert
     # reads exactly the region it is asked to pass through (its pixel statistics need the whole

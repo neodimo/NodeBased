@@ -39,6 +39,7 @@ NODE_CATEGORIES = {
         "Dither": "Adds noise before quantising, to hide banding.",
         "Grid": "Draws an evenly spaced line grid.",
         "MarkerRemoval": "Reconstructs marked pixels from nearby unmarked image regions.",
+        "DustBust": "Replaces marked spots with pixels sampled from a neighbouring frame.",
     },
     "Time": {
         "TimeOffset": "Shifts the input's frame by a fixed offset.",

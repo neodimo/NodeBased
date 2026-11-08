@@ -902,7 +902,7 @@ class TileExecutor:
         if is_tile_source_kind(kind):
             return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
-        if kind in ("TimeBlur", "TimeEcho", "NoTimeBlur", "Inpaint", "MarkerRemoval", "TVIScale") or \
+        if kind in ("TimeBlur", "TimeEcho", "NoTimeBlur", "Inpaint", "MarkerRemoval", "DustBust", "TVIScale") or \
                 (kind == "Roto" and node["disabled"]):
             return [self._temporal_tile(node_id, kind, node, params, frame, tier,
                                         buffered_region, node_digests)]

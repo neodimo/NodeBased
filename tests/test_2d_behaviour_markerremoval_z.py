@@ -44,6 +44,15 @@ class MarkerRemovalKernelTests(unittest.TestCase):
         short=marker_removal(image,mask,linearsearch=1)
         long=marker_removal(image,mask,linearsearch=10)
         self.assertFalse(np.array_equal(short[3,5],long[3,5]))
+    def test_radial_beats_bilinear_on_masked_disc_in_radial_ramp(self):
+        yy,xx=np.mgrid[-20:21,-20:21]; r=np.sqrt(xx*xx+yy*yy)
+        image=np.repeat((r/20)[...,None],4,axis=2).astype(np.float32)
+        mask=(r<=7).astype(np.float32)[...,None]
+        radial=marker_removal(image,mask,"radial")
+        bilinear=marker_removal(image,mask,"bilinear")
+        err_rad=np.abs(radial[20,20,0]-image[20,20,0])
+        err_bil=np.abs(bilinear[20,20,0]-image[20,20,0])
+        self.assertLess(err_rad,err_bil)
     def test_evaluator_enable_and_tile_path(self):
         d=Dispatcher(empty_document())
         d.execute({"op":"create","id":"plate","type":"Constant","params":{"width":24,"height":20,"red":.3,"green":.2,"blue":.1,"alpha":1}})

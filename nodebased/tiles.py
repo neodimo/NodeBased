@@ -326,7 +326,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     # matte), so it is not per-tile-local either. `_temporal_tile` solves it once per (node,
     # frame, tier) the same way and slices tiles from that result -- tiles equal to full-frame.
     "Inpaint",
-    "MarkerRemoval",
+    "MarkerRemoval", "DustBust",
     # TVIScale (2D parity plan 15, step F2) joins them for a different reason: it is size-changing
     # like Reformat, but unlike Reformat its own target size needs no live upstream display size to
     # state (2**power of whatever arrives, in both axes uniformly), so `tileexec._canvas_size_for_
@@ -418,6 +418,7 @@ TILE_KIND_BEHAVIOR = {
     "NoTimeBlur": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "Inpaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "MarkerRemoval": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+    "DustBust": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "TVIScale": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "RotoPaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "Roto": {"source": False, "bypass_self_resolves": True, "reads_files": False},

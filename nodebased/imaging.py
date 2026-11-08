@@ -1705,6 +1705,8 @@ class Evaluator:
                 delta_y = shapes.resolve_scalar(track["y"], frame, "y") - shapes.resolve_scalar(track["y"], reference_frame, "y")
                 params["position_x"] += delta_x / tier
                 params["position_y"] += delta_y / tier
+            if kind == "DustBust":
+                data = payload or {"spots": []}
             if kind == "Roto":
                 data = shapes.resolve_roto_shapes(payload, frame, doc, tier, params)
             elif kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
@@ -2971,6 +2973,14 @@ class Evaluator:
                     reference_paint = self.evaluate_raster(doc, source_key, cancel=cancel,
                         frame=float(params["reference_frame"]), tier=tier, typed=True, return_digest=True)
                     fingerprint = [kind.lower(), reference_paint[1], round(float(frame), 6)]
+            dustbust_source = None
+            if kind == "DustBust" and not node["disabled"]:
+                source_key = node["inputs"].get("image")
+                lo, hi = int(doc.get("time", {}).get("first", frame)), int(doc.get("time", {}).get("last", frame))
+                source_frame = max(lo, min(hi, int(round(frame)) + int(params.get("frame_offset", 1))))
+                dustbust_source = self.evaluate_raster(doc, source_key, cancel=cancel, frame=source_frame,
+                    tier=tier, typed=True, return_digest=True)
+                fingerprint = ["dustbust", source_frame, dustbust_source[1]]
             if kind == "Inpaint" and not node["disabled"]:
                 source_key = node["inputs"].get("image")
                 radius = max(1, int(params["temporal_frames"]) // 2)
@@ -3348,6 +3358,25 @@ class Evaluator:
                     from .flow_nodes import vector_layers_to_motion
                     layers = vector_layers_to_motion(source.layers, params["forward_layer"], params["backward_layer"])
                     raster = Raster(source.pixels, source.data, source.display, layers, source.meta)
+                elif kind == "DustBust" and dustbust_source is not None:
+                    source = values[node["inputs"]["image"]]
+                    sampled, _sample_digest = dustbust_source
+                    scaled_params = dict(params, spots=(data or {}).get("spots", []))
+                    pixels = self._kernel(kind, scaled_params, [source.pixels, sampled.fit(source.data)], frame,
+                                          data, (source.data.x, source.data.y))
+                    layers = dict(source.layers or {})
+                    mask_name = str(params.get("maskchannel", "none"))
+                    if mask_name.lower() != "none":
+                        from .raster import Raster as _Raster
+                        mask = np.zeros((*pixels.shape[:2], 4), np.float32)
+                        mask[..., 0] = 0
+                        # Coverage is calculated separately so unpainted areas stay zero.
+                        from .ops2d_dustbust import dustbust as _dustbust
+                        _unused, coverage = _dustbust(source.pixels, sampled.fit(source.data), scaled_params.get("spots", []),
+                            frame, params.get("frame_offset", 1), params.get("edge_hardness", .5), False, mask_name)
+                        mask[..., 0] = coverage; mask[..., 3] = coverage
+                        layers[mask_name] = _Raster.of(mask, source.display)
+                    raster = Raster(pixels, source.data, source.display, layers, source.meta)
                 elif kind == "SmartVector" and smartvector_layers is not None:
                     source = values[node["inputs"]["image"]]
                     raster = Raster(source.pixels, source.data, source.display,
@@ -5978,6 +6007,15 @@ class Evaluator:
                 shifted[sy0+dy:sy1+dy, sx0+dx:sx1+dx] = control[sy0:sy1, sx0:sx1]
             control = shifted
             return marker_removal(src, control, p.get("mode", "bilinear"), p.get("linearsearch", 100))
+        if kind == "DustBust":
+            if not p.get("enable", 1):
+                return inputs[0].copy()
+            from .ops2d_dustbust import dustbust
+            source = inputs[1] if len(inputs) > 1 and inputs[1] is not None else inputs[0]
+            result = dustbust(inputs[0], source, p.get("spots", []), frame or 0,
+                              p.get("frame_offset", 1), p.get("edge_hardness", .5),
+                              bool(p.get("view_source", 0)), p.get("maskchannel", "none"))
+            return result[0] if isinstance(result, tuple) else result
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace"):
             from .ocio_nodes import transform
             filtered = transform(kind, p, inputs[0])

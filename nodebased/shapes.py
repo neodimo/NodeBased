@@ -68,14 +68,14 @@ POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 FEATHER_POINT_FIELDS = ("feather_x", "feather_y")
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
-NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks", "PlanarTracker": "tracks", "RotoPaint": "items",
+NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks", "PlanarTracker": "tracks", "RotoPaint": "items", "DustBust": "spots",
                     "SplineWarp": "pairs", "GridWarp": "grid"}
 
 # Pixel-unit scalars inside a payload — these must be scaled by a proxy tier change alongside
 # `tiers.PIXEL_UNIT_PARAMS`, or a shape keys a different part of the frame at tier 2.
 # See docs/EVALUATION_TIERS.md clause C3.
 PIXEL_UNIT_SCALARS = frozenset({"x", "y", "in_x", "in_y", "out_x", "out_y", "feather",
-                                "feather_x", "feather_y", "stroke_width",
+                                "feather_x", "feather_y", "stroke_width", "radius",
                                 "translate_x", "translate_y", "center_x", "center_y"})
 
 
@@ -361,6 +361,13 @@ def validate_payload(kind, payload, where):
                         raise ValueError(f"{p_at} defines exactly {list(POINT_FIELDS)}")
                     for field in POINT_FIELDS:
                         validate_scalar(point[field], field, p_at)
+        return
+    if kind == "DustBust":
+        if not isinstance(payload, dict) or set(payload) != {"spots"} or not isinstance(payload["spots"], list):
+            raise ValueError(f"{where}: DustBust payload defines a spots list")
+        for i, spot in enumerate(payload["spots"]):
+            if not isinstance(spot, dict) or set(spot) != {"frame", "x", "y", "radius"} or type(spot.get("frame")) is not int or any(not _is_number(spot.get(k)) for k in ("x", "y", "radius")) or spot["radius"] <= 0:
+                raise ValueError(f"{where}.spots[{i}] needs an integer frame, finite coordinates and positive radius")
         return
     if kind == "GridWarp":
         if not isinstance(payload, dict) or set(payload) != {"source", "destination"}:
