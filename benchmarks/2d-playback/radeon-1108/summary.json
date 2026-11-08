@@ -1,0 +1,157 @@
+{
+ "runs": [
+  {
+   "case": "gpu2d-48-radeon-1108-1",
+   "adapter": "radeon-1108",
+   "backend": "cpu",
+   "frames_in_first_pass": null,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 23.994,
+   "total_duration_ms": 1953.843,
+   "mean_interval_ms": 41.015,
+   "interval_ms": {
+    "n": 46,
+    "mean": 41.015,
+    "p50": 40.399,
+    "p95": 47.956,
+    "p99": 52.641,
+    "max": 54.464
+   },
+   "first_picture_latency_ms": 67.133,
+   "latency_ms": {
+    "n": 47,
+    "mean": 44.225,
+    "p50": 37.549,
+    "p95": 65.98,
+    "p99": 70.877,
+    "max": 72.74
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 23.054,
+    "p50": 20.022,
+    "p95": 37.656,
+    "p99": 46.062,
+    "max": 48.244
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 10.427,
+    "p50": 7.629,
+    "p95": 18.444,
+    "p99": 27.512,
+    "max": 34.656
+   },
+   "frames_dropped_counted": 0
+  },
+  {
+   "case": "gpu2d-48-radeon-1108-2",
+   "adapter": "radeon-1108",
+   "backend": "cpu",
+   "frames_in_first_pass": null,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 24.02,
+   "total_duration_ms": 1949.949,
+   "mean_interval_ms": 40.965,
+   "interval_ms": {
+    "n": 46,
+    "mean": 40.965,
+    "p50": 39.411,
+    "p95": 50.732,
+    "p99": 58.705,
+    "max": 63.557
+   },
+   "first_picture_latency_ms": 65.564,
+   "latency_ms": {
+    "n": 47,
+    "mean": 46.154,
+    "p50": 46.019,
+    "p95": 64.596,
+    "p99": 70.724,
+    "max": 72.497
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 24.502,
+    "p50": 22.725,
+    "p95": 39.43,
+    "p99": 41.367,
+    "max": 42.272
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 10.577,
+    "p50": 7.721,
+    "p95": 18.297,
+    "p99": 25.47,
+    "max": 30.133
+   },
+   "frames_dropped_counted": 0
+  },
+  {
+   "case": "gpu2d-48-radeon-1108-3",
+   "adapter": "radeon-1108",
+   "backend": "cpu",
+   "frames_in_first_pass": null,
+   "fresh_frames_traced": 47,
+   "first_pass_fps": 23.926,
+   "total_duration_ms": 1956.855,
+   "mean_interval_ms": 41.019,
+   "interval_ms": {
+    "n": 46,
+    "mean": 41.019,
+    "p50": 40.65,
+    "p95": 51.097,
+    "p99": 55.871,
+    "max": 58.971
+   },
+   "first_picture_latency_ms": 69.978,
+   "latency_ms": {
+    "n": 47,
+    "mean": 46.232,
+    "p50": 39.257,
+    "p95": 64.415,
+    "p99": 74.689,
+    "max": 78.702
+   },
+   "node_evaluation_ms": {
+    "n": 47,
+    "mean": 24.709,
+    "p50": 21.97,
+    "p95": 38.181,
+    "p99": 44.83,
+    "max": 50.137
+   },
+   "display_conversion_ms": {
+    "n": 47,
+    "mean": 11.632,
+    "p50": 8.237,
+    "p95": 19.21,
+    "p99": 27.94,
+    "max": 34.502
+   },
+   "frames_dropped_counted": 1
+  }
+ ],
+ "groups": {
+  "gpu2d-48-radeon-1108": {
+   "passes": 3,
+   "first_pass_fps": [
+    23.994,
+    24.02,
+    23.926
+   ],
+   "first_pass_fps_median": 23.994,
+   "interval_p95_ms": [
+    47.956,
+    50.732,
+    51.097
+   ],
+   "node_evaluation_median_ms": [
+    20.022,
+    22.725,
+    21.97
+   ]
+  }
+ }
+}

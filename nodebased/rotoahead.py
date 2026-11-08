@@ -31,7 +31,10 @@ import threading
 
 from . import cachetier, groups, sourcepool
 
-DEFAULT_FRAMES = 2
+# The 1080p GPU playback trace still found 27 ms p95 Roto kernels on the
+# foreground walk with a two-frame queue.  Keep one more matte in flight so
+# the single preview worker has a better chance of finding it complete.
+DEFAULT_FRAMES = 3
 DEFAULT_BYTE_CAP = 256 << 20
 
 # Kinds after which the frame a node sees is not the frame the walk asked for (or is fetched by a nested call).
