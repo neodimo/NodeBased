@@ -144,6 +144,7 @@ class RotoToolbarTests(unittest.TestCase):
 
     def test_point_tools_add_remove_cusp_smooth_feather_and_toggle_curve(self):
         viewer = self.window.viewer
+        viewer.roto_toolbar.set_setting("r", "Select Points", "autokey", False)
         self.put_shape(handles=True, feather=7.0)
         viewer.select_roto_tool("Points", "Add Points"); self.assertTrue(self.click_data(170, 80))
         self.assertEqual(len(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]), 5)
@@ -161,6 +162,7 @@ class RotoToolbarTests(unittest.TestCase):
 
     def test_select_splines_points_all_and_feather_modes_pick_only_their_targets(self):
         viewer=self.window.viewer
+        viewer.roto_toolbar.set_setting("r", "Select Points", "autokey", False)
         shape=self.put_shape(feather=5.0)
         shape["feather_model"]="edge"
         self.window.command({"op":"set_shapes","id":"r","shapes":[shape]})
@@ -221,6 +223,36 @@ class RotoToolbarTests(unittest.TestCase):
         self.assertGreater(float(mask.sum()), 1000.0)
         self.assertFalse(np.array_equal(roto.flatten_points(resolved[0]["points"]),
                                         roto.flatten_points(resolved[0]["points"], curve_type="bspline")))
+
+    def test_transform_box_pivot_drag_keeps_shape_points_fixed(self):
+        from PySide6.QtCore import QPointF
+        viewer = self.window.viewer
+        viewer.roto_toolbar.set_setting("r", "Select Points", "autokey", False)
+        shape = self.put_shape()
+        shape["transform"] = {"translate_x": 7.0, "translate_y": -4.0, "rotate": 31.0,
+                              "scale_x": 1.4, "scale_y": 0.8, "center_x": 170.0, "center_y": 140.0}
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": [shape]}, render=False)
+        viewer.roto_selected_points = {(0, index) for index in range(len(shape["points"]))}
+        context = viewer._roto_context(); resolved = viewer._roto_resolved(context)
+        before = [dict(point) for point in resolved[0]["points"]]
+        selected, bounds, _, pivot = viewer._roto_box_geometry(resolved, context[3])
+        viewer.roto_drag = {"kind": "box", "kind_name": "pivot", "selected": selected,
+                            "bounds": bounds, "pivot": pivot, "start": pivot,
+                            "scene": QPointF(pivot.x() + 12.0, pivot.y() + 9.0),
+                            "tier": context[3],
+                            "initial": {(si, pi): dict(resolved[si]["points"][pi]) for si, pi in selected},
+                            "alt_shape": None}
+        before_undo = len(self.window.dispatcher.undo_stack)
+        self.assertTrue(viewer._commit_roto_drag())
+        after = viewer._roto_resolved(viewer._roto_context())[0]["points"]
+        for actual, previous in zip(after, before):
+            self.assertAlmostEqual(actual["x"], previous["x"], places=5)
+            self.assertAlmostEqual(actual["y"], previous["y"], places=5)
+        from nodebased import shapes as shape_model
+        stored = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["transform"]
+        self.assertNotEqual(shape_model.resolve_scalar(stored["center_x"], 1, "center_x"), 170.0)
+        self.assertNotEqual(shape_model.resolve_scalar(stored["center_y"], 1, "center_y"), 140.0)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), before_undo + 1)
 
     def test_shift_drag_changes_brush_size_without_creating_a_stroke(self):
         self.window.command({"op":"create", "id":"p", "type":"RotoPaint", "pos":[0,0]})

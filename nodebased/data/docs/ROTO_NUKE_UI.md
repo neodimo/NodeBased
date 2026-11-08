@@ -9,17 +9,16 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Toolbar and tools | 32 | 0 | 0 | 100.0 |
 | Tool settings | 189 | 1 | 0 | 99.7 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
-| Viewer editing | 27 | 3 | 1 | 91.9 |
+| Viewer editing | 28 | 2 | 1 | 93.5 |
 | Timing and animation | 7 | 2 | 1 | 80.0 |
-| Overall | — | — | — | 97.2 |
+| Overall | — | — | — | 97.3 |
 ## Largest gaps
 
-1. Transform-box center/pivot behavior still differs from Nuke.
-2. B-Spline tension gestures remain open; the official guide names the gesture but does not specify a tension mapping.
-3. Clone view selection depends on multi-view projects, which NodeBased does not support.
-4. Timing still lacks the full per-shape key scope menu and motion-blur keys; ripple editing remains undocumented in the traversed guide.
-5. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
-6. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
+1. B-Spline tension gestures remain open; the official guide names the gesture but does not specify a tension mapping.
+2. Clone view selection depends on multi-view projects, which NodeBased does not support.
+3. Timing still lacks the full per-shape key scope menu and motion-blur keys; ripple editing remains undocumented in the traversed guide.
+4. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
+5. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
 ## Proposed implementation steps
 
 | Step | Side | Scope |
@@ -63,7 +62,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 18 | R1 · viewer side | B-Spline | match | `RotoViewerToolbar`; `Viewer.begin_roto_draw` and `Viewer.finish_roto_draw`; `roto.flatten_points` evaluates uniform cubic B-splines. | B-Spline shapes rasterize through the new evaluator; Bezier shapes keep their existing path. |
 | 19 | R1 · viewer side | Transform box | match | `Viewer.keyPressEvent` T; `Viewer._roto_box_geometry` | T toggles the transform box for an active Roto selection. |
 | 20 | R1 · viewer side | Ellipse | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
-| 21 | R1 · viewer side | Transform-box center/pivot | differs | `Viewer._roto_box_result`; `RotoPanel.build_panel` shape transform center controls; interaction differs from Nuke handles. |  |
+| 21 | R1 · viewer side | Transform-box center/pivot | match | `Viewer._roto_box_action`, `_roto_pivot_updates` and `_commit_roto_drag`; centre drag preserves rendered points and is covered by `tests.test_roto_toolbar_r1`. |  |
 | 22 | R1 · viewer side | Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 23 | R1 · viewer side | Transform-box pivot modify | match | `Viewer.mousePressEvent` maps Ctrl/Cmd+Shift drag on the transform handle to pivot modification. |  |
 | 24 | R1 · viewer side | Cusped Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |

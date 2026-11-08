@@ -1676,8 +1676,8 @@
     },
     {
       "name": "Transform-box center/pivot",
-      "status": "differs",
-      "location": "`Viewer._roto_box_result`; `RotoPanel.build_panel` shape transform center controls; interaction differs from Nuke handles.",
+      "status": "match",
+      "location": "`Viewer._roto_box_action`, `_roto_pivot_updates` and `_commit_roto_drag`; dragging the centre preserves every rendered control point. `tests.test_roto_toolbar_r1` checks the pivot move and single undo.",
       "difference": ""
     },
     {
