@@ -9,9 +9,9 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Toolbar and tools | 31 | 0 | 1 | 96.9 |
 | Tool settings | 0 | 136 | 54 | 35.8 |
 | Stroke/shape list | 0 | 12 | 8 | 30.0 |
-| Viewer editing | 14 | 10 | 7 | 61.3 |
+| Viewer editing | 16 | 9 | 6 | 66.1 |
 | Timing and animation | 0 | 9 | 1 | 45.0 |
-| Overall | — | — | — | 45.4 |
+| Overall | — | — | — | 45.9 |
 
 ## Largest gaps
 
@@ -67,13 +67,13 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 16 | R1 · viewer side | Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 17 | R1 · viewer side | Cusped Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 18 | R1 · viewer side | B-Spline | missing | `roto.flatten_points` evaluates cubic Bezier spans; no B-Spline evaluator is present in `nodebased/roto.py`. | The B-Spline control curve cannot yet be evaluated as Nuke expects. |
-| 19 | R1 · viewer side | Transform box | differs | `Viewer._roto_box_geometry`, `_roto_box_action`, `_roto_box_result`; no T toggle. |  |
+| 19 | R1 · viewer side | Transform box | match | `Viewer.keyPressEvent` T; `Viewer._roto_box_geometry` | T toggles the transform box for an active Roto selection. |
 | 20 | R1 · viewer side | Ellipse | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 21 | R1 · viewer side | Transform-box center/pivot | differs | `Viewer._roto_box_result`; `RotoPanel.build_panel` shape transform center controls; interaction differs from Nuke handles. |  |
 | 22 | R1 · viewer side | Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 23 | R1 · viewer side | Transform-box pivot modify | differs | `Viewer._roto_box_action`, `_roto_box_result`; Nuke Ctrl/Cmd+Shift handle gesture is absent. |  |
 | 24 | R1 · viewer side | Cusped Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
-| 25 | R1 · viewer side | Nudge point | missing | No numeric-keypad nudge branch in `Viewer.keyPressEvent`. |  |
+| 25 | R1 · viewer side | Nudge point | match | `Viewer.keyPressEvent` numeric keypad arrows | A keypad arrow nudges the selected point by one pixel. |
 | 26 | R1 · viewer side | Open Spline | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 27 | R1 · viewer side | Draw Bezier/B-Spline freely | differs | `Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; no Ctrl/Cmd sketch mode or B-Spline implementation. |  |
 | 28 | R1 · viewer side | Shapes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |

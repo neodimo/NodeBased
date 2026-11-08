@@ -1667,9 +1667,8 @@
     },
     {
       "name": "Transform box",
-      "status": "differs",
-      "location": "`Viewer._roto_box_geometry`, `_roto_box_action`, `_roto_box_result`; no T toggle.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` T toggles `_roto_box_geometry` while a Roto selection is active."
     },
     {
       "name": "Transform-box center/pivot",
@@ -1685,9 +1684,8 @@
     },
     {
       "name": "Nudge point",
-      "status": "missing",
-      "location": "No numeric-keypad nudge branch in `Viewer.keyPressEvent`.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` numeric keypad arrows move selected Roto points by one pixel."
     },
     {
       "name": "Draw Bezier/B-Spline freely",
