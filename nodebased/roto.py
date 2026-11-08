@@ -558,7 +558,10 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
                 # Motion blur with an explicit shutter: the mean over every sample time, the current frame included only if sampled.
                 result = sum(coverage(points, sw, sh, origin=(sx0, sy0), flattened_cache=flattened_cache)
                              for points in samples) / len(samples)
-                result = np.clip(feather(result, shape["feather"]), 0.0, 1.0)
+                # `feather` has just allocated its result.  Clamp that array in place instead
+                # of allocating a second patch-sized array before the blend below.
+                result = feather(result, shape["feather"])
+                np.clip(result, 0.0, 1.0, out=result)
                 if falloff == "smooth":
                     result = result * result * (3.0 - 2.0 * result)
                 elif falloff == "gaussian":
@@ -570,7 +573,8 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
                     result = (result + sum(coverage(points, sw, sh, origin=(sx0, sy0),
                                                     flattened_cache=flattened_cache, curve_type=shape.get("curve_type", "bezier"))
                                            for points in samples)) / (len(samples) + 1)
-                result = np.clip(feather(result, shape["feather"]), 0.0, 1.0)
+                result = feather(result, shape["feather"])
+                np.clip(result, 0.0, 1.0, out=result)
                 if falloff == "smooth":
                     result = result * result * (3.0 - 2.0 * result)
                 elif falloff == "gaussian":
