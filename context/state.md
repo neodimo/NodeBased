@@ -1,5 +1,24 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (1:16 PM on 2026-11-08 PDT)
+
+`main` moved `cccd2d6d` -> `03333543` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `03333543` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-1256.log`, started 12:56 PM): **Ran 9466 tests in 1101.084 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step AB: the next nodes under 80: Root, Sampler, Histogram, HistEQ and GenerateLUT.** Commits:
+  - `2dac6ce2` Improve 2D analysis node fidelity and layouts
+  Diff: 13 files changed, 139 insertions(+), 50 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (12:46 PM on 2026-11-08 PDT)
 
 `main` moved `0f20f846` -> `0422e201` (lane commits cherry-picked onto main in lane order) and then to this

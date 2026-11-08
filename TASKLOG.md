@@ -1,3 +1,9 @@
+## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step AB: the next nodes under 80: Root, Sampler, Histogram, HistEQ and GenerateLUT (integrator tick)
+
+- **What was done:** `main` `cccd2d6d` -> `03333543` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `03333543`: Ran 9466 tests in 1101.084 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-08 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: the direct picture on the Radeon, a faster Roto matte, the order-dependent test (finish 1) (integrator tick)
 
 - **What was done:** `main` `0f20f846` -> `0422e201` plus this docs commit. Evidence and per-lane commit
