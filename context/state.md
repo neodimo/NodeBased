@@ -10884,3 +10884,7 @@ Evidence: targeted Roto, planar tracking, Tracker, RotoPaint, knob, core, tiers,
 
 ## 2026-11-07 — Lane 9 R2 (partial)
 Settings-strip implementation committed on `openclaw/nb-2d-behaviour`; audit 158/190 tool-setting rows matched, overall 90.1. Remaining R2 differs rows are documented in `docs/ROTO_NUKE_UI.md`; R1 rows 21, 27, 29, 33, 47 remain. Autokey is reserved for Lane 2 R4. See TASKLOG.md and lane report for evidence and next owner.
+## 2026-11-08 — Lane 8 finish: Roto profile and allocation reuse (partial)
+
+The playback fixture profiler identifies box feathering as the active cost after coverage; its stored five-frame record is `benchmarks/2d-playback/roto-fixture-profile-1108.json`. `roto.rasterise` now clamps the new feather array in place, preserving the five fixture matte hashes exactly. Focused Roto/read-ahead/source-pool tests and the desktop-then-playback-pipeline run pass. The three requested post-change Radeon runs were 135.729–139.864 ms p95 (and 148.010–151.131 ms with CPUs `0-3`), incompatible with the 48.698–52.407 ms baseline, so this step stays partial until Gonzo reproduces the original controlled benchmark environment. Raw run files are deliberate workspace scratch, not committed evidence.
+
