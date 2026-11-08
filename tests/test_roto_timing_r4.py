@@ -172,6 +172,7 @@ class RotoTimingR4Tests(unittest.TestCase):
         self.window.command({"op": "view", "id": "p"})
         self.window.viewer.paint_selected_item_index = 0
         panel = self.window.build_node_panel("p")
+        self.window.set_properties_widget(panel)
         combo = panel.findChild(QComboBox, "rotopaint-layer-lifetime")
         self.assertIsNotNone(combo)
         self.assertEqual(combo.findData("all"), combo.currentIndex())
@@ -181,12 +182,12 @@ class RotoTimingR4Tests(unittest.TestCase):
         life = self.window.dispatcher.document["node_data"]["p"]["items"][0]["lifetime"]
         self.assertEqual(life, {"type": "range", "start": 1, "end": 1})
         panel = self.window.build_node_panel("p")
+        self.window.set_properties_widget(panel)
         before = len(self.window.dispatcher.undo_stack)
         panel.findChild(QPushButton, "rotopaint-layer-key-transform-scale_x").click()
         item = self.window.dispatcher.document["node_data"]["p"]["items"][0]
         self.assertEqual(item["transform"]["scale_x"]["curve"]["keys"], [{"frame": 1, "value": 1.0}])
         self.assertEqual(len(self.window.dispatcher.undo_stack), before + 1)
-
     def test_rotopaint_stroke_lifetime_panel_edits_from_and_to(self):
         self.window.command({"op": "create", "id": "p", "type": "RotoPaint"})
         self.window.command({"op": "connect", "id": "p", "input": "image", "source": "r"})
@@ -194,11 +195,13 @@ class RotoTimingR4Tests(unittest.TestCase):
         self.window.command({"op": "view", "id": "p"})
         self.window.viewer.paint_selected_item_index = 0
         panel = self.window.build_node_panel("p")
+        self.window.set_properties_widget(panel)
         combo = panel.findChild(QComboBox, "rotopaint-layer-lifetime")
         self.assertEqual([combo.itemData(i) for i in range(combo.count())],
                          ["all", "start_to", "single", "to_end", "range"])
         combo.setCurrentIndex(combo.findData("start_to"))
         panel = self.window.build_node_panel("p")
+        self.window.set_properties_widget(panel)
         endpoint = panel.findChild(QSpinBox, "rotopaint-layer-lifetime-last")
         self.assertIsNotNone(endpoint)
         endpoint.setValue(5)

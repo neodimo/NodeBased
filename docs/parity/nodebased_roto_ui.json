@@ -1778,21 +1778,21 @@
     },
     {
       "name": "Set key: spline",
-      "status": "match",
-      "location": "`RotoPanel.build_panel`; the spline key controls create keys on every selected shape point and show the current/total key count.",
-      "difference": ""
+      "status": "differs",
+      "location": "Roto has current/total spline keys, navigation and set/delete in `RotoPanel.build_panel`; RotoPaint has no equivalent spline-key panel controls.",
+      "difference": "The selected-spline controls do not yet appear in the RotoPaint panel."
     },
     {
       "name": "Delete key: spline",
-      "status": "match",
-      "location": "`RotoPanel.build_panel`; delete removes the selected spline point keys at the current frame.",
-      "difference": ""
+      "status": "differs",
+      "location": "Roto `RotoPanel.build_panel` deletes selected spline point keys at the current frame; RotoPaint has no equivalent panel control.",
+      "difference": "The delete control is missing from RotoPaint."
     },
     {
       "name": "Set/delete point keys",
-      "status": "match",
-      "location": "`RotoPanel.build_panel`; set/delete keys affect only the selected points and their point scalars.",
-      "difference": ""
+      "status": "differs",
+      "location": "Roto `RotoPanel.build_panel` sets/deletes selected point keys; the viewer edit path is shared by RotoPaint, but its panel has no selected-point key controls.",
+      "difference": "The selected-point controls are absent from the RotoPaint panel."
     },
     {
       "name": "Set key: transform",
