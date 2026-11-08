@@ -21,7 +21,7 @@ def active(stroke, frame):
 
 
 def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0, 0), dynamic_hardness=False,
-                   buildup_opacity=None):
+                   buildup_opacity=None, pressure_size=True, pressure_opacity=True):
     """Stroke coverage in 0..1: the max over a chain of round dabs along the point path.
 
     A dab is solid out to `hardness` of its radius and falls off smoothly from there to the rim
@@ -44,16 +44,16 @@ def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0
             t = i / count
             x, y = x0 + t*(x1-x0), y0 + t*(y1-y0)
             pressure = p0 + t*(p1-p0)
-            radius = max(0.25, size * pressure * 0.5)
+            radius = max(0.25, size * (pressure if pressure_size else 1.0) * 0.5)
             dab_hardness = hardness * pressure if dynamic_hardness else hardness
             d = np.sqrt((xx + ox + 0.5 - x)**2 + (yy + oy + 0.5 - y)**2)
             ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
             if dab_hardness < 1.0:
                 ramp = ramp * ramp * (3.0 - 2.0 * ramp)
             if buildup_opacity is None:
-                coverage = np.maximum(coverage, ramp * pressure)
+                coverage = np.maximum(coverage, ramp * (pressure if pressure_opacity else 1.0))
             else:
-                dab = np.clip(ramp * pressure * buildup_opacity, 0.0, 1.0)
+                dab = np.clip(ramp * (pressure if pressure_opacity else 1.0) * buildup_opacity, 0.0, 1.0)
                 coverage = 1.0 - (1.0 - coverage) * (1.0 - dab)
     return coverage
 
@@ -86,6 +86,8 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
     tool, blend = stroke["tool"], stroke["blend"]
     dynamic = bool(stroke.get("dynamic_hardness", False))
     buildup = bool(stroke.get("buildup", False))
+    pressure_size = bool(stroke.get("pressure_size", True))
+    pressure_opacity = bool(stroke.get("pressure_opacity", True))
     paint_source = stroke.get("source", "color")
     if tool == "paint" and blend == "over" and paint_source == "color":
         # Most brush marks touch a small part of a tile. Rasterise and composite only that
@@ -101,12 +103,13 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
         if dynamic or buildup:
             coverage = _distance_grid(x1 - x0, y1 - y0, stroke["points"], brush["size"], brush["spacing"],
                                       brush["hardness"], local_origin, dynamic,
-                                      float(brush["opacity"]) if buildup else None)
+                                      float(brush["opacity"]) if buildup else None, pressure_size, pressure_opacity)
             alpha = coverage[..., None] * np.float32(stroke["opacity"] if buildup else brush["opacity"] * stroke["opacity"])
         else:
             coverage = _distance_grid(x1 - x0, y1 - y0, stroke["points"],
                                       brush["size"], brush["spacing"],
-                                      brush["hardness"], local_origin)
+                                      brush["hardness"], local_origin, pressure_size=pressure_size,
+                                      pressure_opacity=pressure_opacity)
             alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
         rgba = np.asarray(stroke["color"], np.float32)
         inverse = np.float32(1.0) - alpha
@@ -128,7 +131,8 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
         alpha = coverage[..., None] * np.float32(stroke["opacity"] if buildup else brush["opacity"] * stroke["opacity"])
     else:
         coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"],
-                                  brush["size"], brush["spacing"], brush["hardness"], origin)
+                                  brush["size"], brush["spacing"], brush["hardness"], origin,
+                                  pressure_size=pressure_size, pressure_opacity=pressure_opacity)
         alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
     tool = stroke["tool"]
     if tool == "paint" and paint_source != "color":
@@ -250,6 +254,11 @@ def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
             clone_raster = clone_map.get(source_frame)
             clone_source = source if clone_raster is None else clone_raster.fit(clone_raster.data)
             clone_source = clone_source[..., :4] if hasattr(clone_source, "shape") else source
+            item_reveal = item.get("_reveal_source", reveal)
+            if hasattr(item_reveal, "fit"):
+                item_reveal = item_reveal.fit(item_reveal.data)
+            if hasattr(item_reveal, "pixels"):
+                item_reveal = item_reveal.pixels
             origins = item.get("_clone_source_origins", {}).get(source_frame, origin)
             bounds = item.get("_clone_source_bounds", {}).get(source_frame)
             samples = item.get("_motion_samples")
@@ -257,12 +266,12 @@ def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
                 # Motion blur: the stroke drawn at each shutter time over the same picture, the results averaged.
                 acc = np.zeros_like(out)
                 for points in samples:
-                    acc += apply_stroke(out, dict(item, points=points), frame, source=clone_source, reveal=reveal,
+                    acc += apply_stroke(out, dict(item, points=points), frame, source=clone_source, reveal=item_reveal,
                                         origin=origin, source_origin=origins, source_bounds=bounds,
                                         plate=plate if item.get("source") == "background" else None)
                 out = (acc / np.float32(len(samples))).astype(np.float32)
             else:
-                out = apply_stroke(out, item, frame, source=clone_source, reveal=reveal, origin=origin,
+                out = apply_stroke(out, item, frame, source=clone_source, reveal=item_reveal, origin=origin,
                                    source_origin=origins, source_bounds=bounds,
                                    plate=plate if item.get("source") == "background" else None)
         else:

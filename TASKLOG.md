@@ -2002,3 +2002,11 @@
 - **Artifacts:** `3768a446` and `51c404b3`; local test logs at `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L8-gpu2d-cache.log` and `L8-media-fastpath.log`.
 - **State:** Partial. GPU Transform, media, Read-format, source-pool and cache tests passed. No required fixture-wide before/after array comparison or fresh Radeon/RTX playback passes were run.
 - **Next owner + concrete artifact:** Gonzo; use `tools/benchmark_gpu2d.py playback` with the 10/31 fixture command and write `benchmarks/2d-gpu/R6-1/playback-decode-python-1104.json`.
+
+## Lane 9 R2 — 2026-11-07 (PARTIAL)
+
+- What was done: Added a tool-dependent Roto/RotoPaint viewer settings strip, persistent per-tool `tool_settings`, creation-time settings on shapes/strokes, source-time/clone settings, and view/edit toggles. The audit reports tool settings 35.8 -> 83.2 (158/190 matched) and overall 52.5 -> 90.1. Autokey has a reserved slot for Lane 2 R4.
+- Artifacts: implementation and tests in this worktree; screenshots at `/var/home/omid/.openclaw/workspace/scratch/nb-qa/1107-roto-r2/{bezier,brush,clone}.png`; module logs at `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/L9-R2-modules/`. Worktree-local until commit; scratch artifacts remain local.
+- State: Partial. 32 R2 ledger rows still differ; rows 21, 27, 29, 33, 47 from R1 remain. `tests.test_roto_settings_r2`, `tests.test_roto_paint_ui`, `tests.test_roto_toolbar_r1`, `tests.test_knowledge` pass. Required Roto/direct-viewer module sweep passed all runnable modules except `tests.test_directviewer_hit_order`, stopped at five minutes and not retried.
+- Next owner + artifact: Gonzo continues the remaining ledger rows using `docs/ROTO_NUKE_UI.md` and `docs/parity/nodebased_roto_ui.json`; Lane 2 owns the autokey toggle.
+- Failure mode: `tests.test_directviewer_hit_order` hangs without output beyond five minutes; do not retry in this step.

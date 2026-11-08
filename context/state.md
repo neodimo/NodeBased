@@ -10666,3 +10666,6 @@ Evidence: targeted Roto, planar tracking, Tracker, RotoPaint, knob, core, tiers,
 **Evidence.** `3768a446` caches parameter/window-identical GPU Transform plans and tests animated-translate invalidation. `51c404b3` skips an identity native-linear EXR conversion. Targeted GPU2D and media/Read/source-pool/cache tests passed; logs are deliberate workspace scratch.
 
 **Limits.** Fixture-wide decoded/rendered `np.array_equal` comparison and the requested Radeon/RTX fresh playback passes remain unverified. Linux-only lane.
+
+## 2026-11-07 — Lane 9 R2 (partial)
+Settings-strip implementation committed on `openclaw/nb-2d-behaviour`; audit 158/190 tool-setting rows matched, overall 90.1. Remaining R2 differs rows are documented in `docs/ROTO_NUKE_UI.md`; R1 rows 21, 27, 29, 33, 47 remain. Autokey is reserved for Lane 2 R4. See TASKLOG.md and lane report for evidence and next owner.

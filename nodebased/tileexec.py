@@ -1188,8 +1188,8 @@ class TileExecutor:
         for item in items:
             if item.get("kind") != "stroke" or item.get("tool") != "clone":
                 continue
-            source_frame = (max(int(document["time"]["first"]), int(frame)-1)
-                            if item["source_frame"] == "relative" else int(item["source_frame"]))
+            source_frame = paintknobs.source_time_frame(
+                item, frame, document["time"]["first"], document["time"]["last"], clone=True)
             dx, dy = item["source_offset"]
             source_bounds = self.canvas_region(self._unbaked_document, image_id, source_frame, tier)
             # The window the stroke reads, kept to at least one pixel so a tile that reads wholly beyond the source's edge still
@@ -1221,6 +1221,17 @@ class TileExecutor:
             item.setdefault("_clone_source_origins", {})[source_frame] = (sx0, sy0)
             item.setdefault("_clone_source_bounds", {})[source_frame] = (
                 source_bounds.x, source_bounds.y, source_bounds.width, source_bounds.height)
+
+        reveal_id = node["inputs"].get("input2")
+        if reveal_id is not None:
+            for item in items:
+                if item.get("kind") != "stroke" or item.get("tool") != "reveal":
+                    continue
+                source_frame = paintknobs.source_time_frame(
+                    item, frame, document["time"]["first"], document["time"]["last"])
+                source = self.evaluator.evaluate_raster(
+                    self._unbaked_document, reveal_id, frame=source_frame, tier=tier, typed=True)
+                item["_reveal_source"] = source.fit(region)
 
         painted = paint.rasterise(base, items, frame, source=base, reveal=reveal,
                                   origin=(region.x, region.y),

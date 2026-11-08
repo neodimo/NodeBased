@@ -380,10 +380,29 @@ def validate_payload(kind, payload, where):
         if len(destination[0]) != columns:
             raise ValueError(f"{where}: source and destination grid dimensions differ")
         return
-    if not isinstance(payload, dict) or slot not in payload or set(payload) - {slot, "layers"} or (
+    allowed_payload = {slot, "layers"}
+    if kind in ("Roto", "RotoPaint"):
+        allowed_payload.add("tool_settings")
+    if not isinstance(payload, dict) or slot not in payload or set(payload) - allowed_payload or (
             "layers" in payload and slot not in ("shapes", "items")):
         raise ValueError(f"{where}: a {kind} payload defines exactly {slot!r}" + (" and optional layers" if slot in ("shapes", "items") else ""))
     items = payload[slot]
+    if "tool_settings" in payload:
+        settings = payload["tool_settings"]
+        if (kind not in ("Roto", "RotoPaint") or not isinstance(settings, dict)
+                or any(not isinstance(tool, str) or not isinstance(values, dict)
+                       or len(values) > 64 for tool, values in settings.items())):
+            raise ValueError(f"{where}.tool_settings must map tool names to setting objects")
+        def check_setting(value):
+            if value is None or type(value) in (bool, str, int):
+                return True
+            if type(value) is float:
+                return math.isfinite(value)
+            if isinstance(value, (list, tuple)):
+                return len(value) <= 8 and all(check_setting(item) for item in value)
+            return False
+        if any(not check_setting(value) for values in settings.values() for value in values.values()):
+            raise ValueError(f"{where}.tool_settings contains an unsupported value")
     if slot == "items":
         if not isinstance(items, list) or len(items) > MAXIMUM_SHAPES + 10000:
             raise ValueError(f"{where}.items must be a list of at most 10200 entries")

@@ -3785,6 +3785,7 @@ class Dispatcher:
                                                  "shapes": "[{name, mode, opacity, feather, closed, stroke_width, points}] (closed defaults true; open shapes render as strokes)",
                                                  "layers": "optional [{name, visible, locked, layer, overlay_color}] folders; an item's `layer` names its folder (kept when omitted)"},
                                   "set_paint_items": {"id": "string (RotoPaint node id)", "items": "ordered paint/shape layers"},
+                                  "set_roto_tool_settings": {"id": "Roto or RotoPaint node id", "tool": "tool name", "settings": "per-tool setting object"},
                                   "paint_tools": ["paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"],
                                   "paint_stroke": {"points": "[{x, y, pressure}]",
                                                    "brush": ["size", "hardness", "opacity", "spacing", "strength"],
@@ -3809,7 +3810,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "node_tab", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "viewer_knobs", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "node_tab", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "viewer_knobs", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_roto_tool_settings", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -3849,7 +3850,7 @@ class Dispatcher:
 
     # Operations that edit a graph, and so can run inside a Group when the command carries a "path".
     GRAPH_EDIT_OPS = frozenset({"create", "set", "connect", "move", "rename", "label", "thumbnail", "node_tab", "disable",
-                                "delete", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_key", "set_curve", "delete_key", "clear_curve",
+                                "delete", "set_shapes", "set_tracks", "set_paint_items", "set_roto_tool_settings", "set_warp_data", "set_key", "set_curve", "delete_key", "clear_curve",
                                 "group", "ungroup"})
 
     def _edit(self, doc, cmd):
@@ -4137,13 +4138,29 @@ class Dispatcher:
                 raise ValueError(f"{op}: 'layers' must be a list")
             # An empty payload is stored as an absent entry so "no shapes" has one representation
             # in the document and two comps that look identical also serialize identically.
-            if items or (layers and not carried):
+            existing = doc["node_data"].get(key, {})
+            if items or (layers and not carried) or existing.get("tool_settings"):
                 doc["node_data"][key] = {slot: copy.deepcopy(items)}
                 if layers:
                     doc["node_data"][key]["layers"] = copy.deepcopy(layers)
+                if node["type"] in ("Roto", "RotoPaint") and existing.get("tool_settings"):
+                    doc["node_data"][key]["tool_settings"] = copy.deepcopy(existing["tool_settings"])
             else:
                 doc["node_data"].pop(key, None)
             return {slot: len(items)}
+        elif op == "set_roto_tool_settings":
+            if node["type"] not in ("Roto", "RotoPaint"):
+                raise ValueError("set_roto_tool_settings: expected a Roto or RotoPaint node")
+            tool, settings = cmd.get("tool"), cmd.get("settings")
+            if not isinstance(tool, str) or not tool or len(tool) > 64 or not isinstance(settings, dict):
+                raise ValueError("set_roto_tool_settings: tool and settings are required")
+            payload = copy.deepcopy(doc["node_data"].get(key, {}))
+            slot = "items" if node["type"] == "RotoPaint" else "shapes"
+            payload.setdefault(slot, [])
+            values = payload.setdefault("tool_settings", {})
+            values[tool] = copy.deepcopy(settings)
+            doc["node_data"][key] = payload
+            return copy.deepcopy(settings)
         elif op == "disable":
             # A node with nothing `bypass_slot` can name (a pure generator: Read, Constant,
             # Checker, Roto) has no meaningful "disabled" behaviour and is refused outright. A Draw

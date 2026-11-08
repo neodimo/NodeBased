@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (QApplication, QTabBar, QMainWindow, QWidget, QVBo
     QStackedWidget, QButtonGroup, QStyleOptionSlider, QStylePainter)
 
 from . import __version__
+from .roto_settings import TOOL_CONTROLS
 from .updater import Updater
 from .core import _downstream_of
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
@@ -1627,7 +1628,189 @@ class RotoViewerToolbar(QWidget):
             button.setMenu(menu)
             button.clicked.connect(lambda checked=False, g=group: self.cycle(g))
             layout.addWidget(button); self.buttons[group] = button
+        self.settings_strip = QWidget(self.parentWidget())
+        self.settings_strip.setObjectName("roto-tool-settings-strip")
+        self.settings_strip.setStyleSheet("QWidget#roto-tool-settings-strip { background: rgba(25,25,27,235); border: 1px solid #5f5f6b; }"
+                                          "QScrollBar:horizontal { height: 10px; background: #25252c; margin: 0px; }"
+                                          "QScrollBar::handle:horizontal { background: #70707a; min-width: 30px; border-radius: 4px; }")
+        outer = QVBoxLayout(self.settings_strip); outer.setContentsMargins(2, 2, 2, 2); outer.setSpacing(0)
+        self.settings_scroll = QScrollArea(self.settings_strip)
+        self.settings_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.settings_scroll.setWidgetResizable(False)
+        self.settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.settings_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.settings_content = QWidget()
+        self.settings_layout = QHBoxLayout(self.settings_content)
+        self.settings_layout.setContentsMargins(5, 2, 5, 2); self.settings_layout.setSpacing(7)
+        self.settings_scroll.setWidget(self.settings_content); outer.addWidget(self.settings_scroll)
+        self.settings_widgets = {}
+        self._settings_signature = None
+        self.settings_strip.hide()
         self.adjustSize(); self.hide()
+
+    @staticmethod
+    def _setting_key(label):
+        return {"Color": "color", "Blending mode": "blend", "Feather type": "feather_falloff",
+                "Feather falloff": "falloff_power", "Lifetime type": "lifetime",
+                "Brush size": "brush_size", "Brush spacing": "brush_spacing",
+                "Brush hardness": "brush_hardness", "Pressure alters opacity": "pressure_opacity",
+                "Pressure alters size": "pressure_size", "Pressure alters hardness": "pressure_hardness",
+                "Build up": "buildup", "Clone source transform translate X/Y": "source_offset",
+                "Rotate": "source_rotate", "Scale": "source_scale", "Skew X": "source_skew_x",
+                "Skew Y": "source_skew_y", "Skew order": "source_skew_order", "Center X/Y": "source_center",
+                "Round to pixel": "source_round", "Filter": "source_filter",
+                "Black outside": "source_black_outside", "Time offset": "source_time_offset",
+                "Time offset type": "source_time_offset_type", "Paint source": "source",
+                "Effect": "effect", "Onion skin": "onion_skin",
+                "Onion skin opacity": "onion_skin_opacity", "Hide splines": "hide_splines",
+                "Show paint stroke splines": "show_paint_stroke_splines", "Hide points": "hide_points",
+                "Hide transform handles": "hide_transform_handles",
+                "Hide transform handles on move": "hide_transform_handles_on_move",
+                "Constant selection mode": "constant_selection_mode", "Label points": "label_points",
+                "Feather link": "feather_link", "Autokey": "autokey"}.get(
+                    label, label.lower().replace(" ", "_").replace("/", "_"))
+
+    @staticmethod
+    def _setting_default(control):
+        default = control["default"]
+        if control["label"] == "Color": return [1.0, 1.0, 1.0, 1.0]
+        if control["label"] in ("Clone source transform translate X/Y", "Center X/Y"): return [0.0, 0.0]
+        if default is not None:
+            return default
+        label = control["label"]
+        if control["widget_kind"] == "toggle": return False
+        if label == "Color": return [1.0, 1.0, 1.0, 1.0]
+        if label == "Paint source": return "background"
+        if label == "Onion skin": return False
+        if label == "Onion skin opacity": return 0.5
+        if label == "Center X/Y": return [0.0, 0.0]
+        return 0.0
+
+    def _tool_settings(self, key, tool):
+        payload = self.viewer.window.dispatcher.document.get("node_data", {}).get(key, {})
+        stored = payload.get("tool_settings", {}).get(tool, {})
+        return {self._setting_key(c["label"]): stored.get(self._setting_key(c["label"]), self._setting_default(c))
+                for c in TOOL_CONTROLS.get(tool, [])}
+
+    def set_setting(self, key, tool, setting, value):
+        context = self.viewer._roto_context()
+        if context is None or context[0] != key: return
+        values = self._tool_settings(key, tool); values[setting] = value
+        self.viewer.window.command({"op": "set_roto_tool_settings", "id": key, "tool": tool, "settings": values}, render=False)
+        item_fields = {"opacity": "opacity", "feather": "feather", "feather_on": "feather_on",
+                       "falloff_power": "falloff_power", "feather_falloff": "feather_falloff",
+                       "blend": "blend_mode", "source": "source", "color": "color",
+                       "effect": "effect", "source_time_offset": "source_time_offset",
+                       "source_time_offset_type": "source_time_offset_type", "source_round": "source_round",
+                       "source_black_outside": "source_black_outside", "source_filter": "source_filter",
+                       "pressure_opacity": "pressure_opacity", "pressure_size": "pressure_size",
+                       "pressure_hardness": "dynamic_hardness", "buildup": "buildup"}
+        payload = self.viewer.window.dispatcher.document.get("node_data", {}).get(key, {})
+        if context[1]["type"] == "Roto":
+            index = self.viewer.roto_selected_shape_index
+            if setting == "source_offset": item_fields[setting] = "source_transform_translate"
+            roto_source_fields = {"source_rotate": "source_transform_rotate", "source_scale": "source_transform_scale",
+                                 "source_skew_x": "source_transform_skewX", "source_skew_y": "source_transform_skewY",
+                                 "source_skew_order": "source_transform_skew_order", "source_center": "source_transform_center",
+                                 "source_round": "source_translate_round"}
+            if setting in roto_source_fields: item_fields[setting] = roto_source_fields[setting]
+            if index >= 0 and index < len(payload.get("shapes", [])) and setting in item_fields:
+                shapes = copy.deepcopy(payload["shapes"])
+                if setting == "lifetime":
+                    current = int(self.viewer.window.dispatcher.document["time"]["current"])
+                    shapes[index]["lifetime"] = {"type": {"all frames":"all", "single frame":"single", "range":"range", "from current":"start_to"}.get(value,"all"), "start":current,"end":current}
+                else: shapes[index][item_fields[setting]] = copy.deepcopy(value)
+                self.viewer.window.command({"op": "set_shapes", "id": key, "shapes": shapes}, render=False)
+        else:
+            index = self.viewer.paint_selected_item_index
+            items = payload.get("items", [])
+            if index is not None and 0 <= index < len(items):
+                field = item_fields.get(setting)
+                if setting.startswith("brush_"): field = "brush." + setting[6:]
+                if setting == "source_offset": field = "source_offset"
+                is_stroke = items[index].get("kind") == "stroke"
+                if field and field.startswith("brush.") and not is_stroke: field = None
+                if setting == "source_offset" and not is_stroke: field = "source_transform_translate"
+                if setting == "source_round" and not is_stroke: field = "source_translate_round"
+                if field:
+                    updated = copy.deepcopy(items)
+                    if field.startswith("brush."):
+                        updated[index].setdefault("brush", {})[field.split(".",1)[1]] = copy.deepcopy(value)
+                    elif setting == "lifetime":
+                        current = int(self.viewer.window.dispatcher.document["time"]["current"])
+                        lifetime = str(value)
+                        if updated[index].get("kind") == "shape":
+                            updated[index]["lifetime"] = {"type": {"all frames":"all", "single frame":"single", "range":"range", "from current":"start_to"}.get(lifetime,"all"), "start":current,"end":current}
+                        else:
+                            updated[index]["lifetime"] = {"mode": {"all frames":"all", "single frame":"single", "range":"range", "from current":"from_current"}.get(lifetime,"single"), "first":current,"last":current}
+                    else:
+                        updated[index][field] = copy.deepcopy(value)
+                    if setting == "opacity" and is_stroke:
+                        updated[index].setdefault("brush", {})["opacity"] = float(value)
+                    self.viewer.window.command({"op": "set_paint_items", "id": key, "items": updated}, render=False)
+                transform_fields = {"source_rotate": "rotate", "source_skew_x": "skew_x",
+                                    "source_skew_y": "skew_y", "source_skew_order": "skew_order"}
+                if is_stroke and (setting in transform_fields or setting in ("source_scale", "source_center")):
+                    updated = copy.deepcopy(items); transform = updated[index].setdefault("source_transform", {})
+                    if setting == "source_scale": transform.update(scale_x=float(value), scale_y=float(value))
+                    elif setting == "source_center": transform.update(center_x=float(value[0]), center_y=float(value[1]))
+                    else: transform[transform_fields[setting]] = copy.deepcopy(value)
+                    self.viewer.window.command({"op": "set_paint_items", "id": key, "items": updated}, render=False)
+                elif not is_stroke and (setting in transform_fields or setting in ("source_scale", "source_center")):
+                    source_fields = {"source_rotate":"source_transform_rotate", "source_scale":"source_transform_scale",
+                                     "source_skew_x":"source_transform_skewX", "source_skew_y":"source_transform_skewY",
+                                     "source_skew_order":"source_transform_skew_order", "source_center":"source_transform_center"}
+                    updated = copy.deepcopy(items); updated[index][source_fields[setting]] = copy.deepcopy(value)
+                    self.viewer.window.command({"op": "set_paint_items", "id": key, "items": updated}, render=False)
+        if setting in {"hide_points", "hide_splines", "show_paint_stroke_splines", "hide_transform_handles"}:
+            self.viewer.viewport().update()
+
+    def _make_settings_widget(self, tool, control, value, key):
+        label = control["label"]; setting = self._setting_key(label); kind = control["widget_kind"]
+        if kind == "toggle":
+            widget = QCheckBox(label, self.settings_strip); widget.setChecked(bool(value))
+            widget.toggled.connect(lambda checked, k=key, t=tool, s=setting: self.set_setting(k, t, s, bool(checked)))
+        elif kind == "dropdown":
+            widget = QComboBox(self.settings_strip); widget.setObjectName("roto-setting-"+setting)
+            choices = {"Source": ["color", "foreground", "background"], "Blending mode": ["over", "plus", "multiply", "screen"],
+                       "Feather type": ["linear", "smooth", "gaussian"], "Lifetime type": ["all frames", "single frame", "range", "from current"],
+                       "Skew order": ["XY", "YX"], "Filter": ["Impulse", "Cubic", "Keys", "Simon", "Rifman", "Mitchell", "Parzen", "Notch"],
+                       "Time offset type": ["relative", "absolute"], "View": ["current"]}.get(label, [str(value)])
+            for choice in choices: widget.addItem(choice, choice)
+            index = widget.findData(value); widget.setCurrentIndex(max(0, index))
+            widget.currentIndexChanged.connect(lambda i, w=widget, k=key, t=tool, s=setting: self.set_setting(k, t, s, w.itemData(i)))
+        elif kind == "colour swatch":
+            widget = QPushButton(label, self.settings_strip)
+            rgba = list(value) if isinstance(value, (list, tuple)) else [1, 1, 1, 1]
+            color = QColor.fromRgbF(*[max(0.0, min(1.0, float(v))) for v in rgba[:4]])
+            widget.setStyleSheet("background-color: "+color.name()+";")
+            widget.clicked.connect(lambda _=False, w=widget, k=key, t=tool, s=setting, c=color:
+                self._choose_color(w, k, t, s, c))
+        elif isinstance(value, (list, tuple)):
+            widget = QWidget(self.settings_strip); row = QHBoxLayout(widget); row.setContentsMargins(0,0,0,0); row.setSpacing(2)
+            fields=[]
+            for i, component in enumerate(value[:2]):
+                spin=QDoubleSpinBox(widget); spin.setRange(-65536,65536); spin.setDecimals(3); spin.setMaximumWidth(75); spin.setValue(float(component)); row.addWidget(spin); fields.append(spin)
+            def update_pair(_=None, fields=fields, k=key, t=tool, s=setting): self.set_setting(k,t,s,[f.value() for f in fields])
+            for field in fields: field.valueChanged.connect(update_pair)
+        else:
+            widget = QDoubleSpinBox(self.settings_strip); widget.setRange(-65536,65536); widget.setDecimals(3); widget.setMaximumWidth(85)
+            widget.setValue(float(value)); widget.valueChanged.connect(lambda v, k=key, t=tool, s=setting: self.set_setting(k,t,s,float(v)))
+        widget.setToolTip(label)
+        return widget
+
+    def _choose_color(self, widget, key, tool, setting, initial):
+        color = QColorDialog.getColor(initial, self.settings_strip, "Color", QColorDialog.ColorDialogOption.ShowAlphaChannel)
+        if color.isValid():
+            value = [color.redF(), color.greenF(), color.blueF(), color.alphaF()]
+            widget.setStyleSheet("background-color: "+color.name()+";")
+            self.set_setting(key, tool, setting, value)
+
+    def _fit_settings_content(self):
+        self.settings_layout.activate()
+        size = self.settings_layout.sizeHint().expandedTo(self.settings_layout.minimumSize())
+        self.settings_content.setFixedSize(size)
+        self.settings_scroll.updateGeometry()
 
     def choose(self, group, tool):
         if self.viewer.roto_drawing:
@@ -1647,6 +1830,7 @@ class RotoViewerToolbar(QWidget):
         context = self.viewer._roto_context()
         visible = context is not None
         if self.isVisible() != visible: self.setVisible(visible)
+        self.settings_strip.setVisible(visible)
         if not visible: return
         kind = context[1]["type"]
         paint_group = {"paint": "Brushes", "eraser": "Brushes", "clone": "Clone/Reveal",
@@ -1658,6 +1842,43 @@ class RotoViewerToolbar(QWidget):
             self.tool_by_group[paint_group[self.viewer.paint_tool]] = paint_names[self.viewer.paint_tool]
         self.tool_by_group["Shapes"] = self.viewer.roto_shape_tool
         self.tool_by_group["Select"] = self.viewer.roto_selection_tool
+        tool = (self.tool_by_group.get(self.viewer.roto_active_group)
+                if self.viewer.roto_active_group else self.viewer.roto_selection_tool)
+        if self.viewer.roto_active_group == "Brushes" and self.viewer.paint_tool == "eraser": tool = "Eraser"
+        if self.viewer.roto_active_group == "Clone/Reveal": tool = paint_names.get(self.viewer.paint_tool, "Clone")
+        if self.viewer.roto_active_group == "Blur/Sharpen/Smear": tool = paint_names.get(self.viewer.paint_tool, "Blur")
+        if self.viewer.roto_active_group == "Dodge/Burn": tool = paint_names.get(self.viewer.paint_tool, "Dodge")
+        tool = tool or "Select Points"
+        self.settings_strip.setProperty("toolName", tool)
+        signature = (context[0], tool)
+        if signature != self._settings_signature:
+            while self.settings_layout.count():
+                item = self.settings_layout.takeAt(0)
+                if item.widget(): item.widget().deleteLater()
+            self.settings_widgets.clear()
+            values = self._tool_settings(context[0], tool)
+            for control in TOOL_CONTROLS.get(tool, []):
+                label = control["label"]
+                if label == "Autokey":
+                    slot = QLabel("Autokey slot", self.settings_strip); slot.setToolTip("Lane 2 step R4 owns this control")
+                    self.settings_layout.addWidget(slot); self.settings_widgets["autokey"] = slot
+                    continue
+                setting = self._setting_key(label)
+                widget = self._make_settings_widget(tool, control, values[setting], context[0])
+                if control["widget_kind"] not in ("toggle", "colour swatch"):
+                    caption = QLabel(label, self.settings_strip)
+                    self.settings_layout.addWidget(caption)
+                self.settings_layout.addWidget(widget); self.settings_widgets[setting] = widget
+            self._settings_signature = signature
+        self.settings_content.adjustSize()
+        self.settings_content.ensurePolished()
+        self.settings_layout.activate()
+        content_size = self.settings_layout.sizeHint().expandedTo(self.settings_layout.minimumSize())
+        self.settings_content.setFixedSize(content_size)
+        self.settings_scroll.updateGeometry()
+        self.settings_strip.setGeometry(160, 6, max(100, self.parentWidget().width()-166), 60)
+        QTimer.singleShot(0, self._fit_settings_content)
+        self.settings_strip.raise_()
         y = 0
         for group, shortcut, tools, only in ROTO_TOOL_GROUPS:
             button = self.buttons[group]
@@ -2235,7 +2456,7 @@ class Viewer(PanZoomView):
         if node["type"] == "RotoPaint":
             payload = {"shapes": [{k: item[k] for k in ("name", "mode", "opacity", "feather", "points", "closed", "curve_type", "locked", "layer") if k in item}
                                   for item in payload.get("items", []) if item.get("kind") == "shape"],
-                       "layers": payload.get("layers", [])}
+                       "layers": payload.get("layers", []), "tool_settings": payload.get("tool_settings", {})}
         tier = getattr(getattr(self.window, "proxy", None), "currentData", lambda: 1)()
         try:
             tier = max(1, int(tier))
@@ -2570,17 +2791,48 @@ class Viewer(PanZoomView):
         index = 1
         while f"stroke{index}" in names: index += 1
         tool = "clone" if self.dustbust_preset else self.paint_tool
+        settings_tool = {"paint": "Brush", "eraser": "Eraser", "clone": "Clone", "reveal": "Reveal",
+                         "blur": "Blur", "sharpen": "Sharpen", "smear": "Smear", "dodge": "Dodge", "burn": "Burn"}.get(tool, "Brush")
+        tool_settings = self.roto_toolbar._tool_settings(key, settings_tool)
         follow = None if self.dustbust_preset else self.paint_follow_track
         items.append({"kind": "stroke", "name": f"stroke{index}", "points": drag["points"],
-                      "brush": {"size": self.paint_size, "hardness": self.paint_hardness,
-                                "opacity": self.paint_brush_opacity, "spacing": self.paint_spacing,
+                      "brush": {"size": float(tool_settings.get("brush_size", 25.0)),
+                                "hardness": float(tool_settings.get("brush_hardness", 0.2)),
+                                "opacity": float(tool_settings.get("opacity", 1.0)),
+                                "spacing": float(tool_settings.get("brush_spacing", 0.05)),
                                 "strength": self.paint_strength},
-                      "tool": tool, "lifetime": lifetime, "color": list(self.paint_color),
-                      "source_offset": list(self.paint_source_offset),
+                      "tool": tool, "lifetime": lifetime,
+                      "color": list(tool_settings.get("color", self.paint_color)),
+                      "source": str(tool_settings.get("source", "color")),
+                      "source_offset": list(tool_settings.get("source_offset", self.paint_source_offset)),
                       "source_frame": "relative" if self.dustbust_preset else
                                       (self.paint_source_frame if tool == "clone" else frame),
-                      "opacity": self.paint_layer_opacity, "blend": self.paint_blend,
+                      "opacity": float(tool_settings.get("opacity", self.paint_layer_opacity)), "blend": self.paint_blend,
                       "visible": self.paint_visible, "follow_track": follow, "patch_blend": 0.0})
+        item = items[-1]
+        life_type = str(tool_settings.get("lifetime", "single frame"))
+        if life_type == "all frames": item["lifetime"] = {"mode": "all"}
+        elif life_type == "range": item["lifetime"] = {"mode": "range", "first": int(self.paint_range_first), "last": int(self.paint_range_last)}
+        elif life_type == "from current": item["lifetime"] = {"mode": "from_current", "first": frame}
+        else: item["lifetime"] = {"mode": "single", "first": frame}
+        item["source_time_offset"] = float(tool_settings.get("source_time_offset", 0.0))
+        item["source_time_offset_type"] = str(tool_settings.get("source_time_offset_type", "relative"))
+        item["source_round"] = bool(tool_settings.get("source_round", False))
+        item["source_black_outside"] = bool(tool_settings.get("source_black_outside", False))
+        item["source_filter"] = str(tool_settings.get("source_filter", "Cubic")).lower()
+        center = tool_settings.get("source_center", [0.0, 0.0])
+        item["source_transform"] = {"rotate": float(tool_settings.get("source_rotate", 0.0)),
+                                     "scale_x": float(tool_settings.get("source_scale", 1.0)),
+                                     "scale_y": float(tool_settings.get("source_scale", 1.0)),
+                                     "skew_x": float(tool_settings.get("source_skew_x", 0.0)),
+                                     "skew_y": float(tool_settings.get("source_skew_y", 0.0)),
+                                     "skew_order": str(tool_settings.get("source_skew_order", "XY")),
+                                     "center_x": float(center[0]), "center_y": float(center[1])}
+        item["effect"] = float(tool_settings.get("effect", 0.0))
+        item["buildup"] = bool(tool_settings.get("buildup", True))
+        item["dynamic_hardness"] = bool(tool_settings.get("pressure_hardness", False))
+        item["pressure_opacity"] = bool(tool_settings.get("pressure_opacity", True))
+        item["pressure_size"] = bool(tool_settings.get("pressure_size", True))
         self.dustbust_preset = False
         self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
@@ -3522,6 +3774,20 @@ class Viewer(PanZoomView):
         shape = {"name": f"shape{index}", "mode": "union", "opacity": 1.0,
                  "feather": 0.0, "feather_model": "edge", "closed": bool(closed),
                  "stroke_width": 1.0, "points": points}
+        settings = self.roto_toolbar._tool_settings(key, self.roto_shape_tool)
+        shape.update({"opacity": float(settings.get("opacity", 1.0)),
+                      "feather": float(settings.get("feather", 0.0)),
+                      "feather_on": bool(settings.get("feather_on", True)),
+                      "falloff_power": float(settings.get("falloff_power", 1.0)),
+                      "feather_falloff": settings.get("feather_falloff", "linear"),
+                      "blend_mode": {"add": "plus"}.get(settings.get("blend", "over"), settings.get("blend", "over")),
+                      "source": settings.get("source", "color"),
+                      "color": settings.get("color", [1.0, 1.0, 1.0, 1.0])})
+        life = settings.get("lifetime", "all frames")
+        shape["lifetime"] = {"type": {"all frames": "all", "single frame": "single", "range": "range",
+                                       "from current": "start_to"}.get(life, "all"),
+                             "start": int(self.window.dispatcher.document["time"]["current"]),
+                             "end": int(self.window.dispatcher.document["time"]["current"])}
         if self.roto_shape_tool == "B-Spline":
             shape["curve_type"] = "bspline"
             shape["feather_model"] = "box"
@@ -3532,8 +3798,10 @@ class Viewer(PanZoomView):
         if items is None:
             self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
         else:
-            paint_shape = {k: shape[k] for k in ("name", "mode", "opacity", "feather", "points", "closed", "curve_type") if k in shape}
-            items.append({"kind": "shape", **paint_shape, "blend": "over", "visible": True})
+            paint_shape = {k: shape[k] for k in ("name", "mode", "opacity", "feather", "points", "closed", "curve_type",
+                                                   "feather_on", "falloff_power", "feather_falloff", "blend_mode", "source", "color", "lifetime") if k in shape}
+            layer_blend = {"plus": "add", "over": "over"}.get(shape.get("blend_mode", "over"), shape.get("blend_mode", "over"))
+            items.append({"kind": "shape", **paint_shape, "blend": layer_blend, "visible": True})
             self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
 
@@ -4527,6 +4795,14 @@ class Viewer(PanZoomView):
         context = self._roto_context()
         if context is not None:
             _, _, payload, tier = context
+            overlay_tool = (self.roto_toolbar.tool_by_group.get("Points")
+                            if self.roto_active_group == "Points" else self.roto_selection_tool)
+            select_settings = payload.get("tool_settings", {}).get(overlay_tool, {})
+            hide_splines = bool(select_settings.get("hide_splines", False))
+            hide_points = bool(select_settings.get("hide_points", False))
+            moving = self.roto_drag is not None and bool(self.roto_drag.get("moved"))
+            hide_handles = bool(select_settings.get("hide_transform_handles", False) or
+                                 (select_settings.get("hide_transform_handles_on_move", False) and moving))
             resolved = self._roto_resolved(context)
             if self.roto_drag is not None:
                 # Keep the wireframe responsive while the document remains unchanged.  The
@@ -4585,19 +4861,23 @@ class Viewer(PanZoomView):
                     pen.setCosmetic(True)
                 painter.setPen(pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawPath(path)
+                if not hide_splines: painter.drawPath(path)
                 for point_index, point in enumerate(points):
+                    if hide_points: continue
                     center = self._roto_scene_point(point, tier)
                     radius = 5.0 / max(abs(self.view_zoom()), 0.05)
                     painter.setBrush(QColor("#f4ce63") if (shape_index, point_index) in self.roto_selected_points else QColor("#202127"))
                     painter.drawEllipse(center, radius, radius)
-                    if shape_index == self.roto_selected_shape_index:
+                    if select_settings.get("label_points", False):
+                        painter.setPen(QPen(QColor("#f4ce63"), 1))
+                        painter.drawText(QPointF(center.x()+radius, center.y()-radius), str(point_index+1))
+                    if not hide_handles and shape_index == self.roto_selected_shape_index:
                         for hx, hy in (("in_x", "in_y"), ("out_x", "out_y")):
                             if point[hx] == 0 and point[hy] == 0: continue
                             handle = self._roto_scene_point({"x": point["x"]+point[hx], "y": point["y"]+point[hy]}, tier)
                             painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(center, handle)
                             painter.setBrush(QColor("#f4ce63")); painter.drawEllipse(handle, radius*.7, radius*.7)
-                if (shape_index == self.roto_selected_shape_index and shape.get("feather_model") == "edge"
+                if (not hide_handles and shape_index == self.roto_selected_shape_index and shape.get("feather_model") == "edge"
                         and (shape["feather"] != 0 or any(p.get("feather_x", 0) or p.get("feather_y", 0) for p in points))):
                     feather_points = shape_model.feather_handle_points(points, shape["feather"])
                     feather_path = QPainterPath(self._roto_scene_point(feather_points[0], tier))
@@ -4612,7 +4892,16 @@ class Viewer(PanZoomView):
                     for feather_point in feather_points:
                         center = self._roto_scene_point(feather_point, tier)
                         painter.drawEllipse(center, radius*.75, radius*.75)
-            geometry = self._roto_box_geometry(resolved, tier) if self.roto_transform_box_enabled else None
+            if context[1]["type"] == "RotoPaint" and not hide_splines and select_settings.get("show_paint_stroke_splines", False):
+                raw_items = self.window.dispatcher.document.get("node_data", {}).get(context[0], {}).get("items", [])
+                painter.setPen(QPen(QColor("#68d8ff"), 1.5)); painter.setBrush(Qt.BrushStyle.NoBrush)
+                for item in raw_items:
+                    if item.get("kind") != "stroke" or not item.get("points"): continue
+                    points = item["points"]
+                    line = QPainterPath(self._roto_scene_point(points[0], tier))
+                    for point in points[1:]: line.lineTo(self._roto_scene_point(point, tier))
+                    painter.drawPath(line)
+            geometry = self._roto_box_geometry(resolved, tier) if self.roto_transform_box_enabled and not hide_handles else None
             if geometry is not None:
                 _, bounds, _, box_pivot = geometry
                 pad = 6.0 / max(abs(self.view_zoom()), .05)

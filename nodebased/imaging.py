@@ -3157,10 +3157,9 @@ class Evaluator:
             if kind == "RotoPaint" and not node["disabled"]:
                 input_key = node["inputs"].get("image")
                 if input_key is not None:
-                    source_frames = sorted({(max(int(doc["time"]["first"]), int(frame) - 1) if item["source_frame"] == "relative"
-                                             else int(item["source_frame"]))
-                                            for item in (data or [])
-                                            if item.get("kind") == "stroke" and item.get("tool") == "clone"})
+                    source_frames = sorted({paintknobs.source_time_frame(
+                        item, frame, doc["time"]["first"], doc["time"]["last"], clone=True)
+                        for item in (data or []) if item.get("kind") == "stroke" and item.get("tool") == "clone"})
                     if source_frames:
                         clone_fingerprints = []
                         for source_frame in source_frames:
@@ -3170,6 +3169,19 @@ class Evaluator:
                             clone_sources[source_frame] = clone_raster
                             clone_fingerprints.append([source_frame, clone_digest])
                         fingerprint = ["clone_sources", clone_fingerprints]
+                    reveal_id = node["inputs"].get("input2")
+                    reveal_frames = sorted({paintknobs.source_time_frame(
+                        item, frame, doc["time"]["first"], doc["time"]["last"])
+                        for item in (data or []) if item.get("kind") == "stroke" and item.get("tool") == "reveal"})
+                    if reveal_id is not None and reveal_frames:
+                        reveal_fingerprints = []
+                        for source_frame in reveal_frames:
+                            source_raster, source_digest = self.evaluate_raster(
+                                doc, target=reveal_id, cancel=cancel, frame=source_frame, tier=tier,
+                                typed=True, return_digest=True)
+                            clone_sources[("reveal", source_frame)] = source_raster
+                            reveal_fingerprints.append([source_frame, source_digest])
+                        fingerprint = [fingerprint, "reveal_sources", reveal_fingerprints]
             if temporal_samples is not None:
                 fingerprint = [kind.lower(), *(sample_digest for _, sample_digest in temporal_samples)]
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes,
@@ -3589,9 +3601,14 @@ class Evaluator:
                         enriched = []
                         for item in data or []:
                             if item.get("kind") == "stroke" and item.get("tool") == "clone":
-                                clone_frame = (max(int(doc["time"]["first"]), int(frame)-1)
-                                               if item["source_frame"] == "relative" else int(item["source_frame"]))
+                                clone_frame = paintknobs.source_time_frame(
+                                    item, frame, doc["time"]["first"], doc["time"]["last"], clone=True)
                                 item = dict(item, _clone_sources=clone_sources, _clone_frame=clone_frame)
+                            elif item.get("kind") == "stroke" and item.get("tool") == "reveal":
+                                reveal_frame = paintknobs.source_time_frame(
+                                    item, frame, doc["time"]["first"], doc["time"]["last"])
+                                source = clone_sources.get(("reveal", reveal_frame))
+                                if source is not None: item = dict(item, _reveal_source=source)
                             enriched.append(item)
                         data = enriched
                     if kind == "GridWarpTracker" and params.get("drive", "tracker") == "smartvector" and len(images) > 2 and images[2] is not None:

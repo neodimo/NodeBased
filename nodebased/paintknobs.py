@@ -43,18 +43,17 @@ SOURCES = ("color", "foreground", "background")
 CLONE_FILTERS = ("impulse", "cubic", "keys", "simon", "rifman", "mitchell", "parzen", "notch")
 # Item settings both kinds take.
 COMMON_FIELDS = ("locked", "source", "transform", "extra_matrix", "motion_blur", "overlay_color", "layer", *shapes.MOTION_BLUR_FIELDS)
-SHAPE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "feather_falloff", "feather_model", "closed", "curve_type", "stroke_width", "feather_on",
-                     "falloff_power", "lifetime", "cap_start", "cap_end")
-STROKE_ITEM_FIELDS = (*COMMON_FIELDS, "effect", "dynamic_hardness", "buildup", "write_on", "source_transform", "source_round",
-                      "source_filter", "source_black_outside")
-SOURCE_TRANSFORM_DEFAULTS = {"rotate": 0.0, "scale_x": 1.0, "scale_y": 1.0, "skew_x": 0.0, "skew_y": 0.0,
-                             "center_x": 0.0, "center_y": 0.0}
 ROTO_SOURCE_FIELDS = ("source_transform_translate", "source_translate_round", "source_transform_rotate",
                       "source_transform_scale", "source_transform_skewX", "source_transform_skewY",
                       "source_transform_skew_order", "source_transform_center", "source_filter",
                       "source_black_outside", "source_time_offset", "source_time_offset_type")
-
-
+SHAPE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "feather_falloff", "feather_model", "closed", "curve_type", "stroke_width", "feather_on",
+                     "falloff_power", "lifetime", "cap_start", "cap_end", "color", "blend_mode", *ROTO_SOURCE_FIELDS)
+STROKE_ITEM_FIELDS = (*COMMON_FIELDS, "effect", "dynamic_hardness", "buildup", "write_on", "source_transform", "source_round",
+                      "source_filter", "source_black_outside", "source_time_offset", "source_time_offset_type",
+                      "pressure_opacity", "pressure_size")
+SOURCE_TRANSFORM_DEFAULTS = {"rotate": 0.0, "scale_x": 1.0, "scale_y": 1.0, "skew_x": 0.0, "skew_y": 0.0,
+                             "center_x": 0.0, "center_y": 0.0}
 def roto_source_spec(shape):
     """Adapt a Roto spline's Clone-tab knobs to the stroke source fields used by the paint engine."""
     translate = shape.get("source_transform_translate", (0.0, 0.0))
@@ -92,6 +91,22 @@ KINDS = ("RotoPaint",)
 
 def new_params(kind):
     return dict(PARAMS) if kind in KINDS else {}
+
+
+def source_time_frame(item, frame, first, last, *, clone=False):
+    """Resolve a RotoPaint source-time control with held sequence boundaries."""
+    if "source_time_offset" in item:
+        offset = int(round(float(item["source_time_offset"])))
+        if item.get("source_time_offset_type", "relative") == "absolute":
+            value = offset
+        else:
+            base = max(int(first), int(frame) - 1) if clone else int(frame)
+            value = base + offset
+    elif clone:
+        value = max(int(first), int(frame) - 1) if item.get("source_frame", "relative") == "relative" else int(item["source_frame"])
+    else:
+        value = int(frame)
+    return min(int(last), max(int(first), value))
 
 
 def upgrade_params(kind):
@@ -134,7 +149,7 @@ def validate_stroke_extras(item, where):
     validate_common(item, where)
     if "effect" in item and not (_number(item["effect"]) and 0.0 <= item["effect"] <= 4096.0):
         raise ValueError(f"{where}.effect must be a number between 0 and 4096")
-    for field in ("dynamic_hardness", "buildup", "source_round", "source_black_outside"):
+    for field in ("dynamic_hardness", "buildup", "source_round", "source_black_outside", "pressure_opacity", "pressure_size"):
         if field in item and type(item[field]) is not bool:
             raise ValueError(f"{where}.{field} must be a boolean")
     if "write_on" in item:
@@ -144,6 +159,10 @@ def validate_stroke_extras(item, where):
             raise ValueError(f"{where}.write_on defines start and end between 0 and 1")
     if item.get("source_filter", "cubic") not in CLONE_FILTERS:
         raise ValueError(f"{where}.source_filter must be one of {list(CLONE_FILTERS)}")
+    if "source_time_offset" in item and not _number(item["source_time_offset"]):
+        raise ValueError(f"{where}.source_time_offset must be a finite number")
+    if item.get("source_time_offset_type", "relative") not in ("relative", "absolute"):
+        raise ValueError(f"{where}.source_time_offset_type must be relative or absolute")
     transform = item.get("source_transform", {})
     if not isinstance(transform, dict) or set(transform) - set(SOURCE_TRANSFORM_DEFAULTS) - {"skew_order"}:
         raise ValueError(f"{where}.source_transform contains unsupported fields")

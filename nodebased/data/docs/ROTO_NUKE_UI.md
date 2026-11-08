@@ -7,22 +7,22 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Section | Match | Differs | Missing | Score |
 |---|---:|---:|---:|---:|
 | Toolbar and tools | 32 | 0 | 0 | 100.0 |
-| Tool settings | 0 | 136 | 54 | 35.8 |
+| Tool settings | 158 | 32 | 0 | 91.6 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
-| Viewer editing | 25 | 4 | 2 | 87.1 |
+| Viewer editing | 25 | 5 | 1 | 88.7 |
 | Timing and animation | 0 | 9 | 1 | 45.0 |
-| Overall | — | — | — | 52.5 |
+| Overall | — | — | — | 90.1 |
 
 ## Largest gaps
 
-1. Per-tool settings controls remain the largest gap: Nuke has a viewer strip with many controls that NodeBased keeps in properties.
-2. B-Spline evaluation now uses a uniform cubic curve; Nuke tension adjustment remains open.
-3. Other viewer interactions still differ in transform-box controls, freehand sketching and B-Spline tension.
-4. Reveal onion-skin remains absent; Clone offset now follows Nuke’s Ctrl/Cmd gestures.
-5. Timing and animation controls do not reproduce Nuke’s complete per-shape/per-point workflow.
-6. Clone/reveal source and transform controls are not in Nuke’s top-of-viewer settings arrangement.
-7. The stroke/shape list is now Nuke's table (step R3); it still lacks the View column, Nuke's full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
-8. Layer group transforms and Nuke's newest-on-top list order are not reproduced.
+1. Transform-box center/pivot behavior still differs from Nuke.
+2. Freehand sketch drawing and B-Spline tension/handle workflows remain open.
+3. Reveal onion-skin display is still absent; its controls now have a settings-strip slot.
+4. Timing and animation controls do not reproduce Nuke’s complete per-shape/per-point workflow.
+5. Selection labels, constant-selection mode, transform-handle-on-move and the Autokey behavior remain incomplete.
+6. Clone view selection and Reveal paint-source/onion-skin behavior need follow-up.
+7. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
+8. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
 
 ## Proposed implementation steps
 
@@ -93,7 +93,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 44 | R1 · viewer side | Sharpen | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 45 | R1 · viewer side | Clone offset | match | `Viewer.hit_press`, `Viewer.hit_move`, `Viewer.hit_release`; Ctrl/Cmd+drag sets the offset; Ctrl/Cmd+Shift resets it. |  |
 | 46 | R1 · viewer side | Smear | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 47 | R1 · viewer side | Reveal onion skin | missing | No onion-skin overlay in `Viewer.paint_overlays` or T binding in `Viewer.keyPressEvent`. |  |
+| 47 | R1 · viewer side | Reveal onion skin | differs | `RotoViewerToolbar.settings_strip`; `Viewer.paint_overlays` | The Reveal toggle and opacity are exposed; the onion-skin overlay is still absent. |
 | 48 | R1 · viewer side | Blur/Sharpen/Smear tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 49 | R1 · viewer side | Selection tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar shortcut selects the group and repeated presses cycle its tools. |
 | 50 | R1 · viewer side | Dodge | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
@@ -101,196 +101,196 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 52 | R1 · viewer side | Burn | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 53 | R1 · viewer side | Paint tool cycles | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar shortcut selects the group and repeated presses cycle its tools. |
 | 54 | R1 · viewer side | Dodge/Burn tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
-| 55 | R2 · viewer side | tool · Label points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 56 | R2 · viewer side | tool · Hide splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 57 | R2 · viewer side | tool · Show paint stroke splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 58 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 59 | R2 · viewer side | tool · Hide transform handles | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 60 | R2 · viewer side | tool · Hide transform handles on move | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 61 | R2 · viewer side | tool · Constant selection mode | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 62 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 63 | R2 · viewer side | tool · Label points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 64 | R2 · viewer side | tool · Hide splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 65 | R2 · viewer side | tool · Show paint stroke splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 66 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 67 | R2 · viewer side | tool · Hide transform handles | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 68 | R2 · viewer side | tool · Hide transform handles on move | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 69 | R2 · viewer side | tool · Constant selection mode | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 70 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 71 | R2 · viewer side | tool · Label points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 72 | R2 · viewer side | tool · Hide splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 73 | R2 · viewer side | tool · Show paint stroke splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 74 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 75 | R2 · viewer side | tool · Hide transform handles | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 76 | R2 · viewer side | tool · Hide transform handles on move | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 77 | R2 · viewer side | tool · Constant selection mode | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 78 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 79 | R2 · viewer side | tool · Label points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 80 | R2 · viewer side | tool · Hide splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 81 | R2 · viewer side | tool · Show paint stroke splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 82 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 83 | R2 · viewer side | tool · Hide transform handles | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 84 | R2 · viewer side | tool · Hide transform handles on move | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 85 | R2 · viewer side | tool · Constant selection mode | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 86 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 87 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 88 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 89 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 90 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 91 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 92 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 93 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 94 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 95 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 96 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 97 | R2 · viewer side | tool · Hide points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 98 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 99 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 100 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 101 | R2 · viewer side | tool · Source | differs | `Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 102 | R2 · viewer side | tool · Blending mode | differs | `Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 103 | R2 · viewer side | tool · Feather | differs | `RotoPanel.build_panel` / `roto-shape-feather` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 104 | R2 · viewer side | tool · Feather on | differs | `RotoPanel.build_panel` / `roto-shape-feather_on` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 105 | R2 · viewer side | tool · Feather falloff | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 106 | R2 · viewer side | tool · Feather type | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` combo | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 107 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 108 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 109 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 110 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 111 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 112 | R2 · viewer side | tool · Source | differs | `Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 113 | R2 · viewer side | tool · Blending mode | differs | `Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 114 | R2 · viewer side | tool · Feather | differs | `RotoPanel.build_panel` / `roto-shape-feather` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 115 | R2 · viewer side | tool · Feather on | differs | `RotoPanel.build_panel` / `roto-shape-feather_on` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 116 | R2 · viewer side | tool · Feather falloff | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 117 | R2 · viewer side | tool · Feather type | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` combo | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 118 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 119 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 120 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 121 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 122 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 123 | R2 · viewer side | tool · Source | differs | `Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 124 | R2 · viewer side | tool · Blending mode | differs | `Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 125 | R2 · viewer side | tool · Feather | differs | `RotoPanel.build_panel` / `roto-shape-feather` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 126 | R2 · viewer side | tool · Feather on | differs | `RotoPanel.build_panel` / `roto-shape-feather_on` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 127 | R2 · viewer side | tool · Feather falloff | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 128 | R2 · viewer side | tool · Feather type | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` combo | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 129 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 130 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 131 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 132 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 133 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 134 | R2 · viewer side | tool · Source | differs | `Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 135 | R2 · viewer side | tool · Blending mode | differs | `Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 136 | R2 · viewer side | tool · Feather | differs | `RotoPanel.build_panel` / `roto-shape-feather` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 137 | R2 · viewer side | tool · Feather on | differs | `RotoPanel.build_panel` / `roto-shape-feather_on` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 138 | R2 · viewer side | tool · Feather falloff | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 139 | R2 · viewer side | tool · Feather type | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` combo | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 140 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 141 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 142 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 143 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 144 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 145 | R2 · viewer side | tool · Source | differs | `Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 146 | R2 · viewer side | tool · Blending mode | differs | `Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 147 | R2 · viewer side | tool · Feather | differs | `RotoPanel.build_panel` / `roto-shape-feather` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 148 | R2 · viewer side | tool · Feather on | differs | `RotoPanel.build_panel` / `roto-shape-feather_on` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 149 | R2 · viewer side | tool · Feather falloff | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 150 | R2 · viewer side | tool · Feather type | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` combo | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 151 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 152 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 153 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 154 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 155 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 156 | R2 · viewer side | tool · Source | differs | `Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 157 | R2 · viewer side | tool · Blending mode | differs | `Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 158 | R2 · viewer side | tool · Feather | differs | `RotoPanel.build_panel` / `roto-shape-feather` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 159 | R2 · viewer side | tool · Feather on | differs | `RotoPanel.build_panel` / `roto-shape-feather_on` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 160 | R2 · viewer side | tool · Feather falloff | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 161 | R2 · viewer side | tool · Feather type | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` combo | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 162 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 163 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 164 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 165 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 166 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 167 | R2 · viewer side | tool · Source | differs | `Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 168 | R2 · viewer side | tool · Blending mode | differs | `Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 169 | R2 · viewer side | tool · Feather | differs | `RotoPanel.build_panel` / `roto-shape-feather` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 170 | R2 · viewer side | tool · Feather on | differs | `RotoPanel.build_panel` / `roto-shape-feather_on` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 171 | R2 · viewer side | tool · Feather falloff | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 172 | R2 · viewer side | tool · Feather type | differs | `RotoPanel.build_panel` / `roto-shape-feather_falloff` combo | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 173 | R2 · viewer side | tool · Feather link | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 174 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 175 | R2 · viewer side | tool · Autokey | differs | `Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget. | Autokey behavior is conditional on existing animation rather than an exposed default-on toggle. |
-| 176 | R2 · viewer side | tool · Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour… | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 177 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 178 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 179 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 180 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 181 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 182 | R2 · viewer side | tool · Pressure alters opacity | missing | No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 183 | R2 · viewer side | tool · Pressure alters size | missing | No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 184 | R2 · viewer side | tool · Pressure alters hardness | missing | No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 185 | R2 · viewer side | tool · Build up | differs | `Window.build_node_panel` / no build-up control | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 186 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 187 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 188 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 189 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 190 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 191 | R2 · viewer side | tool · Clone source transform translate X/Y | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 192 | R2 · viewer side | tool · Rotate | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 193 | R2 · viewer side | tool · Scale | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 194 | R2 · viewer side | tool · Skew X | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 195 | R2 · viewer side | tool · Skew Y | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 196 | R2 · viewer side | tool · Skew order | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 197 | R2 · viewer side | tool · Center X/Y | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 198 | R2 · viewer side | tool · Round to pixel | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 199 | R2 · viewer side | tool · Filter | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 200 | R2 · viewer side | tool · Black outside | differs | `Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round` | Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ. |
-| 201 | R2 · viewer side | tool · Time offset | differs | `Window.build_node_panel` / Clone source frame and Absolute source frame | NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls. |
-| 202 | R2 · viewer side | tool · Time offset type | differs | `Window.build_node_panel` / Clone source frame and Absolute source frame | NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls. |
-| 203 | R2 · viewer side | tool · View | missing | No multiview source-view selector; NodeBased has no stereo/multi-view project mode. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 204 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 205 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 206 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 207 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 208 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 209 | R2 · viewer side | tool · Paint source | missing | No matching NodeBased RotoPaint tool-setting control identified. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 210 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 211 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 212 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 213 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 214 | R2 · viewer side | tool · Time offset | differs | `Window.build_node_panel` / Clone source frame and Absolute source frame | NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls. |
-| 215 | R2 · viewer side | tool · Time offset type | differs | `Window.build_node_panel` / Clone source frame and Absolute source frame | NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls. |
-| 216 | R2 · viewer side | tool · Onion skin | missing | No source onion-skin overlay/toggle in `Viewer.paint_overlays` or `Viewer.keyPressEvent`. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 217 | R2 · viewer side | tool · Onion skin opacity | missing | No source onion-skin overlay/toggle in `Viewer.paint_overlays` or `Viewer.keyPressEvent`. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
-| 218 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 219 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 220 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 221 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 222 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 223 | R2 · viewer side | tool · Effect | differs | `Window.build_node_panel` / `rotopaint-layer-effect` for existing stroke only | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 224 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 225 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 226 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 227 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 228 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 229 | R2 · viewer side | tool · Effect | differs | `Window.build_node_panel` / `rotopaint-layer-effect` for existing stroke only | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 230 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 231 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 232 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 233 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 234 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 235 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 236 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 237 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 238 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 239 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 240 | R2 · viewer side | tool · Opacity | differs | `Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field | Control exists for selected items or in node properties, rather than the pre-draw tool settings bar. |
-| 241 | R2 · viewer side | tool · Brush size | differs | `Window.build_node_panel` / Brush size QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 242 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 243 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 244 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
+| 55 | R2 · viewer side | tool · Label points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 56 | R2 · viewer side | tool · Hide splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 57 | R2 · viewer side | tool · Show paint stroke splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 58 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 59 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 60 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 61 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 62 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 63 | R2 · viewer side | tool · Label points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 64 | R2 · viewer side | tool · Hide splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 65 | R2 · viewer side | tool · Show paint stroke splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 66 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 67 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 68 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 69 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 70 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 71 | R2 · viewer side | tool · Label points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 72 | R2 · viewer side | tool · Hide splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 73 | R2 · viewer side | tool · Show paint stroke splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 74 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 75 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 76 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 77 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 78 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 79 | R2 · viewer side | tool · Label points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 80 | R2 · viewer side | tool · Hide splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 81 | R2 · viewer side | tool · Show paint stroke splines | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 82 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 83 | R2 · viewer side | tool · Hide transform handles | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 84 | R2 · viewer side | tool · Hide transform handles on move | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 85 | R2 · viewer side | tool · Constant selection mode | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 86 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 87 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 88 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 89 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 90 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 91 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 92 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 93 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 94 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 95 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 96 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 97 | R2 · viewer side | tool · Hide points | match | RotoViewerToolbar.settings_strip; Viewer.paint_overlays |  |
+| 98 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 99 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 100 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 101 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 102 | R2 · viewer side | tool · Blending mode | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 103 | R2 · viewer side | tool · Feather | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 104 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 105 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 106 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 107 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 108 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 109 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 110 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 111 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 112 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 113 | R2 · viewer side | tool · Blending mode | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 114 | R2 · viewer side | tool · Feather | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 115 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 116 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 117 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 118 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 119 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 120 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 121 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 122 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 123 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 124 | R2 · viewer side | tool · Blending mode | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 125 | R2 · viewer side | tool · Feather | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 126 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 127 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 128 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 129 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 130 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 131 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 132 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 133 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 134 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 135 | R2 · viewer side | tool · Blending mode | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 136 | R2 · viewer side | tool · Feather | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 137 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 138 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 139 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 140 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 141 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 142 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 143 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 144 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 145 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 146 | R2 · viewer side | tool · Blending mode | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 147 | R2 · viewer side | tool · Feather | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 148 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 149 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 150 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 151 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 152 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 153 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 154 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 155 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 156 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 157 | R2 · viewer side | tool · Blending mode | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 158 | R2 · viewer side | tool · Feather | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 159 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 160 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 161 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 162 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 163 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 164 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 165 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 166 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 167 | R2 · viewer side | tool · Source | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 168 | R2 · viewer side | tool · Blending mode | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 169 | R2 · viewer side | tool · Feather | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 170 | R2 · viewer side | tool · Feather on | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 171 | R2 · viewer side | tool · Feather falloff | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 172 | R2 · viewer side | tool · Feather type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 173 | R2 · viewer side | tool · Feather link | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 174 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 175 | R2 · viewer side | tool · Autokey | differs | RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4. | A named slot is present; Lane 2 step R4 will add the behavior. |
+| 176 | R2 · viewer side | tool · Color | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 177 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 178 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 179 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 180 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 181 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 182 | R2 · viewer side | tool · Pressure alters opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 183 | R2 · viewer side | tool · Pressure alters size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 184 | R2 · viewer side | tool · Pressure alters hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 185 | R2 · viewer side | tool · Build up | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 186 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 187 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 188 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 189 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 190 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 191 | R2 · viewer side | tool · Clone source transform translate X/Y | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 192 | R2 · viewer side | tool · Rotate | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 193 | R2 · viewer side | tool · Scale | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 194 | R2 · viewer side | tool · Skew X | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 195 | R2 · viewer side | tool · Skew Y | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 196 | R2 · viewer side | tool · Skew order | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 197 | R2 · viewer side | tool · Center X/Y | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 198 | R2 · viewer side | tool · Round to pixel | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 199 | R2 · viewer side | tool · Filter | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 200 | R2 · viewer side | tool · Black outside | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 201 | R2 · viewer side | tool · Time offset | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 202 | R2 · viewer side | tool · Time offset type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 203 | R2 · viewer side | tool · View | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 204 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 205 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 206 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 207 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 208 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 209 | R2 · viewer side | tool · Paint source | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 210 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 211 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 212 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 213 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 214 | R2 · viewer side | tool · Time offset | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 215 | R2 · viewer side | tool · Time offset type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 216 | R2 · viewer side | tool · Onion skin | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 217 | R2 · viewer side | tool · Onion skin opacity | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 218 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 219 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 220 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 221 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 222 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 223 | R2 · viewer side | tool · Effect | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 224 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 225 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 226 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 227 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 228 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 229 | R2 · viewer side | tool · Effect | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 230 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 231 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 232 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 233 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 234 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 235 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 236 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 237 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 238 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 239 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 240 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 241 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 242 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 243 | R2 · viewer side | tool · Brush hardness | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
+| 244 | R2 · viewer side | tool · Lifetime type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 245 | R3 · panel side | Name | match | `rotolist.ShapeListTree` Name column (`roto-shape-row-name-*`, `rotopaint-row-name-*`, `*-layer-name-*`) |  |
 | 246 | R3 · panel side | Visible | match | `rotolist.ShapeListTree` Visible column (`roto-shape-row-visible-*`, `rotopaint-row-visible-*`, `*-layer-visible-*`) |  |
 | 247 | R3 · panel side | Lock | match | `rotolist.ShapeListTree` Lock column (`roto-shape-row-locked-*`, `rotopaint-row-locked-*`, `*-layer-locked-*`) |  |

@@ -204,51 +204,51 @@
       "controls": [
         {
           "label": "Label points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Show paint stroke splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles on move",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Constant selection mode",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -257,51 +257,51 @@
       "controls": [
         {
           "label": "Label points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Show paint stroke splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles on move",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Constant selection mode",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -310,51 +310,51 @@
       "controls": [
         {
           "label": "Label points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Show paint stroke splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles on move",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Constant selection mode",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -363,51 +363,51 @@
       "controls": [
         {
           "label": "Label points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Show paint stroke splines",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Hide transform handles on move",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Constant selection mode",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -416,15 +416,15 @@
       "controls": [
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         }
       ]
     },
@@ -433,15 +433,15 @@
       "controls": [
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         }
       ]
     },
@@ -450,15 +450,15 @@
       "controls": [
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         }
       ]
     },
@@ -467,15 +467,15 @@
       "controls": [
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         }
       ]
     },
@@ -484,15 +484,15 @@
       "controls": [
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         }
       ]
     },
@@ -501,15 +501,15 @@
       "controls": [
         {
           "label": "Hide points",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
           "difference": ""
         },
         {
           "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         }
       ]
     },
@@ -518,69 +518,69 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Source",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Blending mode",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather on",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather falloff",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather type",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Lifetime type",
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Source",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Blending mode",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather on",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather falloff",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -589,69 +589,69 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Source",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Blending mode",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather on",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather falloff",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather type",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Lifetime type",
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Source",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Blending mode",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather on",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather falloff",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -660,69 +660,69 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Source",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Blending mode",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather on",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather falloff",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather type",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Lifetime type",
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Source",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Blending mode",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather on",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather falloff",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -731,69 +731,69 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Source",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Blending mode",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather on",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather falloff",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather type",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Lifetime type",
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Source",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Blending mode",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather on",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather falloff",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -802,69 +802,69 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Source",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Blending mode",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather on",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather falloff",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather type",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Lifetime type",
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Source",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Blending mode",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather on",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather falloff",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -873,69 +873,69 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Source",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Blending mode",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather on",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather falloff",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather type",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Lifetime type",
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Source",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Blending mode",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather on",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather falloff",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -944,69 +944,69 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Source",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-source`; `RotoPanel.build_panel` / `roto-shape-source`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Blending mode",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-blend`; `RotoPanel.build_panel` / `roto-shape-blend_mode`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather on",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_on`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather falloff",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff`",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather type",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-feather_falloff` combo",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
-        },
-        {
-          "label": "Feather link",
-          "status": "missing",
-          "location": "No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Lifetime type",
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Source",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Blending mode",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather on",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather falloff",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Feather link",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Lifetime type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Autokey",
           "status": "differs",
-          "location": "`Viewer._roto_scalar_at_frame`, `Viewer._commit_roto_drag`; no autokey widget.",
-          "difference": "Autokey behavior is conditional on existing animation rather than an exposed default-on toggle."
+          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
+          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
         }
       ]
     },
@@ -1015,63 +1015,63 @@
       "controls": [
         {
           "label": "Color",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-shape-color`; `Window.build_node_panel` / Choose paint colour…",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Pressure alters opacity",
-          "status": "missing",
-          "location": "No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
           "label": "Pressure alters size",
-          "status": "missing",
-          "location": "No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
           "label": "Pressure alters hardness",
-          "status": "missing",
-          "location": "No pressure-alters checkbox or brush-style selector in `Window.build_node_panel` or Viewer controls.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
           "label": "Build up",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / no build-up control",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     },
@@ -1080,33 +1080,33 @@
       "controls": [
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     },
@@ -1115,111 +1115,111 @@
       "controls": [
         {
           "label": "Clone source transform translate X/Y",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Rotate",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Scale",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Skew X",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Skew Y",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Skew order",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Center X/Y",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Round to pixel",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Filter",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Black outside",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source offset fields; selected-stroke editor `rotopaint-layer-source-transform-*` and `rotopaint-layer-source-round`",
-          "difference": "Clone-source transforms are partly represented in properties for an existing stroke; the Nuke controls and pre-draw placement differ."
-        },
-        {
-          "label": "Time offset",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
-        },
-        {
-          "label": "Time offset type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
-        },
-        {
-          "label": "View",
-          "status": "missing",
-          "location": "No multiview source-view selector; NodeBased has no stereo/multi-view project mode.",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
           "difference": ""
         },
         {
-          "label": "Opacity",
+          "label": "Rotate",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Scale",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Skew X",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Skew Y",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Skew order",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Center X/Y",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Round to pixel",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Filter",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Black outside",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Time offset",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "Time offset type",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
+        },
+        {
+          "label": "View",
           "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
+        },
+        {
+          "label": "Opacity",
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     },
@@ -1228,57 +1228,57 @@
       "controls": [
         {
           "label": "Paint source",
-          "status": "missing",
-          "location": "No matching NodeBased RotoPaint tool-setting control identified.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         },
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Time offset",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Time offset type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Clone source frame and Absolute source frame",
-          "difference": "NodeBased selects previous or absolute frame instead of Nuke’s relative/absolute time-offset controls."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Onion skin",
-          "status": "missing",
-          "location": "No source onion-skin overlay/toggle in `Viewer.paint_overlays` or `Viewer.keyPressEvent`.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         },
         {
           "label": "Onion skin opacity",
-          "status": "missing",
-          "location": "No source onion-skin overlay/toggle in `Viewer.paint_overlays` or `Viewer.keyPressEvent`.",
-          "difference": ""
+          "status": "differs",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": "Selected-item and tool-specific parity remains incomplete."
         }
       ]
     },
@@ -1287,39 +1287,39 @@
       "controls": [
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Effect",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-effect` for existing stroke only",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     },
@@ -1328,39 +1328,39 @@
       "controls": [
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Effect",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-layer-effect` for existing stroke only",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     },
@@ -1369,33 +1369,33 @@
       "controls": [
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     },
@@ -1404,33 +1404,33 @@
       "controls": [
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     },
@@ -1439,33 +1439,33 @@
       "controls": [
         {
           "label": "Opacity",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush opacity QDoubleSpinBox; existing item opacity field",
-          "difference": "Control exists for selected items or in node properties, rather than the pre-draw tool settings bar."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush size",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Brush size QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush spacing",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Spacing QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Brush hardness",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Hardness QDoubleSpinBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         },
         {
           "label": "Lifetime type",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / Lifetime ElidingComboBox",
-          "difference": "The existing setting is in the properties panel; effect is only exposed for an existing stroke."
+          "status": "match",
+          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
+          "difference": ""
         }
       ]
     }
@@ -1748,9 +1748,9 @@
     },
     {
       "name": "Reveal onion skin",
-      "status": "missing",
-      "location": "No onion-skin overlay in `Viewer.paint_overlays` or T binding in `Viewer.keyPressEvent`.",
-      "difference": ""
+      "status": "differs",
+      "location": "RotoViewerToolbar.settings_strip; Viewer.paint_overlays",
+      "difference": "The Reveal toggle and opacity are exposed; the onion-skin overlay is still absent."
     },
     {
       "name": "Selection tool cycle",
