@@ -81,17 +81,55 @@ class RotoPaintViewerTests(unittest.TestCase):
         self.assertNotIn("paint", self.window.dispatcher.document["node_data"])
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=end)
 
-    def test_b_e_and_c_pick_the_brush_eraser_and_clone_tools_and_the_drag_uses_them(self):
+    def test_n_cycles_brush_eraser_and_c_selects_clone_and_the_drag_uses_eraser(self):
         viewer = self.window.viewer
         viewer.setFocus()
-        for key, tool in ((Qt.Key.Key_E, "eraser"), (Qt.Key.Key_C, "clone"), (Qt.Key.Key_B, "paint")):
-            QTest.keyClick(viewer, key)
-            self.assertEqual(viewer.paint_tool, tool)
+        QTest.keyClick(viewer, Qt.Key.Key_N)
+        self.assertEqual(viewer.paint_tool, "paint")
+        QTest.keyClick(viewer, Qt.Key.Key_N)
+        self.assertEqual(viewer.paint_tool, "eraser")
+        QTest.keyClick(viewer, Qt.Key.Key_C)
+        self.assertEqual(viewer.paint_tool, "clone")
+        QTest.keyClick(viewer, Qt.Key.Key_C)
+        self.assertEqual(viewer.paint_tool, "reveal")
+        QTest.keyClick(viewer, Qt.Key.Key_X); QTest.keyClick(viewer, Qt.Key.Key_X)
+        self.assertEqual(viewer.paint_tool, "sharpen")
+        QTest.keyClick(viewer, Qt.Key.Key_D); QTest.keyClick(viewer, Qt.Key.Key_D)
+        self.assertEqual(viewer.paint_tool, "burn")
+        QTest.keyClick(viewer, Qt.Key.Key_B)
+        self.assertEqual(self.window.channels.currentText(), "B")
+        self.assertEqual(viewer.paint_tool, "burn")
+        QTest.keyClick(viewer, Qt.Key.Key_B)
         QTest.keyClick(viewer, Qt.Key.Key_E)
+        self.assertEqual(viewer.paint_tool, "burn")
+        QTest.keyClick(viewer, Qt.Key.Key_N)
+        self.assertEqual(viewer.paint_tool, "eraser")
         self.gesture()
         items = self.window.dispatcher.document["node_data"]["paint"]["items"]
         self.assertEqual([item["tool"] for item in items], ["eraser"])
         self.assertEqual(self.window.channels.currentText(), "RGB")
+
+    def test_toolbar_is_scoped_to_selected_viewed_roto_and_groups_match_nuke_order(self):
+        viewer = self.window.viewer
+        viewer.roto_toolbar.refresh()
+        self.assertTrue(viewer.roto_toolbar.isVisible())
+        self.assertEqual(list(viewer.roto_toolbar.buttons), ["Select", "Points", "Shapes", "Brushes",
+                         "Clone/Reveal", "Blur/Sharpen/Smear", "Dodge/Burn"])
+        self.assertTrue(all(button.isVisible() for button in viewer.roto_toolbar.buttons.values()))
+        self.window.command({"op": "create", "id": "grade", "type": "Grade"})
+        self.window.command({"op": "view", "id": "grade"})
+        APP.processEvents(); viewer.roto_toolbar.refresh()
+        self.assertFalse(viewer.roto_toolbar.isVisible())
+
+    def test_shapes_group_routes_roto_paint_viewer_gesture_to_shape_creation(self):
+        viewer = self.window.viewer
+        viewer.roto_toolbar.choose("Shapes", "Ellipse")
+        start, end = viewer.mapToScene(100, 100), viewer.mapToScene(300, 260)
+        self.assertTrue(viewer.hit_press(start, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        self.assertTrue(viewer.hit_release(end, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        items = self.window.dispatcher.document["node_data"]["paint"]["items"]
+        self.assertEqual(items[-1]["kind"], "shape")
+        self.assertEqual(len(items[-1]["points"]), 4)
 
     def test_the_tool_keys_leave_b_as_the_blue_channel_outside_a_paint_node(self):
         self.window.command({"op": "view", "id": "plate"})

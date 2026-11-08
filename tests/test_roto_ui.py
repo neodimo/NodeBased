@@ -74,6 +74,23 @@ class RotoOverlayTests(unittest.TestCase):
     def scene_pixel_tolerance(self):
         return 1.0 / max(abs(self.window.viewer.transform().m11()), 0.05) + 0.05
 
+    def test_toolbar_groups_cycle_and_are_hidden_when_a_non_roto_node_is_viewed(self):
+        viewer = self.window.viewer
+        viewer.roto_toolbar.refresh()
+        self.assertTrue(viewer.roto_toolbar.isVisible())
+        self.assertEqual(list(viewer.roto_toolbar.buttons), ["Select", "Points", "Shapes", "Brushes",
+                         "Clone/Reveal", "Blur/Sharpen/Smear", "Dodge/Burn"])
+        self.assertFalse(viewer.roto_toolbar.buttons["Brushes"].isVisible())
+        viewer.setFocus()
+        QTest.keyClick(viewer, Qt.Key.Key_V)
+        self.assertEqual(viewer.roto_shape_tool, "Bezier")
+        QTest.keyClick(viewer, Qt.Key.Key_V)
+        self.assertEqual(viewer.roto_shape_tool, "Cusped Bezier")
+        self.window.command({"op": "create", "id": "grade", "type": "Grade"})
+        self.window.command({"op": "view", "id": "grade"})
+        APP.processEvents(); viewer.roto_toolbar.refresh()
+        self.assertFalse(viewer.roto_toolbar.isVisible())
+
     def test_point_drag_queues_tier8_picture_without_touching_document_or_undo(self):
         self.window.command({"op": "set_shapes", "id": "r", "shapes": [triangle()]}, render=False)
         self.window.timer.stop()
@@ -93,7 +110,7 @@ class RotoOverlayTests(unittest.TestCase):
         self.assertEqual(len(self.window.dispatcher.undo_stack), before)
         self.assertIs(viewer.roto_drag, drag)
 
-    def test_enter_ends_an_open_spline(self):
+    def test_enter_closes_a_roto_shape(self):
         viewer = self.window.viewer
         self.assertTrue(viewer.begin_roto_draw("r"))
         viewer.roto_draw_points = [
@@ -103,7 +120,7 @@ class RotoOverlayTests(unittest.TestCase):
         viewer.setFocus()
         QTest.keyClick(viewer, Qt.Key.Key_Return)
         shape = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
-        self.assertFalse(shape["closed"])
+        self.assertTrue(shape["closed"])
         self.assertEqual(shape["stroke_width"], 1.0)
         self.assertEqual(len(viewer.roto_draw_points), 0)
 
