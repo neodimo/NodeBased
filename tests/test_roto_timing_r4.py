@@ -6,12 +6,13 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QCheckBox
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QPushButton
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document, upgrade_document
 from nodebased import shapes
 from nodebased.imaging import Evaluator
+from nodebased import rotopanel
 from tests.test_roto_ui import roto_document
 
 APP = QApplication.instance() or QApplication([])
@@ -76,4 +77,36 @@ class RotoTimingR4Tests(unittest.TestCase):
                                                                            "roto-setting-autokey")
         self.assertIsNotNone(toggle)
         self.assertTrue(toggle.isChecked())
+
+    def test_spline_point_key_controls_and_navigation(self):
+        points = [{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0,
+                   "out_x": 0.0, "out_y": 0.0} for x, y in ((10, 10), (80, 10), (80, 80))]
+        shape = {"name": "keys", "mode": "union", "opacity": 1.0, "feather": 0.0, "points": points}
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": [shape]}, render=False)
+        self.window.viewer.roto_selected_points = {(0, 1)}
+        panel = rotopanel.build_panel(self.window, "r")
+        panel.findChild(QPushButton, "roto-point-set-keys").click()
+        entries = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
+        self.assertIsInstance(entries[1]["x"], dict)
+        self.assertEqual(entries[0]["x"], 10.0)
+        undo_count = len(self.window.dispatcher.undo_stack)
+        panel.findChild(QPushButton, "roto-point-delete-keys").click()
+        self.assertEqual(len(self.window.dispatcher.undo_stack), undo_count + 1)
+        entries = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"]
+        self.assertEqual(entries[1]["x"], 80.0)
+
+        panel = rotopanel.build_panel(self.window, "r")
+        panel.findChild(QPushButton, "roto-spline-set-key").click()
+        self.window.command({"op": "time", "last": 10})
+        self.window.set_time(current=5)
+        panel = rotopanel.build_panel(self.window, "r")
+        panel.findChild(QPushButton, "roto-spline-set-key").click()
+        panel = rotopanel.build_panel(self.window, "r")
+        self.assertEqual(panel.findChild(QLabel, "roto-spline-key-count").text(), "Key 2 / 2")
+        panel.findChild(QPushButton, "roto-spline-previous-key").click()
+        self.assertEqual(self.window.dispatcher.document["time"]["current"], 1)
+        panel = rotopanel.build_panel(self.window, "r")
+        panel.findChild(QPushButton, "roto-spline-delete-key").click()
+        curve = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]["curve"]
+        self.assertEqual([key["frame"] for key in curve["keys"]], [5])
 

@@ -1778,20 +1778,20 @@
     },
     {
       "name": "Set key: spline",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / shape key button; `Window.make_key_button` and `Window.build_curve_menu`.",
+      "status": "match",
+      "location": "`RotoPanel.build_panel`; the spline key controls create keys on every selected shape point and show the current/total key count.",
       "difference": ""
     },
     {
       "name": "Delete key: spline",
-      "status": "differs",
-      "location": "`Window.build_curve_menu` / Delete key at frame; `Window.make_key_button`. Key control presentation differs.",
+      "status": "match",
+      "location": "`RotoPanel.build_panel`; delete removes the selected spline point keys at the current frame.",
       "difference": ""
     },
     {
       "name": "Set/delete point keys",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` `key_shape` keys the selected shape’s point scalars together; no individual point key control.",
+      "status": "match",
+      "location": "`RotoPanel.build_panel`; set/delete keys affect only the selected points and their point scalars.",
       "difference": ""
     },
     {

@@ -74,6 +74,56 @@ def build_panel(window, key):
                 point[field] = keyed(point[field], field)
         save(entries, index)
         window.rebuild_properties_dock()
+    def keyframes(shape):
+        frames = set()
+        def walk(value):
+            if isinstance(value, dict):
+                curve = value.get("curve")
+                if isinstance(curve, dict):
+                    frames.update(int(item["frame"]) for item in curve.get("keys", []))
+                else:
+                    for child in value.values(): walk(child)
+            elif isinstance(value, list):
+                for child in value: walk(child)
+        walk(shape)
+        return sorted(frames)
+    def set_scalar_key(value, field, at):
+        from . import shapes as shape_model
+        number = shape_model.resolve_scalar(value, at, field)
+        curve = copy.deepcopy(value.get("curve")) if isinstance(value, dict) and value.get("curve") else {"interpolation": "smooth", "keys": []}
+        keys = [item for item in curve["keys"] if item["frame"] != at]
+        keys.append({"frame": at, "value": number}); keys.sort(key=lambda item: item["frame"])
+        return {"value": number, "curve": {**curve, "keys": keys}}
+    def delete_scalar_key(value, at):
+        if not isinstance(value, dict) or not value.get("curve"):
+            return value
+        updated = copy.deepcopy(value)
+        updated["curve"]["keys"] = [item for item in updated["curve"]["keys"] if item["frame"] != at]
+        return updated["value"] if not updated["curve"]["keys"] else updated
+    def edit_spline_keys(index, delete=False):
+        entries = current()
+        if not 0 <= index < len(entries): return
+        at = int(window.dispatcher.document["time"]["current"])
+        shape = entries[index]
+        for point in shape["points"]:
+            for field in ("x", "y", "in_x", "in_y", "out_x", "out_y", "feather_x", "feather_y"):
+                point[field] = delete_scalar_key(point.get(field, 0.0), at) if delete else set_scalar_key(point.get(field, 0.0), field, at)
+        save(entries, index)
+        window.rebuild_properties_dock()
+    def edit_selected_point_keys(index, delete=False):
+        selected_points = {(si, pi) for si, pi in getattr(window.viewer, "roto_selected_points", set()) if si == index}
+        if not selected_points: return
+        entries = current()
+        if not 0 <= index < len(entries): return
+        at = int(window.dispatcher.document["time"]["current"])
+        shape = entries[index]
+        for _, point_index in selected_points:
+            if not 0 <= point_index < len(shape["points"]): continue
+            point = shape["points"][point_index]
+            for field in ("x", "y", "in_x", "in_y", "out_x", "out_y", "feather_x", "feather_y"):
+                point[field] = delete_scalar_key(point.get(field, 0.0), at) if delete else set_scalar_key(point.get(field, 0.0), field, at)
+        save(entries, index)
+        window.rebuild_properties_dock()
     def key_field(index, field):
         entries = current()
         if not 0 <= index < len(entries): return
@@ -159,6 +209,29 @@ def build_panel(window, key):
     i=listing.selected_index()
     if 0 <= i < len(shapes):
         shape=shapes[i]
+        frames = keyframes(shape)
+        current_frame = int(window.dispatcher.document["time"]["current"])
+        count = QLabel(f"Key {frames.index(current_frame)+1 if current_frame in frames else 0} / {len(frames)}")
+        count.setObjectName("roto-spline-key-count")
+        key_controls = QHBoxLayout(); key_controls.addWidget(count)
+        for title, delta in (("Previous key", -1), ("Next key", 1)):
+            button = QPushButton(title); button.setObjectName("roto-spline-previous-key" if delta < 0 else "roto-spline-next-key")
+            target = (max((f for f in frames if f < current_frame), default=None) if delta < 0
+                      else min((f for f in frames if f > current_frame), default=None))
+            button.setEnabled(target is not None)
+            button.clicked.connect(lambda _=False, at=target: window.set_time(current=at) if at is not None else None)
+            key_controls.addWidget(button)
+        set_key = QPushButton("Set spline key"); set_key.setObjectName("roto-spline-set-key")
+        set_key.clicked.connect(lambda _=False, idx=i: edit_spline_keys(idx))
+        delete_key = QPushButton("Delete spline key"); delete_key.setObjectName("roto-spline-delete-key")
+        delete_key.clicked.connect(lambda _=False, idx=i: edit_spline_keys(idx, True))
+        key_controls.addWidget(set_key); key_controls.addWidget(delete_key); layout.addLayout(key_controls)
+        point_controls = QHBoxLayout()
+        for title, delete in (("Set selected point keys", False), ("Delete selected point keys", True)):
+            button = QPushButton(title); button.setObjectName("roto-point-delete-keys" if delete else "roto-point-set-keys")
+            button.clicked.connect(lambda _=False, idx=i, d=delete: edit_selected_point_keys(idx, d))
+            point_controls.addWidget(button)
+        layout.addLayout(point_controls)
         def edit(field,value):
             entries=current()
             if i < len(entries):

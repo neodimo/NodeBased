@@ -10,16 +10,16 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Tool settings | 189 | 1 | 0 | 99.7 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
 | Viewer editing | 27 | 3 | 1 | 91.9 |
-| Timing and animation | 1 | 8 | 1 | 50.0 |
-| Overall | — | — | — | 96.1 |
+| Timing and animation | 4 | 5 | 1 | 65.0 |
+| Overall | — | — | — | 96.6 |
 ## Largest gaps
 
 1. Transform-box center/pivot behavior still differs from Nuke.
 2. B-Spline tension gestures remain open; the official guide names the gesture but does not specify a tension mapping.
 3. Clone view selection depends on multi-view projects, which NodeBased does not support.
-4. Timing and animation controls do not reproduce Nuke’s complete per-shape/per-point workflow.
-6. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
-7. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
+4. Timing and animation controls still lack per-field transform keys and complete per-shape key scopes.
+5. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
+6. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
 ## Proposed implementation steps
 
 | Step | Side | Scope |
@@ -308,9 +308,9 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 263 | R3 · panel side | Set lifetime / frame range | match | `rotolist.ShapeListTree`.cmd_set_lifetime, context menu dialog `roto-list-set-lifetime` |  |
 | 264 | R3 · panel side | Planar-track | match | `rotolist.ShapeListTree`.cmd_planar_track, context menu `roto-list-planar-track` (the panel's existing track action) |  |
 | 265 | R4 · panel side | Autokey | match | `RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits. |  |
-| 266 | R4 · panel side | Set key: spline | differs | `RotoPanel.build_panel` / shape key button; `Window.make_key_button` and `Window.build_curve_menu`. |  |
-| 267 | R4 · panel side | Delete key: spline | differs | `Window.build_curve_menu` / Delete key at frame; `Window.make_key_button`. Key control presentation differs. |  |
-| 268 | R4 · panel side | Set/delete point keys | differs | `RotoPanel.build_panel` `key_shape` keys the selected shape’s point scalars together; no individual point key control. |  |
+| 266 | R4 · panel side | Set key: spline | match | `RotoPanel.build_panel`; creates keys on every selected shape point and shows current/total count. |  |
+| 267 | R4 · panel side | Delete key: spline | match | `RotoPanel.build_panel`; removes selected spline point keys at the current frame. |  |
+| 268 | R4 · panel side | Set/delete point keys | match | `RotoPanel.build_panel`; set/delete affects only selected points and their point scalars. |  |
 | 269 | R4 · panel side | Set key: transform | differs | `RotoPanel.build_panel` per-transform key buttons; no RotoPaint spline-key control. |  |
 | 270 | R4 · panel side | Lifetime types | differs | `RotoPanel.build_panel` / `roto-shape-lifetime-type`; `Window.build_node_panel` / `rotopaint-layer-lifetime`. |  |
 | 271 | R4 · panel side | Lifetime endpoints | differs | Roto shape lifetime start/end fields; RotoPaint panel exposes range endpoints, with different control placement. |  |
