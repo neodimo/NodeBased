@@ -246,9 +246,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -299,9 +299,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -352,9 +352,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -405,9 +405,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -578,9 +578,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -649,9 +649,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -720,9 +720,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -791,9 +791,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -862,9 +862,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -933,9 +933,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -1004,9 +1004,9 @@
         },
         {
           "label": "Autokey",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip reserves the Nuke slot; the toggle is owned by Lane 2 step R4.",
-          "difference": "A named slot is present; Lane 2 step R4 will add the behavior."
+          "status": "match",
+          "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
+          "difference": ""
         }
       ]
     },
@@ -1772,8 +1772,8 @@
   "timing_animation": [
     {
       "name": "Autokey",
-      "status": "differs",
-      "location": "`Viewer._roto_scalar_at_frame`; no autokey toggle. New shapes are static; movement keys only if animation is present.",
+      "status": "match",
+      "location": "`RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits.",
       "difference": ""
     },
     {

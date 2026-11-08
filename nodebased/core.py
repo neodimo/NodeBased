@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -3101,6 +3101,15 @@ def upgrade_document(document):
                     _lens_options(graph["nodes"])
         _lens_options(doc.get("nodes", {}))
         doc["version"] = 33
+    if isinstance(doc, dict) and doc.get("version") == 33:
+        # v33 -> v34: old Roto documents keep their historical static-edit behavior.
+        # Newly created nodes receive the Nuke default in the create operation below.
+        for node_id, node in doc.get("nodes", {}).items():
+            if node.get("type") in ("Roto", "RotoPaint"):
+                payload = doc.setdefault("node_data", {}).setdefault(node_id, {})
+                settings = payload.setdefault("tool_settings", {})
+                settings.setdefault("__global__", {}).setdefault("autokey", False)
+        doc["version"] = 34
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -3888,6 +3897,9 @@ class Dispatcher:
                           "inputs": {slot: None for slot in
                                      list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))},
                           "pos": cmd.get("pos", [0, 0]), "disabled": False}
+            if kind in ("Roto", "RotoPaint"):
+                doc["node_data"][key] = {"shapes" if kind == "Roto" else "items": [],
+                                         "tool_settings": {"__global__": {"autokey": True}}}
             if kind == "Group":
                 from .groups import group_slots, new_group_graph
                 nodes[key]["graph"] = new_group_graph()

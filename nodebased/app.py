@@ -1691,12 +1691,22 @@ class RotoViewerToolbar(QWidget):
     def _tool_settings(self, key, tool):
         payload = self.viewer.window.dispatcher.document.get("node_data", {}).get(key, {})
         stored = payload.get("tool_settings", {}).get(tool, {})
-        return {self._setting_key(c["label"]): stored.get(self._setting_key(c["label"]), self._setting_default(c))
+        values = {self._setting_key(c["label"]): stored.get(self._setting_key(c["label"]), self._setting_default(c))
                 for c in TOOL_CONTROLS.get(tool, [])}
+        if "autokey" in values:
+            values["autokey"] = payload.get("tool_settings", {}).get("__global__", {}).get("autokey", False)
+        return values
 
     def set_setting(self, key, tool, setting, value):
         context = self.viewer._roto_context()
         if context is None or context[0] != key: return
+        if setting == "autokey":
+            payload = self.viewer.window.dispatcher.document.get("node_data", {}).get(key, {})
+            global_settings = copy.deepcopy(payload.get("tool_settings", {}).get("__global__", {}))
+            global_settings["autokey"] = bool(value)
+            self.viewer.window.command({"op": "set_roto_tool_settings", "id": key,
+                                        "tool": "__global__", "settings": global_settings}, render=False)
+            return
         values = self._tool_settings(key, tool); values[setting] = value
         self.viewer.window.command({"op": "set_roto_tool_settings", "id": key, "tool": tool, "settings": values}, render=False)
         item_fields = {"opacity": "opacity", "feather": "feather", "feather_on": "feather_on",
@@ -1863,8 +1873,9 @@ class RotoViewerToolbar(QWidget):
             for control in TOOL_CONTROLS.get(tool, []):
                 label = control["label"]
                 if label == "Autokey":
-                    slot = QLabel("Autokey slot", self.settings_strip); slot.setToolTip("Lane 2 step R4 owns this control")
-                    self.settings_layout.addWidget(slot); self.settings_widgets["autokey"] = slot
+                    widget = self._make_settings_widget(tool, control, values["autokey"], context[0])
+                    widget.setObjectName("roto-setting-autokey")
+                    self.settings_layout.addWidget(widget); self.settings_widgets["autokey"] = widget
                     continue
                 setting = self._setting_key(label)
                 widget = self._make_settings_widget(tool, control, values[setting], context[0])
@@ -3707,6 +3718,21 @@ class Viewer(PanZoomView):
 
     def _roto_scalar_at_frame(self, value, frame, replacement, auto_key=False):
         """Change a point coordinate while retaining its v8 animated scalar envelope."""
+        context = self._roto_context()
+        if context is not None:
+            auto_key = self.roto_toolbar._tool_settings(context[0], "Select Points").get("autokey", False)
+        if isinstance(value, dict) and value.get("curve"):
+            updated = copy.deepcopy(value)
+            keys = updated["curve"]["keys"]
+            for key in keys:
+                if key["frame"] == frame:
+                    key["value"] = float(replacement)
+                    return updated
+            if not auto_key:
+                return float(replacement)
+            keys.append({"frame": int(frame), "value": float(replacement)})
+            keys.sort(key=lambda key: key["frame"])
+            return updated
         if not isinstance(value, dict) or "curve" not in value or value.get("curve") is None:
             if not auto_key:
                 return float(replacement)
@@ -3715,10 +3741,6 @@ class Viewer(PanZoomView):
             return float(replacement)
         updated = copy.deepcopy(value)
         keys = updated["curve"]["keys"]
-        for key in keys:
-            if key["frame"] == frame:
-                key["value"] = float(replacement)
-                return updated
         keys.append({"frame": int(frame), "value": float(replacement)})
         keys.sort(key=lambda key: key["frame"])
         return updated

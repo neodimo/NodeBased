@@ -8,7 +8,7 @@ from PySide6.QtCore import QSettings, QRectF, Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QApplication
 from nodebased.app import STYLE, Window
-from nodebased.core import Dispatcher, atomic_save, empty_document, load_document
+from nodebased.core import Dispatcher, atomic_save, empty_document, load_document, upgrade_document
 from nodebased.imaging import Evaluator
 from nodebased import paintknobs
 from nodebased.roto_settings import TOOL_CONTROLS
@@ -90,7 +90,10 @@ class RotoSettingsR2Tests(unittest.TestCase):
         dispatcher.execute({"op":"set", "id":"r", "param":"height", "value":32})
         dispatcher.execute({"op":"view", "id":"r"})
         old = dispatcher.document
-        self.assertNotIn("tool_settings", old["node_data"].get("r", {}))
+        old["version"] = 33
+        old["node_data"]["r"].pop("tool_settings", None)
+        old = upgrade_document(old)
+        self.assertFalse(old["node_data"]["r"]["tool_settings"]["__global__"]["autokey"])
         loaded = Dispatcher(old)
         self.assertEqual(loaded.document, old)
 
@@ -158,6 +161,7 @@ class RotoSettingsR2Tests(unittest.TestCase):
 
     def test_unlinked_feather_point_stays_put_when_shape_point_moves(self):
         viewer = self.window.viewer
+        viewer.roto_toolbar.set_setting("r", "Select Points", "autokey", False)
         shape = {"name":"box", "mode":"union", "opacity":1.0, "feather":0.0,
                  "feather_model":"edge",
                  "points":[{"x":10.0,"y":10.0,"feather_x":5.0,"feather_y":2.0,
