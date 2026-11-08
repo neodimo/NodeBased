@@ -8,7 +8,7 @@ import unittest
 import uuid
 
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QSlider, QSpinBox, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QSlider, QSpinBox, QWidget)
 
 from nodebased.app import Window
 from nodebased.knobfit import WrappingRow
@@ -124,6 +124,27 @@ class PanelSweepTests(unittest.TestCase):
         self.widget(panel, "output_enabled-switch", QCheckBox)
         self.widget(panel, "output_channel-choice", QComboBox)
         self.widget(panel, "invert-switch", QCheckBox)
+
+    def test_histogram_input_and_output_range_rows(self):
+        panel = self.panel("Histogram")
+        self.assertOneRow(panel, "black-field", "white-field", "gamma-field")
+        self.assertOneRow(panel, "black_out-field", "white_out-field")
+        for name in ("black-field", "white-field", "gamma-field", "black_out-field", "white_out-field"):
+            self.widget(panel, name, QDoubleSpinBox)
+
+    def test_histeq_histogram_entries_is_integer_and_sampler_channels_are_a_selector(self):
+        hist = self.panel("HistEQ")
+        self.widget(hist, "histeqbins-field", QSpinBox)
+        self.assertNoSlider(hist, "histeqbins-field")
+        sampler = self.panel("Sampler")
+        self.assertTrue(self.has_menu(sampler, "rgb", "rgba", "alpha"))
+        self.widget(sampler, "sampler-sample-current", QPushButton)
+
+    def test_generate_lut_prelut_size_and_style_share_the_documented_row(self):
+        panel = self.panel("GenerateLUT")
+        self.assertOneRow(panel, "prelut_size-field", "prelut_style-choice")
+        self.widget(panel, "prelut_size-field", QSpinBox)
+        self.widget(panel, "prelut_style-choice", QComboBox)
 
     def test_retime_range_rows(self):
         panel = self.panel("Retime")

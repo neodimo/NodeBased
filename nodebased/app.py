@@ -13993,7 +13993,7 @@ class Window(QMainWindow):
                 readout.setWordWrap(True)
                 form.addRow(readout)
 
-                def run_analysis(k=key, label=readout):
+                def run_analysis(k=key, label=readout, sample_current=False):
                     from . import mincolorknobs
                     selected = self.graph_nodes()[k]
                     inputs = selected["inputs"]
@@ -14044,7 +14044,8 @@ class Window(QMainWindow):
                                           + ("" if delta is None else f" · delta {delta:.5f}"))
                             self.command({"op": "batch", "commands": changes})
                         elif selected["type"] == "Sampler":
-                            start, end = int(selected["params"]["frame_start"]), int(selected["params"]["frame_end"])
+                            start, end = ((int(doc["time"]["current"]),) * 2 if sample_current else
+                                          (int(selected["params"]["frame_start"]), int(selected["params"]["frame_end"])))
                             if end < start:
                                 label.setText("Frame end must be at or after frame start."); return
                             changes = []
@@ -14063,9 +14064,14 @@ class Window(QMainWindow):
                             plot.fill(QColor("#202027"))
                             painter = QPainter(plot)
                             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                            low, high = float(values[:, :3].min()), float(values[:, :3].max())
+                            sample_channels = selected["params"].get("sample_channels", "rgb")
+                            draw_channels = (3,) if sample_channels == "alpha" else ((0, 1, 2, 3) if sample_channels == "rgba" else (0, 1, 2))
+                            draw_colours = {0: "#ff625e", 1: "#76d67c", 2: "#669bff", 3: "#d4d4d8"}
+                            plotted = values[:, draw_channels]
+                            low, high = float(plotted.min()), float(plotted.max())
                             high = high if high > low else low + 1.0
-                            for channel, colour in enumerate(("#ff625e", "#76d67c", "#669bff")):
+                            for channel in draw_channels:
+                                colour = draw_colours[channel]
                                 painter.setPen(QPen(QColor(colour), 1.5))
                                 points = [QPointF(i * (plot.width() - 1) / max(1, n - 1),
                                                   plot.height() - 4 - (float(v[channel]) - low) / (high - low) * (plot.height() - 8))
@@ -14082,8 +14088,15 @@ class Window(QMainWindow):
                         label.setText(f"Analysis failed: {exc}")
 
                 button = QPushButton("Analyze Reference Frames" if node["type"] == "MatchGrade" else "Analyze / refresh")
-                button.clicked.connect(run_analysis)
+                button.clicked.connect(lambda _checked=False, k=key, l=readout: run_analysis(k, l))
                 form.addRow(button)
+                if node["type"] == "Sampler":
+                    sample_current_button = QPushButton("Sample current frame")
+                    sample_current_button.setObjectName("sampler-sample-current")
+                    sample_current_button.setToolTip("Refresh the sampled RGBA line and readout at the playhead only")
+                    sample_current_button.clicked.connect(
+                        lambda _checked=False, k=key, l=readout: run_analysis(k, l, sample_current=True))
+                    form.addRow(sample_current_button)
                 if node["type"] == "MatchGrade":
                     self.add_match_grade_buttons(form, key, readout)
             if node["type"] in MATRIX_READOUT_TYPES:

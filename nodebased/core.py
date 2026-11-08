@@ -473,7 +473,7 @@ SPECS = {
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0, **_behaviour2d.new_params("HistEQ")}},
     "MinColor": {"inputs": ["image"], "params": {"channels": "rgb", "modify": "all", "target": 0.095, "adjdir": "Up", "pixeldelta": 0.0, "frame_start": 1, "frame_end": 100, "mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
-    "Sampler": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0, "sample_r": 0.0, "sample_g": 0.0, "sample_b": 0.0, "sample_a": 0.0}},
+    "Sampler": {"inputs": ["image"], "params": {"sample_channels": "rgb", "frame_start": 1, "frame_end": 100, "sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0, "sample_r": 0.0, "sample_g": 0.0, "sample_b": 0.0, "sample_a": 0.0}},
     # reference is optional so a baked (match_analyzed=1) node keeps working once Analyze has
     # measured and written grade_gain_*/grade_offset_*, exactly as Nuke's baked-knob workflow does.
     "MatchGrade": {"inputs": ["image"], "optional_inputs": ["reference", "mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "match_task": "Match Graded Source", "match_analysis": "Analyze Reference Frames",
@@ -2359,6 +2359,8 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
                              "multichannel"],
            # Invert/Clamp/Multiply/Add/Gamma's channel selector. "rgba" also inverts/clamps alpha.
            "channels": ["rgb", "rgba", "alpha"],
+           # Sampler's selector is a readout filter; keep its contract separate from pixel operators.
+           "sample_channels": ["rgb", "rgba", "alpha"],
            # Copy: which of A's channels replaces each of B's; "none" leaves that channel as B's own.
            "copy_red": ["none", "A.r", "A.g", "A.b", "A.a"], "copy_green": ["none", "A.r", "A.g", "A.b", "A.a"],
            "copy_blue": ["none", "A.r", "A.g", "A.b", "A.a"], "copy_alpha": ["none", "A.r", "A.g", "A.b", "A.a"],
@@ -3135,6 +3137,10 @@ def upgrade_document(document):
                     if not isinstance(current, dict):
                         continue
                     params = current.get("params")
+                    if isinstance(params, dict) and current.get("type") == "Sampler":
+                        # The channel selector changes only the analysis readout; older samplers
+                        # keep their historical RGB plot when opened after this control is added.
+                        params.setdefault("sample_channels", "rgb")
                     if isinstance(params, dict) and current.get("type") in ("Clamp", "Group", "Generate", "Tracker"):
                         for name, value in SPECS[current["type"]]["params"].items():
                             if current.get("type") == "Tracker" and name not in (

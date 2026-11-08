@@ -2174,6 +2174,7 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["sample_channels"], "nuke": ["channels"], "kind": "renamed", "reason": "filters which sampled channels appear in the analysis readout; the Sampler remains a pixel pass-through"},
     {"nodebased": ["sample_x0", "sample_y0"], "nuke": ["sampler"], "kind": "components", "reason": "sample point"},
     {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
@@ -2182,7 +2183,10 @@
     {"nodebased": ["sample_r"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["sample_g"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["sample_b"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["sample_a"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["sample_a"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": [], "nuke": ["normalize_x"], "kind": "unsupported", "reason": "Nuke normalizes scanline-derived lookup-curve x values; NodeBased plots raw samples by line position and has no lookup-curve data model"},
+    {"nodebased": [], "nuke": ["sample_current"], "kind": "panel", "reason": "the Sampler panel's Sample current frame action refreshes the readout and result keys at the playhead only"},
+    {"nodebased": [], "nuke": ["lut"], "kind": "unsupported", "reason": "Nuke converts the scanline into lookup curves; NodeBased's RGBA line plot is a readout and exposes no curve output"}
    ],
    "skip_default": ["sampler"]
   },

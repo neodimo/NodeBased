@@ -856,7 +856,7 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("interpolation",)), KnobGroup("enum", ("colorspace_in",), label="Input space"), KnobGroup("enum", ("colorspace_out",), label="Output space"),
         KnobGroup("enum", ("vector_output_bitdepth",), label="Output bit depth (.3dl)", help="The bit depth the .3dl mesh values are read at; auto takes the file's header or its largest value."),
         KnobGroup("bool", ("vector_normalize_output",), label="Normalize output", help="Scale the .3dl mesh so its largest value is 1."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "GenerateLUT": _groups(KnobGroup("file_write", ("lut_path",), label="3D LUT (.cube or .3dl)"),
+    "GenerateLUT": _groups(KnobGroup("file_write", ("lut_path",), label="Output file"),
                            KnobGroup("enum", ("lut_file_type",), label="File type", help="cube writes a .cube; 3dl writes a Flame/Lustre .3dl with a 1D preLUT and an integer mesh. The output path must end in the file type."),
                            KnobGroup("int", ("lut_size",), label="Size"),
                            KnobGroup("int", ("prelut_size",), label="1D preLUT size", help="Entries of the 1D preLUT row of a .3dl."),
@@ -886,7 +886,7 @@ KNOB_LAYOUT = {
     "Tile": _groups(KnobGroup("int", ("rows",), label="Rows"), KnobGroup("bool", ("mirror_y",), label="Mirror alternate rows"),
                     KnobGroup("int", ("columns",), label="Columns"), KnobGroup("bool", ("mirror_x",), label="Mirror alternate columns"),
                     KnobGroup("enum", ("filter",), label="Filter"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "Histogram": _groups(KnobGroup("float", ("black",)), KnobGroup("float", ("white",)), KnobGroup("float", ("black_out",)), KnobGroup("float", ("white_out",)), KnobGroup("float", ("gamma",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Histogram": _groups(KnobGroup("float", ("black",)), KnobGroup("float", ("white",)), KnobGroup("float", ("gamma",)), KnobGroup("float", ("black_out",)), KnobGroup("float", ("white_out",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "HistEQ": _groups(KnobGroup("int", ("histeqbins",), label="Histogram entries", help="How many bins the histogram holds; more bins follow the picture more closely."), KnobGroup("enum", ("hist_eq_mode",), label="Equalise"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "MinColor": _groups(
         KnobGroup("string", ("channels",), label="Channels", help="The channels searched for the darkest value (Nuke's channels knob)."),
@@ -895,7 +895,7 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("adjdir",), label="Direction", help="Up adds the delta only when it is positive, Down only when it is negative, Both either."),
         KnobGroup("float", ("pixeldelta",), label="Delta", help="The delta Analyze (Find Pixel Delta) calculated: the target minus the darkest value over the frame range."),
         KnobGroup("int", ("frame_start",), label="Frame start"), KnobGroup("int", ("frame_end",), label="Frame end"), KnobGroup("enum", ("mincolor_mode",), label="Find"), KnobGroup("xy", ("box_x", "box_y"), label="Box origin"), KnobGroup("xy", ("box_width", "box_height"), label="Box size"), *[KnobGroup("float", (f"mincolor_{c}",), label=f"Result {c.upper()}") for c in "rgba"]),
-    "Sampler": _groups(KnobGroup("int", ("frame_start",), label="Frame start"), KnobGroup("int", ("frame_end",), label="Frame end"), KnobGroup("xy", ("sample_x0", "sample_y0"), label="Start"), KnobGroup("xy", ("sample_x1", "sample_y1"), label="End"), *[KnobGroup("float", (f"sample_{c}",), label=f"Average {c.upper()}") for c in "rgba"]),
+    "Sampler": _groups(KnobGroup("enum", ("sample_channels",), label="Channels"), KnobGroup("int", ("frame_start",), label="Frame start"), KnobGroup("int", ("frame_end",), label="Frame end"), KnobGroup("xy", ("sample_x0", "sample_y0"), label="Start"), KnobGroup("xy", ("sample_x1", "sample_y1"), label="End"), *[KnobGroup("float", (f"sample_{c}",), label=f"Average {c.upper()}") for c in "rgba"]),
     "MatchGrade": _groups(
         KnobGroup("enum", ("match_task",), label="Task", help="Match Graded Source matches the source with a graded version of the same clip (the target). Match Different Clip matches the colours of one clip with another. The first reads only the Source's alpha for the mask, the second the alpha of both inputs."),
         KnobGroup("enum", ("match_analysis",), label="Analysis", help="Analyze Reference Frames fixes one global grade from the reference frames (the Analyzed switch bakes it); Auto-analyze Per Frame measures every frame as it shows. NodeBased's live match measures the frame it shows, so both read it."),
@@ -2779,6 +2779,9 @@ _nuke_layouts()
 # Lane 2 panel sweep (11/4): knobs the guide's tables give one label share one row in Nuke's panel. Each row replaces the single-knob groups
 # it names, at the place of the first, with the guide's label; every param stays one param, so documents load and render as before.
 ROW_GROUPS = {
+    "Histogram": (KnobGroup("row", ("black", "white", "gamma"), label="Input range", members=("float", "float", "float")),
+                  KnobGroup("row", ("black_out", "white_out"), label="Output range", members=("float", "float"))),
+    "GenerateLUT": (KnobGroup("row", ("prelut_size", "prelut_style"), label="1D preLUT size", members=("int", "enum")),),
     "Shuffle": (KnobGroup("row", ("fromInput1", "layer", "fromInput2", "in2"), label="In", members=("enum", "string", "enum", "string")),),
     "Transform": (KnobGroup("row", ("shutter_offset", "custom_offset"), label="Shutter offset", members=("enum", "float")),),
     "Text": (KnobGroup("row", ("justify", "yjustify"), label="Justify", members=("enum", "enum")),

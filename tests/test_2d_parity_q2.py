@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 from nodebased.analysisregion import min_color_result, region_params_at_frame
-from nodebased.core import Dispatcher
+from nodebased.core import Dispatcher, upgrade_document
 from nodebased.imaging import Evaluator
 
 
@@ -35,6 +35,23 @@ class AnimatedAnalysisRegionTests(unittest.TestCase):
                                     (p["box_x"], p["box_y"], p["box_width"], p["box_height"]))
             measured.append(float(rgba[0]))
         np.testing.assert_allclose(measured, (0.0, 0.25, 0.5), atol=1e-6)
+
+    def test_sampler_channel_selector_preserves_pass_through_and_loads_old_documents(self):
+        dispatcher = Dispatcher()
+        dispatcher.execute({"op": "create", "id": "source", "type": "Constant",
+                            "params": {"width": 3, "height": 1, "red": .2, "green": .4, "blue": .6, "alpha": .8}})
+        dispatcher.execute({"op": "create", "id": "sampler", "type": "Sampler"})
+        dispatcher.execute({"op": "connect", "id": "sampler", "input": "image", "source": "source"})
+        old = dispatcher.document
+        del old["nodes"]["sampler"]["params"]["sample_channels"]
+        self.assertEqual(upgrade_document(old)["nodes"]["sampler"]["params"]["sample_channels"], "rgb")
+
+        evaluator = Evaluator()
+        source = evaluator.evaluate_raster(dispatcher.document, target="source", frame=1)
+        for channels in ("rgb", "rgba", "alpha"):
+            dispatcher.execute({"op": "set", "id": "sampler", "param": "sample_channels", "value": channels})
+            sampled = evaluator.evaluate_raster(dispatcher.document, target="sampler", frame=1)
+            np.testing.assert_array_equal(sampled.pixels, source.pixels)
         self.assertEqual(region_params_at_frame(self.document, "analysis", 2)["box_x"], 1)
 
     def test_sampler_line_measurements_follow_keyed_endpoints_across_frames(self):

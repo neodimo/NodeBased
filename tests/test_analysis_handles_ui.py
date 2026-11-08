@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDoubleSpinBox
+from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QPushButton
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
@@ -100,6 +100,17 @@ class AnalysisHandleTests(unittest.TestCase):
         self.assertEqual((p["box_width"], p["box_height"]), (0.0, 0.0))
         self.window.properties_dock.hide(); APP.processEvents()
         self.assertIsNone(self.window.viewer._analysis_context())
+
+    def test_sampler_sample_current_refreshes_only_the_playhead_key(self):
+        button = self.window.properties_dock.findChild(QPushButton, "sampler-sample-current")
+        self.assertIsNotNone(button)
+        button.click()
+        APP.processEvents()
+        current = int(self.window.dispatcher.document["time"]["current"])
+        curves = self.window.dispatcher.document["animation"]["curves"]["analysis"]
+        for channel in "rgba":
+            keys = curves[f"sample_{channel}"]["keys"]
+            self.assertEqual([key["frame"] for key in keys], [current])
 
 
 if __name__ == "__main__":

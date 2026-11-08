@@ -57,6 +57,11 @@ NOT_PIXEL = {
     "Tracker": {name: "viewer display only (Nuke 17.0 Tracker reference guide)" for name in (
         "zoom_window_behavior", "zoom_window_size", "zoom_magnification_size", "zoom_window_filter_behaviour",
         "keyframe_display", "keyframe_size", "max_number_of_keyframe_tracks_to_display")},
+    # Sampler passes its input through; the channel selector filters the plotted analysis readout.
+    "Sampler": {
+        "channels": "filters the Sampler's plotted readout; the analysis node passes its image input through",
+        "sample_current": "samples one frame for the readout and result keys; it does not change rendered pixels",
+    },
     # Lane 9 step Y (11/4): these controls are exposed/mapped, but their formulas are absent or their behavior is descriptive only.
     "LensDistortion": {
         "distortionModelDisplayX": "equation display only (Nuke 17.0 LensDistortion reference guide)",

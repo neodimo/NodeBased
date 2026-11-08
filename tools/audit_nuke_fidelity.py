@@ -416,6 +416,9 @@ _COUNT_KNOBS |= {("TimeEcho", "framesbehind"), ("ZDefocus", "blades"), ("TimeDis
 # Panel sweep S5 (2026-11-07): SmartVector's matteDilation and VectorBlur's grow_bbox are whole pixels (Int_Knobs in Nuke), the guide's defaults 50 and 0 being
 # the only hint; Sparkles's ray_nb ("rays Nb", default 50) is a count of rays. All three already show as integer fields.
 _COUNT_KNOBS |= {("SmartVector", "matteDilation"), ("VectorBlur", "grow_bbox"), ("Sparkles", "ray_nb")}
+# The histogram entry counts and 1D preLUT size are discrete counts, even though the guide
+# describes them as plain numeric controls.
+_COUNT_KNOBS |= {("HistEQ", "histeqbins"), ("GenerateLUT", "lut1d")}
 # Roto's Motion Blur tab exposes sample counts (whole-number knobs), as do the per-shape settings.
 _COUNT_KNOBS |= {(kind, "global_motionblur") for kind in ("Roto", "RotoPaint")}
 _COUNT_KNOBS |= {(kind, knob) for kind in ("Roto", "RotoPaint") for knob in ("motionblur", "lifetime_start", "lifetime_end")}
@@ -560,7 +563,15 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         elif nuke_kind == "string":
             matches = any(k in ("string", "multiline", "file_read", "file_write") for k in actual)
         elif nuke_kind == "number_list":
-            matches = any(k in ("color", "xy", "xyz", "split") for k in actual)
+            # A documented list knob may be represented as its component fields on one
+            # shared row, preserving NodeBased's separate animatable document params.
+            component_group = group_for.get(next(iter(params))) if params else None
+            component_row = (len(params) > 1 and name in components
+                             and len({id(group_for.get(p)) for p in params}) == 1
+                             and component_group is not None
+                             and component_group.kind == "row"
+                             and all(k in ("int", "float") for k in actual))
+            matches = component_row or any(k in ("color", "xy", "xyz", "split") for k in actual)
         elif nuke_kind == "button":
             matches = any(k == "button" for k in actual)
         else:
