@@ -1683,6 +1683,7 @@ class RotoViewerToolbar(QWidget):
         if label == "Paint source": return "background"
         if label == "Onion skin": return False
         if label == "Onion skin opacity": return 0.5
+        if label == "Constant selection mode": return True
         if label == "Center X/Y": return [0.0, 0.0]
         return 0.0
 
@@ -3945,6 +3946,20 @@ class Viewer(PanZoomView):
                 point[ox] = self._roto_scalar_at_frame(point[ox], frame, -dx, animated)
                 point[oy] = self._roto_scalar_at_frame(point[oy], frame, -dy, animated)
         else:
+            old_x = shape_model.resolve_scalar(point["x"], frame, "x")
+            old_y = shape_model.resolve_scalar(point["y"], frame, "y")
+            active_tool = (self.roto_toolbar.tool_by_group.get("Points")
+                           if self.roto_active_group == "Points" else self.roto_selection_tool)
+            linked = self.roto_toolbar._tool_settings(key, active_tool).get("feather_link", True)
+            if not linked:
+                local_dx, local_dy = shape_model.unresolve_feather_vector((old_x - x, old_y - y),
+                                                                            shape,
+                                                                            self.window.dispatcher.document,
+                                                                            frame)
+                for field, delta in zip(shape_model.FEATHER_POINT_FIELDS, (local_dx, local_dy)):
+                    old = point.get(field, 0.0)
+                    value = shape_model.resolve_scalar(old, frame, field) + delta
+                    point[field] = self._roto_scalar_at_frame(old, frame, value, animated)
             point["x"] = self._roto_scalar_at_frame(point["x"], frame, x, animated)
             point["y"] = self._roto_scalar_at_frame(point["y"], frame, y, animated)
         self.roto_drag = None
@@ -5206,6 +5221,12 @@ class Viewer(PanZoomView):
                             self.setCursor(Qt.CursorShape.ClosedHandCursor)
                             self.viewport().update(); return True
                 self.viewport().update(); return True
+            if (tool in ("Select All", "Select Splines", "Select Points", "Select Feather Points")
+                    and self.roto_selected_points
+                    and self.roto_toolbar._tool_settings(context[0], tool).get("constant_selection_mode", True)):
+                # Nuke keeps an existing selection when constant selection mode is enabled.
+                # In the off state the ordinary empty-space marquee click clears it on release.
+                return True
             geometry = self._roto_box_geometry(resolved, context[3]) if self.roto_transform_box_enabled else None
             if geometry is not None:
                 selected, bounds, _, box_pivot = geometry

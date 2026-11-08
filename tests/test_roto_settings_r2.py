@@ -135,3 +135,40 @@ class RotoSettingsR2Tests(unittest.TestCase):
         self.assertTrue(viewer._finish_paint())
         reveal = self.window.dispatcher.document["node_data"]["p"]["items"][-1]
         self.assertEqual(paintknobs.source_time_frame(reveal, 10, 1, 100), 7)
+
+    def test_constant_selection_preserves_selection_until_disabled(self):
+        viewer = self.window.viewer
+        shape = {"name":"box", "mode":"union", "opacity":1.0, "feather":0.0,
+                 "points":[{"x":float(x), "y":float(y), "in_x":0.0, "in_y":0.0,
+                            "out_x":0.0, "out_y":0.0} for x,y in ((10,10),(40,10),(40,40),(10,40))]}
+        self.window.command({"op":"set_shapes", "id":"r", "shapes":[shape]}, render=False)
+        viewer.roto_selection_tool = "Select Points"
+        viewer.roto_active_group = "Select"
+        viewer.roto_selected_shape_index = 0
+        viewer.roto_selected_points = {(0, 0)}
+        empty = viewer._roto_scene_point({"x":75.0,"y":75.0}, 1)
+        self.assertTrue(viewer.hit_press(empty, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(viewer.roto_selected_points, {(0, 0)})
+        self.assertTrue(viewer.hit_release(empty, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        viewer.roto_toolbar.set_setting("r", "Select Points", "constant_selection_mode", False)
+        self.assertTrue(viewer.hit_press(empty, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        self.assertTrue(viewer.hit_release(empty, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        self.assertEqual(viewer.roto_selected_points, set())
+
+    def test_unlinked_feather_point_stays_put_when_shape_point_moves(self):
+        viewer = self.window.viewer
+        shape = {"name":"box", "mode":"union", "opacity":1.0, "feather":0.0,
+                 "feather_model":"edge",
+                 "points":[{"x":10.0,"y":10.0,"feather_x":5.0,"feather_y":2.0,
+                            "in_x":0.0,"in_y":0.0,"out_x":0.0,"out_y":0.0},
+                           *[{"x":float(x),"y":float(y),"in_x":0.0,"in_y":0.0,
+                              "out_x":0.0,"out_y":0.0} for x,y in ((40,10),(40,40),(10,40))]]}
+        self.window.command({"op":"set_shapes", "id":"r", "shapes":[shape]}, render=False)
+        viewer.roto_active_group = "Points"
+        viewer.roto_toolbar.set_setting("r", "Add Points", "feather_link", False)
+        target = viewer._roto_scene_point({"x":20.0,"y":15.0}, 1)
+        viewer.roto_drag = {"point":(0,0), "kind":"point", "scene":target, "moved":True}
+        self.assertTrue(viewer._commit_roto_drag())
+        moved = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertEqual((moved["x"], moved["y"]), (20.0,15.0))
+        self.assertEqual((moved["feather_x"], moved["feather_y"]), (-5.0,-3.0))
