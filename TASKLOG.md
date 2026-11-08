@@ -1,3 +1,9 @@
+## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R6: measure Roto and RotoPaint's per-item controls in the layout audit, then fix what it finds (finish 1) (integrator tick)
+
+- **What was done:** `main` `8150e262` -> `634e5434` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `634e5434`: Ran 9446 tests in 658.446 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-08 — Lane 9 step R6 finish: dynamic RotoPaint stroke controls
 
 - **What was done:** Added per-stroke `dynamic_size` and `dynamic_transparency` payload booleans, selected-stroke checkboxes, and seeding from the R2 pressure size/opacity tool settings. Legacy render fallback remains pressure-on for both, matching `paint.apply_stroke` before this change. Added pressure-varying pixel and UI tests. The audit now measures both fields; final rows/types: Roto 40/40 and 55/56, RotoPaint 53/54 and 66/67. Other node rows are byte-for-byte unchanged in the generated report comparison (0 changed).

@@ -1,5 +1,24 @@
 ## 2026-11-08 — Lane 9 step R6 finish: RotoPaint dynamic stroke controls
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (4:36 AM on 2026-11-08 PDT)
+
+`main` moved `8150e262` -> `634e5434` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `634e5434` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-0416.log`, started 4:16 AM): **Ran 9446 tests in 658.446 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step R6: measure Roto and RotoPaint's per-item controls in the layout audit, then fix what it finds (finish 1).** Commits:
+  - `2d7b3c67` Add per-stroke dynamic size and transparency controls
+  Diff: 10 files changed, 66 insertions(+), 14 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The two omitted RotoPaint per-stroke controls are implemented. Each stroke accepts `dynamic_size` and `dynamic_transparency`; the selected-stroke panel exposes checkboxes, and newly drawn strokes seed them from the R2 pressure size/opacity settings. `paint.apply_stroke` falls back through the legacy `pressure_size` / `pressure_opacity` values to `True`, preserving old documents pixel-exactly. Pixel tests cover each toggle on/off with varying pressure and old-document equivalence; UI tests cover checkbox editing. Audit final rows/types: Roto 40/40 and 55/56; RotoPaint 53/54 and 66/67. Generated audit diff changes zero other node rows. Required named tests and grep-matched Roto/direct-viewer modules pass. Full suite, Windows, and visual QA were not run for this finish step.
 
 ## 2026-11-08 — Lane 9 step R6, Roto per-item layout measurement (partial)
