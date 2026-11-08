@@ -7,7 +7,7 @@
         {
           "name": "Select All",
           "status": "match",
-          "location": "`RotoViewerToolbar`; `Viewer.hit_press` and `Viewer.hit_release` restrict point and marquee selection."
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` and `Viewer.hit_release` restrict point and marquee selection. Fresh Roto starts in Bezier draw mode; RotoPaint starts in Brush mode (NodeBased choice; Nuke default unspecified)."
         },
         {
           "name": "Select Splines",
@@ -81,8 +81,8 @@
         },
         {
           "name": "B-Spline",
-          "status": "missing",
-          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.begin_roto_draw` and `Viewer.finish_roto_draw`; `roto.flatten_points` evaluates uniform cubic B-splines.",
           "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
         },
         {
@@ -109,6 +109,11 @@
       "cycle": {
         "status": "match",
         "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
+      },
+      "default_tool_decision": {
+        "Roto": "Bezier",
+        "RotoPaint": "Brush",
+        "basis": "NodeBased default while the reference documents no fixed per-group default."
       }
     },
     {
@@ -1608,8 +1613,8 @@
     },
     {
       "name": "Select several points",
-      "status": "differs",
-      "location": "`Viewer.mousePressEvent`, `_roto_box_result`; NodeBased uses Shift+LMB and box selection rather than Ctrl/Cmd+LMB/marquee.",
+      "status": "match",
+      "location": "`Viewer.hit_press`; Ctrl/Cmd+LMB adds points to the selection; marquee selection is also supported.",
       "difference": ""
     },
     {
@@ -1620,8 +1625,8 @@
     },
     {
       "name": "Feather add",
-      "status": "differs",
-      "location": "`Viewer.mousePressEvent` / feather-handle and Ctrl-drag branches; no E key.",
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` E applies per-point feather offsets; Shift+E removes feather.",
       "difference": ""
     },
     {
@@ -1689,7 +1694,7 @@
     {
       "name": "Draw Bezier/B-Spline freely",
       "status": "differs",
-      "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; no Ctrl/Cmd sketch mode or B-Spline implementation.",
+      "location": "`Viewer.begin_roto_draw` and `Viewer.finish_roto_draw`; B-Spline geometry is supported, Ctrl/Cmd sketch-draw mode remains absent.",
       "difference": ""
     },
     {
@@ -1705,8 +1710,8 @@
     },
     {
       "name": "B-Spline tension",
-      "status": "missing",
-      "location": "No B-Spline model or tension interaction in Viewer code.",
+      "status": "differs",
+      "location": "Uniform cubic B-Spline evaluation is implemented in `roto.flatten_points`; Ctrl/Cmd+Alt tension adjustment is still absent.",
       "difference": ""
     },
     {
@@ -1731,14 +1736,14 @@
     },
     {
       "name": "Brush size",
-      "status": "missing",
-      "location": "`Window.build_node_panel` brush size field only; no Shift+drag resize in Viewer.",
+      "status": "match",
+      "location": "`Viewer.hit_press`, `Viewer.hit_move`, and `Viewer.hit_release`; Shift+drag adjusts the viewer brush and mirrors the Brush size field.",
       "difference": ""
     },
     {
       "name": "Clone offset",
-      "status": "differs",
-      "location": "`Window.build_node_panel` Clone source offset fields; no Ctrl/Cmd+drag offset gesture.",
+      "status": "match",
+      "location": "`Viewer.hit_press`, `Viewer.hit_move`, `Viewer.hit_release`; Ctrl/Cmd+LMB drag sets the clone source offset and Ctrl/Cmd+Shift resets it.",
       "difference": ""
     },
     {

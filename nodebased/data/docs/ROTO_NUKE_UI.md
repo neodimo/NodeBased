@@ -6,19 +6,19 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 
 | Section | Match | Differs | Missing | Score |
 |---|---:|---:|---:|---:|
-| Toolbar and tools | 31 | 0 | 1 | 96.9 |
+| Toolbar and tools | 32 | 0 | 0 | 100.0 |
 | Tool settings | 0 | 136 | 54 | 35.8 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
-| Viewer editing | 20 | 7 | 4 | 75.8 |
+| Viewer editing | 24 | 5 | 2 | 85.5 |
 | Timing and animation | 0 | 9 | 1 | 45.0 |
-| Overall | — | — | — | 50.9 |
+| Overall | — | — | — | 52.3 |
 
 ## Largest gaps
 
 1. Per-tool settings controls remain the largest gap: Nuke has a viewer strip with many controls that NodeBased keeps in properties.
-2. B-Spline evaluation and tension controls remain absent; the current Roto rasterizer evaluates cubic Bezier spans.
-3. Other viewer interactions still differ in multi-point bindings, transform-box toggles, nudging and paint gestures.
-4. Clone offset and Reveal onion-skin gestures remain absent from the viewer.
+2. B-Spline evaluation now uses a uniform cubic curve; Nuke tension adjustment remains open.
+3. Other viewer interactions still differ in transform-box controls, freehand sketching and B-Spline tension.
+4. Reveal onion-skin remains absent; Clone offset now follows Nuke’s Ctrl/Cmd gestures.
 5. Timing and animation controls do not reproduce Nuke’s complete per-shape/per-point workflow.
 6. Clone/reveal source and transform controls are not in Nuke’s top-of-viewer settings arrangement.
 7. The stroke/shape list is now Nuke's table (step R3); it still lacks the View column, Nuke's full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
@@ -38,7 +38,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 ## Source and scope notes
 
 - The official Reference Guide p.212 gives the list order: Name, Visible, Lock, Overlay color, Color, Invert, Blending, Motion blur, View (stereo-only), Lifetime, Source. The reference inventory records the full order and commands.
-- Guide pages do not state a fixed default tool for each toolbar group. The inventory records this as unspecified and cites the default-tools page rather than guessing.
+- Guide pages do not state a fixed default tool for each toolbar group. NodeBased chooses Bezier for a fresh Roto viewer and Brush for RotoPaint; the Nuke reference default remains unspecified.
 - The official RotoPaint chapter and Reference Guide searched here do not describe ripple editing; the inventory marks its reference as undocumented in these official sources, not as a claim that no version has it.
 - “View” is stereo-only in the guide; NodeBased has no stereo view control, so it cannot match in the current product scope.
 - All linked chapter pages and the official `hotkeys_studio.html` keyboard page loaded. Guessed keyboard-page aliases returned 404; the actual official page is included. The Reference Guide pages were extracted from the official 17.0v3 PDF.
@@ -51,10 +51,10 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 2 | R1 · viewer side | Select Splines | match | `RotoViewerToolbar`; `Viewer.hit_press`; `Viewer.hit_release` | Click and marquee selection are restricted to the active selection mode. |
 | 3 | R1 · viewer side | Select Points | match | `RotoViewerToolbar`; `Viewer.hit_press`; `Viewer.hit_release` | Click and marquee selection are restricted to the active selection mode. |
 | 4 | R1 · viewer side | Select Feather Points | match | `RotoViewerToolbar`; `Viewer.hit_press`; `Viewer.hit_release` | Click and marquee selection are restricted to the active selection mode. |
-| 5 | R1 · viewer side | Select several points | differs | `Viewer.mousePressEvent`, `_roto_box_result`; NodeBased uses Shift+LMB and box selection rather than Ctrl/Cmd+LMB/marquee. |  |
+| 5 | R1 · viewer side | Select several points | match | `Viewer.hit_press`; Ctrl/Cmd+LMB adds points; marquee selection is also supported. |  |
 | 6 | R1 · viewer side | Select tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 7 | R1 · viewer side | Add Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
-| 8 | R1 · viewer side | Feather add | differs | `Viewer.mousePressEvent` / feather-handle and Ctrl-drag branches; no E key. |  |
+| 8 | R1 · viewer side | Feather add | match | `Viewer.keyPressEvent` E adds per-point feather offsets; Shift+E removes feather. |  |
 | 9 | R1 · viewer side | Remove Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
 | 10 | R1 · viewer side | Cusp Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
 | 11 | R1 · viewer side | Feather reset | match | `Viewer.keyPressEvent` Shift+E | Shift+E removes feather from the selected points. |
@@ -64,7 +64,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 15 | R1 · viewer side | Open/Close Curve | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
 | 16 | R1 · viewer side | Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 17 | R1 · viewer side | Cusped Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
-| 18 | R1 · viewer side | B-Spline | missing | `roto.flatten_points` evaluates cubic Bezier spans; no B-Spline evaluator is present in `nodebased/roto.py`. | The B-Spline control curve cannot yet be evaluated as Nuke expects. |
+| 18 | R1 · viewer side | B-Spline | match | `RotoViewerToolbar`; `Viewer.begin_roto_draw` and `Viewer.finish_roto_draw`; `roto.flatten_points` evaluates uniform cubic B-splines. | B-Spline shapes rasterize through the new evaluator; Bezier shapes keep their existing path. |
 | 19 | R1 · viewer side | Transform box | match | `Viewer.keyPressEvent` T; `Viewer._roto_box_geometry` | T toggles the transform box for an active Roto selection. |
 | 20 | R1 · viewer side | Ellipse | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 21 | R1 · viewer side | Transform-box center/pivot | differs | `Viewer._roto_box_result`; `RotoPanel.build_panel` shape transform center controls; interaction differs from Nuke handles. |  |
@@ -79,7 +79,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 30 | R1 · viewer side | Brush | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 31 | R1 · viewer side | Sharp exit while drawing | match | `Viewer.hit_release` Shift+LMB | Shift+LMB commits a sharp open-spline end. |
 | 32 | R1 · viewer side | Eraser | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 33 | R1 · viewer side | B-Spline tension | missing | No B-Spline model or tension interaction in Viewer code. |  |
+| 33 | R1 · viewer side | B-Spline tension | differs | Uniform cubic evaluation is present; Ctrl/Cmd+Alt tension adjustment is still absent. |  |
 | 34 | R1 · viewer side | Brushes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 35 | R1 · viewer side | Close shape | match | `Viewer.keyPressEvent` Enter; `Viewer.mouseReleaseEvent` | Enter or clicking the first point closes the shape. |
 | 36 | R1 · viewer side | Clone | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
@@ -89,9 +89,9 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 40 | R1 · viewer side | Clone/Reveal tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 41 | R1 · viewer side | Escape to selection | match | `Viewer.keyPressEvent` Escape with Open Spline active | Escape commits the open spline and returns to Select Points. |
 | 42 | R1 · viewer side | Blur | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 43 | R1 · viewer side | Brush size | missing | `Window.build_node_panel` brush size field only; no Shift+drag resize in Viewer. |  |
+| 43 | R1 · viewer side | Brush size | match | `Viewer.hit_press`, `Viewer.hit_move`, `Viewer.hit_release`; Shift+drag adjusts brush size and mirrors the panel field. |  |
 | 44 | R1 · viewer side | Sharpen | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 45 | R1 · viewer side | Clone offset | differs | `Window.build_node_panel` Clone source offset fields; no Ctrl/Cmd+drag offset gesture. |  |
+| 45 | R1 · viewer side | Clone offset | match | `Viewer.hit_press`, `Viewer.hit_move`, `Viewer.hit_release`; Ctrl/Cmd+drag sets the offset; Ctrl/Cmd+Shift resets it. |  |
 | 46 | R1 · viewer side | Smear | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 47 | R1 · viewer side | Reveal onion skin | missing | No onion-skin overlay in `Viewer.paint_overlays` or T binding in `Viewer.keyPressEvent`. |  |
 | 48 | R1 · viewer side | Blur/Sharpen/Smear tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |

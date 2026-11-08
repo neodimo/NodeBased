@@ -43,7 +43,7 @@ SOURCES = ("color", "foreground", "background")
 CLONE_FILTERS = ("impulse", "cubic", "keys", "simon", "rifman", "mitchell", "parzen", "notch")
 # Item settings both kinds take.
 COMMON_FIELDS = ("locked", "source", "transform", "extra_matrix", "motion_blur", "overlay_color", "layer", *shapes.MOTION_BLUR_FIELDS)
-SHAPE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "feather_falloff", "feather_model", "closed", "stroke_width", "feather_on",
+SHAPE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "feather_falloff", "feather_model", "closed", "curve_type", "stroke_width", "feather_on",
                      "falloff_power", "lifetime", "cap_start", "cap_end")
 STROKE_ITEM_FIELDS = (*COMMON_FIELDS, "effect", "dynamic_hardness", "buildup", "write_on", "source_transform", "source_round",
                       "source_filter", "source_black_outside")

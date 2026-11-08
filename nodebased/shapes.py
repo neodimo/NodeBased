@@ -139,7 +139,7 @@ def validate_shape(shape, where):
     from . import paintknobs
     optional = {"visible", "locked", "invert", "feather_falloff", "feather_model", "color", "blend_mode", "source", "motion_blur", "track_link", "transform", "track_follow", "closed", "stroke_width",
                 *paintknobs.ROTO_SOURCE_FIELDS,
-                "feather_on", "falloff_power", "lifetime", "extra_matrix", "cap_start", "cap_end", "overlay_color", "layer",
+                "feather_on", "falloff_power", "lifetime", "extra_matrix", "cap_start", "cap_end", "overlay_color", "layer", "curve_type",
                 *MOTION_BLUR_FIELDS}
     if not isinstance(shape, dict) or not required.issubset(shape) or set(shape) - required - optional:
         raise ValueError(f"{where}: a shape defines exactly the required fields plus supported optional settings")
@@ -149,6 +149,8 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.mode must be one of {list(SHAPE_MODES)}")
     if "closed" in shape and type(shape["closed"]) is not bool:
         raise ValueError(f"{where}.closed must be a boolean")
+    if shape.get("curve_type", "bezier") not in ("bezier", "bspline"):
+        raise ValueError(f"{where}.curve_type must be bezier or bspline")
     validate_list_settings(shape, where)
     validate_scalar(shape.get("stroke_width", 1.0), "stroke_width", where)
     validate_scalar(shape["opacity"], "opacity", where)
@@ -617,6 +619,8 @@ def _resolve_shape(shape, frame, params, blur):
             resolved[field] = [resolve_scalar(channel, frame, "opacity") for channel in copy_value]
     if "source" in shape:
         resolved["source"] = shape["source"]
+    if "curve_type" in shape:
+        resolved["curve_type"] = shape["curve_type"]
     if "overlay_color" in shape:
         resolved["overlay_color"] = [float(c) for c in shape["overlay_color"]]     # for the Viewer outline only; never rendered
     from . import paintknobs

@@ -196,5 +196,108 @@ class RotoToolbarTests(unittest.TestCase):
         point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
         self.assertEqual((point["feather_x"],point["feather_y"]),(0.0,0.0))
 
+    def test_ctrl_click_adds_to_point_selection(self):
+        viewer = self.window.viewer
+        self.put_shape()
+        viewer.select_roto_tool("Select", "Select Points")
+        first = viewer._roto_scene_point({"x":80.0,"y":80.0},1)
+        second = viewer._roto_scene_point({"x":260.0,"y":80.0},1)
+        self.assertTrue(viewer.hit_press(first,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier))
+        self.assertTrue(viewer.hit_press(second,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.ControlModifier))
+        self.assertEqual(viewer.roto_selected_points,{(0,0),(0,1)})
+
+    def test_bspline_tool_stores_and_rasterizes_uniform_cubic_curve(self):
+        viewer = self.window.viewer
+        viewer.select_roto_tool("Shapes", "B-Spline")
+        self.assertTrue(viewer.begin_roto_draw("r"))
+        viewer.roto_draw_points = [{"x":float(x), "y":float(y), "in_x":0.0, "in_y":0.0,
+                                    "out_x":0.0, "out_y":0.0, "scene":viewer.mapToScene(x,y)}
+                                   for x,y in ((40,40),(280,45),(300,240),(50,260))]
+        self.assertTrue(viewer.finish_roto_draw(closed=True))
+        saved = self.window.dispatcher.document["node_data"]["r"]["shapes"][-1]
+        self.assertEqual(saved["curve_type"], "bspline")
+        resolved = shapes.resolve_shapes({"shapes":[saved]}, 1)
+        mask = roto.coverage(resolved[0]["points"], 360, 300, curve_type="bspline")
+        self.assertGreater(float(mask.sum()), 1000.0)
+        self.assertFalse(np.array_equal(roto.flatten_points(resolved[0]["points"]),
+                                        roto.flatten_points(resolved[0]["points"], curve_type="bspline")))
+
+    def test_shift_drag_changes_brush_size_without_creating_a_stroke(self):
+        self.window.command({"op":"create", "id":"p", "type":"RotoPaint", "pos":[0,0]})
+        self.window.command({"op":"view", "id":"p"})
+        self.window.graph.scene().clearSelection()
+        self.window.graph.items_by_id["p"].setSelected(True)
+        APP.processEvents()
+        viewer = self.window.viewer
+        viewer.roto_active_group = None
+        viewer.paint_size = 12.0
+        self.assertIsNotNone(viewer._paint_context())
+        start, end = viewer.mapToScene(30, 30), viewer.mapToScene(50, 30)
+        self.assertTrue(viewer.hit_press(start, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier))
+        self.assertTrue(viewer.hit_move(end, Qt.KeyboardModifier.ShiftModifier))
+        self.assertGreater(viewer.paint_size, 12.0)
+        self.assertTrue(viewer.hit_release(end, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier))
+        self.assertFalse(viewer._paint_context()[2].get("items", []))
+
+    def test_ctrl_drag_sets_clone_offset_and_ctrl_shift_resets(self):
+        self.window.command({"op":"create", "id":"p", "type":"RotoPaint", "pos":[0,0]})
+        self.window.command({"op":"view", "id":"p"})
+        self.window.graph.scene().clearSelection()
+        self.window.graph.items_by_id["p"].setSelected(True)
+        APP.processEvents()
+        viewer = self.window.viewer
+        viewer.roto_active_group = "Clone/Reveal"
+        viewer.paint_tool = "clone"
+        viewer.paint_source_offset = [3.0, 4.0]
+        start, end = viewer.mapToScene(30, 30), viewer.mapToScene(50, 42)
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        start_offset = list(viewer.paint_source_offset)
+        delta = (end.x() - start.x(), end.y() - start.y())
+        self.assertTrue(viewer.hit_press(start, Qt.MouseButton.LeftButton, ctrl))
+        self.assertTrue(viewer.hit_move(end, ctrl))
+        self.assertAlmostEqual(viewer.paint_source_offset[0], start_offset[0] + delta[0], delta=0.1)
+        self.assertAlmostEqual(viewer.paint_source_offset[1], start_offset[1] + delta[1], delta=0.1)
+        self.assertTrue(viewer.hit_release(end, Qt.MouseButton.LeftButton, ctrl))
+        self.assertTrue(viewer.hit_press(start, Qt.MouseButton.LeftButton, ctrl | Qt.KeyboardModifier.ShiftModifier))
+        self.assertEqual(viewer.paint_source_offset, [0.0, 0.0])
+        viewer.hit_release(start, Qt.MouseButton.LeftButton, ctrl | Qt.KeyboardModifier.ShiftModifier)
+        self.assertFalse(viewer._paint_context()[2].get("items", []))
+
+    def test_locked_shapes_and_layers_reject_viewer_edits(self):
+        viewer = self.window.viewer
+        shape = self.put_shape(handles=True)
+        shape["layer"] = "Hold"
+        self.window.dispatcher.document["node_data"]["r"] = {
+            "shapes":[shape], "layers":[{"name":"Hold", "locked":True}]}
+        resolved = viewer._roto_resolved(viewer._roto_context())
+        self.assertTrue(resolved[0]["locked"])
+        original = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]
+        before = __import__("copy").deepcopy(original)
+        viewer.roto_selected_points = {(0, 0), (0, 1)}
+        viewer._set_roto_tangent_mode(True)
+        viewer._remove_roto_feather_points()
+        viewer._delete_roto_points()
+        viewer.roto_drag = {"point":(0,0), "kind":"point", "scene":viewer.mapToScene(90,90),
+                            "start":viewer.mapToScene(80,80), "moved":True}
+        self.assertFalse(viewer._commit_roto_drag())
+        self.assertIsNone(viewer._roto_box_geometry(resolved, 1))
+        viewer.setFocus()
+        QTest.keyClick(viewer, Qt.Key.Key_Right, Qt.KeyboardModifier.KeypadModifier)
+        self.assertEqual(self.window.dispatcher.document["node_data"]["r"]["shapes"][0], before)
+
+    def test_feather_add_and_reset_use_nukes_e_bindings(self):
+        viewer = self.window.viewer
+        shape = self.put_shape()
+        shape["feather"] = 12.0
+        shape["feather_model"] = "edge"
+        self.window.command({"op":"set_shapes", "id":"r", "shapes":[shape]})
+        viewer.roto_selected_points = {(0, 0)}
+        viewer.setFocus(); QTest.keyClick(viewer, Qt.Key.Key_E)
+        point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertNotEqual((point.get("feather_x",0.0),point.get("feather_y",0.0)),(0.0,0.0))
+        QTest.keyClick(viewer, Qt.Key.Key_E, Qt.KeyboardModifier.ShiftModifier)
+        point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertEqual((point.get("feather_x",0.0),point.get("feather_y",0.0)),(0.0,0.0))
+
 if __name__ == "__main__":
     unittest.main()

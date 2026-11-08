@@ -58,14 +58,34 @@ def drawer():
     return forced if forced in DRAWERS else _drawer
 
 
-def flatten_points(points, closed=True):
-    """Flatten resolved Bezier points to a polyline of (x, y) vertices.
+def flatten_points(points, closed=True, curve_type="bezier"):
+    """Flatten resolved Bezier or uniform cubic B-spline points to a polyline of (x, y) vertices.
 
     Tangent handles are stored relative to their point (the Nuke/After Effects convention), so a
     span whose outgoing and incoming handles are both zero is a straight line and emits exactly one
     segment. That is what lets a polygon be a bezier with no handles rather than a second shape
     type — no `is_polygon` flag, no divergent code path.
     """
+    count = len(points)
+    if curve_type == "bspline":
+        controls = ([*points] if closed else [points[0], *points, points[-1]] if count else [])
+        spans = len(controls) if closed else max(0, len(controls) - 3)
+        vertices = []
+        for index in range(spans):
+            control = ([controls[(index + offset) % len(controls)] for offset in range(4)]
+                       if closed else controls[index:index + 4])
+            length = sum(math.hypot(float(b["x"])-float(a["x"]), float(b["y"])-float(a["y"]))
+                         for a, b in zip(control, control[1:]))
+            segments = min(max(int(math.ceil(length / SEGMENT_PIXELS)), MIN_SEGMENTS), MAX_SEGMENTS)
+            steps = range(segments + 1) if index == 0 else range(1, segments + 1)
+            for step in steps:
+                t = step / segments
+                u = 1.0 - t
+                weights = (u*u*u/6.0, (3*t*t*t-6*t*t+4)/6.0,
+                           (-3*t*t*t+3*t*t+3*t+1)/6.0, t*t*t/6.0)
+                vertices.append((sum(w * float(p["x"]) for w, p in zip(weights, control)),
+                                 sum(w * float(p["y"]) for w, p in zip(weights, control))))
+        return np.asarray(vertices, dtype=np.float64)
     count = len(points)
     vertices = []
     for index in range(count if closed else count - 1):
@@ -113,29 +133,30 @@ def _add_span(row, x0, x1):
         row[last] += x1 - last
 
 
-def _flatten_cached(points, cache):
+def _flatten_cached(points, cache, curve_type="bezier", closed=True):
     if cache is None:
-        return flatten_points(points)
-    key = id(points)
+        return flatten_points(points, closed=closed, curve_type=curve_type)
+    key = (id(points), curve_type, closed)
     vertices = cache.get(key)
     if vertices is None:
-        vertices = flatten_points(points)
+        vertices = flatten_points(points, closed=closed, curve_type=curve_type)
         cache[key] = vertices
     return vertices
 
 
-def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None):
+def coverage(points, width, height, origin=(0, 0), *, flattened_cache=None, curve_type="bezier"):
+
     """Scanline-fill one shape's resolved points into an HxW coverage array in [0, 1].
 
     The fast drawer by default (`nodebased/rotofast.py`); `coverage_legacy` is the drawer it replaced."""
     if drawer() != "legacy":
-        polyline = _flatten_cached(points, flattened_cache)
+        polyline = _flatten_cached(points, flattened_cache, curve_type=curve_type)
         if np.isfinite(polyline).all():          # a shape with a NaN or infinite point keeps the old drawer's behaviour
             return rotofast.coverage(polyline, width, height, origin)
-    return coverage_legacy(points, width, height, origin, flattened_cache=flattened_cache)
+    return coverage_legacy(points, width, height, origin, flattened_cache=flattened_cache, curve_type=curve_type)
 
 
-def coverage_legacy(points, width, height, origin=(0, 0), *, flattened_cache=None):
+def coverage_legacy(points, width, height, origin=(0, 0), *, flattened_cache=None, curve_type="bezier"):
     """The previous drawer's scanline fill (see `coverage`).
 
     Non-zero winding, so a self-intersecting shape fills the way every other package fills it and
@@ -144,7 +165,7 @@ def coverage_legacy(points, width, height, origin=(0, 0), *, flattened_cache=Non
     # Coverage is ultimately stored as float32 in the RGBA matte. Keep the band accumulators
     # in that format too: the full-frame float64 plane needlessly doubles memory traffic here.
     matte = np.zeros((height, width), dtype=np.float32)
-    polyline = _flatten_cached(points, flattened_cache)
+    polyline = _flatten_cached(points, flattened_cache, curve_type=curve_type)
     if polyline.shape[0] < 3:
         return matte.astype(np.float32)
     ax, ay = polyline[:, 0], polyline[:, 1]
@@ -206,11 +227,17 @@ def coverage_legacy(points, width, height, origin=(0, 0), *, flattened_cache=Non
     return (matte / SUBSAMPLES).astype(np.float32)
 
 
-def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0), caps=("rounded", "rounded"), soft=False):
+def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="linear", origin=(0, 0), caps=("rounded", "rounded"), soft=False, curve_type="bezier"):
     """Rasterise an open cubic as stroke coverage, round-joined, with the start and end caps `caps` (rounded, square or butt)."""
     h, w = int(height), int(width)
     if drawer() != "legacy":
-        vertices, offsets = rotofast.stroke_polyline(points)
+        if curve_type == "bspline":
+            vertices = flatten_points(points, closed=False, curve_type=curve_type)
+            feather_points = [{"x": p.get("feather_x", 0.0), "y": p.get("feather_y", 0.0),
+                               "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0} for p in points]
+            offsets = flatten_points(feather_points, closed=False, curve_type=curve_type)
+        else:
+            vertices, offsets = rotofast.stroke_polyline(points)
         if len(vertices) < 2:
             return np.zeros((h, w), dtype=np.float32)
         if np.isfinite(vertices).all() and np.isfinite(offsets).all() and np.isfinite(float(feather)):
@@ -517,10 +544,10 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
                 caps = (shape.get("cap_start", "rounded"), shape.get("cap_end", "rounded"))
                 covers = [stroke_coverage(points, sw, sh, shape.get("stroke_width", 1.0),
                                           shape["feather"], falloff, origin=(sx0, sy0), caps=caps,
-                                          soft=bool(shape.get("stroke_soft")))
+                                          soft=bool(shape.get("stroke_soft")), curve_type=shape.get("curve_type", "bezier"))
                           for points in layers]
                 result = sum(covers) / len(covers)
-            elif shape.get("feather_model", "box") == "edge":
+            elif shape.get("feather_model", "box") == "edge" and shape.get("curve_type", "bezier") == "bezier":
                 layers = [shape["points"], *samples] if not only_samples else list(samples)
                 covers = [edge_feather(points, coverage(points, sw, sh, origin=(sx0, sy0),
                                        flattened_cache=flattened_cache), shape["feather"], falloff,
@@ -538,10 +565,10 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
                     result = np.exp(-4.0 * np.square(1.0 - result)).astype(np.float32)
             else:
                 result = coverage(shape["points"], sw, sh, origin=(sx0, sy0),
-                                  flattened_cache=flattened_cache)
+                                  flattened_cache=flattened_cache, curve_type=shape.get("curve_type", "bezier"))
                 if samples:
                     result = (result + sum(coverage(points, sw, sh, origin=(sx0, sy0),
-                                                    flattened_cache=flattened_cache)
+                                                    flattened_cache=flattened_cache, curve_type=shape.get("curve_type", "bezier"))
                                            for points in samples)) / (len(samples) + 1)
                 result = np.clip(feather(result, shape["feather"]), 0.0, 1.0)
                 if falloff == "smooth":

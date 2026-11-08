@@ -1703,6 +1703,8 @@ class Viewer(PanZoomView):
         self.warp_drag = None
         self.warp_pending = {}
         self.paint_drag = None
+        self.paint_size_drag = None
+        self.paint_clone_offset_drag = None
         self.paint_tool = "paint"
         self.roto_shape_tool = "Bezier"
         self.roto_selection_tool = "Select Points"
@@ -2231,8 +2233,9 @@ class Viewer(PanZoomView):
             return None
         payload = document.get("node_data", {}).get(key, {"shapes": []})
         if node["type"] == "RotoPaint":
-            payload = {"shapes": [{k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
-                                  for item in payload.get("items", []) if item.get("kind") == "shape"]}
+            payload = {"shapes": [{k: item[k] for k in ("name", "mode", "opacity", "feather", "points", "closed", "curve_type", "locked", "layer") if k in item}
+                                  for item in payload.get("items", []) if item.get("kind") == "shape"],
+                       "layers": payload.get("layers", [])}
         tier = getattr(getattr(self.window, "proxy", None), "currentData", lambda: 1)()
         try:
             tier = max(1, int(tier))
@@ -2242,6 +2245,7 @@ class Viewer(PanZoomView):
 
     def select_roto_tool(self, group, tool):
         """Set viewer gesture state from the grouped toolbar; the properties combo mirrors paint tools."""
+        self.roto_active_group = group
         if group in ("Brushes", "Clone/Reveal", "Blur/Sharpen/Smear", "Dodge/Burn"):
             self.paint_tool = {"Brush": "paint", "Eraser": "eraser", "Clone": "clone", "Reveal": "reveal",
                                "Blur": "blur", "Sharpen": "sharpen", "Smear": "smear",
@@ -3182,7 +3186,7 @@ class Viewer(PanZoomView):
 
     def _roto_box_geometry(self, resolved, tier):
         selected = {(si, pi) for si, pi in self.roto_selected_points
-                    if si < len(resolved) and pi < len(resolved[si]["points"])}
+                    if si < len(resolved) and pi < len(resolved[si]["points"]) and not resolved[si].get("locked")}
         if len(selected) < 2:
             return None
         points = [self._roto_scene_point(resolved[si]["points"][pi], tier) for si, pi in selected]
@@ -3293,8 +3297,9 @@ class Viewer(PanZoomView):
         if context is None: return False
         key, node, payload, _ = context; shapes = copy.deepcopy(payload.get("shapes", []))
         frame=int(self.window.dispatcher.document["time"]["current"])
+        resolved = shape_model.resolve_shapes(payload, frame)
         for si, pi in self.roto_selected_points:
-            if si >= len(shapes) or shapes[si].get("locked"): continue
+            if si >= len(shapes) or pi >= len(shapes[si]["points"]) or resolved[si].get("locked"): continue
             point = shapes[si]["points"][pi]
             animated=any(isinstance(value,dict) and value.get("curve") for value in point.values())
             if cusp:
@@ -3311,9 +3316,11 @@ class Viewer(PanZoomView):
         context = self._roto_context()
         if context is None or not self.roto_selected_points: return False
         key, node, payload, _ = context; shapes = copy.deepcopy(payload.get("shapes", [])); grouped = {}
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        resolved = shape_model.resolve_shapes(payload, frame)
         for si, pi in self.roto_selected_points: grouped.setdefault(si, set()).add(pi)
         for si, indices in grouped.items():
-            if si >= len(shapes) or shapes[si].get("locked"): continue
+            if si >= len(shapes) or resolved[si].get("locked"): continue
             points = shapes[si]["points"]
             if len(points)-len(indices) < shape_model.MINIMUM_SHAPE_POINTS:
                 self.window.statusBar().showMessage(f"Roto: a shape needs at least {shape_model.MINIMUM_SHAPE_POINTS} points", 4000)
@@ -3321,13 +3328,31 @@ class Viewer(PanZoomView):
             shapes[si]["points"] = [p for i, p in enumerate(points) if i not in indices]
         self._commit_roto_shapes(key, node, shapes); self.roto_selected_points.clear(); self.viewport().update(); return True
 
+    def _add_roto_feather_points(self):
+        context = self._roto_context()
+        if context is None or not self.roto_selected_points: return False
+        key, node, payload, _ = context
+        shapes = copy.deepcopy(payload.get("shapes", []))
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        resolved = shape_model.resolve_shapes(payload, frame)
+        for si, pi in self.roto_selected_points:
+            if si >= len(shapes) or pi >= len(shapes[si]["points"]) or resolved[si].get("locked"): continue
+            handles = shape_model.feather_handle_points(resolved[si]["points"], resolved[si]["feather"])
+            point = shapes[si]["points"][pi]
+            base = resolved[si]["points"][pi]
+            point["feather_x"] = handles[pi]["x"] - base["x"]
+            point["feather_y"] = handles[pi]["y"] - base["y"]
+        self._commit_roto_shapes(key, node, shapes); self.viewport().update(); return True
+
     def _remove_roto_feather_points(self):
         context = self._roto_context()
         if context is None or not self.roto_selected_points: return False
         key, node, payload, _ = context
         shapes = copy.deepcopy(payload.get("shapes", []))
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        resolved = shape_model.resolve_shapes(payload, frame)
         for si, pi in self.roto_selected_points:
-            if si >= len(shapes) or pi >= len(shapes[si]["points"]): continue
+            if si >= len(shapes) or pi >= len(shapes[si]["points"]) or resolved[si].get("locked"): continue
             for field in shape_model.FEATHER_POINT_FIELDS:
                 shapes[si]["points"][pi][field] = 0.0
         self._commit_roto_shapes(key, node, shapes); self.viewport().update(); return True
@@ -3338,6 +3363,8 @@ class Viewer(PanZoomView):
             return False
         key, node, payload, _ = context
         shapes = copy.deepcopy(payload.get("shapes", [])); index = self.roto_selected_shape_index
+        if shape_model.resolve_shapes(payload, int(self.window.dispatcher.document["time"]["current"]))[index].get("locked"):
+            return False
         if not shapes[index].get("closed", True) and len(shapes[index]["points"]) < 3:
             return False
         shapes[index]["closed"] = not shapes[index].get("closed", True)
@@ -3348,7 +3375,7 @@ class Viewer(PanZoomView):
         si = self.roto_selected_shape_index
         shapes = copy.deepcopy(payload.get("shapes", []))
         frame = int(self.window.dispatcher.document["time"]["current"])
-        resolved_all = shape_model.resolve_shapes({"shapes": shapes}, frame)
+        resolved_all = shape_model.resolve_shapes(payload, frame)
         if si < 0 or si >= len(shapes):
             # A Ctrl+Alt click can identify its shape from the outline without requiring a prior
             # selection in the panel.
@@ -3365,7 +3392,7 @@ class Viewer(PanZoomView):
                         d=(x-click_data[0])**2+(y-click_data[1])**2
                         if d<best_distance: best_shape,best_distance=candidate,d
             si=best_shape
-        if si < 0 or si >= len(shapes) or shapes[si].get("locked"): return False
+        if si < 0 or si >= len(shapes) or resolved_all[si].get("locked"): return False
         self.roto_selected_shape_index=si
         shape = shapes[si]
         if len(shape["points"]) >= shape_model.MAXIMUM_SHAPE_POINTS: return False
@@ -3495,6 +3522,9 @@ class Viewer(PanZoomView):
         shape = {"name": f"shape{index}", "mode": "union", "opacity": 1.0,
                  "feather": 0.0, "feather_model": "edge", "closed": bool(closed),
                  "stroke_width": 1.0, "points": points}
+        if self.roto_shape_tool == "B-Spline":
+            shape["curve_type"] = "bspline"
+            shape["feather_model"] = "box"
         shapes.append(shape)
         self.cancel_roto_edit()
         # Whole-payload replacement is the Dispatcher validation/undo boundary.  The local frame
@@ -3502,7 +3532,7 @@ class Viewer(PanZoomView):
         if items is None:
             self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
         else:
-            paint_shape = {k: shape[k] for k in ("name", "mode", "opacity", "feather", "points")}
+            paint_shape = {k: shape[k] for k in ("name", "mode", "opacity", "feather", "points", "closed", "curve_type") if k in shape}
             items.append({"kind": "shape", **paint_shape, "blend": "over", "visible": True})
             self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
@@ -3522,8 +3552,9 @@ class Viewer(PanZoomView):
             x1, y1 = self._roto_data_point(drag["scene"], context[1], tier)
             dx, dy = x1 - x0, y1 - y0
             frame = int(self.window.dispatcher.document["time"]["current"])
+            resolved = self._roto_resolved(context)
             for si, pi in drag["selected"]:
-                if si >= len(shapes) or pi >= len(shapes[si]["points"]) or shapes[si].get("locked"):
+                if si >= len(shapes) or pi >= len(shapes[si]["points"]) or resolved[si].get("locked"):
                     continue
                 point = shapes[si]["points"][pi]
                 animated = any(isinstance(value, dict) and value.get("curve")
@@ -3539,10 +3570,18 @@ class Viewer(PanZoomView):
             frame = int(self.window.dispatcher.document["time"]["current"])
             pivot, sx, sy, angle, dx, dy = self._roto_box_result(
                 drag, drag["scene"], bool(drag.get("shift")))
-            selected = drag["selected"]
+            resolved = self._roto_resolved(context)
+            selected = {(si, pi) for si, pi in drag["selected"]
+                        if si < len(resolved) and not resolved[si].get("locked")}
+            if not selected:
+                self.roto_drag = None
+                return False
             shape_indices = {si for si, _ in selected}
             if drag.get("alt_shape") is not None:
                 si = drag["alt_shape"]
+                if resolved[si].get("locked"):
+                    self.roto_drag = None
+                    return False
                 transform = shapes[si].setdefault("transform", {})
                 animated = (any(isinstance(v, dict) and v.get("curve") for v in transform.values()) or
                             any(isinstance(v, dict) and v.get("curve") for p in shapes[si]["points"] for v in p.values()))
@@ -3594,6 +3633,10 @@ class Viewer(PanZoomView):
         shapes = copy.deepcopy(payload.get("shapes", []))
         if shape_index >= len(shapes) or point_index >= len(shapes[shape_index]["points"]):
             self.roto_drag = None
+            return False
+        if self._roto_resolved(context)[shape_index].get("locked"):
+            self.roto_drag = None
+            self.viewport().update()
             return False
         x, y = self._roto_data_point(drag["scene"], context[1], tier)
         frame = int(self.window.dispatcher.document["time"]["current"])
@@ -3728,8 +3771,9 @@ class Viewer(PanZoomView):
             dy = -1.0 if event.key()==Qt.Key.Key_Up else 1.0 if event.key()==Qt.Key.Key_Down else 0.0
             key,node,payload,_=self._roto_context(); shapes=copy.deepcopy(payload.get("shapes",[]))
             frame=int(self.window.dispatcher.document["time"]["current"])
+            resolved = shape_model.resolve_shapes(payload, frame)
             for si,pi in self.roto_selected_points:
-                if si>=len(shapes) or pi>=len(shapes[si]["points"]): continue
+                if si>=len(shapes) or pi>=len(shapes[si]["points"]) or resolved[si].get("locked"): continue
                 point=shapes[si]["points"][pi]
                 for field,delta in (("x",dx),("y",dy)):
                     point[field]=self._roto_scalar_at_frame(point[field],frame,
@@ -3780,8 +3824,12 @@ class Viewer(PanZoomView):
         if (event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._has_key_focus()
                 and self.roto_selection_tool == "Open/Close Curve" and self._toggle_roto_closed()):
             event.accept(); return
-        if (event.key() == Qt.Key.Key_E and event.modifiers() == Qt.KeyboardModifier.ShiftModifier
-                and self._has_key_focus() and self._remove_roto_feather_points()):
+        if (event.key() == Qt.Key.Key_E and self._has_key_focus() and self._roto_context() is not None
+                and self.roto_selected_points):
+            if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+                self._remove_roto_feather_points()
+            elif not event.modifiers():
+                self._add_roto_feather_points()
             event.accept(); return
         if self._has_key_focus() and event.key() == Qt.Key.Key_Z and self._roto_context() is not None and self.roto_selected_points:
             self._set_roto_tangent_mode(bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
@@ -3875,6 +3923,12 @@ class Viewer(PanZoomView):
 
     def hit_release(self, scene_pos, button, modifiers, pressure=1.0):
         """A release at a scene point. True when it ended or finished a drag."""
+        if button == Qt.MouseButton.LeftButton and self.paint_size_drag is not None:
+            self.paint_size_drag = None
+            return True
+        if button == Qt.MouseButton.LeftButton and self.paint_clone_offset_drag is not None:
+            self.paint_clone_offset_drag = None
+            return True
         if button == Qt.MouseButton.LeftButton and self.paint_drag is not None:
             self._paint_sample(scene_pos, pressure)
             self._finish_paint()
@@ -3955,7 +4009,7 @@ class Viewer(PanZoomView):
                         for si,shape in enumerate(self._roto_resolved(context)):
                             points=shape["points"]
                             if mode in ("Select All","Select Splines"):
-                                outline=roto.flatten_points(points,closed=shape.get("closed",True))
+                                outline=roto.flatten_points(points,closed=shape.get("closed",True),curve_type=shape.get("curve_type","bezier"))
                                 inside=any(rect.contains(self._roto_scene_point({"x":float(x),"y":float(y)},context[3]))
                                            for x,y in outline)
                                 if inside: selected.update((si,pi) for pi in range(len(points)))
@@ -4794,6 +4848,24 @@ class Viewer(PanZoomView):
                 self.roi_drag = self._roi_start(kind, scene_pos)
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 return True
+        paint_context = self._paint_context()
+        ctrl = bool(modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier))
+        shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+        if (button == Qt.MouseButton.LeftButton and paint_context is not None
+                and self.roto_active_group == "Clone/Reveal" and self.paint_tool == "clone" and ctrl):
+            if shift:
+                self.paint_source_offset = [0.0, 0.0]
+                for axis, value in zip(("x", "y"), self.paint_source_offset):
+                    for field in self.window.findChildren(QDoubleSpinBox, f"rotopaint-clone-offset-{axis}"):
+                        field.setValue(value)
+            self.paint_clone_offset_drag = {"start": scene_pos, "offset": list(self.paint_source_offset)}
+            return True
+        if (button == Qt.MouseButton.LeftButton and paint_context is not None
+                and modifiers & Qt.KeyboardModifier.ShiftModifier
+                and self.roto_active_group in (None, "Brushes")
+                and self.paint_tool in ("paint", "eraser")):
+            self.paint_size_drag = {"start": scene_pos, "size": self.paint_size}
+            return True
         context = self._roto_context()
         if button == Qt.MouseButton.LeftButton and context is not None:
             if self.roto_drawing:
@@ -4833,7 +4905,7 @@ class Viewer(PanZoomView):
             if tool == "Select Feather Points":
                 radius = 12.0 / max(abs(self.view_zoom()), .05)
                 for si, shape in enumerate(resolved):
-                    if shape.get("feather_model") != "edge" or not (shape.get("feather") or any(
+                    if shape.get("locked") or shape.get("feather_model") != "edge" or not (shape.get("feather") or any(
                             point.get("feather_x", 0) or point.get("feather_y", 0) for point in shape["points"])):
                         continue
                     for pi, handle in enumerate(shape_model.feather_handle_points(shape["points"], shape["feather"])):
@@ -4864,7 +4936,7 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor); return True
             if len(self.roto_selected_points) >= 2:
                 selected = {(si, pi) for si, pi in self.roto_selected_points
-                            if si < len(resolved) and pi < len(resolved[si]["points"])}
+                            if si < len(resolved) and pi < len(resolved[si]["points"]) and not resolved[si].get("locked")}
                 selected_scene = [self._roto_scene_point(resolved[si]["points"][pi], context[3])
                                   for si, pi in selected]
                 if selected_scene:
@@ -4911,7 +4983,7 @@ class Viewer(PanZoomView):
                 if resolved[hit[0]].get("locked"):
                     return True
                 self.roto_selected_shape_index = hit[0]
-                if modifiers & Qt.KeyboardModifier.ShiftModifier: self.roto_selected_points.add(hit)
+                if modifiers & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.ControlModifier): self.roto_selected_points.add(hit)
                 else: self.roto_selected_points = {hit}
                 self.window.rebuild_properties_dock()
                 self.roto_key = context[0]
@@ -4920,6 +4992,10 @@ class Viewer(PanZoomView):
                                   "moved": False}
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 return True
+            if self.roto_active_group is None and context[1]["type"] == "Roto":
+                if self.begin_roto_draw(context[0]):
+                    self.roto_draw_cursor = scene_pos; self.roto_draw_press = scene_pos
+                    return True
             if (context[1]["type"] == "Roto" or
                     (context[1]["type"] == "RotoPaint" and self.roto_active_group in ("Select", "Points"))):
                 self.roto_drag = {"kind":"marquee","start":scene_pos,"scene":scene_pos,"moved":False}
@@ -4996,7 +5072,7 @@ class Viewer(PanZoomView):
                         kind = "rotate"
                     elif (handles2d.point_in_quad(point[0], point[1], corners)
                           or distance <= hit_radius):
-                        kind = "pivot" if modifiers & Qt.KeyboardModifier.ControlModifier else "translate"
+                        kind = "pivot" if (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)) == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier) else "translate"
                 if kind is not None:
                     touched = {"translate": ("translate_x", "translate_y"),
                                "pivot": ("center_x", "center_y", "translate_x", "translate_y"),
@@ -5049,6 +5125,23 @@ class Viewer(PanZoomView):
 
     def hit_move(self, scene_pos, modifiers, pressure=1.0):
         """A move to a scene point while a handle is held. True when a drag took it."""
+        if self.paint_size_drag is not None:
+            drag = self.paint_size_drag
+            delta = scene_pos.x() - drag["start"].x()
+            self.paint_size = min(4096.0, max(0.1, drag["size"] + delta))
+            for field in self.window.findChildren(QDoubleSpinBox, "rotopaint-brush-size"):
+                field.setValue(self.paint_size)
+            self.viewport().update()
+            return True
+        if self.paint_clone_offset_drag is not None:
+            drag = self.paint_clone_offset_drag
+            dx, dy = scene_pos.x() - drag["start"].x(), scene_pos.y() - drag["start"].y()
+            self.paint_source_offset = [drag["offset"][0] + dx, drag["offset"][1] + dy]
+            for axis, value in zip(("x", "y"), self.paint_source_offset):
+                for field in self.window.findChildren(QDoubleSpinBox, f"rotopaint-clone-offset-{axis}"):
+                    field.setValue(value)
+            self.viewport().update()
+            return True
         if self.wipe_drag is not None:
             self._wipe_drag_to(scene_pos)
             return True
@@ -13625,7 +13718,8 @@ class Window(QMainWindow):
                 tool.setCurrentIndex(tool.findData(self.viewer.paint_tool))
                 tool.currentIndexChanged.connect(lambda index, box=tool: setattr(self.viewer, "paint_tool", box.itemData(index)))
                 form.addRow("Tool", tool)
-                brush_size = QDoubleSpinBox(); brush_size.setRange(0.1, 4096); brush_size.setValue(self.viewer.paint_size)
+                brush_size = QDoubleSpinBox(); brush_size.setObjectName("rotopaint-brush-size")
+                brush_size.setRange(0.1, 4096); brush_size.setValue(self.viewer.paint_size)
                 brush_size.valueChanged.connect(lambda value: setattr(self.viewer, "paint_size", float(value)))
                 form.addRow("Brush size", brush_size)
                 lifetime = ElidingComboBox()

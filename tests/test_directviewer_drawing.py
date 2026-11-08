@@ -246,8 +246,13 @@ class RotoPaintDrawingTests(DrawingBase):
                     self.assertEqual((undo_viewer, undo_direct), (1, 1), where)
 
     def test_each_brush_tool_key_works_on_the_direct_picture(self):
-        for code, tool in ((Qt.Key.Key_E, "eraser"), (Qt.Key.Key_C, "clone"), (Qt.Key.Key_B, "paint")):
-            QTest.keyClick(self.widget, code)
+        # N selects/cycles Nuke's Brushes group; C selects Clone. Brush is the default.
+        for key_sequence, tool in (((), "paint"), ((Qt.Key.Key_N, Qt.Key.Key_N), "eraser"),
+                                   ((Qt.Key.Key_C,), "clone")):
+            self.viewer.roto_active_group = None
+            self.viewer.paint_tool = "paint"
+            for code in key_sequence:
+                QTest.keyClick(self.widget, code)
             self.assertEqual(self.viewer.paint_tool, tool)
             via_direct, _ = self.stroke(self.widget, 1.0, 1.0)
             self.assertEqual([item["tool"] for item in via_direct], [tool])
