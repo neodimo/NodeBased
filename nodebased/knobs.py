@@ -1519,6 +1519,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("LABColourSpace",), label="LAB colour space"), KnobGroup("float", ("stretchAmount",)), KnobGroup("float", ("stretchDirection",)),
         KnobGroup("enum", ("detailSource",), label="Detail source"), KnobGroup("float", ("detailAmount",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"),
         KnobGroup("float", ("rotate",)), KnobGroup("float", ("scale",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "MarkerRemoval": _groups(KnobGroup("bool", ("enabled",), label="Control channel enabled"), KnobGroup("enum", ("mode",), label="Paint type"), KnobGroup("int", ("linearsearch",), label="Bilinear Y search"), KnobGroup("string", ("ctrlMask",), label="Control channel"), KnobGroup("xy", ("x_offset", "y_offset"), label="Pixel offset")),
     "CurveTool": _groups(KnobGroup("enum", ("curve_type",), label="Curve type"),
         KnobGroup("string", ("channels",), label="Channels"), KnobGroup("int", ("avg_frames",), label="Frames for base average"),
         KnobGroup("int", ("frame_start",)), KnobGroup("int", ("frame_end",)),
@@ -2547,6 +2548,7 @@ NUKE_LAYOUT_LANE9 = {
     "Noise": (*_DRAW_HEAD, "type", "size", "z_slice", "octaves", "nyquist", "lacunarity", "gain", "gamma", "translate_x", "rotate_x", "scaling", "skew",
               "center_x", "xrotate", "yrotate", "ramp", "red", "p1_x", "color0_red", "p0_x"),
     "Grid": (*_DRAW_HEAD, "number_x", "line_width", "grid_offset_x", "ramp", "red", "p1_x", "color0_red", "p0_x"),
+    "MarkerRemoval": ("enabled", "mode", "linearsearch", "ctrlMask", KnobGroup("row", ("x_offset", "y_offset"), label="Pixel offset", section="Pixel offset", members=("int", "int"))),
     "Dither": ("channels", "dither_amount", "monodither", "seed", "static_seed"),
     "Grain": ("seed", "red_size", "green_size", "blue_size", "red_i", "green_i", "blue_i", "red_intensity", "green_intensity", "blue_intensity", "black",
               "minimum_red", "maskgrain", "invert_mask"),
@@ -2569,6 +2571,7 @@ NUKE_LABELS = {
     "Ramp": {"premult": "Premult", "p0_x": "Point 0 xy", "p1_x": "Point 1 xy", "color1_red": "Color", "color0_red": "Color 0"},
     "Noise": {"premult": "Premult", "z_slice": "Z", "nyquist": "Clip at Nyquist limit", "translate_x": "Translate xy", "center_x": "Center xy"},
     "Grid": {"premult": "Premult", "line_width": "Size", "grid_offset_x": "Translate", "p0_x": "Point 0", "p1_x": "Point 1"},
+    "MarkerRemoval": {"enabled": "Control channel enabled", "mode": "Paint type", "linearsearch": "Bilinear Y search", "ctrlMask": "Control channel", "x_offset": "X offset", "y_offset": "Y offset"},
     "Grain": {"invert_mask": "Invert alpha", "minimum_red": "Minimum rgb"},
 }
 

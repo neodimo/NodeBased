@@ -37,7 +37,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
-                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "RotoPaint",
+                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "MarkerRemoval", "RotoPaint",
                                        "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
@@ -941,6 +941,7 @@ SPECS = {
                                     "corner4_x": 0.0, "corner4_y": 100.0, "mix": 1.0, **_vectorcornerpinknobs.NEW}},
     "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte", "detail"],
                 "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "fillRegion": "Matte Alpha", "smoothness": 1.0, "LABColourSpace": 0, "stretchAmount": 0.0, "stretchDirection": 0.0, "detailSource": "Source", "detailAmount": 0.0, "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0, "center_x": 480.0, "center_y": 270.0, "channels": "rgb", "mix": 1.0}},
+    "MarkerRemoval": {"inputs": ["image"], "params": {"enabled": 1, "mode": "bilinear", "linearsearch": 100, "ctrlMask": "rgba.alpha", "x_offset": 0, "y_offset": 0}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0,
                   "autocrop_mode": "alpha", "autocrop_color_r": 0.0, "autocrop_color_g": 0.0, "autocrop_color_b": 0.0, "autocrop_tolerance": 0.1,
@@ -1819,7 +1820,7 @@ INPUT_TYPES["volume"] = ("volume",)
 INPUT_TYPES["img"] = ("image",)        # PointsTo3D and Reconcile3D: the plate that gives the format (lane 9 step N)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
-LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
+LIMITS = {"input_number": (1, 64), "enabled": (0, 1), "splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
           "displace_scale": (-1000000.0, 1000000.0), "displace_offset": (-1000000.0, 1000000.0),
           "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_delight_iterations": (1, 200), "splat_delight_smoothness": (0.0, 1.0), "splat_metallic": (0.0, 1.0), "splat_roughness": (0.0, 4.0), "splat_intrinsics_mix": (0.0, 1.0), "splat_reflection_samples": (0, 64), "splat_indirect_samples": (0, 256), "splat_indirect_distance": (0.0, 100000.0), "splat_denoise": (0.0, 1.0), "splat_delight_light_order": (0, 2), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
@@ -1848,6 +1849,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10),
           "radius": (0, 500), "which": (0, 1),
           "invert": (0, 1), "hide_input": (0, 1), "reference_frame": (-1000000, 1000000),
+          "linearsearch": (0, 100000), "x_offset": (-8192, 8192), "y_offset": (-8192, 8192),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "pattern_radius": (1, 128), "search_radius": (1, 256), "adaptive_update": (0, 1),
           "samples_per_axis": (2, 24), "ransac_threshold": (0.01, 100.0),
@@ -2263,6 +2265,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "tracker_warp": ["Translate", "Translate/Rotate", "Translate/Scale", "Translate/Rotate/Scale", "Affine"],
            "spark_mode": ["Rays", "Sparkles", "Fireworks"],
            "vismask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
+           "ctrlMask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
            "vis_mask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
            "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
            "mask_channel": ["alpha", "red", "green", "blue", "luminance"],
@@ -3547,7 +3550,8 @@ def validate(doc, _depth=0):
                 if value != "Custom" and value not in document_formats(doc):
                     raise ValueError(f"Invalid {name}: {value}")
                 continue
-            choices = (["none", "adjust contrast"] if kind == "Roto" and name == "pretrack_filter"
+            choices = (["bilinear", "radial"] if kind == "MarkerRemoval" and name == "mode"
+                       else ["none", "adjust contrast"] if kind == "Roto" and name == "pretrack_filter"
                        else CHOICES.get(name, []))
             if (name in CHOICES and value not in choices and not (kind == "LevelSet" and name in ("channel", "output"))
                     and not _chrome.is_open_choice(kind, name) and not (kind == "DirBlur" and _storedknobs.is_factor_digits(value))):

@@ -13313,7 +13313,9 @@ class Window(QMainWindow):
                     control = ElidingComboBox()
                     if node["type"] == "Read" and param in readknobs.FORMAT_DEFAULTS:
                         control.setObjectName(f"{param}-choice")
-                    control.addItems(["none", "adjust contrast"] if node["type"] == "Roto" and param == "pretrack_filter" else CHOICES[param])
+                    control.addItems(["bilinear", "radial"] if node["type"] == "MarkerRemoval" and param == "mode" else ["none", "adjust contrast"] if node["type"] == "Roto" and param == "pretrack_filter" else CHOICES[param])
+                    if node["type"] == "MarkerRemoval" and param == "ctrlMask":
+                        control.setEditable(True)
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
                     form.addRow({"colorspace": "Input Transform", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
@@ -13575,7 +13577,8 @@ class Window(QMainWindow):
                         elif kind == "enum":
                             widget = ElidingComboBox()
                             widget.setObjectName(f"{name}-choice")
-                            widget.addItems(["none", "adjust contrast"] if node["type"] == "Roto" and name == "pretrack_filter" else CHOICES[name]); widget.setCurrentText(str(node["params"][name]))
+                            widget.addItems(["bilinear", "radial"] if node["type"] == "MarkerRemoval" and name == "mode" else ["none", "adjust contrast"] if node["type"] == "Roto" and name == "pretrack_filter" else CHOICES[name]); widget.setCurrentText(str(node["params"][name]))
+                            if node["type"] == "MarkerRemoval" and name == "ctrlMask": widget.setEditable(True)
                             widget.currentTextChanged.connect(lambda v, k=key, p=name: self.defer_command({"op":"set","id":k,"param":p,"value":v}))
                             layout.addWidget(widget, 1)
                         else:

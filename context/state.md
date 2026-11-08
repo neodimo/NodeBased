@@ -1,3 +1,7 @@
+## 2026-11-08 — Lane 9 step Z partial
+
+MarkerRemoval now renders as its own node with bilinear/radial kernel, offset and named-layer control masks, panel/catalog/tier registration and whole-frame tile slicing. Targeted tests cover pixels, cache and tiles. Audit is 68.2 (no behavior fixture, 0/5), while overall is 95.8 from 95.6 baseline. The dedicated linearsearch pixel test passes and the audit reports no inert knobs. DustBust and viewer spot entry remain. See branch `openclaw/nb-2d-behaviour` and the Lane 9 report. Needs Gonzo: complete DustBust and viewer work from the Z brief; add a behavior audit case for MarkerRemoval and complete DustBust/viewer behavior.
+
 ## 2026-11-08 — Lane 9 step R6 finish: RotoPaint dynamic stroke controls
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (4:36 AM on 2026-11-08 PDT)
@@ -1749,7 +1753,7 @@ docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick
 workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
 
 **Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
-the stacked tip `19b20f60` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1101-1010.log`, started 10:10 AM): **Ran 7690 tests in 569.048 s, OK (skipped=37), exit 0**.
+the stacked tip `19b20f60` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1101-1010.log`, started 10:10 AM): **Ran 7690 tests in 568.248 s, OK (skipped=37), exit 0**.
 
 **What landed.**
 
@@ -6669,7 +6673,7 @@ docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick
 workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
 
 **Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 73 tests in 35.629 s, OK. Full suite on
-the stacked tip `bc79516` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1001-0005.log`, started 12:05 AM): **Ran 3959 tests in 2769.071 s, OK (skipped=1), exit 0**.
+the stacked tip `bc79516` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1001-0005.log`, started 12:05 AM): **Ran 3959 tests in 2768.271 s, OK (skipped=1), exit 0**.
 
 **What landed.**
 

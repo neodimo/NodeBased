@@ -4583,6 +4583,10 @@ class Evaluator:
             if (cancel is not None and kind in _ROW_CHUNKED_MASK_MIX_KINDS
                     and out.height > _CANCEL_CHUNK_ROWS):
                 pixels = Evaluator._run_row_chunked(kind, p, source, mask, mix, out, frame, cancel, progress)
+            elif kind == "MarkerRemoval":
+                pixels = Evaluator._kernel(kind, p, [source.fit(out)], frame,
+                    layer_array=lambda name: (None if source.layers is None or name not in source.layers
+                                              else source.layers[name].fit(out)))
             else:
                 filtered = Evaluator._filtered_pixels(kind, p, source, out, frame)
                 pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
@@ -5955,7 +5959,25 @@ class Evaluator:
         return ((cumsum[tuple(hi)] - cumsum[tuple(lo)]) / window).astype(np.float32)
 
     @staticmethod
-    def _kernel(kind, p, inputs, frame=None, data=None, origin=(0, 0)):
+    def _kernel(kind, p, inputs, frame=None, data=None, origin=(0, 0), layer_array=None):
+        if kind == "MarkerRemoval":
+            if not p.get("enabled", 1):
+                return inputs[0].copy()
+            from .ops2d_chrome import resolve_channel
+            from .ops2d_markerremoval import marker_removal
+            src = inputs[0]
+            if str(p.get("ctrlMask", "rgba.alpha")).lower() == "none":
+                return src.copy()
+            control = resolve_channel(p.get("ctrlMask", "rgba.alpha"), src, layer_array)
+            shifted = np.zeros_like(control)
+            dx, dy = int(p.get("x_offset", 0)), int(p.get("y_offset", 0))
+            h, w = control.shape[:2]
+            sx0, sx1 = max(0, -dx), min(w, w-dx)
+            sy0, sy1 = max(0, -dy), min(h, h-dy)
+            if sx1 > sx0 and sy1 > sy0:
+                shifted[sy0+dy:sy1+dy, sx0+dx:sx1+dx] = control[sy0:sy1, sx0:sx1]
+            control = shifted
+            return marker_removal(src, control, p.get("mode", "bilinear"), p.get("linearsearch", 100))
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace"):
             from .ocio_nodes import transform
             filtered = transform(kind, p, inputs[0])

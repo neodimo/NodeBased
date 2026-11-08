@@ -948,7 +948,7 @@
    "knobs": [
     {"name": "mode", "label": "paint type", "tab": "MarkerRemoval Tab", "primary": true, "role": "knob", "counted": true, "type": "enum", "default": "bilinear", "choices": ["bilinear", "radial"]},
     {"name": "linearsearch", "label": "bilinear y search", "tab": "MarkerRemoval Tab", "primary": true, "role": "knob", "counted": true, "type": "number", "default": 100},
-    {"name": "", "label": "control channel", "tab": "MarkerRemoval Tab", "primary": true, "role": "ui_only", "counted": false, "type": "bool", "default": true, "reason": "enable checkbox or label without a scripting name"},
+    {"name": "enabled", "label": "control channel", "tab": "MarkerRemoval Tab", "primary": true, "role": "knob", "counted": true, "type": "bool", "default": true},
     {"name": "ctrlMask", "label": "control channel", "tab": "MarkerRemoval Tab", "primary": true, "role": "knob", "counted": true, "type": "string", "default": "rgba.alpha"},
     {"name": "x_offset", "label": "x offset", "tab": "Pixel offset", "primary": false, "role": "knob", "counted": true, "type": "number", "default": 0},
     {"name": "y_offset", "label": "y offset", "tab": "Pixel offset", "primary": false, "role": "knob", "counted": true, "type": "number", "default": 0}

@@ -327,7 +327,7 @@ class ProxyTierTests(unittest.TestCase):
                        "flare_radius_inner", "flare_radius_middle", "flare_radius_outer", "flare_chroma_shift",
                        "spark_x", "spark_y", "spark_size", "spark_thick",
                        # Lane 9 step O: BumpBoss's light position and image center are pixel positions.
-                       "lightposition_x", "lightposition_y"}
+                       "lightposition_x", "lightposition_y", "x_offset", "y_offset"}
         for kind, spec in SPECS.items():
             present = pixel_names & set(spec["params"])
             # The fluid `max_size` knob caps simulated cells. Its meaning must stay fixed when

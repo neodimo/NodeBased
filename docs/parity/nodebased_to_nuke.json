@@ -842,8 +842,18 @@
    "reason": "provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10)"
   },
   "MarkerRemoval": {
-   "nodebased": null,
-   "reason": "provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10)"
+   "nodebased": "MarkerRemoval",
+   "inputs": [
+    {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
+   ],
+   "knobs": [
+    {"nodebased": ["enabled"], "nuke": ["enabled"], "kind": "same"},
+    {"nodebased": ["mode"], "nuke": ["mode"], "kind": "same"},
+    {"nodebased": ["linearsearch"], "nuke": ["linearsearch"], "kind": "same"},
+    {"nodebased": ["ctrlMask"], "nuke": ["ctrlMask"], "kind": "same"},
+    {"nodebased": ["x_offset"], "nuke": ["x_offset"], "kind": "same"},
+    {"nodebased": ["y_offset"], "nuke": ["y_offset"], "kind": "same"}
+   ]
   },
   "Flare": {
    "nodebased": "Flare",

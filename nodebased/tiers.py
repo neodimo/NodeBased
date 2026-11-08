@@ -675,7 +675,7 @@ REGION_RULES = {
     "TimeEcho": _identity,
     "NoTimeBlur": _identity,
     "MotionBlur": _identity, "Kronos": _identity, "OFlow": _identity, "VectorToMotion": _identity, "VectorGenerator": _identity, "MotionBlur2D": _identity, "MotionBlur3D": _identity, "CurveTool": _identity, "ContactSheet": _identity,
-    "SmartVector": _identity, "VectorDistort": _identity, "VectorCornerPin": _identity, "Inpaint": _identity,
+    "SmartVector": _identity, "VectorDistort": _identity, "VectorCornerPin": _identity, "Inpaint": _identity, "MarkerRemoval": _identity,
     # TVIScale (like TimeBlur/TimeEcho/Inpaint above) is solved whole and sliced by
     # `tileexec._temporal_tile`, not per-tile, so its own spatial ROI need is the identity; Assert
     # reads exactly the region it is asked to pass through (its pixel statistics need the whole
@@ -790,6 +790,7 @@ PIXEL_UNIT_PARAMS = {
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size", "size"), "DirBlur": ("length", "center_x", "center_y"),
     "VectorDistort": ("blur_size",), "Inpaint": ("translate_x", "translate_y", "center_x", "center_y"),
+    "MarkerRemoval": ("x_offset", "y_offset",),
     "VectorCornerPin": tuple(f"corner{i}_{axis}" for i in range(1, 5) for axis in ("x", "y")) + tuple(
         f"{side}{i}_{axis}" for side in ("user", "to", "from") for i in range(1, 5) for axis in ("x", "y")),
     "DropShadow": ("distance", "shadow_size", "shrink_expand"),

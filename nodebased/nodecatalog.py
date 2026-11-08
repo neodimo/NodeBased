@@ -38,6 +38,7 @@ NODE_CATEGORIES = {
         "Sparkles": "Adds deterministic twinkling glints to highlights.",
         "Dither": "Adds noise before quantising, to hide banding.",
         "Grid": "Draws an evenly spaced line grid.",
+        "MarkerRemoval": "Reconstructs marked pixels from nearby unmarked image regions.",
     },
     "Time": {
         "TimeOffset": "Shifts the input's frame by a fixed offset.",

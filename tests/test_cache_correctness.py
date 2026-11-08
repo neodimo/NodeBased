@@ -152,6 +152,8 @@ def _alt_value(kind, param, default):
     override = VALUE_OVERRIDES.get((kind, param))
     if override is not None:
         return override(default) if callable(override) else override
+    if kind == "MarkerRemoval" and param == "mode":
+        return "radial" if default != "radial" else "bilinear"
     if isinstance(default, str):
         try:
             decoded = json.loads(default)

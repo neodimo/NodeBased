@@ -1,3 +1,11 @@
+## 2026-11-08 — Lane 9 step Z (partial)
+
+- **What was done — evidence:** Added standalone MarkerRemoval with bilinear and radial fill kernels, offset control mask, whole-frame tile solve, knob panel, catalog/theme/tiers registration, and Nuke pairing. Outside-mask pixels pass through bit-identically; pixel tests cover gradient reconstruction, search range, control offsets, empty mask, cache invalidation and tile parity.
+- **Artifacts:** Changes are in this worktree on `openclaw/nb-2d-behaviour`; no external scratch assets. Bundled PARITY_2D and fidelity docs are byte-identical.
+- **State:** Partial. Audit: MarkerRemoval 0.0 -> 68.2, DustBust remains 0.0; overall 95.6 -> 95.8. Targeted MarkerRemoval, tiles, cache, sourcepool, GPU2D, knobs/sliders, core, tiers, catalog, label/panel, knowledge, fidelity-audit, parity-count and RotoPaint regression tests pass. No behavior audit fixture was added, so the audit still lists 0/5 behavior cases. The separate pixel test covers linearsearch; the final audit lists no inert knobs. DustBust and its viewer workflow are unbuilt.
+- **Next owner + concrete artifact:** Needs Gonzo: finish step Z using `scratch/nb-lanes/auto/briefs/L9-dustbust-marker-Z-1107.md`; add a behavior audit fixture for MarkerRemoval, then build DustBust and its viewer click workflow.
+- **Failure mode:** `tests.test_cache_correctness` constructs alternative strings generically; MarkerRemoval `mode` and channel alternatives require valid node-specific values. These are now handled explicitly.
+
 ## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R6: measure Roto and RotoPaint's per-item controls in the layout audit, then fix what it finds (finish 1) (integrator tick)
 
 - **What was done:** `main` `8150e262` -> `634e5434` plus this docs commit. Evidence and per-lane commit
@@ -914,7 +922,7 @@
 ## 2026-11-01 — continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) step A of 1: generated footage gets its own camera limit, and the M5 score card on real clips (integrator tick)
 
 - **What was done:** `main` `a0c43634` -> `19b20f60` plus this docs commit. Evidence and per-lane commit
-  list in the dated `context/state.md` section. Full suite at `19b20f60`: Ran 7690 tests in 569.048 s, OK (skipped=37), exit 0.
+  list in the dated `context/state.md` section. Full suite at `19b20f60`: Ran 7690 tests in 568.248 s, OK (skipped=37), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
 ## 2026-11-01 — continuous mode merge: Lane 4 (Generative, Claude Sonnet 5.5) step A of 1: the video model learns the scene's distance scale (integrator tick)
