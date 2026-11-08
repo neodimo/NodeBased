@@ -1,3 +1,9 @@
+## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step Z: DustBust and MarkerRemoval as their own nodes (integrator tick)
+
+- **What was done:** `main` `49a43af9` -> `d5dd01b0` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `d5dd01b0`: Ran 9453 tests in 1111.819 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-08 — Lane 9 step Z (partial)
 
 - **What was done — evidence:** Added standalone MarkerRemoval with bilinear and radial fill kernels, offset control mask, whole-frame tile solve, knob panel, catalog/theme/tiers registration, and Nuke pairing. Outside-mask pixels pass through bit-identically; pixel tests cover gradient reconstruction, search range, control offsets, empty mask, cache invalidation and tile parity.

@@ -1,5 +1,24 @@
 ## 2026-11-08 — Lane 9 step Z partial
 
+## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (5:36 AM on 2026-11-08 PDT)
+
+`main` moved `49a43af9` -> `d5dd01b0` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d5dd01b0` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-0516.log`, started 5:16 AM): **Ran 9453 tests in 1111.819 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step Z: DustBust and MarkerRemoval as their own nodes.** Commits:
+  - `836e7e00` Add standalone MarkerRemoval node
+  Diff: 23 files changed, 244 insertions(+), 67 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 MarkerRemoval now renders as its own node with bilinear/radial kernel, offset and named-layer control masks, panel/catalog/tier registration and whole-frame tile slicing. Targeted tests cover pixels, cache and tiles. Audit is 68.2 (no behavior fixture, 0/5), while overall is 95.8 from 95.6 baseline. The dedicated linearsearch pixel test passes and the audit reports no inert knobs. DustBust and viewer spot entry remain. See branch `openclaw/nb-2d-behaviour` and the Lane 9 report. Needs Gonzo: complete DustBust and viewer work from the Z brief; add a behavior audit case for MarkerRemoval and complete DustBust/viewer behavior.
 
 ## 2026-11-08 — Lane 9 step R6 finish: RotoPaint dynamic stroke controls
