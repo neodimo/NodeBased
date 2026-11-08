@@ -1,5 +1,33 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra), Lane 9 (2D behaviour B, GPT-6 Luna) (12:16 PM on 2026-11-08 PDT)
+
+`main` moved `4d337020` -> `f9b4bcbd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `f9b4bcbd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1108-1156.log`, started 11:56 AM): **Ran 9461 tests in 1103.303 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: the direct picture on the Radeon, a faster Roto matte, the order-dependent test (finish 1).** Commits:
+  - `8c77b4a0` Record Lane 8 Roto finish evidence
+  - `9f1551aa` Reuse Roto feather result buffer
+  - `b992351b` Profile animated playback Roto stages
+  Diff: 5 files changed, 207 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+- **Lane 9 (2D behaviour B, GPT-6 Luna), step AA: the most-used nodes still below 90 (finish 1).** Commits:
+  - `e7d94d61` Keep retime vector detail paired in fidelity audit
+  - `50e4ea15` Mark mismatched retime vector detail unsupported
+  - `48420970` Classify Viewer settings as display-only
+  - `d0841fe8` Add Nuke filter scope to metadata panel
+  Diff: 8 files changed, 140 insertions(+), 90 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (10:46 AM on 2026-11-08 PDT)
 
 `main` moved `f79c10b5` -> `f26ccfb9` (lane commits cherry-picked onto main in lane order) and then to this

@@ -1,3 +1,9 @@
+## 2026-11-08 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: the direct picture on the Radeon, a faster Roto matte, the order-dependent test (finish 1), Lane 9 (2D behaviour B, GPT-6 Luna) step AA: the most-used nodes still below 90 (finish 1) (integrator tick)
+
+- **What was done:** `main` `4d337020` -> `f9b4bcbd` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `f9b4bcbd`: Ran 9461 tests in 1103.303 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-08 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: the direct picture on the Radeon, a faster Roto matte, the order-dependent test (integrator tick)
 
 - **What was done:** `main` `f79c10b5` -> `f26ccfb9` plus this docs commit. Evidence and per-lane commit
