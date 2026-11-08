@@ -1845,7 +1845,7 @@
     {
       "name": "Bezier/B-Spline handles/tension",
       "binding": "Drag while placing; Ctrl/Cmd+Alt+drag point for B-Spline tension",
-      "fact": "Create handles or adjust B-Spline tension.",
+      "fact": "The guide names the Ctrl/Cmd+Alt-drag gesture but does not specify how drag distance maps to tension.",
       "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {
@@ -1857,7 +1857,7 @@
     {
       "name": "B-Spline tension",
       "binding": "Ctrl/Cmd+Alt+drag point",
-      "fact": "Adjust tension.",
+      "fact": "The guide names the Ctrl/Cmd+Alt-drag gesture but does not specify how drag distance maps to tension.",
       "source_page": "https://thefoundry.s3.amazonaws.com/products/nuke/releases/17.0v3/Nuke17.0v3_ReferenceGuide.pdf#page=205"
     },
     {

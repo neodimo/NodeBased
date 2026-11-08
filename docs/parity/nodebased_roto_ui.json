@@ -1700,8 +1700,8 @@
     {
       "name": "Bezier/B-Spline handles/tension",
       "status": "differs",
-      "location": "`Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag.",
-      "difference": ""
+      "location": "`Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag. The source does not specify the tension mapping.",
+      "difference": "Not documented: the guide names Ctrl/Cmd+Alt-drag but gives no mapping from drag to tension; behavior is left unimplemented rather than invented."
     },
     {
       "name": "Sharp exit while drawing",
@@ -1711,8 +1711,8 @@
     {
       "name": "B-Spline tension",
       "status": "differs",
-      "location": "Uniform cubic B-Spline evaluation is implemented in `roto.flatten_points`; Ctrl/Cmd+Alt tension adjustment is still absent.",
-      "difference": ""
+      "location": "Uniform cubic B-Spline evaluation is implemented in `roto.flatten_points`; Ctrl/Cmd+Alt tension adjustment is still absent. The source does not specify the tension mapping.",
+      "difference": "Not documented: the guide names Ctrl/Cmd+Alt-drag but gives no mapping from drag to tension; behavior is left unimplemented rather than invented."
     },
     {
       "name": "Close shape",
@@ -1778,21 +1778,21 @@
     },
     {
       "name": "Set key: spline",
-      "status": "differs",
-      "location": "Roto has current/total spline keys, navigation and set/delete in `RotoPanel.build_panel`; RotoPaint has no equivalent spline-key panel controls.",
-      "difference": "The selected-spline controls do not yet appear in the RotoPaint panel."
+      "status": "match",
+      "location": "`RotoPanel.build_panel` and `build_paint_timing_controls`; selected spline current/total count, navigation, set and delete controls for Roto and RotoPaint.",
+      "difference": ""
     },
     {
       "name": "Delete key: spline",
-      "status": "differs",
-      "location": "Roto `RotoPanel.build_panel` deletes selected spline point keys at the current frame; RotoPaint has no equivalent panel control.",
-      "difference": "The delete control is missing from RotoPaint."
+      "status": "match",
+      "location": "`RotoPanel.build_panel` and `build_paint_timing_controls`; selected spline keys can be deleted at the current frame for Roto and RotoPaint.",
+      "difference": ""
     },
     {
       "name": "Set/delete point keys",
-      "status": "differs",
-      "location": "Roto `RotoPanel.build_panel` sets/deletes selected point keys; the viewer edit path is shared by RotoPaint, but its panel has no selected-point key controls.",
-      "difference": "The selected-point controls are absent from the RotoPaint panel."
+      "status": "match",
+      "location": "`RotoPanel.build_panel` and `build_paint_timing_controls`; set/delete actions affect the selected points for Roto and RotoPaint.",
+      "difference": ""
     },
     {
       "name": "Set key: transform",
@@ -1815,20 +1815,20 @@
     {
       "name": "Ripple editing",
       "status": "missing",
-      "location": "No ripple timing operation in `RotoPanel.build_panel` or `Window.build_node_panel`; Nuke chapter has no such workflow page.",
-      "difference": ""
+      "location": "No ripple timing control is implemented. The traversed official Nuke chapter and Reference Guide pages do not document a ripple workflow.",
+      "difference": "Undocumented in the cited official sources; behavior remains unimplemented rather than inferred."
     },
     {
       "name": "Per-shape keyframe controls",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / shape key button and scalar key controls; no same selected-item key scope menu.",
+      "status": "match",
+      "location": "Roto and RotoPaint panels expose All, Spline, Transform and Attributes key scopes for the selected shape item.",
       "difference": ""
     },
     {
       "name": "Motion blur keys",
       "status": "differs",
-      "location": "`RotoPanel.build_panel` / motion blur samples/shutter/offset controls; `Window.build_node_panel` selected-item fields.",
-      "difference": ""
+      "location": "`RotoPanel.build_panel` / motion-blur samples, shutter and offset controls; these stored fields are static and have no keyed evaluation path.",
+      "difference": "Motion-blur timing controls do not yet create animation keys."
     }
   ]
 }

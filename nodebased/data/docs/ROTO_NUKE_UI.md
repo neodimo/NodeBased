@@ -10,13 +10,13 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Tool settings | 189 | 1 | 0 | 99.7 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
 | Viewer editing | 28 | 2 | 1 | 93.5 |
-| Timing and animation | 4 | 5 | 1 | 65.0 |
-| Overall | — | — | — | 96.8 |
+| Timing and animation | 8 | 1 | 1 | 85.0 |
+| Overall | — | — | — | 97.5 |
 ## Largest gaps
 
-1. B-Spline tension gestures remain open; the official guide names the gesture but does not specify a tension mapping.
+1. B-Spline tension remains unimplemented. The guide names Ctrl/Cmd+Alt-drag but does not specify how drag distance maps to tension.
 2. Clone view selection depends on multi-view projects, which NodeBased does not support.
-3. RotoPaint still lacks selected-spline and selected-point key controls; timing also lacks the full key-scope menu and motion-blur keys. Ripple editing is undocumented in the traversed guide.
+3. Motion-blur timing fields do not yet create animation keys. Ripple editing is undocumented in the traversed official guide.
 4. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
 5. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
 ## Proposed implementation steps
@@ -70,11 +70,11 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 26 | R1 · viewer side | Open Spline | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 27 | R1 · viewer side | Draw Bezier/B-Spline freely | match | Viewer.hit_press; Viewer.hit_move; Viewer.hit_release; Viewer.finish_roto_draw | Ctrl/Cmd+drag sketches and closes the selected Bezier or B-Spline. |
 | 28 | R1 · viewer side | Shapes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
-| 29 | R1 · viewer side | Bezier/B-Spline handles/tension | differs | `Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag. |  |
+| 29 | R1 · viewer side | Bezier/B-Spline handles/tension | differs | `Viewer.mouseReleaseEvent` drawing drag creates cubic handles; B-Spline tension mapping is not documented. | The guide names Ctrl/Cmd+Alt-drag but does not map drag distance to tension; behavior remains unimplemented. |
 | 30 | R1 · viewer side | Brush | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 31 | R1 · viewer side | Sharp exit while drawing | match | `Viewer.hit_release` Shift+LMB | Shift+LMB commits a sharp open-spline end. |
 | 32 | R1 · viewer side | Eraser | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 33 | R1 · viewer side | B-Spline tension | differs | Uniform cubic evaluation is present; Ctrl/Cmd+Alt tension adjustment is still absent. |  |
+| 33 | R1 · viewer side | B-Spline tension | differs | Uniform cubic B-Spline evaluation is implemented; tension mapping is not documented. | The guide names Ctrl/Cmd+Alt-drag but does not map drag distance to tension; behavior remains unimplemented. |
 | 34 | R1 · viewer side | Brushes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 35 | R1 · viewer side | Close shape | match | `Viewer.keyPressEvent` Enter; `Viewer.mouseReleaseEvent` | Enter or clicking the first point closes the shape. |
 | 36 | R1 · viewer side | Clone | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
@@ -307,12 +307,12 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 263 | R3 · panel side | Set lifetime / frame range | match | `rotolist.ShapeListTree`.cmd_set_lifetime, context menu dialog `roto-list-set-lifetime` |  |
 | 264 | R3 · panel side | Planar-track | match | `rotolist.ShapeListTree`.cmd_planar_track, context menu `roto-list-planar-track` (the panel's existing track action) |  |
 | 265 | R4 · panel side | Autokey | match | `RotoViewerToolbar.settings_strip`; node-level `tool_settings.__global__.autokey` drives viewer edits. |  |
-| 266 | R4 · panel side | Set key: spline | differs | Roto has current/total spline keys, navigation and set controls; RotoPaint has no equivalent panel controls. |  |
-| 267 | R4 · panel side | Delete key: spline | differs | Roto deletes selected spline point keys at the current frame; RotoPaint lacks this panel control. |  |
-| 268 | R4 · panel side | Set/delete point keys | differs | Roto sets/deletes keys on selected points only; RotoPaint lacks selected-point panel controls. |  |
+| 266 | R4 · panel side | Set key: spline | match | `RotoPanel.build_panel` and `build_paint_timing_controls`; selected spline count, navigation, and set controls. |  |
+| 267 | R4 · panel side | Delete key: spline | match | `RotoPanel.build_panel` and `build_paint_timing_controls`; selected spline keys delete at the current frame. |  |
+| 268 | R4 · panel side | Set/delete point keys | match | `RotoPanel.build_panel` and `build_paint_timing_controls`; selected-point set/delete controls for both nodes. |  |
 | 269 | R4 · panel side | Set key: transform | match | `RotoPanel.build_panel` and `Window.build_node_panel`; per-field keys on Roto and RotoPaint transforms. |  |
 | 270 | R4 · panel side | Lifetime types | match | Roto and RotoPaint panels expose All, Start to, Single, To end and Range for shapes and strokes. |  |
 | 271 | R4 · panel side | Lifetime endpoints | match | Roto and RotoPaint panels show From/To only when used by the selected lifetime mode. |  |
-| 272 | R4 · panel side | Ripple editing | missing | No ripple timing operation in `RotoPanel.build_panel` or `Window.build_node_panel`; Nuke chapter has no such workflow page. |  |
-| 273 | R4 · panel side | Per-shape keyframe controls | differs | `RotoPanel.build_panel` / shape key button and scalar key controls; no same selected-item key scope menu. |  |
-| 274 | R4 · panel side | Motion blur keys | differs | `RotoPanel.build_panel` / motion blur samples/shutter/offset controls; `Window.build_node_panel` selected-item fields. |  |
+| 272 | R4 · panel side | Ripple editing | missing | No ripple timing control is implemented; cited official pages do not document a ripple workflow. | Undocumented in the cited official sources; behavior remains unimplemented rather than inferred. |
+| 273 | R4 · panel side | Per-shape keyframe controls | match | Roto and RotoPaint panels expose All, Spline, Transform and Attributes key scopes for the selected shape item. |  |
+| 274 | R4 · panel side | Motion blur keys | differs | Motion-blur samples, shutter and offset fields are static and have no keyed evaluation path. | Motion-blur timing controls do not yet create animation keys. |
