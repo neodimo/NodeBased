@@ -1,3 +1,11 @@
+## 2026-11-07 — Lane 2 step R3, the Roto and RotoPaint stroke/shape list
+
+- **What was done (evidence):** `nodebased/rotolist.py` (new) is one tree table for both panels: Name, Visible, Lock, Overlay color, Color, Invert, Blending, Motion blur, Lifetime, Source; each cell edits its stored field through `set_shapes` / `set_paint_items` (one undo step). Right-click: Add new layer, Duplicate, Copy/Cut > Curve, Paste > Spline, Delete, Set lifetime / frame range, Planar-track. Layers are folders: payload gets an optional `layers` list and items an optional `layer` name (validated in `shapes.validate_layers`; `layer_states` applies a layer's Visible/Lock to its children in `resolve_shapes` / `resolve_paint_items`); a set command that names no `layers` keeps the node's own, so Viewer edits never drop folders. `overlay_color` (3 floats) is an optional item field, drawn only by the Viewer outline. No schema bump: documents without the new keys are untouched.
+- **Tests:** `tests.test_roto_list_r3` (33), plus the named Roto/RotoPaint modules, `test_sourcepool`, `test_gpu2d`, `test_knowledge`, `PropertiesLabelTests`, all OK. Old list tests were updated to the table's object names.
+- **Score:** list 30.0 -> 85.0, overall roto UI 38.2 -> 42.0 (`tools/audit_roto_ui.py`).
+- **Not done:** View column (stereo-only); Color cell for RotoPaint shapes (they store none) and Invert for strokes; Nuke's full blending list; layer group transforms; newest-on-top order. A layer's Lock reaches the resolved shapes but the Viewer's own point-editing lock check reads the raw shape, so a locked layer does not yet block gestures: one line in the Viewer, left for Lane 9 (R1).
+- **Next owner:** Lane 9 for the Viewer lock check; Lane 2 R4 (timing/animation rows).
+
 ## 2026-11-07 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step S5: Nuke's rows and knob types on the fifth eight most-used nodes (finish 1), Lane 9 (2D behaviour B, GPT-6 Luna) step R0: Nuke's Roto and RotoPaint tools and UI, recorded and measured (finish 1) (integrator tick)
 
 - **What was done:** `main` `ce81f135` -> `562ba572` plus this docs commit. Evidence and per-lane commit
