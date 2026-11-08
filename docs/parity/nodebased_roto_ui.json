@@ -6,33 +6,28 @@
       "tools": [
         {
           "name": "Select All",
-          "status": "differs",
-          "location": "`Viewer.mousePressEvent`; `Viewer.keyPressEvent` Ctrl+A",
-          "difference": "The selection behavior exists without Nuke’s dedicated Select All toolbar mode."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` and `Viewer.hit_release` restrict point and marquee selection."
         },
         {
           "name": "Select Splines",
-          "status": "differs",
-          "location": "`Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list`",
-          "difference": "Point/shape selection and edits exist without the corresponding toolbar mode."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` and `Viewer.hit_release` restrict point and marquee selection."
         },
         {
           "name": "Select Points",
-          "status": "differs",
-          "location": "`Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list`",
-          "difference": "Point/shape selection and edits exist without the corresponding toolbar mode."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` and `Viewer.hit_release` restrict point and marquee selection."
         },
         {
           "name": "Select Feather Points",
-          "status": "differs",
-          "location": "`Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list`",
-          "difference": "Point/shape selection and edits exist without the corresponding toolbar mode."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` and `Viewer.hit_release` restrict point and marquee selection."
         }
       ],
       "cycle": {
-        "status": "differs",
-        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
-        "difference": "No Nuke-equivalent toolbar group cycle key."
+        "status": "match",
+        "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
       }
     },
     {
@@ -40,39 +35,33 @@
       "tools": [
         {
           "name": "Add Points",
-          "status": "differs",
-          "location": "`Viewer._insert_roto_point`; `Viewer._delete_roto_points`; `Viewer.keyPressEvent`",
-          "difference": "The operation is available as a gesture/key, without a dedicated toolbar mode."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` applies the selected point operation."
         },
         {
           "name": "Remove Points",
-          "status": "differs",
-          "location": "`Viewer._insert_roto_point`; `Viewer._delete_roto_points`; `Viewer.keyPressEvent`",
-          "difference": "The operation is available as a gesture/key, without a dedicated toolbar mode."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` applies the selected point operation."
         },
         {
           "name": "Cusp Points",
-          "status": "differs",
-          "location": "`Viewer.keyPressEvent` → `Viewer._set_roto_tangent_mode`",
-          "difference": "The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` applies the selected point operation."
         },
         {
           "name": "Smooth Points",
-          "status": "differs",
-          "location": "`Viewer.keyPressEvent` → `Viewer._set_roto_tangent_mode`",
-          "difference": "The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` applies the selected point operation."
         },
         {
           "name": "Remove Feather",
-          "status": "differs",
-          "location": "`RotoPanel.build_panel` / `roto-reset-feather-points`",
-          "difference": "Feather reset is a properties button rather than a toolbar tool."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` applies the selected point operation."
         },
         {
           "name": "Open/Close Curve",
-          "status": "differs",
-          "location": "`Viewer.finish_roto_draw`; `RotoPanel.build_panel` / closed field",
-          "difference": "Open/close is controlled by drawing gesture or selected-item properties; no toolbar mode."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_press` applies the selected point operation."
         }
       ],
       "cycle": null
@@ -82,15 +71,13 @@
       "tools": [
         {
           "name": "Bezier",
-          "status": "differs",
-          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape…",
-          "difference": "Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw`"
         },
         {
           "name": "Cusped Bezier",
-          "status": "missing",
-          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
-          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw`"
         },
         {
           "name": "B-Spline",
@@ -100,33 +87,28 @@
         },
         {
           "name": "Ellipse",
-          "status": "missing",
-          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
-          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw`"
         },
         {
           "name": "Rectangle",
-          "status": "missing",
-          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
-          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw`"
         },
         {
           "name": "Cusped Rectangle",
-          "status": "missing",
-          "location": "No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`.",
-          "difference": "NodeBased supports polygon-spline drawing only; this exact shape tool is absent."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw`"
         },
         {
           "name": "Open Spline",
-          "status": "differs",
-          "location": "`Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape…",
-          "difference": "Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw`"
         }
       ],
       "cycle": {
-        "status": "differs",
-        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
-        "difference": "No Nuke-equivalent toolbar group cycle key."
+        "status": "match",
+        "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
       }
     },
     {
@@ -134,21 +116,18 @@
       "tools": [
         {
           "name": "Brush",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         },
         {
           "name": "Eraser",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         }
       ],
       "cycle": {
-        "status": "differs",
-        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
-        "difference": "No Nuke-equivalent toolbar group cycle key."
+        "status": "match",
+        "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
       }
     },
     {
@@ -156,21 +135,18 @@
       "tools": [
         {
           "name": "Clone",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         },
         {
           "name": "Reveal",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         }
       ],
       "cycle": {
-        "status": "differs",
-        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
-        "difference": "No Nuke-equivalent toolbar group cycle key."
+        "status": "match",
+        "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
       }
     },
     {
@@ -178,27 +154,23 @@
       "tools": [
         {
           "name": "Blur",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         },
         {
           "name": "Sharpen",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         },
         {
           "name": "Smear",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         }
       ],
       "cycle": {
-        "status": "differs",
-        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
-        "difference": "No Nuke-equivalent toolbar group cycle key."
+        "status": "match",
+        "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
       }
     },
     {
@@ -206,21 +178,18 @@
       "tools": [
         {
           "name": "Dodge",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         },
         {
           "name": "Burn",
-          "status": "differs",
-          "location": "`Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent`",
-          "difference": "This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key."
+          "status": "match",
+          "location": "`RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture."
         }
       ],
       "cycle": {
-        "status": "differs",
-        "location": "`Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo.",
-        "difference": "No Nuke-equivalent toolbar group cycle key."
+        "status": "match",
+        "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
       }
     }
   ],
@@ -1663,9 +1632,8 @@
     },
     {
       "name": "Feather reset",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / `roto-reset-feather-points`; no Shift+E.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` Shift+E"
     },
     {
       "name": "Tangent create",
@@ -1747,15 +1715,13 @@
     },
     {
       "name": "Close shape",
-      "status": "differs",
-      "location": "`Viewer.finish_roto_draw`, `Viewer.mouseReleaseEvent`; Enter/first point close, but shape-mode semantics differ.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` Enter; `Viewer.mouseReleaseEvent` closes on first point"
     },
     {
       "name": "Leave shape open",
-      "status": "differs",
-      "location": "`Viewer.keyPressEvent` Escape → `Viewer.cancel_roto_edit`; NodeBased cancels instead of committing an open spline.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` Escape while Open Spline is active commits an open shape."
     },
     {
       "name": "Tool change",
@@ -1789,9 +1755,8 @@
     },
     {
       "name": "Selection tool cycle",
-      "status": "missing",
-      "location": "No Q selection-mode cycle in `Viewer.keyPressEvent`.",
-      "difference": ""
+      "status": "match",
+      "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
     },
     {
       "name": "Tool mode cycle",
@@ -1801,9 +1766,8 @@
     },
     {
       "name": "Paint tool cycles",
-      "status": "differs",
-      "location": "`Viewer.keyPressEvent` handles B/E/C; other paint operations use `Window.build_node_panel` / `rotopaint-tool`.",
-      "difference": ""
+      "status": "match",
+      "location": "`RotoViewerToolbar`; `Viewer.keyPressEvent`"
     }
   ],
   "timing_animation": [

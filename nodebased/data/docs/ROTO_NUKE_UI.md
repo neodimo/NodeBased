@@ -6,25 +6,25 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 
 | Section | Match | Differs | Missing | Score |
 |---|---:|---:|---:|---:|
-| Toolbar and tools | 0 | 27 | 5 | 42.2 |
+| Toolbar and tools | 31 | 0 | 1 | 96.9 |
 | Tool settings | 0 | 136 | 54 | 35.8 |
-| Stroke/shape list | 15 | 4 | 1 | 85.0 |
-| Viewer editing | 9 | 14 | 8 | 51.6 |
+| Stroke/shape list | 0 | 12 | 8 | 30.0 |
+| Viewer editing | 14 | 10 | 7 | 61.3 |
 | Timing and animation | 0 | 9 | 1 | 45.0 |
-| Overall | — | — | — | 42.0 |
+| Overall | — | — | — | 45.4 |
 
 ## Largest gaps
 
-1. The viewer lacks Nuke’s grouped toolbar and its per-group tool-cycle behavior.
-2. Shape drawing is limited to polygon-spline gestures; Bezier variants and primitive shapes are absent.
-3. Nuke’s per-tool settings strip is absent; related controls live in NodeBased properties.
-4. Point editing has different bindings and lacks some Nuke gestures and transform controls.
-5. Paint tools are selected from a properties dropdown rather than Nuke’s viewer toolbar.
-6. The stroke/shape list is now Nuke's table (step R3); it still lacks the View column, Nuke's full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
-7. Layer group transforms and Nuke's newest-on-top list order are not reproduced.
+1. Per-tool settings controls remain the largest gap: Nuke has a viewer strip with many controls that NodeBased keeps in properties.
+2. The RotoPaint list still lacks Nuke’s ordered columns, folders, and item commands.
+3. B-Spline evaluation and tension controls remain absent; the current Roto rasterizer evaluates cubic Bezier spans.
+4. Other viewer interactions still differ in multi-point bindings, transform-box toggles, nudging and paint gestures.
+5. Clone offset and Reveal onion-skin gestures remain absent from the viewer.
+6. The RotoPaint layer editor does not reproduce the ordered, columnar stroke/shape list.
+7. List item visibility, lock, overlay/render color, invert, blend, motion blur, and lifetime controls differ in placement.
 8. Timing and animation controls do not reproduce Nuke’s complete per-shape/per-point workflow.
 9. Clone/reveal source and transform controls are not in Nuke’s top-of-viewer settings arrangement.
-10. Timing and animation rows (R4) are the largest remaining panel-side gap.
+10. Nuke’s list commands, folders, and grouping behavior have incomplete parity.
 
 ## Proposed implementation steps
 
@@ -49,60 +49,60 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 
 | Rank | Step / side | Nuke item | Status | NodeBased location | Exact difference |
 |---:|---|---|---|---|---|
-| 1 | R1 · viewer side | Select All | differs | `Viewer.mousePressEvent`; `Viewer.keyPressEvent` Ctrl+A | The selection behavior exists without Nuke’s dedicated Select All toolbar mode. |
-| 2 | R1 · viewer side | Select Splines | differs | `Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list` | Point/shape selection and edits exist without the corresponding toolbar mode. |
-| 3 | R1 · viewer side | Select Points | differs | `Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list` | Point/shape selection and edits exist without the corresponding toolbar mode. |
-| 4 | R1 · viewer side | Select Feather Points | differs | `Viewer.mousePressEvent` and Roto overlay editing; `RotoPanel.build_panel` / `roto-shape-list` | Point/shape selection and edits exist without the corresponding toolbar mode. |
+| 1 | R1 · viewer side | Select All | match | `RotoViewerToolbar`; `Viewer.hit_press`; `Viewer.hit_release` | Click and marquee selection are restricted to the active selection mode. |
+| 2 | R1 · viewer side | Select Splines | match | `RotoViewerToolbar`; `Viewer.hit_press`; `Viewer.hit_release` | Click and marquee selection are restricted to the active selection mode. |
+| 3 | R1 · viewer side | Select Points | match | `RotoViewerToolbar`; `Viewer.hit_press`; `Viewer.hit_release` | Click and marquee selection are restricted to the active selection mode. |
+| 4 | R1 · viewer side | Select Feather Points | match | `RotoViewerToolbar`; `Viewer.hit_press`; `Viewer.hit_release` | Click and marquee selection are restricted to the active selection mode. |
 | 5 | R1 · viewer side | Select several points | differs | `Viewer.mousePressEvent`, `_roto_box_result`; NodeBased uses Shift+LMB and box selection rather than Ctrl/Cmd+LMB/marquee. |  |
-| 6 | R1 · viewer side | Select tool cycle | differs | `Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo. | No Nuke-equivalent toolbar group cycle key. |
-| 7 | R1 · viewer side | Add Points | differs | `Viewer._insert_roto_point`; `Viewer._delete_roto_points`; `Viewer.keyPressEvent` | The operation is available as a gesture/key, without a dedicated toolbar mode. |
+| 6 | R1 · viewer side | Select tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
+| 7 | R1 · viewer side | Add Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
 | 8 | R1 · viewer side | Feather add | differs | `Viewer.mousePressEvent` / feather-handle and Ctrl-drag branches; no E key. |  |
-| 9 | R1 · viewer side | Remove Points | differs | `Viewer._insert_roto_point`; `Viewer._delete_roto_points`; `Viewer.keyPressEvent` | The operation is available as a gesture/key, without a dedicated toolbar mode. |
-| 10 | R1 · viewer side | Cusp Points | differs | `Viewer.keyPressEvent` → `Viewer._set_roto_tangent_mode` | The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent. |
-| 11 | R1 · viewer side | Feather reset | differs | `RotoPanel.build_panel` / `roto-reset-feather-points`; no Shift+E. |  |
-| 12 | R1 · viewer side | Smooth Points | differs | `Viewer.keyPressEvent` → `Viewer._set_roto_tangent_mode` | The point operation works with Z/Shift+Z; the dedicated toolbar tool is absent. |
-| 13 | R1 · viewer side | Remove Feather | differs | `RotoPanel.build_panel` / `roto-reset-feather-points` | Feather reset is a properties button rather than a toolbar tool. |
+| 9 | R1 · viewer side | Remove Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
+| 10 | R1 · viewer side | Cusp Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
+| 11 | R1 · viewer side | Feather reset | match | `Viewer.keyPressEvent` Shift+E | Shift+E removes feather from the selected points. |
+| 12 | R1 · viewer side | Smooth Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
+| 13 | R1 · viewer side | Remove Feather | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
 | 14 | R1 · viewer side | Tangent move both | differs | `Viewer.mouseMoveEvent` / tangent branch mirrors handles by default; Nuke Shift snaps opposite tangent lengths. |  |
-| 15 | R1 · viewer side | Open/Close Curve | differs | `Viewer.finish_roto_draw`; `RotoPanel.build_panel` / closed field | Open/close is controlled by drawing gesture or selected-item properties; no toolbar mode. |
-| 16 | R1 · viewer side | Bezier | differs | `Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape… | Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ. |
-| 17 | R1 · viewer side | Cusped Bezier | missing | No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`. | NodeBased supports polygon-spline drawing only; this exact shape tool is absent. |
-| 18 | R1 · viewer side | B-Spline | missing | No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`. | NodeBased supports polygon-spline drawing only; this exact shape tool is absent. |
+| 15 | R1 · viewer side | Open/Close Curve | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
+| 16 | R1 · viewer side | Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
+| 17 | R1 · viewer side | Cusped Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
+| 18 | R1 · viewer side | B-Spline | missing | `roto.flatten_points` evaluates cubic Bezier spans; no B-Spline evaluator is present in `nodebased/roto.py`. | The B-Spline control curve cannot yet be evaluated as Nuke expects. |
 | 19 | R1 · viewer side | Transform box | differs | `Viewer._roto_box_geometry`, `_roto_box_action`, `_roto_box_result`; no T toggle. |  |
-| 20 | R1 · viewer side | Ellipse | missing | No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`. | NodeBased supports polygon-spline drawing only; this exact shape tool is absent. |
+| 20 | R1 · viewer side | Ellipse | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 21 | R1 · viewer side | Transform-box center/pivot | differs | `Viewer._roto_box_result`; `RotoPanel.build_panel` shape transform center controls; interaction differs from Nuke handles. |  |
-| 22 | R1 · viewer side | Rectangle | missing | No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`. | NodeBased supports polygon-spline drawing only; this exact shape tool is absent. |
+| 22 | R1 · viewer side | Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 23 | R1 · viewer side | Transform-box pivot modify | differs | `Viewer._roto_box_action`, `_roto_box_result`; Nuke Ctrl/Cmd+Shift handle gesture is absent. |  |
-| 24 | R1 · viewer side | Cusped Rectangle | missing | No tool or drawing mode for this shape in `Viewer.begin_roto_draw` or `Window.build_node_panel`. | NodeBased supports polygon-spline drawing only; this exact shape tool is absent. |
+| 24 | R1 · viewer side | Cusped Rectangle | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 25 | R1 · viewer side | Nudge point | missing | No numeric-keypad nudge branch in `Viewer.keyPressEvent`. |  |
-| 26 | R1 · viewer side | Open Spline | differs | `Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; `Window.build_node_panel` / Draw shape… | Click-point drawing is available; Nuke Bezier drag handles, mode selection, and toolbar placement are absent or differ. |
+| 26 | R1 · viewer side | Open Spline | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 27 | R1 · viewer side | Draw Bezier/B-Spline freely | differs | `Viewer.begin_roto_draw`, `Viewer.finish_roto_draw`; no Ctrl/Cmd sketch mode or B-Spline implementation. |  |
-| 28 | R1 · viewer side | Shapes tool cycle | differs | `Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo. | No Nuke-equivalent toolbar group cycle key. |
+| 28 | R1 · viewer side | Shapes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 29 | R1 · viewer side | Bezier/B-Spline handles/tension | differs | `Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag. |  |
-| 30 | R1 · viewer side | Brush | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
+| 30 | R1 · viewer side | Brush | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 31 | R1 · viewer side | Sharp exit while drawing | missing | No Shift+LMB sharp-exit branch in `Viewer.mousePressEvent`. |  |
-| 32 | R1 · viewer side | Eraser | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
+| 32 | R1 · viewer side | Eraser | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 33 | R1 · viewer side | B-Spline tension | missing | No B-Spline model or tension interaction in Viewer code. |  |
-| 34 | R1 · viewer side | Brushes tool cycle | differs | `Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo. | No Nuke-equivalent toolbar group cycle key. |
-| 35 | R1 · viewer side | Close shape | differs | `Viewer.finish_roto_draw`, `Viewer.mouseReleaseEvent`; Enter/first point close, but shape-mode semantics differ. |  |
-| 36 | R1 · viewer side | Clone | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
-| 37 | R1 · viewer side | Leave shape open | differs | `Viewer.keyPressEvent` Escape → `Viewer.cancel_roto_edit`; NodeBased cancels instead of committing an open spline. |  |
-| 38 | R1 · viewer side | Reveal | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
+| 34 | R1 · viewer side | Brushes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
+| 35 | R1 · viewer side | Close shape | match | `Viewer.keyPressEvent` Enter; `Viewer.mouseReleaseEvent` | Enter or clicking the first point closes the shape. |
+| 36 | R1 · viewer side | Clone | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
+| 37 | R1 · viewer side | Leave shape open | match | `Viewer.keyPressEvent` Escape with Open Spline selected | Escape commits the spline as open. |
+| 38 | R1 · viewer side | Reveal | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 39 | R1 · viewer side | Tool change | missing | No Roto tool-mode group in Viewer to switch away while drawing. |  |
-| 40 | R1 · viewer side | Clone/Reveal tool cycle | differs | `Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo. | No Nuke-equivalent toolbar group cycle key. |
+| 40 | R1 · viewer side | Clone/Reveal tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 41 | R1 · viewer side | Escape to selection | differs | `Viewer.keyPressEvent` Escape cancels Roto editing rather than switching to Select. |  |
-| 42 | R1 · viewer side | Blur | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
+| 42 | R1 · viewer side | Blur | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 43 | R1 · viewer side | Brush size | missing | `Window.build_node_panel` brush size field only; no Shift+drag resize in Viewer. |  |
-| 44 | R1 · viewer side | Sharpen | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
+| 44 | R1 · viewer side | Sharpen | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 45 | R1 · viewer side | Clone offset | differs | `Window.build_node_panel` Clone source offset fields; no Ctrl/Cmd+drag offset gesture. |  |
-| 46 | R1 · viewer side | Smear | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
+| 46 | R1 · viewer side | Smear | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 47 | R1 · viewer side | Reveal onion skin | missing | No onion-skin overlay in `Viewer.paint_overlays` or T binding in `Viewer.keyPressEvent`. |  |
-| 48 | R1 · viewer side | Blur/Sharpen/Smear tool cycle | differs | `Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo. | No Nuke-equivalent toolbar group cycle key. |
-| 49 | R1 · viewer side | Selection tool cycle | missing | No Q selection-mode cycle in `Viewer.keyPressEvent`. |  |
-| 50 | R1 · viewer side | Dodge | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
+| 48 | R1 · viewer side | Blur/Sharpen/Smear tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
+| 49 | R1 · viewer side | Selection tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar shortcut selects the group and repeated presses cycle its tools. |
+| 50 | R1 · viewer side | Dodge | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 51 | R1 · viewer side | Tool mode cycle | missing | No S tool-mode cycle in `Viewer.keyPressEvent`. |  |
-| 52 | R1 · viewer side | Burn | differs | `Window.build_node_panel` / `rotopaint-tool`; `Viewer.paint_tool`; `Viewer.keyPressEvent` | This operation exists in a properties-panel dropdown; Nuke places it in a left toolbar group and cycles it with a different key. |
-| 53 | R1 · viewer side | Paint tool cycles | differs | `Viewer.keyPressEvent` handles B/E/C; other paint operations use `Window.build_node_panel` / `rotopaint-tool`. |  |
-| 54 | R1 · viewer side | Dodge/Burn tool cycle | differs | `Viewer.keyPressEvent`; paint tool subset uses B/E/C and others use `rotopaint-tool` combo. | No Nuke-equivalent toolbar group cycle key. |
+| 52 | R1 · viewer side | Burn | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
+| 53 | R1 · viewer side | Paint tool cycles | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar shortcut selects the group and repeated presses cycle its tools. |
+| 54 | R1 · viewer side | Dodge/Burn tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 55 | R2 · viewer side | tool · Label points | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
 | 56 | R2 · viewer side | tool · Hide splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
 | 57 | R2 · viewer side | tool · Show paint stroke splines | missing | No corresponding control in `Window.build_node_panel`, `RotoPanel.build_panel`, or a Viewer toolbar. | Nuke presents this control in the viewer settings bar; NodeBased uses a different or absent control/location (see implementation mapping). |
@@ -293,26 +293,26 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 242 | R2 · viewer side | tool · Brush spacing | differs | `Window.build_node_panel` / Spacing QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
 | 243 | R2 · viewer side | tool · Brush hardness | differs | `Window.build_node_panel` / Hardness QDoubleSpinBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
 | 244 | R2 · viewer side | tool · Lifetime type | differs | `Window.build_node_panel` / Lifetime ElidingComboBox | The existing setting is in the properties panel; effect is only exposed for an existing stroke. |
-| 245 | R3 · panel side | Name | match | `rotolist.ShapeListTree` Name column (`roto-shape-row-name-*`, `rotopaint-row-name-*`, `*-layer-name-*`) |  |
-| 246 | R3 · panel side | Visible | match | `rotolist.ShapeListTree` Visible column (`roto-shape-row-visible-*`, `rotopaint-row-visible-*`, `*-layer-visible-*`) |  |
-| 247 | R3 · panel side | Lock | match | `rotolist.ShapeListTree` Lock column (`roto-shape-row-locked-*`, `rotopaint-row-locked-*`, `*-layer-locked-*`) |  |
-| 248 | R3 · panel side | Overlay color | match | `rotolist.ShapeListTree` Overlay color column (`*-row-overlay-*`); stored as `overlay_color`, drawn by the Viewer outline, never rendered |  |
-| 249 | R3 · panel side | Color | differs | `rotolist.ShapeListTree` Color column (`*-row-color-*`) | RotoPaint shape items carry no colour of their own, so their Color cell is disabled; strokes and Roto shapes edit theirs. |
-| 250 | R3 · panel side | Invert | differs | `rotolist.ShapeListTree` Invert column (`*-row-invert-*`) | A RotoPaint stroke has no invert setting, so its cell is disabled; shapes edit theirs. |
-| 251 | R3 · panel side | Blending | differs | `rotolist.ShapeListTree` Blending column (`*-row-blend-*`) | Roto offers ten blending modes and RotoPaint four, a subset of Nuke's list. |
-| 252 | R3 · panel side | Motion blur | match | `rotolist.ShapeListTree` Motion blur column (`*-row-motion_blur-*`) |  |
-| 253 | R3 · panel side | View | missing | No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`. | Stereo-only column; NodeBased has no multi-view project support, so it stays out of scope. |
-| 254 | R3 · panel side | Lifetime | match | `rotolist.ShapeListTree` Lifetime column (`*-row-lifetime-*`): shows the type and range, opens the panel's lifetime editor |  |
-| 255 | R3 · panel side | Source | match | `rotolist.ShapeListTree` Source column (`*-row-source-*`) |  |
-| 256 | R3 · panel side | Layers and folders | differs | `rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; `shapes.layer_states` | Group transforms of a layer and Nuke's newest-on-top ordering are not reproduced; the list order stays the render order. |
-| 257 | R3 · panel side | Add new layer | match | `rotolist.ShapeListTree`.cmd_add_layer, context menu `roto-list-add-layer` |  |
-| 258 | R3 · panel side | Duplicate | match | `rotolist.ShapeListTree`.cmd_duplicate, context menu `roto-list-duplicate` (items and layers with their contents) |  |
-| 259 | R3 · panel side | Copy > Curve | match | `rotolist.ShapeListTree`.cmd_copy, context menu Copy > Curve | Strokes have no curve and are skipped. |
-| 260 | R3 · panel side | Cut > Curve | match | `rotolist.ShapeListTree`.cmd_cut, context menu Cut > Curve | Strokes have no curve and are skipped. |
-| 261 | R3 · panel side | Paste > Spline | match | `rotolist.ShapeListTree`.cmd_paste, context menu Paste > Spline (pastes across Roto and RotoPaint) |  |
-| 262 | R3 · panel side | Delete | match | `rotolist.ShapeListTree`.cmd_delete, context menu `roto-list-delete` (a layer takes its contents with it) |  |
-| 263 | R3 · panel side | Set lifetime / frame range | match | `rotolist.ShapeListTree`.cmd_set_lifetime, context menu dialog `roto-list-set-lifetime` |  |
-| 264 | R3 · panel side | Planar-track | match | `rotolist.ShapeListTree`.cmd_planar_track, context menu `roto-list-planar-track` (the panel's existing track action) |  |
+| 245 | R3 · panel side | Name | differs | `RotoPanel.build_panel` / `roto-shape-list`, `roto-shape-row-name-*`; `Window.build_node_panel` / `rotopaint-layer-list`, `rotopaint-layer-name` | Editable names appear in vertical lists rather than ordered table columns. |
+| 246 | R3 · panel side | Visible | differs | `RotoPanel.build_panel` / `roto-shape-row-visible-*`; `Window.build_node_panel` / `rotopaint-layer-visible` | Toggle exists outside a list column. |
+| 247 | R3 · panel side | Lock | differs | `RotoPanel.build_panel` / `roto-shape-row-locked-*`; `Window.build_node_panel` / `rotopaint-layer-locked` | Toggle exists outside a list column. |
+| 248 | R3 · panel side | Overlay color | missing | No per-item outline-color column/control in `RotoPanel.build_panel` or `Window.build_node_panel`. |  |
+| 249 | R3 · panel side | Color | differs | `RotoPanel.build_panel` / `roto-shape-color`; paint item `Window.build_node_panel` / `rotopaint-layer-color` | Picker exists in selected-item properties; no overview color column. |
+| 250 | R3 · panel side | Invert | differs | `RotoPanel.build_panel` / `roto-shape-invert`; paint item `Window.build_node_panel` / `rotopaint-layer-invert` | Checkbox exists in selected-item properties, not the list overview. |
+| 251 | R3 · panel side | Blending | differs | `RotoPanel.build_panel` / `roto-shape-blend_mode`; `Window.build_node_panel` / `rotopaint-layer-blend` | Combo exists in properties; not a list column; NodeBased paint blend options are a subset. |
+| 252 | R3 · panel side | Motion blur | differs | `RotoPanel.build_panel` / motion-blur fields; `Window.build_node_panel` / `rotopaint-layer-motion-blur` | Motion blur exists in properties, not a list column. |
+| 253 | R3 · panel side | View | missing | No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`. |  |
+| 254 | R3 · panel side | Lifetime | differs | `RotoPanel.build_panel` / `roto-shape-lifetime-type`; `Window.build_node_panel` / `rotopaint-layer-lifetime` | Lifetime is edited in properties, not in a list column. |
+| 255 | R3 · panel side | Source | differs | `RotoPanel.build_panel` / `roto-shape-source`; `Window.build_node_panel` / `rotopaint-layer-source` | Source is edited in properties, not a list column. |
+| 256 | R3 · panel side | Add new layer | missing | `Window.build_node_panel` / flat `rotopaint-layer-list`; no nested folders/groups or group transform overlay. |  |
+| 257 | R3 · panel side | Duplicate | missing | No add-group/folder control in `Window.build_node_panel` / `rotopaint-layer-list`. |  |
+| 258 | R3 · panel side | Copy > Curve | missing | No equivalent context-menu operation in the NodeBased Roto panels. |  |
+| 259 | R3 · panel side | Cut > Curve | missing | No equivalent context-menu operation in the NodeBased Roto panels. |  |
+| 260 | R3 · panel side | Paste > Spline | missing | No equivalent context-menu operation in the NodeBased Roto panels. |  |
+| 261 | R3 · panel side | Delete | missing | No equivalent context-menu operation in the NodeBased Roto panels. |  |
+| 262 | R3 · panel side | Set lifetime / frame range | differs | `Window.build_node_panel` / `rotopaint-layer-delete`; `RotoPanel.build_panel` / `roto-shape-delete` | Delete is a button, not a context menu command. |
+| 263 | R3 · panel side | Planar-track | differs | `Window.build_node_panel` / `rotopaint-layer-lifetime`; `RotoPanel.build_panel` / `roto-shape-lifetime-type` | Lifetime control exists in properties, not the list menu. |
+| 264 | R3 · panel side | Layers and folders | differs | `RotoPanel.add_tracking_actions` / `roto-track-shape` | Tracking can be started from the panel, not a layer-list menu. |
 | 265 | R4 · panel side | Autokey | differs | `Viewer._roto_scalar_at_frame`; no autokey toggle. New shapes are static; movement keys only if animation is present. |  |
 | 266 | R4 · panel side | Set key: spline | differs | `RotoPanel.build_panel` / shape key button; `Window.make_key_button` and `Window.build_curve_menu`. |  |
 | 267 | R4 · panel side | Delete key: spline | differs | `Window.build_curve_menu` / Delete key at frame; `Window.make_key_button`. Key control presentation differs. |  |
