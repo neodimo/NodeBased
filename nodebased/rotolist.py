@@ -186,9 +186,12 @@ class ShapeListTree(QTreeWidget):
         header = self.header(); header.setStretchLastSection(False)
         for column, tip in enumerate(COLUMN_TIPS):
             self.headerItem().setToolTip(column, tip)
-            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch if column == 0
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive if column == 0
                                         else QHeaderView.ResizeMode.ResizeToContents)
         header.setMinimumSectionSize(24)
+        header.resizeSection(0, 150)            # names stay readable; the other columns follow their contents, and the table scrolls
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setRootIsDecorated(True); self.setUniformRowHeights(False); self.setIndentation(14)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setDragEnabled(True); self.setAcceptDrops(True); self.setDropIndicatorShown(True)
