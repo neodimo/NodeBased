@@ -107,6 +107,17 @@ class RotoToolbarTests(unittest.TestCase):
         viewer.setFocus(); QTest.keyClick(viewer, Qt.Key.Key_Escape)
         saved = self.window.dispatcher.document["node_data"]["r"]["shapes"][-1]
         self.assertFalse(saved["closed"])
+        self.assertEqual(viewer.roto_active_group,"Select")
+        self.assertEqual(viewer.roto_selection_tool,"Select Points")
+        viewer.select_roto_tool("Shapes","Bezier");self.assertTrue(viewer.begin_roto_draw("r"))
+        start=viewer.mapToScene(130,120);end=viewer.mapToScene(170,160)
+        viewer.roto_draw_points=[{"x":10.0,"y":10.0,"in_x":0.0,"in_y":0.0,"out_x":0.0,"out_y":0.0,"scene":start}]
+        viewer.roto_draw_press=start;viewer.roto_draw_cursor=end
+        viewer.hit_release(end,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.ShiftModifier)
+        sharp=self.window.dispatcher.document["node_data"]["r"]["shapes"][-1]
+        self.assertFalse(sharp["closed"])
+        self.assertEqual((sharp["points"][-1]["in_x"],sharp["points"][-1]["in_y"],
+                          sharp["points"][-1]["out_x"],sharp["points"][-1]["out_y"]),(0.0,0.0,0.0,0.0))
         viewer.select_roto_tool("Shapes", "Cusped Bezier")
         self.assertTrue(viewer.begin_roto_draw("r"))
         viewer.roto_draw_press = viewer.mapToScene(80, 80)
@@ -126,6 +137,10 @@ class RotoToolbarTests(unittest.TestCase):
         viewer.roto_draw_cursor = viewer.mapToScene(290, 210)
         viewer.hit_release(viewer.roto_draw_cursor, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
         self.assertTrue(any(viewer.roto_draw_points[0][key] for key in ("in_x","in_y","out_x","out_y")))
+        viewer.roto_draw_points.append({"x":180.0,"y":160.0,"in_x":0.0,"in_y":0.0,"out_x":0.0,"out_y":0.0})
+        viewer.roto_toolbar.choose("Select","Select Points")
+        self.assertFalse(viewer.roto_drawing)
+        self.assertFalse(self.window.dispatcher.document["node_data"]["r"]["shapes"][-1]["closed"])
 
     def test_point_tools_add_remove_cusp_smooth_feather_and_toggle_curve(self):
         viewer = self.window.viewer

@@ -9,9 +9,9 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Toolbar and tools | 31 | 0 | 1 | 96.9 |
 | Tool settings | 0 | 136 | 54 | 35.8 |
 | Stroke/shape list | 0 | 12 | 8 | 30.0 |
-| Viewer editing | 16 | 9 | 6 | 66.1 |
+| Viewer editing | 20 | 7 | 4 | 75.8 |
 | Timing and animation | 0 | 9 | 1 | 45.0 |
-| Overall | — | — | — | 45.9 |
+| Overall | — | — | — | 47.0 |
 
 ## Largest gaps
 
@@ -62,7 +62,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 11 | R1 · viewer side | Feather reset | match | `Viewer.keyPressEvent` Shift+E | Shift+E removes feather from the selected points. |
 | 12 | R1 · viewer side | Smooth Points | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
 | 13 | R1 · viewer side | Remove Feather | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
-| 14 | R1 · viewer side | Tangent move both | differs | `Viewer.mouseMoveEvent` / tangent branch mirrors handles by default; Nuke Shift snaps opposite tangent lengths. |  |
+| 14 | R1 · viewer side | Tangent move both | match | `Viewer.mouseMoveEvent` Shift-drag | Shift snaps the opposite tangent to the same length. |
 | 15 | R1 · viewer side | Open/Close Curve | match | `RotoViewerToolbar`; `Viewer.hit_press` | Clicking with this active tool performs the point operation. |
 | 16 | R1 · viewer side | Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 17 | R1 · viewer side | Cusped Bezier | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
@@ -79,7 +79,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 28 | R1 · viewer side | Shapes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 29 | R1 · viewer side | Bezier/B-Spline handles/tension | differs | `Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag. |  |
 | 30 | R1 · viewer side | Brush | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 31 | R1 · viewer side | Sharp exit while drawing | missing | No Shift+LMB sharp-exit branch in `Viewer.mousePressEvent`. |  |
+| 31 | R1 · viewer side | Sharp exit while drawing | match | `Viewer.hit_release` Shift+LMB | Shift+LMB commits a sharp open-spline end. |
 | 32 | R1 · viewer side | Eraser | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 33 | R1 · viewer side | B-Spline tension | missing | No B-Spline model or tension interaction in Viewer code. |  |
 | 34 | R1 · viewer side | Brushes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
@@ -87,9 +87,9 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 36 | R1 · viewer side | Clone | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 37 | R1 · viewer side | Leave shape open | match | `Viewer.keyPressEvent` Escape with Open Spline selected | Escape commits the spline as open. |
 | 38 | R1 · viewer side | Reveal | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 39 | R1 · viewer side | Tool change | missing | No Roto tool-mode group in Viewer to switch away while drawing. |  |
+| 39 | R1 · viewer side | Tool change | match | `RotoViewerToolbar.choose` | Changing tools finalizes an open spline and activates the selected tool. |
 | 40 | R1 · viewer side | Clone/Reveal tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
-| 41 | R1 · viewer side | Escape to selection | differs | `Viewer.keyPressEvent` Escape cancels Roto editing rather than switching to Select. |  |
+| 41 | R1 · viewer side | Escape to selection | match | `Viewer.keyPressEvent` Escape with Open Spline active | Escape commits the open spline and returns to Select Points. |
 | 42 | R1 · viewer side | Blur | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 43 | R1 · viewer side | Brush size | missing | `Window.build_node_panel` brush size field only; no Shift+drag resize in Viewer. |  |
 | 44 | R1 · viewer side | Sharpen | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |

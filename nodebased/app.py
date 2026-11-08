@@ -1630,6 +1630,9 @@ class RotoViewerToolbar(QWidget):
         self.adjustSize(); self.hide()
 
     def choose(self, group, tool):
+        if self.viewer.roto_drawing:
+            if not self.viewer.finish_roto_draw(closed=False):
+                self.viewer.cancel_roto_edit()
         self.tool_by_group[group] = tool
         self.viewer.roto_active_group = group
         self.viewer.select_roto_tool(group, tool)
@@ -3626,7 +3629,7 @@ class Viewer(PanZoomView):
             dx, dy = x - px, y - py
             point[hx] = self._roto_scalar_at_frame(point[hx], frame, dx, animated)
             point[hy] = self._roto_scalar_at_frame(point[hy], frame, dy, animated)
-            if not drag.get("broken"):
+            if drag.get("shift") and not drag.get("broken"):
                 ox, oy = (("out_x", "out_y") if drag["handle"] == "in" else ("in_x", "in_y"))
                 point[ox] = self._roto_scalar_at_frame(point[ox], frame, -dx, animated)
                 point[oy] = self._roto_scalar_at_frame(point[oy], frame, -dy, animated)
@@ -3791,6 +3794,10 @@ class Viewer(PanZoomView):
             return
         if (event.key() == Qt.Key.Key_Escape and self.roto_drawing and self.roto_shape_tool == "Open Spline"
                 and self.finish_roto_draw(closed=False)):
+            self.roto_selection_tool = "Select Points"
+            self.roto_active_group = "Select"
+            self.roto_toolbar.tool_by_group["Select"] = "Select Points"
+            self.roto_toolbar.refresh()
             event.accept(); return
         if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
                                                   or self.transform_drag is not None or self.analysis_drag is not None or self.flare_drag is not None or self.warp_drawing
@@ -3916,9 +3923,13 @@ class Viewer(PanZoomView):
                         self.finish_roto_draw(closed=True)
                     else:
                         dx, dy = (end[0]-point[0], end[1]-point[1]) if distance > 3 else (0.0, 0.0)
+                        sharp_exit = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+                        if sharp_exit: dx, dy = 0.0, 0.0
                         if self.roto_shape_tool == "Cusped Bezier": dx, dy = 0.0, 0.0
                         self.roto_draw_points.append({"x": point[0], "y": point[1], "in_x": -dx, "in_y": -dy,
                                                       "out_x": dx, "out_y": dy, "scene": start})
+                        if sharp_exit and len(self.roto_draw_points) >= 2:
+                            self.finish_roto_draw(closed=False)
                     self.roto_draw_cursor = None
                     self.roto_draw_press = None
                     self.viewport().update()

@@ -1643,9 +1643,8 @@
     },
     {
       "name": "Tangent move both",
-      "status": "differs",
-      "location": "`Viewer.mouseMoveEvent` / tangent branch mirrors handles by default; Nuke Shift snaps opposite tangent lengths.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.mouseMoveEvent` Shift-drag snaps the opposite tangent to the same length."
     },
     {
       "name": "Break tangent",
@@ -1701,9 +1700,8 @@
     },
     {
       "name": "Sharp exit while drawing",
-      "status": "missing",
-      "location": "No Shift+LMB sharp-exit branch in `Viewer.mousePressEvent`.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.hit_release` Shift+LMB commits a sharp open-spline end."
     },
     {
       "name": "B-Spline tension",
@@ -1723,15 +1721,13 @@
     },
     {
       "name": "Tool change",
-      "status": "missing",
-      "location": "No Roto tool-mode group in Viewer to switch away while drawing.",
-      "difference": ""
+      "status": "match",
+      "location": "`RotoViewerToolbar.choose` finalizes an open spline and switches to the chosen tool."
     },
     {
       "name": "Escape to selection",
-      "status": "differs",
-      "location": "`Viewer.keyPressEvent` Escape cancels Roto editing rather than switching to Select.",
-      "difference": ""
+      "status": "match",
+      "location": "`Viewer.keyPressEvent` Escape commits Open Spline and returns to Select Points."
     },
     {
       "name": "Brush size",

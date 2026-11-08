@@ -405,7 +405,7 @@ class RotoOverlayTests(unittest.TestCase):
         self.assertLess(float(abs(before-after).max()),1e-4)
         self.assertEqual(len(self.window.dispatcher.undo_stack),1)
 
-    def test_handle_drag_mirrors_unless_ctrl_breaks_it_and_undoes_once(self):
+    def test_handle_drag_moves_one_side_shift_snaps_lengths_and_ctrl_breaks_it(self):
         shape=triangle(); shape["points"][0].update(out_x=5.0,out_y=0.0,in_x=-5.0,in_y=0.0)
         self.window.close(); APP.processEvents(); self.window=Window(roto_document([shape])); self.window.show()
         self.assertTrue(wait_until(lambda:self.window.frame is not None)); self.window.graph.items_by_id["r"].setSelected(True)
@@ -413,12 +413,16 @@ class RotoOverlayTests(unittest.TestCase):
         viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(20,10)),"broken":False}
         viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
         pixel_tolerance = self.scene_pixel_tolerance()
-        self.assertAlmostEqual(point["out_x"],10.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-10.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(point["out_x"],10.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-5.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),1)
-        viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(30,10)),"broken":True}
+        viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(25,10)),"broken":False,"shift":True}
         viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
-        self.assertAlmostEqual(point["out_x"],20.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-10.0,delta=pixel_tolerance)
+        self.assertAlmostEqual(point["out_x"],15.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-15.0,delta=pixel_tolerance)
         self.assertEqual(len(self.window.dispatcher.undo_stack),2)
+        viewer.roto_drag={"point":(0,0),"kind":"tangent","handle":"out","scene":viewer.mapToScene(self.scene_pos(30,10)),"broken":True,"shift":True}
+        viewer._commit_roto_drag(); point=self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
+        self.assertAlmostEqual(point["out_x"],20.0,delta=pixel_tolerance); self.assertAlmostEqual(point["in_x"],-15.0,delta=pixel_tolerance)
+        self.assertEqual(len(self.window.dispatcher.undo_stack),3)
 
     def test_deleting_selected_point_enforces_minimum_and_is_one_undo(self):
         shape=triangle(); shape["points"].append({"x":10.,"y":90.,"in_x":0.,"in_y":0.,"out_x":0.,"out_y":0.})
