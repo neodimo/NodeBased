@@ -838,8 +838,15 @@
    ]
   },
   "DustBust": {
-   "nodebased": null,
-   "reason": "provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10)"
+   "nodebased": "DustBust",
+   "inputs": [{"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}],
+   "knobs": [
+    {"nodebased": ["enable"], "nuke": ["enable"], "kind": "same"},
+    {"nodebased": ["view_source"], "nuke": ["view_source"], "kind": "same"},
+    {"nodebased": ["frame_offset"], "nuke": ["frame_offset"], "kind": "same"},
+    {"nodebased": ["edge_hardness"], "nuke": ["edge_hardness"], "kind": "same"},
+    {"nodebased": ["maskchannel"], "nuke": ["maskchannel"], "kind": "same"}
+   ]
   },
   "MarkerRemoval": {
    "nodebased": "MarkerRemoval",

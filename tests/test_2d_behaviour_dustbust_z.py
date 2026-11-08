@@ -29,6 +29,10 @@ class DustBustTests(unittest.TestCase):
         np.testing.assert_array_equal(ev.evaluate_raster(d.document,"b",frame=1).pixels,ev.evaluate_raster(d.document,"a",frame=1).pixels)
         d.execute({"op":"set","id":"b","param":"view_source","value":1})
         np.testing.assert_array_equal(Evaluator().evaluate_raster(d.document,"b",frame=2).pixels,source)
+    def test_disabled_node_bypasses_the_image(self):
+        d=self.make_doc(); source=Evaluator().evaluate_raster(d.document,"a",frame=2).pixels
+        d.execute({"op":"disable","id":"b","value":True})
+        np.testing.assert_array_equal(Evaluator().evaluate_raster(d.document,"b",frame=2).pixels,source)
     def test_frame_offset_invalidates_and_tile_equals_full(self):
         d=self.make_doc(); exe=TileExecutor(evaluator=Evaluator(),tile_edge=8)
         doc=dict(d.document,view="b"); full=Evaluator().evaluate_raster(doc,"b",frame=2).pixels
@@ -38,6 +42,19 @@ class DustBustTests(unittest.TestCase):
         d.execute({"op":"set","id":"b","param":"frame_offset","value":1})
         after=Evaluator().evaluate_raster(d.document,"b",frame=2,return_digest=True)[1]
         self.assertNotEqual(before,after)
+        pixels_after=Evaluator().evaluate_raster(d.document,"b",frame=2).pixels
+        self.assertNotEqual(float(full[12,12,0]),float(pixels_after[12,12,0]))
+    def test_edge_hardness_and_output_mask_channel(self):
+        d=self.make_doc()
+        d.execute({"op":"set","id":"b","param":"edge_hardness","value":0.0})
+        soft=Evaluator().evaluate_raster(d.document,"b",frame=2).pixels
+        d.execute({"op":"set","id":"b","param":"edge_hardness","value":1.0})
+        hard=Evaluator().evaluate_raster(d.document,"b",frame=2).pixels
+        self.assertFalse(np.array_equal(soft[12,15],hard[12,15]))
+        d.execute({"op":"set","id":"b","param":"maskchannel","value":"dust.coverage"})
+        result=Evaluator().evaluate_raster(d.document,"b",frame=2)
+        self.assertIn("dust.coverage",result.layers)
+        self.assertGreater(float(result.layers["dust.coverage"].pixels[12,12,0]),0.99)
     def test_viewer_click_adds_one_spot_and_undoes_as_one_edit(self):
         d=Dispatcher(empty_document()); d.execute({"op":"create","id":"plate","type":"Constant","params":{"width":24,"height":24}})
         d.execute({"op":"create","id":"dust","type":"DustBust"}); d.execute({"op":"connect","id":"dust","input":"image","source":"plate"}); d.execute({"op":"view","id":"dust"})

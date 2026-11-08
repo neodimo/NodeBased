@@ -4,13 +4,13 @@
   list in the dated `context/state.md` section. Full suite at `d5dd01b0`: Ran 9453 tests in 1111.819 s, OK (skipped=38), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
-## 2026-11-08 — Lane 9 step Z (partial)
+## 2026-11-08 — Lane 9 step Z finish (complete)
 
-- **What was done — evidence:** Added standalone MarkerRemoval with bilinear and radial fill kernels, offset control mask, whole-frame tile solve, knob panel, catalog/theme/tiers registration, and Nuke pairing. Outside-mask pixels pass through bit-identically; pixel tests cover gradient reconstruction, search range, control offsets, empty mask, cache invalidation and tile parity.
-- **Artifacts:** Changes are in this worktree on `openclaw/nb-2d-behaviour`; no external scratch assets. Bundled PARITY_2D and fidelity docs are byte-identical.
-- **State:** Partial. Audit: MarkerRemoval 0.0 -> 68.2, DustBust remains 0.0; overall 95.6 -> 95.8. Targeted MarkerRemoval, tiles, cache, sourcepool, GPU2D, knobs/sliders, core, tiers, catalog, label/panel, knowledge, fidelity-audit, parity-count and RotoPaint regression tests pass. No behavior audit fixture was added, so the audit still lists 0/5 behavior cases. The separate pixel test covers linearsearch; the final audit lists no inert knobs. DustBust and its viewer workflow are unbuilt.
-- **Next owner + concrete artifact:** Needs Gonzo: finish step Z using `scratch/nb-lanes/auto/briefs/L9-dustbust-marker-Z-1107.md`; add a behavior audit fixture for MarkerRemoval, then build DustBust and its viewer click workflow.
-- **Failure mode:** `tests.test_cache_correctness` constructs alternative strings generically; MarkerRemoval `mode` and channel alternatives require valid node-specific values. These are now handled explicitly.
+- **What was done — evidence:** Added DustBust as a temporal node with validated spot payloads, frame-clamped source sampling, edge falloff, source preview, coverage layer and one-click/one-undo viewer editing. Added radial-vs-bilinear behavior coverage on a masked disc in a radial ramp. Both audit fixtures are marked convention because the Nuke pages name behavior without full equations. Measured scores: DustBust 99.4, MarkerRemoval 95.8, overall 96.0 (95.6 baseline).
+- **Artifacts:** Lane branch `openclaw/nb-2d-behaviour`, commits `99ac0bcf` (kernel/viewer) plus the documentation/handoff commit in this branch. Docs `docs/PARITY_2D.md`, `docs/PARITY_2D_FIDELITY.md`, `docs/parity/nodebased_to_nuke.json` and bundled copies are synchronized. Test logs are deliberate scratch under `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/`.
+- **State:** Done for requested scope. New behavior modules, audit, knowledge, parity counts, sourcepool, GPU2D, cache, tiles, knobs/sliders, core, tiers, catalog, desktop labels/panel, bypass pixel test and RotoPaint regressions passed. The generic `tests.test_bypass` process produced no output for five minutes and was stopped; DustBust-specific bypass pixels passed. Linux/offscreen only; Windows and real-display QA unverified. No schema bump; old document format unchanged.
+- **Next owner + concrete artifact:** Integrator: continue from `openclaw/nb-2d-behaviour` and use `scratch/nb-lanes/run/report-L9.md`.
+- **Failure mode:** The generic bypass module exceeded the five-minute no-output limit; it was terminated by its launched PID, and its node-specific test passed.
 
 ## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step R6: measure Roto and RotoPaint's per-item controls in the layout audit, then fix what it finds (finish 1) (integrator tick)
 

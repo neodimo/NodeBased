@@ -230,6 +230,16 @@ def _rgb_only(fn):
     return expected
 
 
+def radial_fixture_for_audit(fx):
+    h, w = fx["A"].shape[:2]
+    yy, xx = np.mgrid[:h, :w]
+    radius = np.sqrt((xx-w//2)**2 + (yy-h//2)**2)
+    ramp = np.repeat((radius / max(1, min(h, w)//2))[..., None], 4, axis=2).astype(np.float32)
+    ramp[..., 3] = 0
+    ramp[radius <= 3, 3] = 1
+    return ramp
+
+
 def _cases():
     out = []
     for op in MERGE_OPERATIONS_GUIDE:
@@ -359,6 +369,32 @@ def _cases():
     out.append(Case("exposure_stops_blackpoint", "Exposure", "Exposure",
                     (("mode", "Stops"), ("red", -1.0), ("green", -1.0), ("blue", -1.0), ("blackpoint", 0.1)), ("A",), "Exposure",
                     {"exposure_mode": "stops", "red": -1.0, "gang": 1, "blackpoint": 0.1}, ("A",), exposure(-1.0, 0.1), "convention", exp_note))
+    def radial_expected(fx):
+        ref = radial_fixture_for_audit(fx).astype(np.float64)
+        valid = np.zeros(ref.shape, bool)
+        y, x = ref.shape[0]//2, ref.shape[1]//2
+        rays = [(np.cos(2*np.pi*i/16), np.sin(2*np.pi*i/16)) for i in range(16)]
+        samples = []
+        for dy, dx in rays:
+            for distance in range(1, max(ref.shape[:2])):
+                yy, xx = int(round(y+dy*distance)), int(round(x+dx*distance))
+                if ref[yy, xx, 3] <= 0:
+                    samples.append((np.hypot(yy-y, xx-x), ref[yy, xx, :3])); break
+        ref[y, x, :3] = sum(rgb/dist for dist, rgb in samples) / sum(1/dist for dist, _ in samples)
+        valid[y, x, :3] = True
+        return ref, valid
+    out.append(Case("markerremoval_radial_disc", "MarkerRemoval", "MarkerRemoval", (("mode", "radial"),), ("A",),
+                    "MarkerRemoval", {"mode": "radial", "_marker_disc": True}, ("A",), radial_expected,
+                    "convention", "Radial fill convention: a masked disc in a radial ramp is sampled along rays; the centre recovers the ramp centre."))
+    def dustbust_expected(fx):
+        ref = np.empty_like(fx["A"], dtype=np.float64); ref[...] = [2.0, 0.25, 0.5, 1.0]
+        yy, xx = np.mgrid[:ref.shape[0], :ref.shape[1]]
+        ref[(xx-ref.shape[1]//2)**2 + (yy-ref.shape[0]//2)**2 <= 4, 0] = 1.0
+        return ref, _all_valid(ref)
+    out.append(Case("dustbust_temporal_disc", "DustBust", "DustBust", (("enable", 1), ("view_source", False), ("frame_offset", -1), ("edge_hardness", 1.0)),
+                    ("A",), "DustBust", {"enable": 1, "frame_offset": -1, "edge_hardness": 1.0,
+                    "_stamp": {"frame": 2, "time": [1, 2], "spots": [{"frame": 2, "x": W//2, "y": H//2, "radius": 2}]}}, ("A",), dustbust_expected, "convention",
+                    "Temporal spot replacement convention: the spot core samples the input at frame + frame_offset."))
     return out
 
 
@@ -503,6 +539,8 @@ def _run_stamped_document(case):
             last = name
         return last
     d.execute({"op": "create", "id": "n", "type": case.nb_kind, "params": knobs})
+    if case.nb_kind == "DustBust" and stamp.get("spots"):
+        d.execute({"op": "set_dustbust_spots", "id": "n", "spots": stamp["spots"]})
     if "clips" in stamp:
         for index, steps in enumerate(stamp["clips"]):
             d.execute({"op": "connect", "id": "n", "input": f"clip{index}", "source": chain(f"p{index}", round(0.2 + 0.1 * index, 6), steps)})
@@ -543,6 +581,14 @@ def run_nodebased(case, fx=None):
     from nodebased import core
     from nodebased.imaging import Evaluator
     fx = fx or make_fixtures()
+    if case.nb_params.get("_marker_disc"):
+        image = radial_fixture_for_audit(fx)
+        params = {"enabled": 1, "mode": "radial", "linearsearch": 100, "ctrlMask": "rgba.alpha", "x_offset": 0, "y_offset": 0}
+        return np.asarray(Evaluator._kernel("MarkerRemoval", params, [image]), dtype=np.float64)
+    if case.nb_params.get("_marker_disc"):
+        image = radial_fixture_for_audit(fx)
+        params = dict(core.SPECS["MarkerRemoval"]["params"], mode="radial", ctrlMask="rgba.alpha")
+        return np.asarray(Evaluator._kernel("MarkerRemoval", params, [image]), dtype=np.float64)
     spec = core.SPECS[case.nb_kind]
     slots = [fx[name] for name in case.nb_inputs]
     slots += [None] * (len(spec["inputs"]) + len(spec.get("optional_inputs", [])) - len(slots))

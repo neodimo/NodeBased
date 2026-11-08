@@ -169,6 +169,7 @@ NOT_PIXEL = {
         "stereo_offset": "NodeBased has no stereo views; a stereo offset cannot change rendered pixels",
         "source_view": "NodeBased has no stereo views; a source-view selector cannot change rendered pixels",
     },
+    "DustBust": {"maskchannel": "writes a named coverage layer; it does not change the RGBA picture (tests/test_2d_behaviour_dustbust_z.py)"},
     "Crop": {"reformat": "makes the box the format, which changes the window and not the fixture's pixels (tests/test_2d_behaviour_transform.py)",
              "crop": "black outside acts only where the box reaches past the picture, with intersect off; the probe's box does not (tests/test_2d_behaviour_transform.py)"},
 }
@@ -212,6 +213,7 @@ def _inputs_for(kind, fx, size):
 # Starting values the probe uses in place of a kind's defaults where the defaults put the effect outside the 16 x 12 fixture. Nuke's own defaults stay
 # the defaults the `defaults` component compares; only the probe's starting point moves.
 PROBE_BASE = {
+    "MarkerRemoval": {"mode": "bilinear", "linearsearch": 1, "ctrlMask": "fixture.control"},
     "CopyRectangle": {"area_x": 3.0, "area_y": 2.0, "area_r": 11.0, "area_t": 9.0},     # Nuke's 512 389 1536 1167 lies off a 16 x 12 picture
     # Lane 2 step H (11/3): Flare's centre and radii, Glint's 50 pixel rays and Sparkles's 300 pixel rays all lie off a 16 x 12 picture.
     "Flare": {"position_x": 8.0, "position_y": 6.0, "flare_radius_inner": 2.0, "flare_radius_middle": 4.0, "flare_radius_outer": 7.0},
@@ -326,6 +328,46 @@ def probe_acts(kind, params, fx):
     key = (kind, tuple(sorted(params)))
     if key in _PROBES:
         return _PROBES[key]
+    if kind == "DustBust":
+        from nodebased.core import Dispatcher, empty_document
+        from nodebased.imaging import Evaluator
+        from nodebased.core import SPECS
+        size = fx["A"].shape[:2]; h, w = size
+        base = dict(SPECS[kind]["params"], **probe_base(kind))
+        d = Dispatcher(empty_document()); d.execute({"op":"time","first":0,"last":2,"current":1})
+        d.execute({"op":"create","id":"plate","type":"Constant","params":{"width":w,"height":h,"red":0.2,"green":0.3,"blue":0.4,"alpha":1}})
+        d.execute({"op":"set_curve","id":"plate","param":"red","curve":{"interpolation":"linear","keys":[{"frame":0,"value":0.9},{"frame":1,"value":0.2},{"frame":2,"value":0.7}]}})
+        d.execute({"op":"create","id":"dust","type":"DustBust","params":base})
+        d.execute({"op":"set_dustbust_spots","id":"dust","spots":[{"frame":1,"x":w/2,"y":h/2,"radius":max(2,min(w,h)/3)}]})
+        d.execute({"op":"connect","id":"dust","input":"image","source":"plate"})
+        def render(dispatcher): return Evaluator().evaluate_raster(dispatcher.document,"dust",frame=1).pixels
+        reference=render(d); acts={}
+        for name in params:
+            if name not in base: continue
+            acts[name]=False
+            for value in probe_moves(kind,name,base[name]):
+                trial=Dispatcher(d.document)
+                trial.execute({"op":"set","id":"dust","param":name,"value":value})
+                if not np.array_equal(render(trial),reference): acts[name]=True; break
+        _PROBES[key]=acts
+        return acts
+    if kind == "MarkerRemoval":
+        from nodebased.imaging import Evaluator
+        h, w = fx["A"].shape[:2]
+        yy = np.arange(h, dtype=np.float32)[:, None]
+        image = np.zeros((h, w, 4), np.float32)
+        image[..., :3] = np.broadcast_to(yy[..., None], (h, w, 3))
+        image[..., 3] = 1
+        control = np.zeros((h, w, 1), np.float32); control[h//2-1:h//2+2, w//2-3:w//2+3] = 1
+        base = _base_params(kind, (h, w)); slots = [image]
+        run = lambda p: Evaluator._kernel(kind, p, slots, layer_array=lambda name: control if name == "fixture.control" else None)
+        reference = run(base); acts = {}
+        for name in params:
+            acts[name] = False
+            for value in probe_moves(kind, name, base[name]):
+                if not np.array_equal(run(dict(base, **{name: value})), reference): acts[name] = True; break
+        _PROBES[key] = acts
+        return acts
     size = fx["A"].shape[:2]
     base = _base_params(kind, size)
     slots = _inputs_for(kind, fx, size)
