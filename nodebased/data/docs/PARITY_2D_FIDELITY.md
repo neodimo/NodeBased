@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 95.6 / 100** (167 nodes scored, rank-weighted; 98.0 counting only the nodes NodeBased has).
+**Overall fidelity: 95.7 / 100** (167 nodes scored, rank-weighted; 98.1 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.3 (98.6 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -35,7 +35,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
 | Image | 97.1 | 96.9 | 98.1 | 6 |
-| Draw | 94.5 | 86.3 | 95.2 | 17 |
+| Draw | 95.4 | 86.6 | 95.2 | 17 |
 | Time | 99.4 | 96.8 | 99.2 | 13 |
 | Channel | 99.1 | 98.4 | 98.9 | 5 |
 | Color | 97.4 | 91.0 | 97.1 | 34 |
@@ -70,13 +70,13 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 95.8 | 98.0 | 96 (72/75) | - | 95 | 100 | 100 | 100 (36/36) | 76 | - | unmeasured |
+| 1 | Roto | `Roto` | supported | 98.3 | 98.0 | 96 (72/75) | - | 96 | 100 | 100 | 100 (36/36) | 100 | - | unmeasured |
 | 2 | Text | `Text` | supported | 98.3 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 100 | - | no fixture |
 | 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 5 | Radial | `Radial` | supported | 98.7 | 98.8 | 100 (14/14) | - | 88 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | Noise | `Noise` | supported | 99.6 | 99.5 | 100 (26/26) | - | 96 | 100 | 100 | - | 100 | 100 (1/1) | unmeasured |
-| 7 | RotoPaint | `RotoPaint` | supported | 96.8 | 99.5 | 100 (88/88) | - | 95 | 100 | 100 | 100 (5/5) | 74 | - | unmeasured |
+| 7 | RotoPaint | `RotoPaint` | supported | 99.4 | 99.6 | 100 (88/88) | - | 96 | 100 | 100 | 100 (5/5) | 98 | - | unmeasured |
 | 8 | LightWrap | `LightWrap` | supported | 99.1 | 98.9 | 100 (27/27) | 100 (26/26) | 89 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 9 | Grain | `Grain` | supported | 96.7 | 95.0 | 88 (13/14) | 100 (13/13) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (6/6) | - | - | unmeasured |
@@ -298,13 +298,13 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | UDIM Import | — | — | 0 |
 | CurveTool | — | 100.0% (9/9) | 3 |
 | Profile | — | — | 2 |
-| Roto | — | 29.1% (16/55) | 18 |
+| Roto | 100.0% (40/40) | 98.2% (55/56) | 15 |
 | Text | 100.0% (4/4) | 100.0% (36/36) | 5 |
 | Rectangle | — | 100.0% (10/10) | 3 |
 | Ramp | — | 100.0% (8/8) | 2 |
 | Radial | — | 100.0% (11/11) | 3 |
 | Noise | — | 100.0% (23/23) | 3 |
-| RotoPaint | — | 21.5% (14/65) | 20 |
+| RotoPaint | 96.2% (51/53) | 97.0% (64/66) | 18 |
 | LightWrap | — | 100.0% (26/26) | 1 |
 | Grain | — | 100.0% (13/13) | 1 |
 | ScannedGrain | — | — | 1 |
@@ -473,13 +473,13 @@ Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were place
 
 Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. Current: Remove rows 3/3, types 4/4; AppendClip rows 0/0, types 5/5; CornerPin2D rows 2/2, types 11/12; BurnIn rows 2/2, types 18/18; Clamp rows 8/8, types 8/8; Blend rows 0/0, types 2/2; DirBlur rows 0/0, types 11/11; ContactSheet rows 6/6, types 11/11. CornerPin2D's `invert` (a check box in the guide) is a check box over the stored forward/inverse text, DirBlur's `target` (an xy pair) is an x, y pair of fields over the stored text "x,y", and DirBlur's `Quality` (a number) is a whole-number field with a slider over the stored low/normal/high (1, 2 and 4; any other whole number is stored as its digits). A saved document keeps the text it held and renders as before. CornerPin2D's `motionblur` (a number in the guide, an on/off switch beside a samples count here) stays as it is, as Tracker's and Transform's do: one number would change how the node renders. AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.
 
-Panel sweep S4 (2026-11-04) baseline for its nodes, before rows were placed on one row and the count and fraction knobs were listed: TimeBlur rows 0/2; TimeEcho types 2/3; ZDefocus types 24/25; IBKGizmo types 13/14; Encryptomatte rows 0/2; Kronos rows 0/2, types 12/14; IBKColor types 1/5; OFlow rows 0/2, types 10/12; CopyRectangle rows 0/4; TimeDissolve types 0/2; RotoPaint types 9/62. Current: TimeBlur rows 2/2, types 4/4; TimeEcho rows 0/0, types 3/3; ZDefocus rows 0/0, types 25/25; IBKGizmo rows 0/0, types 14/14; Encryptomatte rows 2/2, types 1/1; Kronos rows 2/2, types 13/14; IBKColor rows 0/0, types 1/3; OFlow rows 2/2, types 11/12; CopyRectangle rows 4/4, types 5/5; TimeDissolve rows 0/0, types 2/2; RotoPaint rows 0/0, types 14/65. RotoPaint stays as it is: 52 of its 53 mismatches are per-shape and per-stroke knobs (colour, blending mode, brush size, feather, transform) that have no knob on the node's panel, and the last, `global_motionblur` (a number in the guide, a samples count beside an on/off switch here), would change how the node renders. Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.
+Panel sweep S4 (2026-11-04) baseline for its nodes, before rows were placed on one row and the count and fraction knobs were listed: TimeBlur rows 0/2; TimeEcho types 2/3; ZDefocus types 24/25; IBKGizmo types 13/14; Encryptomatte rows 0/2; Kronos rows 0/2, types 12/14; IBKColor types 1/5; OFlow rows 0/2, types 10/12; CopyRectangle rows 0/4; TimeDissolve types 0/2; RotoPaint types 9/62. Current: TimeBlur rows 2/2, types 4/4; TimeEcho rows 0/0, types 3/3; ZDefocus rows 0/0, types 25/25; IBKGizmo rows 0/0, types 14/14; Encryptomatte rows 2/2, types 1/1; Kronos rows 2/2, types 13/14; IBKColor rows 0/0, types 1/3; OFlow rows 2/2, types 11/12; CopyRectangle rows 4/4, types 5/5; TimeDissolve rows 0/0, types 2/2; RotoPaint rows 51/53, types 64/66. Roto and RotoPaint per-item rows and widget types are measured through the `per_item` payload-to-selected-control mappings. Roto currently measures rows 40/40 and types 55/56; RotoPaint rows 51/53 and types 64/66. The two remaining RotoPaint gaps are dynamic size and transparency: the current payload has no corresponding fields or controls. `global_motionblur` remains a node-level samples count beside an on/off switch. Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.
 
 Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on one row and the count knobs were listed: Grid types 11/12; Colorspace rows 0/6; MotionBlur2D and MotionBlur3D rows 0/2; SmartVector types 7/9; VectorBlur types 10/12; OCIODisplay types 6/7; OCIOFileTransform types 2/3; OCIOLookTransform types 3/4; Sparkles types 26/27. Current: Grid rows 0/0, types 12/12; Colorspace rows 6/6, types 1/1; MotionBlur2D rows 2/2, types 3/3; MotionBlur3D rows 2/2, types 3/3; SmartVector rows 0/0, types 8/9; VectorBlur rows 0/0, types 12/12; OCIODisplay rows 0/0, types 7/7; OCIOFileTransform rows 0/0, types 3/3; OCIOLookTransform rows 0/0, types 4/4; Sparkles rows 0/0, types 27/27. Grid's Number is one row of two whole-number fields; Colorspace's Input and Output are one row each of three menus; MotionBlur's shutter offset menu and custom offset share a row. OCIODisplay's, OCIOFileTransform's and OCIOLookTransform's Invert direction is a check box over the stored direction text (forward or inverse), as CornerPin2D's Invert is. SmartVector's matteDilation, VectorBlur's grow_bbox and Sparkles's ray_nb are listed as counting knobs. Root is the Project Settings dialog, not a node panel, and the ruler reads node panels only, so its frame-range and proxy rows are not measured here. SmartVector's `vectorDetailReg` (a fraction in the guide, an integer 1 to 6 here) needs a change to the kernel, and that stays the one types mismatch on SmartVector. VectorBlur's `uv` (a layer picker in the guide) is an editable menu of the motion and SmartVector layer names over the same stored layer name (panel sweep S5 finish); STMap and IDistort keep their layer name field.
 
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
-**Lowest shared-row scores:** GenerateLUT (0.0%); LensDistortion (0.0%); Root (0.0%); Write (0.0%); BurnIn (100.0%).
+**Lowest shared-row scores:** GenerateLUT (0.0%); LensDistortion (0.0%); Root (0.0%); Write (0.0%); RotoPaint (96.2%).
 **Lowest widget-type scores:** Expression (0.0%); HistEQ (0.0%); Histogram (0.0%); Posterize (0.0%); ViewMetaData (0.0%).
 
 ## The 30 largest gaps
@@ -497,14 +497,14 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 7 | MarkerRemoval (Draw #10) | - | 5.00 | 0.0 | provided as a RotoPaint preset, not a node (PARITY_2D.md Draw #10) |
 | 8 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
 | 9 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
-| 10 | Roto (Draw #1) | `Roto` | 4.17 | 95.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
-| 11 | Viewer (Image #3) | `Viewer` | 3.76 | 88.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 12 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 13 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 14 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 15 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 16 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 17 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
+| 10 | Viewer (Image #3) | `Viewer` | 3.76 | 88.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 11 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 12 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 13 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 14 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 15 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 16 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
+| 17 | Roto (Draw #1) | `Roto` | 1.70 | 98.3 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
 | 18 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.49 | 73.1 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
 | 19 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
 | 20 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |

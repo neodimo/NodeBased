@@ -14605,7 +14605,13 @@ class Window(QMainWindow):
                             field.currentIndexChanged.connect(lambda idx2, n=param, box=field: update_layer((n,), box.itemData(idx2)))
                             form.addRow(label, field)
                     else:
-                        form.addRow("Tool", QLabel(edit_item["tool"].title()))
+                        tool_field = ElidingComboBox(); tool_field.setObjectName("rotopaint-layer-tool")
+                        for value in ("paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"):
+                            tool_field.addItem(value.title(), value)
+                        tool_field.setCurrentIndex(tool_field.findData(edit_item["tool"]))
+                        tool_field.currentIndexChanged.connect(
+                            lambda idx2, box=tool_field: update_layer(("tool",), box.itemData(idx2)))
+                        form.addRow("Tool", tool_field)
                         for title, bkey, lo, hi, step in (
                             ("Brush size", "size", 0.1, 4096, 1.0), ("Hardness", "hardness", 0.0, 1.0, 0.05),
                             ("Brush opacity", "opacity", 0.0, 1.0, 0.05), ("Spacing", "spacing", 0.01, 4.0, 0.05),
@@ -14652,6 +14658,26 @@ class Window(QMainWindow):
                         clone_filter.currentIndexChanged.connect(
                             lambda idx2, box=clone_filter: update_layer(("source_filter",), box.itemData(idx2)))
                         form.addRow("Clone filter", clone_filter)
+                        source_skew_order = ElidingComboBox()
+                        source_skew_order.setObjectName("rotopaint-layer-source-transform-skew-order")
+                        for value in shape_model.SKEW_ORDERS: source_skew_order.addItem(value, value)
+                        source_skew_order.setCurrentIndex(source_skew_order.findData(
+                            edit_item.get("source_transform", {}).get("skew_order", "XY")))
+                        source_skew_order.currentIndexChanged.connect(
+                            lambda idx2, box=source_skew_order: update_layer(
+                                ("source_transform", "skew_order"), box.itemData(idx2)))
+                        form.addRow("Clone skew order", source_skew_order)
+                        item_spin("source-time-offset", "Clone source time offset", -100000, 100000, 1, 0,
+                                  ("source_time_offset",))
+                        source_time_type = ElidingComboBox()
+                        source_time_type.setObjectName("rotopaint-layer-source-time-offset-type")
+                        for value in ("relative", "absolute"): source_time_type.addItem(value.title(), value)
+                        source_time_type.setCurrentIndex(source_time_type.findData(
+                            edit_item.get("source_time_offset_type", "relative")))
+                        source_time_type.currentIndexChanged.connect(
+                            lambda idx2, box=source_time_type: update_layer(
+                                ("source_time_offset_type",), box.itemData(idx2)))
+                        form.addRow("Clone source time mode", source_time_type)
                         if edit_item["tool"] == "paint":
                             def choose_layer_color(k=key, idx=selected):
                                 entries = current_layer_items(k)

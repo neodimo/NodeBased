@@ -75,6 +75,31 @@ FULL_PANEL_SHAPE = (
 
 
 class PanelShapeMetricTests(unittest.TestCase):
+    def test_per_item_widgets_contribute_rows_and_widget_types(self):
+        node = {"knobs": [{"name": "opacity", "type": "number", "default": 1.0, "label": "Opacity", "primary": True}]}
+        pair = {"knobs": [{"nuke": ["opacity"], "nodebased": [], "kind": "panel"}],
+                "per_item": [{"nuke": "opacity", "payload": "opacity", "widget": "roto-shape-opacity",
+                              "widget_kind": "float_slider", "row": "attributes"}]}
+        rows, types = audit.panel_shape_metrics(node, pair, "Roto")
+        self.assertEqual((rows["matched"], rows["total"]), (1, 1))
+        self.assertEqual((types["matched"], types["total"]), (1, 1))
+
+    def test_per_item_wrong_widget_kind_is_wrong(self):
+        node = {"knobs": [{"name": "opacity", "type": "number", "default": 1.0, "label": "Opacity", "primary": True}]}
+        pair = {"knobs": [{"nuke": ["opacity"], "nodebased": [], "kind": "panel"}],
+                "per_item": [{"nuke": "opacity", "payload": "opacity", "widget": "roto-shape-opacity",
+                              "widget_kind": "bool", "row": "attributes"}]}
+        _, types = audit.panel_shape_metrics(node, pair, "Roto")
+        self.assertEqual((types["matched"], types["total"]), (0, 1))
+
+    def test_per_item_missing_widget_does_not_match_its_row(self):
+        node = {"knobs": [{"name": "opacity", "type": "number", "default": 1.0, "label": "Opacity", "primary": True}]}
+        pair = {"knobs": [{"nuke": ["opacity"], "nodebased": [], "kind": "panel"}],
+                "per_item": [{"nuke": "opacity", "payload": "opacity", "widget": None,
+                              "widget_kind": None, "row": "attributes"}]}
+        rows, _ = audit.panel_shape_metrics(node, pair, "Roto")
+        self.assertEqual((rows["matched"], rows["total"]), (0, 1))
+
     def test_nodes_with_a_full_panel_shape_keep_it(self):
         broken = []
         for name in FULL_PANEL_SHAPE:

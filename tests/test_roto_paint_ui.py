@@ -266,6 +266,15 @@ class RotoPaintLayerEditorTests(unittest.TestCase):
         self.assertAlmostEqual(strength_field.value(), 0.2)
         self.assertIsNone(panel.findChild(QDoubleSpinBox, "rotopaint-layer-feather"))
 
+    def test_selected_stroke_tool_is_an_editable_item_combo(self):
+        self.window.viewer.paint_selected_item_index = 1
+        panel = self.panel()
+        field = panel.findChild(QComboBox, "rotopaint-layer-tool")
+        self.assertIsNotNone(field)
+        self.assertEqual(field.currentData(), "dodge")
+        field.setCurrentIndex(field.findData("blur"))
+        self.assertEqual(self.items()[1]["tool"], "blur")
+
     def test_selecting_a_shape_shows_its_mode_and_feather_instead_of_brush_fields(self):
         self.window.viewer.paint_selected_item_index = 0
         panel = self.panel()

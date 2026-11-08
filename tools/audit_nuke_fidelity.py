@@ -418,6 +418,7 @@ _COUNT_KNOBS |= {("TimeEcho", "framesbehind"), ("ZDefocus", "blades"), ("TimeDis
 _COUNT_KNOBS |= {("SmartVector", "matteDilation"), ("VectorBlur", "grow_bbox"), ("Sparkles", "ray_nb")}
 # Roto's Motion Blur tab exposes sample counts (whole-number knobs), as do the per-shape settings.
 _COUNT_KNOBS |= {(kind, "global_motionblur") for kind in ("Roto", "RotoPaint")}
+_COUNT_KNOBS |= {(kind, knob) for kind in ("Roto", "RotoPaint") for knob in ("motionblur", "lifetime_start", "lifetime_end")}
 _FLOAT_KNOBS = {("IBKGizmo", "level"), ("Kronos", "timingFrame2"), ("OFlow", "timingFrame2")}
 # Knobs whose Nuke widget the guide's default cannot tell: IBKColor's Size (a pixel size, default 10) and multi ("patch black", default 0, which
 # the gizmo may show as a check box or a number). Left unmeasured and counted as such, as the rule asks.
@@ -498,8 +499,11 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
     type_match = type_total = unknown_count = 0
     read = node_type == "Read"
     viewer = node_type == "Viewer"
+    per_item_names = {entry.get("nuke") for entry in pair.get("per_item", [])}
     for knob in knobs:
         name, nuke_kind = knob.get("name"), knob.get("type", "unknown")
+        if name in per_item_names:
+            continue
         if not node_type:
             if nuke_kind == "unknown":
                 unknown_count += 1
@@ -559,7 +563,54 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         type_match += int(matches)
         if not matches:
             type_missed.append((name, nuke_kind, sorted(actual)))
-    return {"matched": row_match, "total": row_total, "score": row_match / row_total if row_total else None, "missed": row_missed}, {
+    # Roto controls live on the selected payload item, not in knob_layout(). The
+    # reviewable per_item records name the actual widget and its containing row;
+    # item selection is part of this panel contract (the builders hide these
+    # controls until a shape/stroke is selected).
+    per_item = pair.get("per_item", [])
+    # The guide records XY controls as `number`; for payload widgets, Nuke's
+    # XY knob is the relevant widget class (two adjacent numeric fields).
+    xy_knobs = {"translate", "scale", "source_transform_translate"}
+    if node_type == "RotoPaint":
+        xy_knobs.add("source_transform_scale")
+    per_knobs = {k["name"]: k for k in knobs}
+    per_row_match = per_row_total = per_type_match = per_type_total = 0
+    per_row_missed, per_type_missed = [], []
+    for item in per_item:
+        knob = per_knobs.get(item["nuke"])
+        if not knob or knob.get("type") == "unknown":
+            continue
+        kind = item.get("nuke_kind", knob.get("type"))
+        if kind == "number":
+            kind = ("number_list" if item["nuke"] in xy_knobs else
+                    "int" if (node_type, item["nuke"]) in _COUNT_KNOBS else
+                    "float" if (node_type, item["nuke"]) in _FLOAT_KNOBS else
+                    "unknown" if (node_type, item["nuke"]) in _UNSURE_KNOBS else
+                    number_knob_kind(item["nuke"], knob.get("default")))
+        if kind == "unknown":
+            continue
+        actual_kind = item.get("widget_kind")
+        per_type_total += 1
+        if (kind == actual_kind or
+                (kind == "float" and actual_kind in ("float", "float_slider", "color")) or
+                (kind == "number_list" and actual_kind in ("color", "xy", "xyz", "split"))):
+            per_type_match += 1
+        else:
+            per_type_missed.append((item["nuke"], kind, actual_kind))
+        per_row_total += 1
+        if item.get("row") and item.get("widget"):
+            per_row_match += 1
+        else:
+            per_row_missed.append(item["nuke"])
+    if per_row_total:
+        row_match += per_row_match
+        row_total += per_row_total
+    if per_type_total:
+        type_match += per_type_match
+        type_total += per_type_total
+        for missed in per_type_missed:
+            type_missed.append(missed)
+    return {"matched": row_match, "total": row_total, "score": row_match / row_total if row_total else None, "missed": row_missed + per_row_missed}, {
         "matched": type_match, "total": type_total, "score": type_match / type_total if type_total else None,
         "unknown": unknown_count, "unknown_names": [], "by_kind": expected_counts, "missed": type_missed,
     }
@@ -784,8 +835,9 @@ def build_report(reference_dir=None):
       "Current: " + "; ".join(
           f"{n} rows {sweep[n]['panel_rows']['matched']}/{sweep[n]['panel_rows']['total']}, types {sweep[n]['panel_types']['matched']}/{sweep[n]['panel_types']['total']}"
           for n in ("TimeBlur", "TimeEcho", "ZDefocus", "IBKGizmo", "Encryptomatte", "Kronos", "IBKColor", "OFlow", "CopyRectangle", "TimeDissolve", "RotoPaint") if n in sweep) + ". "
-      "RotoPaint stays as it is: 52 of its 53 mismatches are per-shape and per-stroke knobs (colour, blending mode, brush size, feather, transform) that have no knob on the node's panel, "
-      "and the last, `global_motionblur` (a number in the guide, a samples count beside an on/off switch here), would change how the node renders. "
+      "Roto and RotoPaint per-item rows and widget types are measured through the `per_item` payload-to-selected-control mappings. "
+      "Roto currently measures rows 40/40 and types 55/56; RotoPaint rows 51/53 and types 64/66. The two remaining RotoPaint gaps are dynamic size and transparency: "
+      "the current payload has no corresponding fields or controls. `global_motionblur` remains a node-level samples count beside an on/off switch. "
       "Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) "
       "stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. "
       "TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.")
