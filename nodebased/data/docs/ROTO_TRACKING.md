@@ -632,6 +632,39 @@ Not honoured, with the reason in `docs/parity/nodebased_to_nuke.json`: the stere
 spline `key` spinner, the `format` knob (the node keeps the wired image's format), and the tracking tab (`pretrack_filter` to
 `reference_frame`).
 
+## Edge snap and fit to edges (past Nuke)
+
+Nuke's Roto has neither feature. Both are opt-in: with **Snap to edges** off (the default) every gesture behaves exactly as before, and a
+saved shot stores no setting for them, loads and renders bit-identical. They read the image at the Roto node's input (`bg`, or `image` on
+RotoPaint) at the current frame through the evaluator and never change it.
+
+**The edge field** (`nodebased/rotoedges.py`). Edge strength is the gradient magnitude of the maximum over the RGB channels (luminance can
+cancel an edge between a saturated colour and a grey of the same luma; for a grey plate the two are equal), after a Gaussian of sigma 1 px,
+with the Scharr kernel normalised so a unit step gives 1 per pixel. Only a region is computed: a window around the cursor for a snap, a
+band around the shape for a fit, rounded out to a 32 px grid, and cached by (node, frame, input digest, region). An edit to the input
+changes the digest and misses. Below an absolute gradient floor, or 20% of the region's gradient range, nothing is an edge, so a point
+with no edge nearby stays where it is.
+
+**Snap to edges.** A "Snap to edges" checkbox and a "Snap radius" field (px, default 8) sit in the strip of the Select tools, Add Points and
+the shape tools; they are shared by every tool of the node (stored next to Autokey under the node's `__global__` tool settings, and left out
+when at their defaults). When on, a point placed by a shape tool (a Rectangle or Ellipse snaps its two drag corners), a point dragged with a
+Select tool and a point added on a spline move to the strongest edge within the radius on release, to a sub-pixel position. The preview while
+dragging shows the snapped position. Feather drags, tangent drags and multi-point moves do not snap. **Hold Alt+Shift** for a gesture without
+snapping: Ctrl already drags a feather and starts a freehand sketch, Alt alone pans the picture and Shift alone ends an open curve, so only the
+pair is free (Shift ends an open curve as before unless Alt is held and Snap is on). One undo step per gesture, as before.
+
+**Fit to edges.** A "Fit band" field (px, default 12) and a "Fit to edges" button in the Select tools' strip, and "Fit to edges" in the shape
+list's right-click menu, refine every point of the selected shapes, closed or open, to the edges within the band: an active contour in which each
+point moves along its normal toward the strongest edge, a second-difference smoothness term keeps curvature close to the original, spacing is
+kept, tangents turn and scale with their neighbours, a cusped corner goes to the corner where two edges meet, and feather offsets stay
+relative to their point. With Autokey on it writes a key at the current frame (the same commit path as a point drag), with Autokey off it
+changes the static shape. One undo step covers all selected shapes; locked shapes and shapes in locked layers are skipped.
+
+Measured on synthetic images (tests/test_roto_edges_i1.py): a snap from 5 px outside a disc lands within 0.09 px of its edge; a 16-point circle
+perturbed by up to 4 px fits to 0.3 px RMS; a perturbed square reaches its corners within 0.25 px; fitting a 24-point shape on a 1920 x 1080
+plate computes a 672 x 672 px region in about 15 ms and fits in about 15 ms. The plate of the playback fixture is a smooth gradient with no
+edges, so Fit to edges leaves a shape on it unchanged, by design.
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.
