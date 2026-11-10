@@ -191,6 +191,16 @@ class SwitchTests(unittest.TestCase):
         with mock.patch("multiprocessing.parent_process", return_value=object()):
             self.assertFalse(rotogpu.enabled(environ={rotogpu.ENV: "1"}))
 
+    def test_the_read_ahead_process_steps_aside_when_the_card_draws_the_mattes(self):
+        from nodebased import rotoahead
+        pool = rotoahead.MatteProcessPool()
+        rotogpu.set_enabled(True)
+        try:
+            self.assertIsNone(pool.build({"width": 8, "height": 8}, [], None))
+            self.assertIsNone(pool._executor)                  # no child process was started for it
+        finally:
+            pool.shutdown()
+
     def test_a_graphics_error_falls_back_to_the_processor_matte(self):
         expected = processor(self.resolved, 200, 200)
         rotogpu.set_enabled(True)

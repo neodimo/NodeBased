@@ -72,6 +72,10 @@ class MatteProcessPool:
     def build(self, params, data, cancel):
         if not self.available:
             return None
+        # With Roto mattes on the graphics card (rotogpu.py) the matte is drawn in this process, so the read-ahead takes the thread path.
+        from . import rotogpu
+        if rotogpu.enabled():
+            return None
         # Test/instrumentation wrappers must remain visible to the existing
         # thread-path tests and profiling hooks; child processes cannot inherit
         # their in-memory replacement safely.
