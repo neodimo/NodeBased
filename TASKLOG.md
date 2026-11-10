@@ -1,3 +1,9 @@
+## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) Lane 2 step I6 (Tue 11/10): ripple through the past-Nuke tools, and outlines with holes, Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step I5 (Tue 11/10): outline a subject from one click (past Nuke) (integrator tick)
+
+- **What was done:** `main` `7ae2464f` -> `3e7d149b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `3e7d149b`: Ran 9658 tests in 1382.860 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) Lane 2 step RW4 (Tue 11/10): the last Roto and RotoPaint parity rows (integrator tick)
 
 - **What was done:** `main` `69635256` -> `f4ae8fd0` plus this docs commit. Evidence and per-lane commit

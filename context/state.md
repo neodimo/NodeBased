@@ -1,5 +1,33 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:27 PM on 2026-11-10 PDT)
+
+`main` moved `7ae2464f` -> `3e7d149b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `3e7d149b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-1458.log`, started 2:58 PM): **Ran 9658 tests in 1382.860 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Lane 2 step I6 (Tue 11/10): ripple through the past-Nuke tools, and outlines with holes.** Commits:
+  - `9f60cc14` Source pool test: the Blur waits for the Roto to begin, so a loaded machine cannot reorder the start
+  - `378b7bc9` Roto: ripple edit carries Fit to edges to the other keys in the ripple range; Track points and Fill in-betweens say ripple does not apply
+  Diff: 7 files changed, 164 insertions(+), 4 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step I5 (Tue 11/10): outline a subject from one click (past Nuke).** Commits:
+  - `44354f73` Outline-from-click timing: checked only with NODEBASED_TIMING_TESTS=1; the full suite checks accuracy
+  - `9ddaaebd` Outline-from-click timing test: check wall-clock time only when run alone, not under the parallel suite
+  - `28245548` Docs: Outline from a click (past Nuke) with measured accuracy and 1080p timing
+  - `8378204f` Roto: Outline from click mode in the Bezier and B-Spline strip, with tests (accuracy, viewer click, undo, box, Esc)
+  - `fd21bdc7` Roto: outline a subject from one click (continuous min-cut segmentation, contour, edge refinement, Bezier fit)
+  Diff: 6 files changed, 1248 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:56 PM on 2026-11-10 PDT)
 
 `main` moved `69635256` -> `f4ae8fd0` (lane commits cherry-picked onto main in lane order) and then to this
