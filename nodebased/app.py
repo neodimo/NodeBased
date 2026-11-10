@@ -49,7 +49,7 @@ from . import graphlook
 from . import gpu3d
 from . import roto
 from . import rotogpu
-from . import rotoedges, rotoinbetween, rotoripple
+from . import rotoedges, rotoinbetween, rotooutline, rotoripple
 from . import paintknobs
 from . import rotolist
 from . import gpupicture
@@ -1692,6 +1692,7 @@ class RotoViewerToolbar(QWidget):
                 "Constant selection mode": "constant_selection_mode", "Label points": "label_points",
                 "Feather link": "feather_link", "Autokey": "autokey",
                 "Snap to edges": "snap_edges", "Snap radius": "snap_radius", "Fit band": "fit_band",
+                "Outline from click": "outline_click",
                 "Fit to edges": "fit_to_edges", "Fill band": "fill_band", "Fill threshold": "fill_threshold",
                 "Fill every Nth frame": "fill_step", "Fill from": "fill_from", "Fill to": "fill_to",
                 "Fill in-betweens": "fill_inbetweens", "Ripple edit": "ripple_edit",
@@ -1980,6 +1981,8 @@ class Viewer(PanZoomView):
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_draw_press = None
+        self.roto_outline_drag = None        # Outline from click: a press waiting for its release (and a box being drawn)
+        self.roto_outline_box = None         # ... and the box drawn with Shift-drag, in scene points (x0, y0, x1, y1)
         self.roto_drag = None
         self.roto_selected_points = set()
         self.roto_track_flags = None         # Track points: low-confidence points per frame, drawn in the overlay only
@@ -3902,6 +3905,71 @@ class Viewer(PanZoomView):
         x, y = field.snap(point, radius)
         return [x, y]
 
+    # -- outline from click (lane 9, step I5) ------------------------------------------------------
+    def _roto_outline_mode(self):
+        """True while the Bezier or B-Spline tool is active on a Roto node whose strip has Outline from click on."""
+        context = self._roto_context()
+        if context is None or self.roto_active_group != "Shapes" or self.roto_shape_tool not in ("Bezier", "B-Spline"):
+            return False
+        shared = context[2].get("tool_settings", {}).get("__global__", {})
+        return bool(shared.get("outline_click", False))
+
+    def _roto_outline_cancel(self):
+        had = self.roto_outline_drag is not None or self.roto_outline_box is not None
+        self.roto_outline_drag = None
+        self.roto_outline_box = None
+        return had
+
+    def _roto_outline_run(self, scene_pos):
+        """Outline the subject under `scene_pos` (inside the pending box, if one was drawn) as one new shape."""
+        context = self._roto_context()
+        if context is None:
+            return False
+        key, node, _, tier = context
+        source = node["inputs"].get("image" if node["type"] == "RotoPaint" else "bg")
+        if source is None:
+            self.window.statusBar().showMessage("Outline from click needs a picture connected to the Roto's background input", 5000)
+            return False
+        document = self.window.dispatcher.document
+        box = None
+        if self.roto_outline_box is not None:
+            bx0, by0, bx1, by1 = self.roto_outline_box
+            if bx0 <= scene_pos.x() <= bx1 and by0 <= scene_pos.y() <= by1:
+                (x0, y0), (x1, y1) = (self._roto_data_point(QPointF(bx0, by0), node, tier),
+                                      self._roto_data_point(QPointF(bx1, by1), node, tier))
+                box = (x0, y0, x1, y1)
+        self.roto_outline_box = None
+        seed = self._roto_data_point(scene_pos, node, tier)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            raster = self.window.evaluator.evaluate_raster(document, target=source, frame=int(document["time"]["current"]))
+            image = raster.to_display()
+            points = rotooutline.outline_from_click(image, seed, box)
+            if self.roto_shape_tool == "B-Spline":
+                points = rotooutline.bspline_controls(points)
+        except rotooutline.OutlineError as error:
+            self.window.statusBar().showMessage(f"Outline from click: {error}", 6000)
+            return False
+        except Exception as error:
+            self.window.statusBar().showMessage(f"Outline from click could not read the picture ({error})", 6000)
+            return False
+        finally:
+            QApplication.restoreOverrideCursor()
+        if not self.begin_roto_draw(key):
+            return False
+        self.roto_draw_points = [dict(p, scene=self._roto_scene_point(p, tier)) for p in points]
+        if not self.finish_roto_draw(closed=True):
+            return False
+        context = self._roto_context()
+        if context is not None:
+            index = len(context[2].get("shapes", [])) - 1
+            self.roto_selected_shape_index = index
+            self.roto_selected_points = {(index, i) for i in range(len(points))}
+            self.window.rebuild_properties_dock()
+        self.window.statusBar().showMessage(f"Outline from click: {len(points)} points", 4000)
+        self.viewport().update()
+        return True
+
     def roto_flagged_points(self, key, frame, shape_index, point_count):
         """Indices of the points Track points flagged on `frame` for a shape (overlay only; empty once the shape's point count changed)."""
         flags = self.roto_track_flags
@@ -4610,6 +4678,10 @@ class Viewer(PanZoomView):
             self.roto_toolbar.tool_by_group["Select"] = "Select Points"
             self.roto_toolbar.refresh()
             event.accept(); return
+        if event.key() == Qt.Key.Key_Escape and self._roto_outline_cancel():
+            self.unsetCursor()
+            self.viewport().update()
+            event.accept(); return
         if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
                                                   or self.transform_drag is not None or self.analysis_drag is not None or self.flare_drag is not None or self.warp_drawing
                                                   or self.warp_drag is not None or self.tracker_drag is not None):
@@ -4724,6 +4796,17 @@ class Viewer(PanZoomView):
             self.unsetCursor()
             self.window.set_viewer_roi(rect=rect)
             self.viewport().update()
+            return True
+        if button == Qt.MouseButton.LeftButton and self.roto_outline_drag is not None:
+            drag, self.roto_outline_drag = self.roto_outline_drag, None
+            self.unsetCursor()
+            if drag["shift"] and (scene_pos - drag["start"]).manhattanLength() > 4:
+                a, b = drag["start"], scene_pos
+                self.roto_outline_box = (min(a.x(), b.x()), min(a.y(), b.y()), max(a.x(), b.x()), max(a.y(), b.y()))
+                self.window.statusBar().showMessage("Outline from click: box set, now click inside the subject (Esc cancels)", 6000)
+                self.viewport().update()
+                return True
+            self._roto_outline_run(scene_pos)
             return True
         if button == Qt.MouseButton.LeftButton and self.roto_drawing:
             if self.roto_free_sketch:
@@ -5466,6 +5549,14 @@ class Viewer(PanZoomView):
                 painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(QPointF(box_pivot.x(), bounds.top()), rotate)
                 painter.setBrush(QColor("#202127")); painter.drawEllipse(rotate, pad*.7, pad*.7)
                 painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawEllipse(box_pivot, pad*.7, pad*.7)
+            outline_box = self.roto_outline_box
+            if self.roto_outline_drag is not None and self.roto_outline_drag["shift"]:
+                a, b = self.roto_outline_drag["start"], self.roto_outline_drag["scene"]
+                outline_box = (min(a.x(), b.x()), min(a.y(), b.y()), max(a.x(), b.x()), max(a.y(), b.y()))
+            if outline_box is not None:
+                box_pen = QPen(QColor("#58d7ff"), 1); box_pen.setCosmetic(True); box_pen.setStyle(Qt.PenStyle.DashLine)
+                painter.setPen(box_pen); painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(QRectF(QPointF(outline_box[0], outline_box[1]), QPointF(outline_box[2], outline_box[3])))
             if self.roto_drawing:
                 origin_x = self.format_rect.left() if self.format_rect is not None else 0.0
                 origin_y = self.format_rect.top() if self.format_rect is not None else 0.0
@@ -5710,6 +5801,10 @@ class Viewer(PanZoomView):
             if self.roto_drawing:
                 self.roto_draw_cursor = scene_pos
                 self.roto_draw_press = scene_pos
+                return True
+            if self.roto_active_group == "Shapes" and self._roto_outline_mode():
+                self.roto_outline_drag = {"start": scene_pos, "scene": scene_pos, "shift": shift}
+                self.setCursor(Qt.CursorShape.CrossCursor)
                 return True
             if self.roto_active_group == "Shapes":
                 if self.begin_roto_draw(context[0]):
@@ -6016,6 +6111,10 @@ class Viewer(PanZoomView):
             return True
         if self.roi_drag is not None:
             self._roi_drag_to(scene_pos)
+            return True
+        if self.roto_outline_drag is not None:
+            self.roto_outline_drag["scene"] = scene_pos
+            self.viewport().update()
             return True
         if self.roto_drawing:
             self.roto_draw_cursor = scene_pos

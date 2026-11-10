@@ -659,3 +659,30 @@ def _guarded_fit(field, points, band=1.5):
     if moved <= band + 0.25 and _edge_score(field, candidate) > _edge_score(field, points):
         return candidate
     return points
+
+
+def bspline_controls(points, samples_per_span=2):
+    """Control points of a closed uniform cubic B-spline that passes through the outline.
+
+    The B-Spline tool stores control points, not points on the curve, so the Bezier outline is
+    sampled (each point and the middle of each span) and the controls ``Q`` solved from
+    ``P_i = (Q_(i-1) + 4 Q_i + Q_(i+1)) / 6``. A B-spline has no corners: sharp tips round off.
+    """
+    count = len(points)
+    samples = []
+    for i, a in enumerate(points):
+        b = points[(i + 1) % count]
+        p0 = np.array([a["x"], a["y"]]); p1 = p0 + [a["out_x"], a["out_y"]]
+        p3 = np.array([b["x"], b["y"]]); p2 = p3 + [b["in_x"], b["in_y"]]
+        for k in range(samples_per_span):
+            t = k / samples_per_span
+            samples.append(_evaluate(np.array([p0, p1, p2, p3]), np.array([t]))[0])
+    samples = np.array(samples)
+    n = len(samples)
+    matrix = np.zeros((n, n))
+    for i in range(n):
+        matrix[i, (i - 1) % n] += 1.0
+        matrix[i, i] += 4.0
+        matrix[i, (i + 1) % n] += 1.0
+    controls = np.linalg.solve(matrix / 6.0, samples)
+    return [{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0} for x, y in controls]
