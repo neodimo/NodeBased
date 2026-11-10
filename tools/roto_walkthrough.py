@@ -557,6 +557,35 @@ def s08(w):
             "a layer's translate moves every shape inside it")
     w.check(all(number(w.shape_entries()[i]["points"][0]["x"]) == b for i, b in zip(inside, before)), "the shapes' own points are untouched")
     w.shot("layer-transform")
+    # RotoPaint's list has the same cells: its own colour and Invert for shapes and strokes, and the same blending list.
+    stroke = {"kind": "stroke", "name": "stroke1", "points": [{"x": 320.0, "y": 180.0, "pressure": 1.0}],
+              "brush": {"size": 60.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.2, "strength": 0.2},
+              "tool": "paint", "lifetime": {"mode": "all"}, "color": [0.1, 0.1, 0.9, 1.0], "source_offset": [0.0, 0.0],
+              "source_frame": "relative", "opacity": 1.0, "blend": "over", "visible": True, "follow_track": None, "patch_blend": 0.0}
+    w.fresh("paint", items=[paint_shape_item(square("box", 60, 60, 220, 160)), stroke])
+    def paint_tree():
+        panel = w.window.build_node_panel(w.key)
+        w.window.set_properties_widget(panel)
+        w.settle()
+        return panel.findChild(QTreeWidget, "rotopaint-layer-list")
+    tree = paint_tree()
+    for name in ("row-color-0", "row-invert-0", "row-color-1", "row-invert-1"):
+        cell = tree.findChild(QWidget, "rotopaint-" + name)
+        w.check(cell is not None and cell.isEnabled(), f"the RotoPaint {name} cell is live")
+    pixel = lambda x, y: w.window.evaluator.evaluate_raster(w.document, target="paint").pixels[y, x, :3].tolist()
+    tree.set_color(0, [0.9, 0.2, 0.1, 1.0]); w.settle()
+    w.check(abs(pixel(140, 110)[0] - 0.9) < 1e-3 and abs(pixel(140, 110)[2] - 0.1) < 1e-3, "a RotoPaint shape renders in its own colour")
+    tree = paint_tree()
+    tree.findChild(QCheckBox, "rotopaint-row-invert-0").setChecked(True); w.settle()
+    w.check(pixel(140, 110) != [0.9, 0.2, 0.1] and abs(pixel(600, 340)[0] - 0.9) < 1e-3, "Invert paints everything but the shape")
+    tree = paint_tree()
+    combo = tree.findChild(QComboBox, "rotopaint-row-blend-0")
+    offered = [combo.itemData(i) for i in range(combo.count())]
+    w.check(offered[:4] == ["over", "add", "multiply", "screen"] and set(shape_model.BLEND_MODES) <= set(offered),
+            f"the RotoPaint Blending cell offers {len(offered)} modes: the four it had and Roto's whole list")
+    combo.setCurrentIndex(combo.findData("difference")); w.settle()
+    w.check(w.payload["items"][0]["blend"] == "difference", "choosing a mode in the cell stores it")
+    w.shot_widget("rotopaint-list", paint_tree())
     w.note("not applicable: the View column is for multi-view projects, which NodeBased does not have (ledger row 253 in docs/ROTO_NUKE_UI.md)")
 
 
@@ -657,7 +686,49 @@ def s10(w):
     keys = w.payload["shapes"][0]["motion_blur_shutter"]["curve"]["keys"]
     w.check([(k["frame"], k["value"]) for k in keys] == [(1, 0.5), (12, 0.0)], "clearing it on frame 12 keys the blur off from there")
     w.shot_widget("motion-blur-keys", w.shape_tree())
-    w.note("ripple editing is not implemented; the guide's pages do not document a ripple workflow (ledger row 272 in docs/ROTO_NUKE_UI.md)")
+    # Ripple editing ("Deleting or Rippling Keyframes"): with the ripple edit button on, one point edit is applied as the same offset to
+    # the point's other keys in the range chosen next to it (all, from start, to end or range); a red border marks the mode.
+    keyed = square("box", 160, 90, 480, 270)
+    keyed["points"][0]["x"] = {"value": 160.0, "curve": {"interpolation": "linear", "keys": [
+        {"frame": 1, "value": 160.0}, {"frame": 8, "value": 200.0}, {"frame": 16, "value": 240.0}]}}
+    w.fresh("roto", shapes=[keyed], last=24, current=8)
+    w.tool("Select", "Select All")
+    strip = w.viewer.roto_toolbar.settings_widgets
+    w.check({"ripple_edit", "ripple_mode", "ripple_from", "ripple_to"} <= set(strip), "the Select All settings strip has the ripple edit button, its mode menu and range fields")
+    modes = strip["ripple_mode"]
+    w.check([modes.itemText(i) for i in range(modes.count())] == ["all", "from start", "to end", "range"], "the menu offers all, from start, to end and range")
+    def nudge():
+        """The keypad-arrow nudge of the selected point by one pixel, delivered straight to the viewer's key handler."""
+        from PySide6.QtGui import QKeyEvent
+        w.viewer.setFocus(); w.settle()
+        w.viewer.roto_selected_points = {(0, 0)}
+        w.viewer.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.KeypadModifier))
+        w.settle()
+    x_keys = lambda: {k["frame"]: k["value"] for k in w.shape_entries()[0]["points"][0]["x"]["curve"]["keys"]}
+    def nudge():
+        """The keypad-arrow nudge of the selected point by one pixel, delivered straight to the viewer's key handler."""
+        from PySide6.QtGui import QKeyEvent
+        w.viewer.setFocus(); w.settle()
+        w.viewer.roto_selected_points = {(0, 0)}
+        w.viewer.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.KeypadModifier))
+        w.settle()
+    nudge()
+    w.check(x_keys() == {1: 160.0, 8: 201.0, 16: 240.0}, "with ripple off a nudge at frame 8 changes only that key")
+    w.window.command({"op": "undo"}); w.settle()
+    strip["ripple_edit"].setChecked(True); w.settle()
+    w.check(w.viewer.roto_ripple_window() == (1, 24), "ripple on shows the red border and ripples all frames")
+    w.shot("ripple-on")
+    depth = w.undo_depth()
+    nudge()
+    w.check(x_keys() == {1: 161.0, 8: 201.0, 16: 241.0}, "with ripple on, every key of the point moves by the same offset")
+    w.check(w.undo_depth() == depth + 1, "the whole ripple is one undo step")
+    w.window.command({"op": "undo"}); w.settle()
+    w.check(x_keys() == {1: 160.0, 8: 200.0, 16: 240.0}, "one undo restores every key")
+    strip = w.viewer.roto_toolbar.settings_widgets
+    strip["ripple_mode"].setCurrentIndex(strip["ripple_mode"].findData("to end")); w.settle()
+    nudge()
+    w.check(x_keys() == {1: 160.0, 8: 201.0, 16: 241.0}, "to end leaves the keys before the current frame alone")
+    w.shot("ripple-to-end")
 
 
 # ---- RotoPaint: strokes and tools ------------------------------------------------------------------------------------

@@ -4,19 +4,20 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 
 ## Measured counts
 
-| Section | Match | Differs | Missing | Score |
-|---|---:|---:|---:|---:|
-| Toolbar and tools | 32 | 0 | 0 | 100.0 |
-| Tool settings | 189 | 1 | 0 | 99.7 |
-| Stroke/shape list | 16 | 3 | 1 | 87.5 |
-| Viewer editing | 31 | 0 | 0 | 100.0 |
-| Timing and animation | 9 | 0 | 1 | 90.0 |
-| Overall | — | — | — | 98.6 |
+| Section | Match | Differs | Missing | Not applicable | Score |
+|---|---:|---:|---:|---:|---:|
+| Toolbar and tools | 32 | 0 | 0 | 0 | 100.0 |
+| Tool settings | 189 | 0 | 0 | 1 | 100.0 |
+| Stroke/shape list | 19 | 0 | 0 | 1 | 100.0 |
+| Viewer editing | 31 | 0 | 0 | 0 | 100.0 |
+| Timing and animation | 10 | 0 | 0 | 0 | 100.0 |
+| Overall | — | — | — | — | 100.0 |
+
+Not applicable rows stay in the inventory and are counted, but take no part in the score: they are neither a hit nor a miss. The two are the Clone tool's View control and the list's View column, which Nuke shows only for multi-view (stereo) projects; NodeBased has no multi-view projects.
+
 ## Largest gaps
 
-1. Clone view selection depends on multi-view projects, which NodeBased does not support.
-2. Ripple editing is undocumented in the traversed official guide and is not implemented.
-3. The stroke/shape list still lacks the View column, a Color cell for RotoPaint shapes and an Invert cell for strokes; RotoPaint offers four blending modes where Roto offers Merge's thirty.
+None are left against the traversed guide pages. What the ledger does not cover: the tools past Nuke (edge snapping, point tracking, in-betweens, the GPU matte), playback and ahead-of-time evaluation.
 
 ## Proposed implementation steps
 
@@ -243,7 +244,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 200 | R2 · viewer side | tool · Black outside | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 201 | R2 · viewer side | tool · Time offset | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 202 | R2 · viewer side | tool · Time offset type | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
-| 203 | R2 · viewer side | tool · View | differs | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint | Selected-item and tool-specific parity remains incomplete. |
+| 203 | R2 · viewer side | tool · View | not applicable | No view list: a project here has one view (Nuke shows the control only for multi-view projects). | Not applicable: the Clone tool's View control picks the stereo or multi-view source and the guide shows it only when the project has multiple views; NodeBased has no multi-view projects. It takes no part in the score. |
 | 204 | R2 · viewer side | tool · Opacity | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 205 | R2 · viewer side | tool · Brush size | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
 | 206 | R2 · viewer side | tool · Brush spacing | match | RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint |  |
@@ -289,11 +290,11 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 246 | R3 · panel side | Visible | match | `rotolist.ShapeListTree` Visible column (`roto-shape-row-visible-*`, `rotopaint-row-visible-*`, `*-layer-visible-*`) |  |
 | 247 | R3 · panel side | Lock | match | `rotolist.ShapeListTree` Lock column (`roto-shape-row-locked-*`, `rotopaint-row-locked-*`, `*-layer-locked-*`) |  |
 | 248 | R3 · panel side | Overlay color | match | `rotolist.ShapeListTree` Overlay color column (`*-row-overlay-*`); stored as `overlay_color`, drawn by the Viewer outline, never rendered |  |
-| 249 | R3 · panel side | Color | differs | `rotolist.ShapeListTree` Color column (`*-row-color-*`) | RotoPaint shape items carry no colour of their own, so their Color cell is disabled; strokes and Roto shapes edit theirs. |
-| 250 | R3 · panel side | Invert | differs | `rotolist.ShapeListTree` Invert column (`*-row-invert-*`) | A RotoPaint stroke has no invert setting, so its cell is disabled; shapes edit theirs. |
-| 251 | R3 · panel side | Blending | differs | `rotolist.ShapeListTree` Blending column (`*-row-blend-*`); `shapes.BLEND_MODES`; `roto.MERGE_BLEND_MODES` | Roto offers the Merge node's thirty operations, each through Merge's own formula (convention: the guide gives no Roto list). RotoPaint shapes and strokes still offer four. |
+| 249 | R3 · panel side | Color | match | `rotolist.ShapeListTree` Color column (`*-row-color-*`); `paint.rasterise` draws a RotoPaint shape in its own colour (its alpha scales the coverage) |  |
+| 250 | R3 · panel side | Invert | match | `rotolist.ShapeListTree` Invert column (`*-row-invert-*`); shapes invert their matte in `roto.rasterise`, strokes invert their footprint in `paint.apply_stroke` |  |
+| 251 | R3 · panel side | Blending | match | `rotolist.ShapeListTree` Blending column (`*-row-blend-*`); `shapes.BLEND_MODES` (Roto) and `shapes.PAINT_BLEND_MODES` (RotoPaint); `roto.blend_onto` |  |
 | 252 | R3 · panel side | Motion blur | match | `rotolist.ShapeListTree` Motion blur column (`*-row-motion_blur-*`) |  |
-| 253 | R3 · panel side | View | missing | No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`. | Stereo-only column; NodeBased has no multi-view project support, so it stays out of scope. |
+| 253 | R3 · panel side | View | not applicable | No View column: a project here has one view (Nuke shows the column only for multi-view projects). | Not applicable: the View column lists the views an item appears in and the guide shows it only for multi-view projects; NodeBased has no multi-view projects. It takes no part in the score. |
 | 254 | R3 · panel side | Lifetime | match | `rotolist.ShapeListTree` Lifetime column (`*-row-lifetime-*`): shows the type and range, opens the panel's lifetime editor |  |
 | 255 | R3 · panel side | Source | match | `rotolist.ShapeListTree` Source column (`*-row-source-*`) |  |
 | 256 | R3 · panel side | Layers and folders | match | `rotolist.ShapeListTree` tree, front-most item first at every level as in Nuke (`rotolist.reverse_tree`; the stored order stays render order, so saved shots render as before): layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; a layer's own transform (`shapes.resolve_layer_transform`) is applied to every shape inside it, edited from the panel's Layer transform controls and by the transform box with the layer row selected |  |
@@ -312,7 +313,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 269 | R4 · panel side | Set key: transform | match | `RotoPanel.build_panel` and `Window.build_node_panel`; per-field keys on Roto and RotoPaint transforms. |  |
 | 270 | R4 · panel side | Lifetime types | match | Roto and RotoPaint panels expose All, Start to, Single, To end and Range for shapes and strokes. |  |
 | 271 | R4 · panel side | Lifetime endpoints | match | Roto and RotoPaint panels show From/To only when used by the selected lifetime mode. |  |
-| 272 | R4 · panel side | Ripple editing | missing | No ripple timing control is implemented; cited official pages do not document a ripple workflow. | Undocumented in the cited official sources; behavior remains unimplemented rather than inferred. |
+| 272 | R4 · panel side | Ripple editing | match | Select tools' settings strip: Ripple edit, Ripple mode (all, from start, to end, range) and Ripple from/to; `rotoripple.ripple_shapes` applied in `Viewer._commit_roto_shapes` for drags and keypad nudges; a red border on the Viewer while on. |  |
 | 273 | R4 · panel side | Per-shape keyframe controls | match | Roto and RotoPaint panels expose All, Spline, Transform and Attributes key scopes for the selected shape item. |  |
 | 274 | R4 · panel side | Motion blur keys | match | Samples, shutter and offset key buttons in the Roto panel; the list's Motion blur cell shows the shutter's key state and, with autokey on, sets a shutter key at the current frame (`rotolist.ShapeListTree.edit_motion_blur`) | A shutter key of 0 is blur off from that frame. |
 
@@ -333,3 +334,13 @@ Step RW3 made the shape list read as Nuke's does and added the "Past Nuke" tour 
 
 - **List order** (row 256). The top row of the list is the front-most item, at every level (layers and the items inside them), and a new shape or stroke appears at the top of its layer. The stored order stays render order, back first, so no schema changed and saved shots render bit-identically; only the view and the edits that come from it read the other way round. Dropping an item above another puts it in front of that one; Duplicate puts the copy directly above the original, in front of it; Paste goes in front of the selected item; an item dropped into a layer lands at the top of it; Move up brings the item forward. Selection sync and the undo steps are unchanged. The View column (row 253) stays out of scope: Nuke shows it for multi-view projects only and NodeBased has none, so the walkthrough reports it as not applicable.
 - **Past Nuke tour.** Scenes 17 (Snap to edges and Fit to edges), 18 (Track points) and 19 (Fill in-betweens) run on pictures computed from formulas, with a caption under each screenshot in the pack's README.
+
+## RW4 conventions
+
+Step RW4 closed the last six rows.
+
+- **Ripple editing** (row 272). Nuke's "Deleting or Rippling Keyframes" page puts a ripple edit button in the Select tools' settings with a menu of all, from start, to end and range. The settings strip of the four Select tools now has Ripple edit (off), Ripple mode (all) and, for the range choice, Ripple from and Ripple to; they are stored once per node with Autokey and, being defaults, are absent from older documents. With it on, a point edit made in the Viewer (a drag, a transform box edit or a keypad nudge) moves each of that point's other keys inside the range by the offset the edit gave it at the current frame; keys outside the range stay put, a point with no keys simply takes the new value, and a shape that gained or lost points is left as edited. The whole change is one command, so one undo restores every key. All is the project's first to last frame, from start is the first frame to the current one, to end is the current frame to the last. A red border around the Viewer shows the mode is on. Track points, Fit to edges and Fill in-betweens do not ripple.
+- **RotoPaint shape Color and Invert** (rows 249 and 250). A RotoPaint shape item stores an optional `color`, drawn as the shape's colour (its alpha scales the coverage); a shape without one still paints white. Invert already inverted a shape's matte; a stroke now takes an `invert` flag too (the guide's list inverts "shape/stroke/group") and then affects everything outside its own footprint. The list's Color and Invert cells are live on both kinds.
+- **RotoPaint blending list** (row 251). `shapes.PAINT_BLEND_MODES` is the four classic modes (over, add, multiply, screen, whose formulas and results are unchanged) followed by every other mode of Roto's list. Those are drawn by `roto.blend_onto`, which holds Roto's own formulas, so a RotoPaint shape over a picture reads the same as the second shape in Roto; like a Roto shape, the mode acts only inside the shape's bounds (or the stroke's reach), and an inverted item reaches the whole frame. The settings strip's Blending mode menu follows the node kind.
+- **View rows** (rows 203 and 253). Both are stereo-only and marked not applicable; see the counts above.
+
