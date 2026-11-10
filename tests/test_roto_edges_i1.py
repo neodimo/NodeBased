@@ -462,6 +462,35 @@ class ViewerEdgeTests(unittest.TestCase):
         self.viewer.window.command({"op": "undo"})
         self.assertFalse(self.viewer.fit_roto_to_edges([0, 1]))
 
+    def test_rotopaint_shapes_fit_too(self):
+        document = disc_plate_document()
+        dispatcher = Dispatcher(document)
+        dispatcher.execute({"op": "create", "id": "p", "type": "RotoPaint", "pos": [0, 0]})
+        dispatcher.execute({"op": "connect", "id": "p", "input": "image", "source": "plate"})
+        shape = circle_shape(np.linspace(-3, 3, 16))
+        item = {"kind": "shape", **{k: shape[k] for k in ("name", "mode", "opacity", "feather", "points", "closed")},
+                "blend": "over", "visible": True}
+        dispatcher.execute({"op": "set_paint_items", "id": "p", "items": [item]})
+        dispatcher.execute({"op": "view", "id": "p"})
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+        self.open(dispatcher.document)
+        self.window.graph.scene().clearSelection()
+        self.window.graph.items_by_id["p"].setSelected(True)
+        APP.processEvents()
+        self.viewer.roto_selected_shape_index = 0
+        self.viewer.roto_toolbar.set_setting("p", "Select Points", "autokey", False)
+
+        def points():
+            return self.window.dispatcher.document["node_data"]["p"]["items"][0]["points"]
+
+        before = rms_to_circle_about(static_points({"points": points()}), DISC_CENTRE, DISC_RADIUS)
+        self.assertTrue(self.viewer.fit_roto_to_edges())
+        after = rms_to_circle_about(static_points({"points": points()}), DISC_CENTRE, DISC_RADIUS)
+        self.assertGreater(before, 1.2)
+        self.assertLess(after, 0.75)
+
     def test_list_menu_has_fit_to_edges(self):
         self.fit_setup()
         self.window.rebuild_properties_dock()
