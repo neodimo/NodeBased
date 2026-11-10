@@ -1,3 +1,9 @@
+## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step I3: image-aware in-betweens for Roto shapes (integrator tick)
+
+- **What was done:** `main` `03b6d5ac` -> `7e730826` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7e730826`: Ran 9565 tests in 1177.046 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-10 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step I2: Roto point tracking that follows a deforming shape (integrator tick)
 
 - **What was done:** `main` `cef848d8` -> `47af076d` plus this docs commit. Evidence and per-lane commit

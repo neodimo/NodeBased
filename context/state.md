@@ -1,5 +1,27 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:56 AM on 2026-11-10 PDT)
+
+`main` moved `03b6d5ac` -> `7e730826` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7e730826` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-0036.log`, started 12:36 AM): **Ran 9565 tests in 1177.046 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step I3: image-aware in-betweens for Roto shapes.** Commits:
+  - `5293c41c` Tests: Roto list menu now ends with Fill in-betweens
+  - `ea7d1e85` Docs: Roto in-betweens (past Nuke) section, bundled copy identical
+  - `26de1bbf` Roto: Fill in-betweens command (shape list menu and Select tools strip), settings for band, threshold, every Nth frame and From/To; one undo step, locked shapes skipped
+  - `052a7a73` Roto: image-aware in-betweens (rotoinbetween): fit each frame between two keys to its own image edges and key only the points that moved
+  Diff: 8 files changed, 748 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (12:16 AM on 2026-11-10 PDT)
 
 `main` moved `cef848d8` -> `47af076d` (lane commits cherry-picked onto main in lane order) and then to this
