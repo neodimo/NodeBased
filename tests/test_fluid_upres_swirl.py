@@ -116,6 +116,14 @@ class SwirlGridTests(unittest.TestCase):
         mass = float(second.density.sum(dtype=np.float64)) * 8
         self.assertLess(abs(float(d_on.sum(dtype=np.float64)) - mass) / mass, .02)
 
+    def test_flame_temperature_and_fuel_ignore_the_swirl(self):
+        off = self.two_frames("cpu", swirl=0.0)[3]
+        on = self.two_frames("cpu", swirl=1.0)[3]
+        np.testing.assert_array_equal(off.coords, on.coords)
+        for name in ("flame", "temperature", "fuel"):
+            np.testing.assert_array_equal(off.data[name], on.data[name])
+        self.assertFalse(np.array_equal(off.data["density"], on.data["density"]))
+
     def test_swirl_is_deterministic(self):
         a = self.two_frames("cpu")[3].to_dense()["density"]
         b = self.two_frames("cpu")[3].to_dense()["density"]
