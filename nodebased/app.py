@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (QApplication, QTabBar, QMainWindow, QWidget, QVBo
     QStackedWidget, QButtonGroup, QStyleOptionSlider, QStylePainter)
 
 from . import __version__
-from .roto_settings import TOOL_CONTROLS
+from .roto_settings import TOOL_CONTROLS, GLOBAL_SETTINGS
 from .updater import Updater
 from .core import _downstream_of
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
@@ -48,6 +48,7 @@ from . import radialcommands
 from . import graphlook
 from . import gpu3d
 from . import roto
+from . import rotoedges
 from . import paintknobs
 from . import rotolist
 from . import gpupicture
@@ -1675,7 +1676,9 @@ class RotoViewerToolbar(QWidget):
                 "Hide transform handles": "hide_transform_handles",
                 "Hide transform handles on move": "hide_transform_handles_on_move",
                 "Constant selection mode": "constant_selection_mode", "Label points": "label_points",
-                "Feather link": "feather_link", "Autokey": "autokey"}.get(
+                "Feather link": "feather_link", "Autokey": "autokey",
+                "Snap to edges": "snap_edges", "Snap radius": "snap_radius", "Fit band": "fit_band",
+                "Fit to edges": "fit_to_edges"}.get(
                     label, label.lower().replace(" ", "_").replace("/", "_"))
 
     @staticmethod
@@ -1700,17 +1703,21 @@ class RotoViewerToolbar(QWidget):
         stored = payload.get("tool_settings", {}).get(tool, {})
         values = {self._setting_key(c["label"]): stored.get(self._setting_key(c["label"]), self._setting_default(c))
                 for c in TOOL_CONTROLS.get(tool, [])}
-        if "autokey" in values:
-            values["autokey"] = payload.get("tool_settings", {}).get("__global__", {}).get("autokey", True)
+        shared = payload.get("tool_settings", {}).get("__global__", {})
+        for name, default in GLOBAL_SETTINGS.items():
+            if name in values:
+                values[name] = shared.get(name, default)
         return values
 
     def set_setting(self, key, tool, setting, value):
         context = self.viewer._roto_context()
         if context is None or context[0] != key: return
-        if setting == "autokey":
+        if setting in GLOBAL_SETTINGS:
             payload = self.viewer.window.dispatcher.document.get("node_data", {}).get(key, {})
             global_settings = copy.deepcopy(payload.get("tool_settings", {}).get("__global__", {}))
-            global_settings["autokey"] = bool(value)
+            global_settings[setting] = bool(value) if isinstance(GLOBAL_SETTINGS[setting], bool) else float(value)
+            if setting != "autokey" and global_settings[setting] == GLOBAL_SETTINGS[setting]:
+                global_settings.pop(setting)   # defaults are not stored: an old document equals a new one
             self.viewer.window.command({"op": "set_roto_tool_settings", "id": key,
                                         "tool": "__global__", "settings": global_settings}, render=False)
             return
@@ -1797,6 +1804,9 @@ class RotoViewerToolbar(QWidget):
         if kind == "toggle":
             widget = QCheckBox(label, self.settings_strip); widget.setChecked(bool(value))
             widget.toggled.connect(lambda checked, k=key, t=tool, s=setting: self.set_setting(k, t, s, bool(checked)))
+        elif kind == "button":
+            widget = QPushButton(label, self.settings_strip); widget.setObjectName("roto-setting-"+setting)
+            widget.clicked.connect(lambda _=False: self.viewer.fit_roto_to_edges())
         elif kind == "dropdown":
             widget = QComboBox(self.settings_strip); widget.setObjectName("roto-setting-"+setting)
             choices = {"Source": ["color", "foreground", "background"], "Blending mode": ["over", "plus", "multiply", "screen"],
@@ -1893,7 +1903,7 @@ class RotoViewerToolbar(QWidget):
                     continue
                 setting = self._setting_key(label)
                 widget = self._make_settings_widget(tool, control, values[setting], context[0])
-                if control["widget_kind"] not in ("toggle", "colour swatch"):
+                if control["widget_kind"] not in ("toggle", "colour swatch", "button"):
                     caption = QLabel(label, self.settings_strip)
                     self.settings_layout.addWidget(caption)
                 self.settings_layout.addWidget(widget); self.settings_widgets[setting] = widget
@@ -3740,9 +3750,115 @@ class Viewer(PanZoomView):
                                  "curve": {"interpolation": "linear", "keys": [{"frame": f, "value": v}
                                                                               for f, v in vals.items()]}}
                                 if len(frames) > 1 else vals[frames[0]])
+        if len(frames) == 1 and isinstance(new_point["x"], float) and isinstance(new_point["y"], float):
+            new_point["x"], new_point["y"] = self._roto_snap_data(
+                context, [new_point["x"], new_point["y"]], bool(getattr(self, "_roto_press_alt", False)))
         shape["points"].insert(insertion_i,new_point)
         self._commit_roto_shapes(key,node,shapes)
         self.roto_selected_points={(si,insertion_i)}; self.viewport().update(); return True
+
+    # -- edge snap and fit to edges (lane 9, step I1) ---------------------------------------------
+    @staticmethod
+    def _roto_no_snap_modifiers(modifiers):
+        """Alt+Shift held: this gesture does not snap. (Ctrl drags a feather and sketches freehand, Alt
+        alone pans the picture and Shift alone ends an open curve, so only the pair is free.)"""
+        both = Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier
+        return (modifiers & both) == both
+
+    def _roto_snap_config(self, key):
+        """(snap on, snap radius in px) for a Roto node; snapping is off unless the strip turned it on."""
+        shared = self.window.dispatcher.document.get("node_data", {}).get(key, {}).get(
+            "tool_settings", {}).get("__global__", {})
+        return bool(shared.get("snap_edges", False)), max(0.5, float(shared.get("snap_radius", 8.0)))
+
+    def _roto_edge_field(self, context, x0, y0, x1, y1):
+        """The edge field over a data-space box of the image the Roto node sees at its input, or None.
+
+        Reads the input through the evaluator at the current frame (never changes it) and keeps only
+        the region asked for; fields are cached by (node, frame, input digest, region).
+        """
+        key, node, _, _ = context
+        source = node["inputs"].get("image" if node["type"] == "RotoPaint" else "bg")
+        if source is None:
+            return None
+        document = self.window.dispatcher.document
+        frame = int(document["time"]["current"])
+        try:
+            raster, digest = self.window.evaluator.evaluate_raster(
+                document, target=source, frame=frame, return_digest=True)
+        except Exception:
+            return None
+        width, height = raster.display.width, raster.display.height
+        box = rotoedges.aligned_box(x0, y0, x1, y1, width, height)
+        if box[2] - box[0] < 3 or box[3] - box[1] < 3:
+            return None
+        return rotoedges.CACHE.field(key, frame, digest, box, lambda: raster.to_display())
+
+    def _roto_snap_data(self, context, point, suppress=False):
+        """A data-space point moved to the strongest edge within the snap radius (or unchanged)."""
+        enabled, radius = self._roto_snap_config(context[0])
+        if not enabled or suppress:
+            return point
+        field = self._roto_edge_field(context, point[0] - radius - 4, point[1] - radius - 4,
+                                      point[0] + radius + 4, point[1] + radius + 4)
+        if field is None:
+            return point
+        x, y = field.snap(point, radius)
+        return [x, y]
+
+    def fit_roto_to_edges(self, shape_indices=None):
+        """Refine the selected shapes to the image edges within the strip's Fit band: one undo step.
+
+        Locked shapes and shapes in locked layers are skipped. With Autokey on the new coordinates
+        are keyed at the current frame; with it off they change the static shape.
+        """
+        context = self._roto_context()
+        if context is None:
+            return False
+        key, node, payload, tier = context
+        document = self.window.dispatcher.document
+        frame = int(document["time"]["current"])
+        shared = payload.get("tool_settings", {}).get("__global__", {})
+        band = max(1.0, float(shared.get("fit_band", 12.0)))
+        shapes = copy.deepcopy(payload.get("shapes", []))
+        resolved = self._roto_resolved(context)
+        if shape_indices is None:
+            chosen = {si for si, _ in self.roto_selected_points}
+            if 0 <= self.roto_selected_shape_index < len(shapes):
+                chosen.add(self.roto_selected_shape_index)
+            shape_indices = sorted(chosen)
+        targets = [si for si in shape_indices if 0 <= si < len(shapes) and not resolved[si].get("locked")
+                   and len(resolved[si]["points"]) >= 2]
+        if not targets:
+            self.window.statusBar().showMessage("Fit to edges: select an unlocked shape first", 4000)
+            return False
+        changed = False
+        for si in targets:
+            points = resolved[si]["points"]
+            outline = roto.flatten_points(points, closed=resolved[si].get("closed", True),
+                                          curve_type=resolved[si].get("curve_type", "bezier"))
+            xs = [x for x, _ in outline] + [float(p["x"]) for p in points]
+            ys = [y for _, y in outline] + [float(p["y"]) for p in points]
+            margin = band + 6
+            field = self._roto_edge_field(context, min(xs) - margin, min(ys) - margin,
+                                          max(xs) + margin, max(ys) + margin)
+            if field is None:
+                self.window.statusBar().showMessage("Fit to edges: connect an image to the Roto input", 4000)
+                return False
+            fitted = field.fit({"points": points, "closed": resolved[si].get("closed", True),
+                                "curve_type": resolved[si].get("curve_type", "bezier")}, band, 12)
+            animated = any(isinstance(value, dict) and value.get("curve")
+                           for p in shapes[si]["points"] for value in p.values())
+            for target, new in zip(shapes[si]["points"], fitted):
+                local = shape_model.unresolve_roto_point(new, shapes[si], document, frame, tier)
+                for field_name in shape_model.POINT_FIELDS:
+                    target[field_name] = self._roto_scalar_at_frame(target[field_name], frame,
+                                                                    local[field_name], animated)
+            changed = True
+        if changed:
+            self._commit_roto_shapes(key, node, shapes)
+            self.viewport().update()
+        return changed
 
     def _roto_scalar_at_frame(self, value, frame, replacement, auto_key=False):
         """Change a point coordinate while retaining its v8 animated scalar envelope."""
@@ -4008,6 +4124,8 @@ class Viewer(PanZoomView):
             self.viewport().update()
             return False
         x, y = self._roto_data_point(drag["scene"], context[1], tier)
+        if drag.get("kind") == "point":
+            x, y = self._roto_snap_data(context, [x, y], bool(drag.get("alt")))
         frame = int(self.window.dispatcher.document["time"]["current"])
         point = shapes[shape_index]["points"][point_index]
         shape = shapes[shape_index]
@@ -4362,7 +4480,14 @@ class Viewer(PanZoomView):
                     point = self._roto_data_point(start, context[1], context[3])
                     end = self._roto_data_point(scene_pos, context[1], context[3])
                     distance = (scene_pos - start).manhattanLength()
+                    raw_dx, raw_dy = end[0]-point[0], end[1]-point[1]
+                    no_snap = bool(getattr(self, "_roto_press_alt", False) or self._roto_no_snap_modifiers(modifiers))
+                    snapped_point = self._roto_snap_data(context, point, no_snap)
+                    if snapped_point != point:
+                        start = self._roto_scene_point({"x": snapped_point[0], "y": snapped_point[1]}, context[3])
+                        point = snapped_point
                     if self.roto_shape_tool in ("Ellipse", "Rectangle", "Cusped Rectangle") and not self.roto_draw_points:
+                        end = self._roto_snap_data(context, end, no_snap)
                         x0, y0 = point; x1, y1 = end
                         left, right = sorted((x0, x1)); top, bottom = sorted((y0, y1))
                         if self.roto_shape_tool == "Ellipse":
@@ -4384,8 +4509,9 @@ class Viewer(PanZoomView):
                                        scene_pos.y()-self.roto_draw_points[0]["scene"].y()) < 12/max(abs(self.view_zoom()), .05)):
                         self.finish_roto_draw(closed=True)
                     else:
-                        dx, dy = (end[0]-point[0], end[1]-point[1]) if distance > 3 else (0.0, 0.0)
-                        sharp_exit = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+                        dx, dy = (raw_dx, raw_dy) if distance > 3 else (0.0, 0.0)
+                        sharp_exit = bool(modifiers & Qt.KeyboardModifier.ShiftModifier) and not (
+                            no_snap and self._roto_snap_config(context[0])[0])
                         if sharp_exit: dx, dy = 0.0, 0.0
                         if self.roto_shape_tool == "Cusped Bezier": dx, dy = 0.0, 0.0
                         self.roto_draw_points.append({"x": point[0], "y": point[1], "in_x": -dx, "in_y": -dy,
@@ -4407,6 +4533,7 @@ class Viewer(PanZoomView):
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
             self.roto_drag["shift"] = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+            self.roto_drag["alt"] = bool(self.roto_drag.get("alt") or self._roto_no_snap_modifiers(modifiers))
             if self.roto_drag.get("kind") == "marquee":
                 drag=self.roto_drag; self.roto_drag=None
                 if drag["moved"]:
@@ -5297,6 +5424,7 @@ class Viewer(PanZoomView):
             self.paint_size_drag = {"start": scene_pos, "size": self.paint_size}
             return True
         context = self._roto_context()
+        self._roto_press_alt = self._roto_no_snap_modifiers(modifiers)
         if button == Qt.MouseButton.LeftButton and context is not None:
             if self.roto_drawing:
                 self.roto_draw_cursor = scene_pos
@@ -5430,7 +5558,7 @@ class Viewer(PanZoomView):
                 self.roto_key = context[0]
                 self.roto_drag = {"point": hit, "kind": "feather_point" if modifiers & Qt.KeyboardModifier.ControlModifier else "point",
                                   "scene": scene_pos, "start": scene_pos,
-                                  "moved": False}
+                                  "moved": False, "alt": self._roto_no_snap_modifiers(modifiers)}
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 return True
             if self.roto_active_group is None and context[1]["type"] == "Roto":
@@ -5611,6 +5739,7 @@ class Viewer(PanZoomView):
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
             self.roto_drag["shift"] = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+            self.roto_drag["alt"] = bool(self.roto_drag.get("alt") or self._roto_no_snap_modifiers(modifiers))
             self.viewport().update()
             if self.roto_drag["moved"] and self.roto_drag.get("kind") != "marquee":
                 self._preview_roto_drag()

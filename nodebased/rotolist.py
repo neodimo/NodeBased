@@ -661,6 +661,20 @@ class ShapeListTree(QTreeWidget):
     def cmd_planar_track(self):
         return self.window.track_roto_shape(self.key)
 
+    def cmd_fit_to_edges(self):
+        """Fit the selected shapes to the image edges (the viewer's Fit to edges command)."""
+        entries = self.entries()
+        shape_refs = [ref for kind, ref in self.selected_ids()
+                      if kind == "item" and 0 <= ref < len(entries) and entries[ref].get("kind", "shape") == "shape"]
+        if not shape_refs:
+            return False
+        if self.is_roto:
+            indices = list(shape_refs)
+        else:   # RotoPaint: the viewer numbers shapes among the items that are shapes
+            order = [i for i, item in enumerate(entries) if item.get("kind") == "shape"]
+            indices = [order.index(ref) for ref in shape_refs if ref in order]
+        return self.window.viewer.fit_roto_to_edges(indices)
+
     def ask_lifetime(self):
         dialog = QDialog(self); dialog.setWindowTitle("Set lifetime / frame range")
         form = QFormLayout(dialog)
@@ -698,6 +712,7 @@ class ShapeListTree(QTreeWidget):
         menu.addSeparator()
         add(menu, "Set lifetime / frame range", self.ask_lifetime, "roto-list-set-lifetime", has_curves)
         add(menu, "Planar-track", self.cmd_planar_track, "roto-list-planar-track", has_curves)
+        add(menu, "Fit to edges", self.cmd_fit_to_edges, "roto-list-fit-to-edges", has_curves)
         return menu
 
     def _show_menu(self, position):

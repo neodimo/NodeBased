@@ -1,11 +1,24 @@
 """Roto edge snap and fit-to-edges: the edge field (lane 9, step I1, group 1)."""
+import copy
 import math
+import os
+import tempfile
 import time
 import unittest
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import numpy as np
+from PySide6.QtCore import QPointF, QSettings, Qt
+from PySide6.QtTest import QTest
 
 from nodebased import rotoedges, roto
+from nodebased.app import Window
+from nodebased.core import Dispatcher, atomic_save, empty_document, load_document
+from nodebased.rotolist import ShapeListTree
+from nodebased.imaging import Evaluator
+from tests.test_roto_ui import APP
+from tests.waiting import wait_until
 
 CENTRE = (100.0, 90.0)
 RADIUS = 40.0
@@ -27,16 +40,18 @@ def full_field(image, sigma=rotoedges.SIGMA):
     return rotoedges.field_from_image(image, (0, 0, width, height), sigma)
 
 
-def circle_points(count=16, radius=RADIUS, centre=CENTRE, radial=None):
+def circle_points(count=16, radius=RADIUS, centre=CENTRE, radial=None, handles=True):
     points = []
     k = 4.0 / 3.0 * math.tan(math.pi / (2 * count))
     for i in range(count):
         a = 2 * math.pi * i / count
         r = radius + (radial[i] if radial is not None else 0.0)
         tx, ty = -math.sin(a), math.cos(a)
-        handle = k * radius
-        points.append({"x": centre[0] + r * math.cos(a), "y": centre[1] + r * math.sin(a),
-                       "in_x": -tx * handle, "in_y": -ty * handle, "out_x": tx * handle, "out_y": ty * handle})
+        handle = k * radius if handles else 0.0
+        points.append({name: float(value) for name, value in
+                       (("x", centre[0] + r * math.cos(a)), ("y", centre[1] + r * math.sin(a)),
+                        ("in_x", -tx * handle), ("in_y", -ty * handle),
+                        ("out_x", tx * handle), ("out_y", ty * handle))})
     return points
 
 
@@ -198,6 +213,271 @@ class FitTests(unittest.TestCase):
         print(f"\nfit 24 points on 1080p: field {1000 * (mid - started):.1f} ms, "
               f"fit {1000 * (done - mid):.1f} ms, region {box}")
         self.assertLess(done - started, 5.0)
+
+
+# -- the viewer: snap to edges and fit to edges (groups 2 and 3) -------------------------------
+
+DISC_CENTRE = (50.0, 50.0)
+DISC_RADIUS = 25.08   # area-equivalent radius of the plate's hard-edged Radial disc (box 25..75)
+
+
+def disc_plate_document(shapes=None, layers=None):
+    """A 100 x 100 Roto whose background is a white disc on black (a Radial with no softness)."""
+    document = empty_document()
+    document["nodes"] = {}
+    document["view"] = None
+    document["time"].update(first=1, last=3, current=2)
+    dispatcher = Dispatcher(document)
+    dispatcher.execute({"op": "create", "id": "plate", "type": "Radial"})
+    for name, value in dict(width=100, height=100, box_x=25, box_y=25, box_width=50, box_height=50,
+                            softness=0.0).items():
+        dispatcher.execute({"op": "set", "id": "plate", "param": name, "value": value})
+    dispatcher.execute({"op": "create", "id": "r", "type": "Roto", "pos": [0, 0]})
+    dispatcher.execute({"op": "set", "id": "r", "param": "width", "value": 100})
+    dispatcher.execute({"op": "set", "id": "r", "param": "height", "value": 100})
+    dispatcher.execute({"op": "connect", "id": "r", "input": "bg", "source": "plate"})
+    dispatcher.execute({"op": "view", "id": "r"})
+    if shapes:
+        command = {"op": "set_shapes", "id": "r", "shapes": shapes}
+        if layers:
+            command["layers"] = layers
+        dispatcher.execute(command)
+    return dispatcher.document
+
+
+def circle_shape(radial=None, count=16, name="circle", handles=True, **extra):
+    shape = {"name": name, "mode": "union", "opacity": 1.0, "feather": 0.0, "closed": True,
+             "points": circle_points(count, DISC_RADIUS, DISC_CENTRE, radial, handles)}
+    shape.update(extra)
+    return shape
+
+
+def static_points(shape):
+    return [{k: float(p[k]) for k in rotoedges.POINT_FIELDS} for p in shape["points"]]
+
+
+def edge_error(x, y):
+    return abs(math.hypot(x - DISC_CENTRE[0], y - DISC_CENTRE[1]) - DISC_RADIUS)
+
+
+class ViewerEdgeTests(unittest.TestCase):
+    def setUp(self):
+        QSettings("NodeBased", "NodeBased").clear()
+        rotoedges.CACHE.clear()
+        self.open(disc_plate_document())
+
+    def open(self, document):
+        self.window = Window(document)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True)
+        APP.processEvents()
+        self.viewer = self.window.viewer
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def reopen(self, shapes, autokey=None, layers=None):
+        """Start a fresh window whose document already holds `shapes` (as the existing gesture tests do)."""
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+        rotoedges.CACHE.clear()
+        self.open(disc_plate_document(shapes, layers))
+        if autokey is not None:
+            self.viewer.roto_toolbar.set_setting("r", "Select Points", "autokey", autokey)
+        self.viewer.select_roto_tool("Select", "Select Points")
+
+    def scene_pos(self, x, y):
+        return self.viewer.mapFromScene(QPointF(x, y))
+
+    def tolerance(self):
+        return 1.0 / max(abs(self.viewer.transform().m11()), 0.05) + 0.05
+
+    def shapes(self):
+        return self.window.dispatcher.document["node_data"]["r"]["shapes"]
+
+    def set_snap(self, on=True, radius=8.0):
+        self.viewer.roto_toolbar.set_setting("r", "Select Points", "snap_edges", on)
+        self.viewer.roto_toolbar.set_setting("r", "Select Points", "snap_radius", radius)
+
+    def click_ring(self, offset=4.0, count=8, modifiers=Qt.KeyboardModifier.NoModifier):
+        clicks = []
+        self.assertTrue(self.window.begin_roto_draw("r"))
+        for i in range(count):
+            angle = 2 * math.pi * (i + 0.3) / count
+            x = DISC_CENTRE[0] + (DISC_RADIUS + offset) * math.cos(angle)
+            y = DISC_CENTRE[1] + (DISC_RADIUS + offset) * math.sin(angle)
+            clicks.append((x, y))
+            QTest.mouseClick(self.viewer.viewport(), Qt.MouseButton.LeftButton, modifiers, pos=self.scene_pos(x, y))
+        self.undo_before_finish = len(self.window.dispatcher.undo_stack)
+        self.assertTrue(self.viewer.finish_roto_draw(closed=True))
+        return clicks
+
+    # -- group 2 -----------------------------------------------------------------------------
+    def test_snap_is_off_by_default_and_points_land_where_clicked(self):
+        self.viewer.select_roto_tool("Shapes", "Bezier")
+        self.assertEqual(self.viewer._roto_snap_config("r")[0], False)
+        clicks = self.click_ring()
+        for (x, y), p in zip(clicks, self.shapes()[-1]["points"]):
+            self.assertAlmostEqual(p["x"], x, delta=self.tolerance())
+            self.assertAlmostEqual(p["y"], y, delta=self.tolerance())
+        self.assertGreater(min(edge_error(p["x"], p["y"]) for p in self.shapes()[-1]["points"]), 3.0)
+
+    def test_bezier_drawn_near_the_edge_snaps_every_point_onto_it(self):
+        self.viewer.select_roto_tool("Shapes", "Bezier")
+        self.set_snap(True, 8.0)
+        self.click_ring(offset=4.0)
+        points = self.shapes()[-1]["points"]
+        self.assertEqual(len(points), 8)
+        errors = [edge_error(p["x"], p["y"]) for p in points]
+        self.assertLess(max(errors), 0.5, errors)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), self.undo_before_finish + 1)   # the clicks add none; finishing adds one
+
+    def test_alt_shift_disables_snapping_for_the_gesture(self):
+        self.viewer.select_roto_tool("Shapes", "Bezier")
+        self.set_snap(True, 8.0)
+        clicks = self.click_ring(modifiers=(Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier))
+        for (x, y), p in zip(clicks, self.shapes()[-1]["points"]):
+            self.assertAlmostEqual(p["x"], x, delta=self.tolerance())
+            self.assertAlmostEqual(p["y"], y, delta=self.tolerance())
+
+    def test_select_tool_point_drag_snaps_and_undoes_once(self):
+        self.reopen([circle_shape(handles=False)], autokey=False)
+        self.set_snap(True, 8.0)
+        before = copy.deepcopy(self.shapes())
+        x0 = DISC_CENTRE[0] + DISC_RADIUS
+        start, target = self.scene_pos(x0, DISC_CENTRE[1]), self.scene_pos(x0 + 5.0, DISC_CENTRE[1] + 1.0)
+        undo = len(self.window.dispatcher.undo_stack)
+        QTest.mousePress(self.viewer.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(self.viewer.viewport(), target, 20)
+        QTest.mouseRelease(self.viewer.viewport(), Qt.MouseButton.LeftButton, pos=target)
+        point = self.shapes()[0]["points"][0]
+        self.assertLess(edge_error(point["x"], point["y"]), 0.5)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), undo + 1)
+        self.window.command({"op": "undo"})
+        self.assertEqual(self.shapes(), before)
+
+    def test_drag_without_snap_lands_where_released_and_alt_shift_overrides_snap(self):
+        for snap_on, modifiers in ((False, Qt.KeyboardModifier.NoModifier), (True, (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier))):
+            self.reopen([circle_shape(handles=False)], autokey=False)
+            self.set_snap(snap_on, 8.0)
+            x0 = DISC_CENTRE[0] + DISC_RADIUS
+            start, target = self.scene_pos(x0, DISC_CENTRE[1]), self.scene_pos(x0 + 4.0, DISC_CENTRE[1] + 3.0)
+            QTest.mousePress(self.viewer.viewport(), Qt.MouseButton.LeftButton, modifiers, pos=start)
+            QTest.mouseMove(self.viewer.viewport(), target, 20)
+            QTest.mouseRelease(self.viewer.viewport(), Qt.MouseButton.LeftButton, modifiers, pos=target)
+            point = self.shapes()[0]["points"][0]
+            self.assertAlmostEqual(point["x"], x0 + 4.0, delta=self.tolerance() + 0.3)
+            self.assertAlmostEqual(point["y"], DISC_CENTRE[1] + 3.0, delta=self.tolerance() + 0.3)
+
+    def test_settings_save_and_reload_and_old_documents_open_with_snap_off(self):
+        self.assertEqual(self.viewer._roto_snap_config("r"), (False, 8.0))
+        self.assertNotIn("tool_settings", self.window.dispatcher.document["node_data"].get("r", {}))
+        self.set_snap(True, 11.0)
+        self.viewer.roto_toolbar.set_setting("r", "Select Points", "fit_band", 15.0)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "snap.json")
+            atomic_save(path, self.window.dispatcher.document)
+            reloaded = load_document(path)
+        shared = reloaded["node_data"]["r"]["tool_settings"]["__global__"]
+        self.assertEqual((shared["snap_edges"], shared["snap_radius"], shared["fit_band"]), (True, 11.0, 15.0))
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        self.open(reloaded)
+        self.assertEqual(self.viewer._roto_snap_config("r"), (True, 11.0))
+        self.set_snap(False, 8.0)
+        self.assertEqual(self.viewer._roto_snap_config("r"), (False, 8.0))
+        shared = self.window.dispatcher.document["node_data"]["r"]["tool_settings"]["__global__"]
+        self.assertNotIn("snap_edges", shared)
+        self.assertNotIn("snap_radius", shared)
+
+    def test_strip_shows_snap_and_fit_controls_for_select_and_shape_tools(self):
+        strip = self.viewer.roto_toolbar
+        strip.choose("Select", "Select Points")
+        self.assertTrue({"snap_edges", "snap_radius", "fit_band", "fit_to_edges"} <= set(strip.settings_widgets))
+        strip.choose("Shapes", "Bezier")
+        self.assertTrue({"snap_edges", "snap_radius"} <= set(strip.settings_widgets))
+        self.assertNotIn("fit_to_edges", strip.settings_widgets)
+        strip.choose("Brushes", "Brush") if "Brushes" in strip.buttons and strip.buttons["Brushes"].isVisible() else None
+
+    # -- group 3 -----------------------------------------------------------------------------
+    def fit_setup(self, shapes=None, autokey=False):
+        radial = np.random.default_rng(11).uniform(-3.5, 3.5, 16)
+        self.reopen(shapes or [circle_shape(radial)], autokey=autokey)
+        self.viewer.roto_selected_shape_index = 0
+
+    def test_fit_to_edges_through_the_strip_button_matches_the_edge(self):
+        self.fit_setup()
+        before = rms_to_circle_about(static_points(self.shapes()[0]), DISC_CENTRE, DISC_RADIUS)
+        self.assertGreater(before, 1.2)
+        self.viewer.roto_toolbar.choose("Select", "Select Points")
+        self.viewer.roto_toolbar.settings_widgets["fit_to_edges"].click()
+        APP.processEvents()
+        after = rms_to_circle_about(static_points(self.shapes()[0]), DISC_CENTRE, DISC_RADIUS)
+        self.assertLess(after, 0.75, (before, after))
+        self.assertEqual(self.shapes()[0]["points"][0].get("feather_x", 0.0), 0.0)
+
+    def test_one_undo_restores_the_exact_previous_shape(self):
+        self.fit_setup([circle_shape(np.linspace(-3, 3, 16), name="a"),
+                        circle_shape(np.linspace(3, -3, 16), name="b")])
+        before = copy.deepcopy(self.shapes())
+        undo = len(self.window.dispatcher.undo_stack)
+        self.assertTrue(self.viewer.fit_roto_to_edges([0, 1]))
+        self.assertEqual(len(self.window.dispatcher.undo_stack), undo + 1)
+        self.assertNotEqual(self.shapes(), before)
+        self.window.command({"op": "undo"})
+        self.assertEqual(self.shapes(), before)
+
+    def test_autokey_on_writes_a_key_at_the_current_frame_only(self):
+        self.fit_setup(autokey=True)
+        self.assertTrue(self.viewer.fit_roto_to_edges())
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        for point in self.shapes()[0]["points"]:
+            for name in ("x", "y"):
+                value = point[name]
+                self.assertIsInstance(value, dict)
+                self.assertEqual([k["frame"] for k in value["curve"]["keys"]], [frame])
+
+    def test_autokey_off_changes_the_static_shape(self):
+        self.fit_setup(autokey=False)
+        self.assertTrue(self.viewer.fit_roto_to_edges())
+        for point in self.shapes()[0]["points"]:
+            self.assertIsInstance(point["x"], float)
+
+    def test_locked_shapes_and_shapes_in_locked_layers_are_skipped(self):
+        locked = circle_shape(np.linspace(-3, 3, 16), name="locked", locked=True)
+        layered = circle_shape(np.linspace(-3, 3, 16), name="layered", layer="L")
+        free = circle_shape(np.linspace(-3, 3, 16), name="free")
+        self.reopen([locked, layered, free], autokey=False,
+                    layers=[{"name": "L", "visible": True, "locked": True}])
+        before = copy.deepcopy(self.shapes())
+        self.assertTrue(self.viewer.fit_roto_to_edges([0, 1, 2]))
+        after = self.shapes()
+        self.assertEqual(after[0], before[0])
+        self.assertEqual(after[1], before[1])
+        self.assertNotEqual(after[2], before[2])
+        self.viewer.window.command({"op": "undo"})
+        self.assertFalse(self.viewer.fit_roto_to_edges([0, 1]))
+
+    def test_list_menu_has_fit_to_edges(self):
+        self.fit_setup()
+        self.window.rebuild_properties_dock()
+        APP.processEvents()
+        lists = [w for w in self.window.findChildren(ShapeListTree)]
+        if not lists:
+            self.skipTest("no Roto list in this layout")
+        menu = lists[0].build_menu()
+        self.assertIn("roto-list-fit-to-edges", [a.objectName() for a in menu.actions()
+                                                  if a.objectName()] + [a.objectName() for sub in menu.findChildren(type(menu)) for a in sub.actions()])
+
+
+def rms_to_circle_about(points, centre, radius):
+    outline = roto.flatten_points(points, closed=True)
+    distances = [math.hypot(x - centre[0], y - centre[1]) - radius for x, y in outline]
+    return math.sqrt(sum(d * d for d in distances) / len(distances))
 
 
 if __name__ == "__main__":

@@ -192,3 +192,20 @@ TOOL_CONTROLS = {'Select All': [{'label': 'Label points', 'widget_kind': 'toggle
           {'label': 'Brush spacing', 'widget_kind': 'field/slider', 'default': 0.05},
           {'label': 'Brush hardness', 'widget_kind': 'slider', 'default': 0.2},
           {'label': 'Lifetime type', 'widget_kind': 'dropdown', 'default': 'single frame'}]}
+
+
+# Edge snapping and fitting (Lane 9, step I1). Nuke has neither, so these controls come after
+# the Nuke ones. "Snap to edges", "Snap radius" and "Fit band" are shared by every tool of the node
+# (stored under the node's "__global__" tool settings beside Autokey); an old document has none of
+# them stored and therefore loads with snapping off.
+SNAP_CONTROLS = [{'label': 'Snap to edges', 'widget_kind': 'toggle', 'default': False},
+                 {'label': 'Snap radius', 'widget_kind': 'field', 'default': 8.0}]
+FIT_CONTROLS = [{'label': 'Fit band', 'widget_kind': 'field', 'default': 12.0},
+                {'label': 'Fit to edges', 'widget_kind': 'button', 'default': None}]
+GLOBAL_SETTINGS = {'autokey': True, 'snap_edges': False, 'snap_radius': 8.0, 'fit_band': 12.0}
+
+for _tool in ('Select All', 'Select Splines', 'Select Points', 'Select Feather Points'):
+    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS)
+for _tool in ('Add Points', 'Bezier', 'Cusped Bezier', 'B-Spline', 'Ellipse', 'Rectangle',
+              'Cusped Rectangle', 'Open Spline'):
+    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS)
