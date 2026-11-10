@@ -9,16 +9,16 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 | Toolbar and tools | 32 | 0 | 0 | 100.0 |
 | Tool settings | 189 | 1 | 0 | 99.7 |
 | Stroke/shape list | 15 | 4 | 1 | 85.0 |
-| Viewer editing | 28 | 2 | 1 | 93.5 |
-| Timing and animation | 8 | 1 | 1 | 85.0 |
-| Overall | — | — | — | 97.5 |
+| Viewer editing | 31 | 0 | 0 | 100.0 |
+| Timing and animation | 9 | 0 | 1 | 90.0 |
+| Overall | — | — | — | 98.4 |
 ## Largest gaps
 
-1. B-Spline tension remains unimplemented. The guide names Ctrl/Cmd+Alt-drag but does not specify how drag distance maps to tension.
-2. Clone view selection depends on multi-view projects, which NodeBased does not support.
-3. Motion-blur timing fields do not yet create animation keys. Ripple editing is undocumented in the traversed official guide.
-4. The stroke/shape list still lacks the View column, Nuke’s full blending list, a Color cell for RotoPaint shapes and an Invert cell for strokes.
-5. Layer group transforms and Nuke’s newest-on-top list order are not reproduced.
+1. Clone view selection depends on multi-view projects, which NodeBased does not support.
+2. Ripple editing is undocumented in the traversed official guide and is not implemented.
+3. The stroke/shape list still lacks the View column, a Color cell for RotoPaint shapes and an Invert cell for strokes; RotoPaint offers four blending modes where Roto offers Merge's thirty.
+4. Nuke's newest-on-top list order is not reproduced.
+
 ## Proposed implementation steps
 
 | Step | Side | Scope |
@@ -70,11 +70,11 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 26 | R1 · viewer side | Open Spline | match | `RotoViewerToolbar`; `Viewer.hit_release`; `Viewer.finish_roto_draw` | The selected drawing tool commits the corresponding Bezier geometry. |
 | 27 | R1 · viewer side | Draw Bezier/B-Spline freely | match | Viewer.hit_press; Viewer.hit_move; Viewer.hit_release; Viewer.finish_roto_draw | Ctrl/Cmd+drag sketches and closes the selected Bezier or B-Spline. |
 | 28 | R1 · viewer side | Shapes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
-| 29 | R1 · viewer side | Bezier/B-Spline handles/tension | differs | `Viewer.mouseReleaseEvent` drawing drag creates cubic handles; B-Spline tension mapping is not documented. | The guide names Ctrl/Cmd+Alt-drag but does not map drag distance to tension; behavior remains unimplemented. |
+| 29 | R1 · viewer side | Bezier/B-Spline handles/tension | match | `Viewer.mouseReleaseEvent` drawing drag creates cubic handles; `Viewer.hit_press` Ctrl/Cmd+Alt-drag on a B-Spline point sets its animatable `tension`; `roto.tensioned_controls`, `roto.flatten_points` | The guide names the gesture but gives no scale or formula; this is a convention (see RW2 conventions below). |
 | 30 | R1 · viewer side | Brush | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 31 | R1 · viewer side | Sharp exit while drawing | match | `Viewer.hit_release` Shift+LMB | Shift+LMB commits a sharp open-spline end. |
 | 32 | R1 · viewer side | Eraser | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 33 | R1 · viewer side | B-Spline tension | differs | Uniform cubic B-Spline evaluation is implemented; tension mapping is not documented. | The guide names Ctrl/Cmd+Alt-drag but does not map drag distance to tension; behavior remains unimplemented. |
+| 33 | R1 · viewer side | B-Spline tension | match | `Viewer.hit_press` Ctrl/Cmd+Alt-drag on a B-Spline point sets its animatable `tension`; `roto.tensioned_controls`, `roto.flatten_points` | The guide names the gesture but gives no scale or formula; this is a convention (see RW2 conventions below). |
 | 34 | R1 · viewer side | Brushes tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 35 | R1 · viewer side | Close shape | match | `Viewer.keyPressEvent` Enter; `Viewer.mouseReleaseEvent` | Enter or clicking the first point closes the shape. |
 | 36 | R1 · viewer side | Clone | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
@@ -92,7 +92,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 48 | R1 · viewer side | Blur/Sharpen/Smear tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
 | 49 | R1 · viewer side | Selection tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar shortcut selects the group and repeated presses cycle its tools. |
 | 50 | R1 · viewer side | Dodge | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
-| 51 | R1 · viewer side | Tool mode cycle | missing | No S tool-mode cycle in `Viewer.keyPressEvent`. |  |
+| 51 | R1 · viewer side | Tool mode cycle | match | `Viewer.keyPressEvent`: S (no modifiers, Viewer focus) steps through the tools of the active group. | The guide: "S cycles through the modes of the currently selected tool" (working_toolbars.html). |
 | 52 | R1 · viewer side | Burn | match | `RotoViewerToolbar`; `Viewer.paint_tool` drives the viewer gesture. | The selected viewer tool is the operation used by paint gestures. |
 | 53 | R1 · viewer side | Paint tool cycles | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar shortcut selects the group and repeated presses cycle its tools. |
 | 54 | R1 · viewer side | Dodge/Burn tool cycle | match | `RotoViewerToolbar`; `Viewer.keyPressEvent` | The toolbar button selects its group and its shortcut cycles the tools. |
@@ -292,12 +292,12 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 248 | R3 · panel side | Overlay color | match | `rotolist.ShapeListTree` Overlay color column (`*-row-overlay-*`); stored as `overlay_color`, drawn by the Viewer outline, never rendered |  |
 | 249 | R3 · panel side | Color | differs | `rotolist.ShapeListTree` Color column (`*-row-color-*`) | RotoPaint shape items carry no colour of their own, so their Color cell is disabled; strokes and Roto shapes edit theirs. |
 | 250 | R3 · panel side | Invert | differs | `rotolist.ShapeListTree` Invert column (`*-row-invert-*`) | A RotoPaint stroke has no invert setting, so its cell is disabled; shapes edit theirs. |
-| 251 | R3 · panel side | Blending | differs | `rotolist.ShapeListTree` Blending column (`*-row-blend-*`) | Roto offers ten blending modes and RotoPaint four, a subset of Nuke's list. |
+| 251 | R3 · panel side | Blending | differs | `rotolist.ShapeListTree` Blending column (`*-row-blend-*`); `shapes.BLEND_MODES`; `roto.MERGE_BLEND_MODES` | Roto offers the Merge node's thirty operations, each through Merge's own formula (convention: the guide gives no Roto list). RotoPaint shapes and strokes still offer four. |
 | 252 | R3 · panel side | Motion blur | match | `rotolist.ShapeListTree` Motion blur column (`*-row-motion_blur-*`) |  |
 | 253 | R3 · panel side | View | missing | No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`. | Stereo-only column; NodeBased has no multi-view project support, so it stays out of scope. |
 | 254 | R3 · panel side | Lifetime | match | `rotolist.ShapeListTree` Lifetime column (`*-row-lifetime-*`): shows the type and range, opens the panel's lifetime editor |  |
 | 255 | R3 · panel side | Source | match | `rotolist.ShapeListTree` Source column (`*-row-source-*`) |  |
-| 256 | R3 · panel side | Layers and folders | differs | `rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; `shapes.layer_states` | Group transforms of a layer and Nuke's newest-on-top ordering are not reproduced; the list order stays the render order. |
+| 256 | R3 · panel side | Layers and folders | differs | `rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; a layer's own transform (`shapes.resolve_layer_transform`) is applied to every shape inside it, edited from the panel's Layer transform controls and by the transform box with the layer row selected | Nuke's newest-on-top list order is not reproduced; the list order stays the render order. |
 | 257 | R3 · panel side | Add new layer | match | `rotolist.ShapeListTree`.cmd_add_layer, context menu `roto-list-add-layer` |  |
 | 258 | R3 · panel side | Duplicate | match | `rotolist.ShapeListTree`.cmd_duplicate, context menu `roto-list-duplicate` (items and layers with their contents) |  |
 | 259 | R3 · panel side | Copy > Curve | match | `rotolist.ShapeListTree`.cmd_copy, context menu Copy > Curve | Strokes have no curve and are skipped. |
@@ -315,4 +315,15 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 271 | R4 · panel side | Lifetime endpoints | match | Roto and RotoPaint panels show From/To only when used by the selected lifetime mode. |  |
 | 272 | R4 · panel side | Ripple editing | missing | No ripple timing control is implemented; cited official pages do not document a ripple workflow. | Undocumented in the cited official sources; behavior remains unimplemented rather than inferred. |
 | 273 | R4 · panel side | Per-shape keyframe controls | match | Roto and RotoPaint panels expose All, Spline, Transform and Attributes key scopes for the selected shape item. |  |
-| 274 | R4 · panel side | Motion blur keys | differs | Motion-blur samples, shutter and offset fields are static and have no keyed evaluation path. | Motion-blur timing controls do not yet create animation keys. |
+| 274 | R4 · panel side | Motion blur keys | match | Samples, shutter and offset key buttons in the Roto panel; the list's Motion blur cell shows the shutter's key state and, with autokey on, sets a shutter key at the current frame (`rotolist.ShapeListTree.edit_motion_blur`) | A shutter key of 0 is blur off from that frame. |
+
+## RW2 conventions
+
+Step RW2 closed four differences the Roto walkthrough (`tools/roto_walkthrough.py`) found. Where the guide gives no formula the choice below is a *convention*, marked as such.
+
+- **B-Spline tension** (ledger rows 29 and 33). Ctrl/Cmd+Alt-drag on a B-Spline point changes that point's `tension` (a number from -1 to 1, default 0, animatable like the other point scalars, one undo step). The guide names the gesture and gives no scale or formula, so *convention*: 100 screen pixels of horizontal drag is a tension of 1, and a point's effective control point is `c = P + 0.5 * t * (P - M)`, M the midpoint of the point's two neighbours (an open spline's end point is its own outside neighbour). Tension 1 puts the curve through the point, tension -1 pulls the control halfway to M for a looser curve, tension 0 is the plain uniform cubic B-Spline, so a point without tension renders exactly as before. Open B-Spline strokes now spread each point's feather offset over the curve by the same weights.
+- **S key** (row 51). With the pointer over the Viewer, S steps to the next tool in the active group (the guide's "modes of the currently selected tool"); Select is the group when none is active. Shortcut clash check: the Node Graph binds S to create a Shuffle, but only when the graph has the keyboard, so the Viewer's S does not reach it; no other Viewer binding uses an unmodified S (Ctrl+S is Save, and a modified S does not cycle). Listed in the Viewer shortcut table.
+- **Layer transform** (row 256). A layer stores an optional `transform` with the shape transform's fields (translate, rotate, scale, skew, skew order, centre), all animatable, identity by default; a layer without one renders bit-identically to before. It is applied to every shape inside the layer after the shape's own transform, then each enclosing layer from the innermost out. The centre defaults to the middle of the points the layer holds, taken before any layer transform (*convention*; a stored centre wins). It is edited from the Layer transform group in the Roto panel when a layer row is selected, and by the transform box (move, scale, rotate, pivot) which then frames every point of the layer. As with a shape's own transform, dragging a single point of a transformed shape in the Viewer sets the point to the position under the cursor without undoing the transform.
+- **Blending list** (row 251). Roto's Blending cell offers the first ten modes as before plus the rest of the Merge node's operations: under, divide, mask, stencil, in, out, atop, xor, average, hypot, matte, disjoint-over, conjoint-over, copy, geometric, overlay, hard-light, soft-light, color-dodge and color-burn. *Convention*: neither the guide nor the parity inventory lists Roto's modes, so the list is Merge's. Each runs through Merge's own `_merge_op` on premultiplied RGBA (A is the shape's colour times its coverage with the coverage as alpha, B is what is below), with no new blend arithmetic.
+- **Motion blur cell** (row 274). The list's Motion blur cell shows the item's shutter key state (a coloured cell: keyed on this frame, or animated with a key elsewhere). With autokey on, ticking it sets a key at the current frame on the item's motion-blur shutter (its value, or the default 0.5 when that is 0) and ticks the flag; clearing it keys the shutter to 0, blur off from that frame; on an item that is not animated yet, clearing it just clears the flag. With autokey off it only sets the flag. Ripple editing stays out: the guide documents no ripple workflow (row 272).
+- **Transform box fix.** The Viewer's transform box was built from `QRectF.united` over one-point rectangles, which Qt treats as empty, so the box collapsed to a point and could not be grabbed with the mouse. It now frames the selected points.

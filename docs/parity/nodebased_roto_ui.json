@@ -1510,8 +1510,8 @@
     {
       "name": "Blending",
       "status": "differs",
-      "location": "`rotolist.ShapeListTree` Blending column (`*-row-blend-*`)",
-      "difference": "Roto offers ten blending modes and RotoPaint four, a subset of Nuke's list."
+      "location": "`rotolist.ShapeListTree` Blending column (`*-row-blend-*`); `shapes.BLEND_MODES`; `roto.MERGE_BLEND_MODES`",
+      "difference": "Roto offers the Merge node's thirty operations (each through Merge's own formula; the guide gives no Roto list, so this is a convention). RotoPaint shapes and strokes still offer four."
     },
     {
       "name": "Motion blur",
@@ -1540,8 +1540,8 @@
     {
       "name": "Layers and folders",
       "status": "differs",
-      "location": "`rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; `shapes.layer_states`",
-      "difference": "Group transforms of a layer and Nuke's newest-on-top ordering are not reproduced; the list order stays the render order."
+      "location": "`rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; `shapes.layer_states`; `shapes.resolve_layer_transform`; the layer Transform controls in `rotopanel._layer_transform_controls`; the transform box with the layer row selected",
+      "difference": "Nuke's newest-on-top list order is not reproduced; the list order stays the render order. A layer's own transform (translate, rotate, scale, skew, centre) is applied to every shape inside it."
     },
     {
       "name": "Add new layer",
@@ -1699,9 +1699,9 @@
     },
     {
       "name": "Bezier/B-Spline handles/tension",
-      "status": "differs",
-      "location": "`Viewer.mouseReleaseEvent` drawing drag creates cubic handles; no B-Spline tension tool or Ctrl/Cmd+Alt tension drag. The source does not specify the tension mapping.",
-      "difference": "Not documented: the guide names Ctrl/Cmd+Alt-drag but gives no mapping from drag to tension; behavior is left unimplemented rather than invented."
+      "status": "match",
+      "location": "`Viewer.hit_press` Ctrl/Cmd+Alt-drag on a B-Spline point sets that point's animatable `tension`; `roto.tensioned_controls` and `roto.flatten_points` evaluate it; uniform cubic B-Spline when tension is 0.",
+      "difference": "The guide names the gesture but gives no scale or formula: 100 screen pixels of horizontal drag is a tension of 1, and a point's effective control is P + 0.5 t (P - M), M the midpoint of its neighbours (convention, in docs/ROTO_NUKE_UI.md)."
     },
     {
       "name": "Sharp exit while drawing",
@@ -1710,9 +1710,9 @@
     },
     {
       "name": "B-Spline tension",
-      "status": "differs",
-      "location": "Uniform cubic B-Spline evaluation is implemented in `roto.flatten_points`; Ctrl/Cmd+Alt tension adjustment is still absent. The source does not specify the tension mapping.",
-      "difference": "Not documented: the guide names Ctrl/Cmd+Alt-drag but gives no mapping from drag to tension; behavior is left unimplemented rather than invented."
+      "status": "match",
+      "location": "`Viewer.hit_press` Ctrl/Cmd+Alt-drag on a B-Spline point sets that point's animatable `tension`; `roto.tensioned_controls` and `roto.flatten_points` evaluate it; uniform cubic B-Spline when tension is 0.",
+      "difference": "The guide names the gesture but gives no scale or formula: 100 screen pixels of horizontal drag is a tension of 1, and a point's effective control is P + 0.5 t (P - M), M the midpoint of its neighbours (convention, in docs/ROTO_NUKE_UI.md)."
     },
     {
       "name": "Close shape",
@@ -1759,8 +1759,8 @@
     },
     {
       "name": "Tool mode cycle",
-      "status": "missing",
-      "location": "No S tool-mode cycle in `Viewer.keyPressEvent`.",
+      "status": "match",
+      "location": "`Viewer.keyPressEvent`: S (no modifiers, pointer over the Viewer) steps through the tools of the active group, as the guide's 'modes of the currently selected tool'.",
       "difference": ""
     },
     {
@@ -1826,9 +1826,9 @@
     },
     {
       "name": "Motion blur keys",
-      "status": "differs",
-      "location": "`RotoPanel.build_panel` / motion-blur samples, shutter and offset controls; these stored fields are static and have no keyed evaluation path.",
-      "difference": "Motion-blur timing controls do not yet create animation keys."
+      "status": "match",
+      "location": "`rotopanel` samples, shutter and offset key buttons; the list's Motion blur cell shows the shutter's key state and, with autokey on, sets a shutter key at the current frame (`rotolist.ShapeListTree.edit_motion_blur`).",
+      "difference": "A key of 0 on the shutter is blur off from that frame; the cell is checked while the flag is on and the shutter is above 0."
     }
   ]
 }
