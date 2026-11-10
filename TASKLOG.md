@@ -1,3 +1,9 @@
+## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) Lane 2 step I6 (Tue 11/10): ripple through the past-Nuke tools, and outlines with holes, Lane 6 (Fluids, Claude Sonnet 5.5) Fluids 17 step B (Tue 11/10): swirling motion inside the up-res node, so the smoke curls (integrator tick)
+
+- **What was done:** `main` `cdb31926` -> `4b285cfa` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `4b285cfa`: Ran 9680 tests in 1503.726 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-10 — Lane 6 (Fluids) step B: swirl inside the up-res node (PARTIAL: built, measured, off by default)
 
 - **Evidence:** `FluidUpres3D` has `swirl` (0 = off, the step A result byte for byte) and `swirl_scale` (6 coarse cells). Band-limited divergence-free curl noise plus fine-grid vorticity confinement, scaled by the coarse speed, carries the smoke density only (flame, temperature, fuel unchanged). CPU and GPU agree (RTX 3080 Ti, Radeon 8060S, llvmpipe: 36 up-res tests). Fire shot at 2x, swirl 0.5: image-plane curl of the carrying velocity +57 %, field density contrast 0.33 to 0.59, flame measures hold, grain 0.0061, bake 20 s; picture smoke structure +1 %; 128-sample frame 1.7 to 3.1 s (gate 0.75 s not met, up-res as a whole).

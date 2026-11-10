@@ -1,5 +1,32 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5) (3:57 PM on 2026-11-10 PDT)
+
+`main` moved `cdb31926` -> `4b285cfa` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `4b285cfa` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-1529.log`, started 3:29 PM): **Ran 9680 tests in 1503.726 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Lane 2 step I6 (Tue 11/10): ripple through the past-Nuke tools, and outlines with holes.** Commits:
+  - `b8ecb3b2` Roto: Outline from click cuts interior holes out of the subject as shapes that subtract, in the same undo step
+  Diff: 5 files changed, 363 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, Claude Sonnet 5.5), Fluids 17 step B (Tue 11/10): swirling motion inside the up-res node, so the smoke curls.** Commits:
+  - `225e753a` Fluid edit classes: FluidUpres3D swirl and swirl_scale are look edits (the up-res reruns, the solve is reused)
+  - `b39ca3dd` Fluids 17 B swirl: docs section and bundled copy, benchmark JSON, stills for frames 8, 16 and 24, task note
+  - `026e9b2b` Test: the swirl leaves flame, temperature and fuel unchanged
+  - `00bb7b56` Up-res swirl moves the smoke density only (flame, temperature and fuel keep the coarse flow), scale default 6; evidence: swirl comparison with image-plane curl of the carrying velocity
+  - `aa3682e1` Up-res swirl: curl noise and vorticity confinement on the fine grid, scaled by the coarse flow's speed (CPU and GPU), off by default
+  Diff: 22 files changed, 6516 insertions(+), 26 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:27 PM on 2026-11-10 PDT)
 
 `main` moved `7ae2464f` -> `3e7d149b` (lane commits cherry-picked onto main in lane order) and then to this
