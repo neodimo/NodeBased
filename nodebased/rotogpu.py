@@ -58,7 +58,7 @@ _failures = 0
 _choice = "default"
 _buffers = {}                  # per device: reusable buffers
 counters = {"gpu_mattes": 0, "cpu_fallbacks": 0, "unsupported": 0, "errors": 0, "last_error": "", "last_reason": "",
-            "gpu_ms": 0.0}
+            "gpu_ms": 0.0, "plan_ms": 0.0, "wait_ms": 0.0, "read_ms": 0.0}
 
 
 class Unsupported(Exception):
@@ -105,7 +105,8 @@ def forced(environ=None):
 def reset_counters():
     global _failures
     _failures = 0
-    counters.update(gpu_mattes=0, cpu_fallbacks=0, unsupported=0, errors=0, last_error="", last_reason="", gpu_ms=0.0)
+    counters.update(gpu_mattes=0, cpu_fallbacks=0, unsupported=0, errors=0, last_error="", last_reason="", gpu_ms=0.0,
+                    plan_ms=0.0, wait_ms=0.0, read_ms=0.0)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -212,53 +213,73 @@ def _edges(polyline, ox, oy, width, height, rotofast):
 
 # ----------------------------------------------------------------------------------------------
 # Shaders
+#
+# Every shape of the call goes through the same four passes (not four per shape): the fill of all shapes' rows, the
+# horizontal and the vertical blur of all shapes' patches, and one finishing pass in which each pixel of each shape's
+# patch is composited, in shape order, through every shape whose patch holds it. Only the patches are read back.
+# The shapes' numbers live in one storage array: a header (shape count, patch cells, patch rows, frame width) then six
+# vec4 per shape. Whole numbers are stored as float values (exact below 2^24).
 
-_STRUCT = """
-struct P {
-    rect: vec4<i32>,     // patch x, y, width, height (canvas pixels)
-    canv: vec4<i32>,     // canvas width, canvas height, first edge, edge count
-    mode: vec4<i32>,     // blur radius, falloff curve, flags (1 invert, 2 power, 4 full alpha), blend
-    f0: vec4<f32>,       // falloff power, opacity, colour alpha, 1 / blur window
-    col: vec4<f32>,      // colour
-};
+_COMMON = """
+@group(0) @binding(0) var<storage, read> prm: array<vec4<f32>>;
+const PER: u32 = 6u;
+fn cell_off(s: u32) -> u32 { return u32(prm[1u + s * PER + 1u].w); }
+fn row_off(s: u32) -> u32 { return u32(prm[1u + s * PER + 5u].x); }
+fn rect_of(s: u32) -> vec4<i32> { return vec4<i32>(prm[1u + s * PER]); }
+// The shape whose cells (or rows) hold index t: the last s with offset(s) <= t.
+fn find_cell(t: u32, n: u32) -> u32 {
+    var lo = 0u; var hi = n;
+    while (hi - lo > 1u) { let mid = (lo + hi) / 2u; if (cell_off(mid) <= t) { lo = mid; } else { hi = mid; } }
+    return lo;
+}
+fn find_row(t: u32, n: u32) -> u32 {
+    var lo = 0u; var hi = n;
+    while (hi - lo > 1u) { let mid = (lo + hi) / 2u; if (row_off(mid) <= t) { lo = mid; } else { hi = mid; } }
+    return lo;
+}
 """
 
-_COVER = _STRUCT + """
-@group(0) @binding(0) var<storage, read> edges: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read_write> cover: array<f32>;
-@group(0) @binding(2) var<storage, read_write> flags: array<u32>;
-@group(0) @binding(3) var<uniform> p: P;
+_COVER = _COMMON + """
+@group(0) @binding(1) var<storage, read> edges: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> cover: array<f32>;
+@group(0) @binding(3) var<storage, read_write> flags: array<u32>;
+@group(0) @binding(4) var<storage, read> rowptr: array<u32>;
+@group(0) @binding(5) var<storage, read> bins: array<u32>;
 const MAXC: u32 = %(maxc)du;
 var<private> xs: array<f32, %(maxc)d>;
 var<private> ds: array<i32, %(maxc)d>;
 
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let row = gid.x;
-    let sw = u32(p.rect.z);
-    let sh = u32(p.rect.w);
-    if (row >= sh) { return; }
-    let base = row * sw;
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+    let t = gid.x + gid.y * (nwg.x * 64u);
+    let n = u32(prm[0].x);
+    if (t >= u32(prm[0].z)) { return; }
+    let s = find_row(t, n);
+    let row = t - row_off(s);
+    let rect = rect_of(s);
+    let sw = u32(rect.z);
+    let base = cell_off(s) + row * sw;
     for (var x = 0u; x < sw; x++) { cover[base + x] = 0.0; }
-    let eoff = u32(p.canv.z);
-    let ecount = u32(p.canv.w);
+    let first_entry = rowptr[t];
+    let last_entry = rowptr[t + 1u];
     let swf = f32(sw);
     for (var sub = 0u; sub < 8u; sub++) {
-        let s = f32(row * 8u + sub);
-        var n = 0u;
-        for (var i = 0u; i < ecount; i++) {
-            let e0 = edges[2u * (eoff + i)];
-            if (s >= e0.z && s < e0.w) {
-                if (n < MAXC) {
-                    xs[n] = clamp(e0.x + (s - e0.z) * e0.y, 0.0, swf);
-                    ds[n] = i32(edges[2u * (eoff + i) + 1u].x);
-                    n++;
+        let sl = f32(row * 8u + sub);
+        var cnt = 0u;
+        for (var q = first_entry; q < last_entry; q++) {
+            let i = bins[q];
+            let e0 = edges[2u * i];
+            if (sl >= e0.z && sl < e0.w) {
+                if (cnt < MAXC) {
+                    xs[cnt] = clamp(e0.x + (sl - e0.z) * e0.y, 0.0, swf);
+                    ds[cnt] = i32(edges[2u * i + 1u].x);
+                    cnt++;
                 } else {
                     flags[0] = 1u;
                 }
             }
         }
-        for (var a = 1u; a < n; a++) {
+        for (var a = 1u; a < cnt; a++) {
             let kx = xs[a];
             let kd = ds[a];
             var b = a;
@@ -267,7 +288,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             ds[b] = kd;
         }
         var wind = 0;
-        for (var k = 0u; k + 1u < n; k++) {
+        for (var k = 0u; k + 1u < cnt; k++) {
             wind += ds[k];
             if (wind != 0) {
                 let x0 = xs[k];
@@ -294,36 +315,37 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 def _blur(axis):
     # The window is summed in order, the first term then the next 2r, the same order as the Blur node's small-radius
     # kernel, with the edge pixel repeated beyond the patch; the sum is scaled by the reciprocal of the window.
-    along, limit = ("x", "sw") if axis == 0 else ("y", "sh")
-    return _STRUCT + """
-@group(0) @binding(0) var<storage, read> src: array<f32>;
-@group(0) @binding(1) var<storage, read_write> dst: array<f32>;
-@group(0) @binding(3) var<uniform> p: P;
+    return _COMMON + """
+@group(0) @binding(1) var<storage, read> src: array<f32>;
+@group(0) @binding(2) var<storage, read_write> dst: array<f32>;
 
-@compute @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let sw = p.rect.z;
-    let sh = p.rect.w;
-    let x = i32(gid.x);
-    let y = i32(gid.y);
-    if (x >= sw || y >= sh) { return; }
-    let r = p.mode.x;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+    let t = gid.x + gid.y * (nwg.x * 64u);
+    let n = u32(prm[0].x);
+    if (t >= u32(prm[0].y)) { return; }
+    let s = find_cell(t, n);
+    let rect = rect_of(s);
+    let base = cell_off(s);
+    let local = t - base;
+    let x = i32(local %% u32(rect.z));
+    let y = i32(local / u32(rect.z));
+    let r = i32(prm[1u + s * PER + 2u].x);
     var acc = 0.0;
     for (var k = 0; k <= 2 * r; k++) {
         let q = clamp(%(along)s - r + k, 0, %(limit)s - 1);
         %(fetch)s
         if (k == 0) { acc = v; } else { acc = acc + v; }
     }
-    dst[u32(y * sw + x)] = acc * p.f0.w;
+    dst[t] = acc * prm[1u + s * PER + 3u].w;
 }
-""" % {"along": along, "limit": limit,
-       "fetch": "let v = src[u32(y * sw + q)];" if axis == 0 else "let v = src[u32(q * sw + x)];"}
+""" % {"along": "x" if axis == 0 else "y", "limit": "rect.z" if axis == 0 else "rect.w",
+       "fetch": "let v = src[base + u32(y * rect.z + q)];" if axis == 0 else "let v = src[base + u32(q * rect.z + x)];"}
 
 
-_FINISH = _STRUCT + """
-@group(0) @binding(0) var<storage, read> src: array<f32>;
-@group(0) @binding(1) var<storage, read_write> canvas: array<vec4<f32>>;
-@group(0) @binding(3) var<uniform> p: P;
+_FINISH = _COMMON + """
+@group(0) @binding(1) var<storage, read> cover: array<f32>;
+@group(0) @binding(2) var<storage, read_write> packed: array<vec4<f32>>;
 
 fn blend_op(code: i32, a: f32, b: f32) -> f32 {
     if (code == 4) { return a - b; }
@@ -335,56 +357,63 @@ fn blend_op(code: i32, a: f32, b: f32) -> f32 {
     return a + b - a * b;
 }
 
-@compute @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let sw = p.rect.z;
-    let sh = p.rect.w;
-    let x = i32(gid.x);
-    let y = i32(gid.y);
-    if (x >= sw || y >= sh) { return; }
-    var c = clamp(src[u32(y * sw + x)], 0.0, 1.0);
-    if (p.mode.y == 1) {
-        c = c * c * (3.0 - 2.0 * c);
-    } else if (p.mode.y == 2) {
-        let d = 1.0 - c;
-        c = exp(-4.0 * d * d);
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+    let t = gid.x + gid.y * (nwg.x * 64u);
+    let n = u32(prm[0].x);
+    if (t >= u32(prm[0].y)) { return; }
+    let own = find_cell(t, n);
+    let own_rect = rect_of(own);
+    let local = t - cell_off(own);
+    let cx = own_rect.x + i32(local % u32(own_rect.z));
+    let cy = own_rect.y + i32(local / u32(own_rect.z));
+    var rgb = vec3<f32>(0.0);
+    var matte = 0.0;
+    for (var k = 0u; k < n; k++) {
+        let rect = rect_of(k);
+        if (cx < rect.x || cx >= rect.x + rect.z || cy < rect.y || cy >= rect.y + rect.w) { continue; }
+        var c = clamp(cover[cell_off(k) + u32((cy - rect.y) * rect.z + (cx - rect.x))], 0.0, 1.0);
+        let mode = vec4<i32>(prm[1u + k * PER + 2u]);
+        let f0 = prm[1u + k * PER + 3u];
+        if (mode.y == 1) {
+            c = c * c * (3.0 - 2.0 * c);
+        } else if (mode.y == 2) {
+            let d = 1.0 - c;
+            c = exp(-4.0 * d * d);
+        }
+        if ((mode.z & 2) != 0) {
+            c = select(0.0, pow(max(c, 0.0), f0.x), c > 0.0);
+        }
+        if ((mode.z & 1) != 0) { c = 1.0 - c; }
+        var alpha = c;
+        if ((mode.z & 4) == 0) { alpha = c * f0.y * f0.z; }
+        let colour = prm[1u + k * PER + 4u].xyz;
+        let blend = mode.w;
+        if (blend == 1) {
+            rgb = rgb * (1.0 - alpha);
+            matte = matte * (1.0 - alpha);
+        } else if (blend == 0) {
+            let keep = 1.0 - alpha;
+            rgb = rgb * keep + alpha * colour;
+            matte = matte * keep + alpha;
+        } else if (blend == 2) {
+            rgb = clamp(rgb + colour * alpha, vec3<f32>(0.0), vec3<f32>(1.0));
+            matte = clamp(matte + alpha, 0.0, 1.0);
+        } else if (blend == 3) {
+            rgb = rgb * (1.0 - alpha + colour * alpha);
+            matte = alpha + matte * (1.0 - alpha);
+        } else {
+            let mixed = vec3<f32>(blend_op(blend, colour.x, rgb.x), blend_op(blend, colour.y, rgb.y), blend_op(blend, colour.z, rgb.z));
+            rgb = clamp(rgb * (1.0 - alpha) + alpha * mixed, vec3<f32>(0.0), vec3<f32>(1.0));
+            matte = clamp(matte * (1.0 - alpha) + alpha * blend_op(blend, 1.0, matte), 0.0, 1.0);
+        }
     }
-    if ((p.mode.z & 2) != 0) {
-        c = select(0.0, pow(max(c, 0.0), p.f0.x), c > 0.0);
-    }
-    if ((p.mode.z & 1) != 0) { c = 1.0 - c; }
-    var alpha = c;
-    if ((p.mode.z & 4) == 0) { alpha = c * p.f0.y * p.f0.z; }
-    let index = u32((p.rect.y + y) * p.canv.x + p.rect.x + x);
-    let below = canvas[index];
-    var rgb = below.xyz;
-    var matte = below.w;
-    let blend = p.mode.w;
-    let colour = p.col.xyz;
-    if (blend == 1) {
-        rgb = rgb * (1.0 - alpha);
-        matte = matte * (1.0 - alpha);
-    } else if (blend == 0) {
-        let keep = 1.0 - alpha;
-        rgb = rgb * keep + alpha * colour;
-        matte = matte * keep + alpha;
-    } else if (blend == 2) {
-        rgb = clamp(rgb + colour * alpha, vec3<f32>(0.0), vec3<f32>(1.0));
-        matte = clamp(matte + alpha, 0.0, 1.0);
-    } else if (blend == 3) {
-        rgb = rgb * (1.0 - alpha + colour * alpha);
-        matte = alpha + matte * (1.0 - alpha);
-    } else {
-        let mixed = vec3<f32>(blend_op(blend, colour.x, rgb.x), blend_op(blend, colour.y, rgb.y), blend_op(blend, colour.z, rgb.z));
-        rgb = clamp(rgb * (1.0 - alpha) + alpha * mixed, vec3<f32>(0.0), vec3<f32>(1.0));
-        matte = clamp(matte * (1.0 - alpha) + alpha * blend_op(blend, 1.0, matte), 0.0, 1.0);
-    }
-    canvas[index] = vec4<f32>(rgb, matte);
+    packed[t] = vec4<f32>(rgb, matte);
 }
 """
 
 _SHADERS = {"cover": _COVER, "blur_h": _blur(0), "blur_v": _blur(1), "finish": _FINISH}
-PARAM_SLOT = 256
+FOLD = 32768          # workgroups in the first dispatch dimension; more work folds into the second
 
 
 # ----------------------------------------------------------------------------------------------
@@ -418,18 +447,56 @@ def _buffer(state, name, nbytes, usage_names):
     return buffer
 
 
-def _params(item, width, height):
-    sx0, sy0, sw, sh = item["rect"]
-    flags = (1 if item["invert"] else 0) | (2 if item["has_power"] else 0) | (4 if item["full_alpha"] else 0)
-    window = 2 * item["radius"] + 1
-    values = np.zeros(PARAM_SLOT // 4, dtype=np.int32)
-    values[0:4] = (sx0, sy0, sw, sh)
-    values[4:8] = (width, height, item["edge_offset"], item["edge_count"])
-    values[8:12] = (item["radius"], item["falloff"], flags, item["blend"])
-    floats = values.view(np.float32)
-    floats[12:16] = (item["power"], item["opacity"], item["alpha"], np.float32(1.0 / window))
-    floats[16:19] = item["color"]
-    return values.tobytes()
+def _table(items, width):
+    """The header and per-shape rows the shaders read (one float32 vec4 each), with the cell and row totals."""
+    table = np.zeros((1 + (len(items) + 1) * 6, 4), dtype=np.float32)
+    cells = rows = 0
+    for index, item in enumerate(items):
+        sx0, sy0, sw, sh = item["rect"]
+        flags = (1 if item["invert"] else 0) | (2 if item["has_power"] else 0) | (4 if item["full_alpha"] else 0)
+        base = 1 + index * 6
+        table[base] = (sx0, sy0, sw, sh)
+        table[base + 1] = (item["edge_offset"], item["edge_count"], 0, cells)
+        table[base + 2] = (item["radius"], item["falloff"], flags, item["blend"])
+        table[base + 3] = (item["power"], item["opacity"], item["alpha"], np.float32(1.0 / (2 * item["radius"] + 1)))
+        table[base + 4] = (*item["color"], 0.0)
+        table[base + 5] = (rows, 0, 0, 0)
+        item["cell_offset"] = cells
+        item["row_offset"] = rows
+        cells += sw * sh
+        rows += sh
+    sentinel = 1 + len(items) * 6
+    table[sentinel + 1] = (0, 0, 0, cells)
+    table[sentinel + 5] = (rows, 0, 0, 0)
+    table[0] = (len(items), cells, rows, 0)
+    return table, cells, rows
+
+
+def _bins(edges, items, rows):
+    """Per pixel row, the edges that reach it: ``rowptr`` (rows + 1) and ``bins`` (edge numbers), both uint32. A row of a
+    shape holds only the edges whose sub-scanlines fall in it, so the fill reads a few of them, not all."""
+    if len(edges) == 0:
+        return np.zeros(rows + 1, np.uint32), np.zeros(1, np.uint32)
+    counts = np.array([item["edge_count"] for item in items], dtype=np.int64)
+    row_base = np.array([item["row_offset"] for item in items], dtype=np.int64)
+    owner = np.repeat(np.arange(len(items)), counts)
+    first = edges[:, 0, 2].astype(np.int64)
+    last = edges[:, 0, 3].astype(np.int64)
+    low = first // SUBSAMPLES
+    span = (last - 1) // SUBSAMPLES - low + 1
+    total = int(span.sum())
+    edge_of = np.repeat(np.arange(len(edges)), span)
+    step = np.arange(total) - np.repeat(np.cumsum(span) - span, span)
+    row_of = row_base[owner][edge_of] + low[edge_of] + step
+    order = np.argsort(row_of, kind="stable")
+    rowptr = np.zeros(rows + 1, np.uint32)
+    np.cumsum(np.bincount(row_of, minlength=rows), out=rowptr[1:])
+    return rowptr, edge_of[order].astype(np.uint32)
+
+
+def _groups(threads):
+    count = -(-threads // 64)
+    return (min(count, FOLD), -(-count // FOLD), 1)
 
 
 def rasterise(shapes, width, height, invert=False, *, flattened_cache=None):
@@ -437,7 +504,9 @@ def rasterise(shapes, width, height, invert=False, *, flattened_cache=None):
     kernel does not cover, and any graphics error as itself; `try_rasterise` turns both into a processor fallback."""
     from . import gpu3d
     w, h = int(width), int(height)
+    planned = time.perf_counter()
     items, edges = plan(shapes, w, h, flattened_cache=flattened_cache)
+    counters["plan_ms"] += (time.perf_counter() - planned) * 1000
     out = np.zeros((h, w, 4), dtype=np.float32)
     if not items:
         if invert:
@@ -446,67 +515,68 @@ def rasterise(shapes, width, height, invert=False, *, flattened_cache=None):
     state = gpu3d._state(_choice)
     device, wgpu = state["device"], state["wgpu"]
     limit = int(getattr(device, "limits", {}).get("max-storage-buffer-binding-size", 128 << 20))
-    if w * h * 16 > limit:
-        raise Unsupported("a frame larger than the card's buffer limit")
-    patch_cells = max(item["rect"][2] * item["rect"][3] for item in items)
-    if patch_cells * 4 > limit or len(edges) * 32 > limit:
-        raise Unsupported("a patch larger than the card's buffer limit")
-    row0 = min(item["rect"][1] for item in items)
-    row1 = max(item["rect"][1] + item["rect"][3] for item in items)
+    table, cells, rows = _table(items, w)
+    rowptr, bins = _bins(edges, items, rows)
+    if cells * 16 > limit or len(edges) * 32 > limit or bins.nbytes > limit:
+        raise Unsupported("patches larger than the card's buffer limit")
     started = time.perf_counter()
     with _lock:
         edge_bytes = np.ascontiguousarray(edges).tobytes() or bytes(32)
         edge_buf = _buffer(state, "edges", len(edge_bytes), ("STORAGE", "COPY_DST"))
-        cover_a = _buffer(state, "cover_a", patch_cells * 4, ("STORAGE", "COPY_DST"))
-        cover_b = _buffer(state, "cover_b", patch_cells * 4, ("STORAGE", "COPY_DST"))
-        canvas = _buffer(state, "canvas", w * h * 16, ("STORAGE", "COPY_SRC", "COPY_DST"))
+        table_buf = _buffer(state, "table", table.nbytes, ("STORAGE", "COPY_DST"))
+        rowptr_buf = _buffer(state, "rowptr", rowptr.nbytes, ("STORAGE", "COPY_DST"))
+        bins_buf = _buffer(state, "bins", bins.nbytes, ("STORAGE", "COPY_DST"))
+        cover_a = _buffer(state, "cover_a", cells * 4, ("STORAGE",))
+        cover_b = _buffer(state, "cover_b", cells * 4, ("STORAGE",))
+        packed = _buffer(state, "packed", cells * 16, ("STORAGE", "COPY_SRC"))
         flags = _buffer(state, "flags", 16, ("STORAGE", "COPY_SRC", "COPY_DST"))
-        ring = _buffer(state, "ring", PARAM_SLOT * len(items), ("UNIFORM", "COPY_DST"))
         flag_stage = _buffer(state, "flag_stage", 16, ("COPY_DST", "MAP_READ"))
-        read_bytes = (row1 - row0) * w * 16
-        stage = _buffer(state, "stage", read_bytes, ("COPY_DST", "MAP_READ"))
+        stage = _buffer(state, "stage", cells * 16, ("COPY_DST", "MAP_READ"))
         queue = device.queue
         queue.write_buffer(edge_buf, 0, edge_bytes)
+        queue.write_buffer(table_buf, 0, table.tobytes())
+        queue.write_buffer(rowptr_buf, 0, rowptr.tobytes())
+        queue.write_buffer(bins_buf, 0, bins.tobytes())
         queue.write_buffer(flags, 0, np.zeros(4, np.uint32))
-        queue.write_buffer(ring, 0, b"".join(_params(item, w, h) for item in items))
         encoder = device.create_command_encoder()
-        encoder.clear_buffer(canvas, row0 * w * 16, read_bytes)
 
-        def run(name, bindings, slot, groups):
+        def run(name, bindings, threads):
             pipeline = _pipeline(state, name)
             entries = [{"binding": b, "resource": {"buffer": buf, "offset": 0, "size": buf.size}} for b, buf in bindings]
-            entries.append({"binding": 3, "resource": {"buffer": ring, "offset": slot, "size": PARAM_SLOT}})
             group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=entries)
             cp = encoder.begin_compute_pass()
             cp.set_pipeline(pipeline)
             cp.set_bind_group(0, group)
-            cp.dispatch_workgroups(*groups)
+            cp.dispatch_workgroups(*_groups(threads))
             cp.end()
 
-        for index, item in enumerate(items):
-            _x, _y, sw, sh = item["rect"]
-            slot = index * PARAM_SLOT
-            tiles = (-(-sw // 8), -(-sh // 8), 1)
-            run("cover", [(0, edge_buf), (1, cover_a), (2, flags)], slot, (-(-sh // 64), 1, 1))
-            current = cover_a
-            if item["radius"] > 0:
-                run("blur_h", [(0, cover_a), (1, cover_b)], slot, tiles)
-                run("blur_v", [(0, cover_b), (1, cover_a)], slot, tiles)
-            run("finish", [(0, current), (1, canvas)], slot, tiles)
+        run("cover", [(0, table_buf), (1, edge_buf), (2, cover_a), (3, flags), (4, rowptr_buf), (5, bins_buf)], rows)
+        final = cover_a
+        if any(item["radius"] > 0 for item in items):
+            run("blur_h", [(0, table_buf), (1, cover_a), (2, cover_b)], cells)
+            run("blur_v", [(0, table_buf), (1, cover_b), (2, cover_a)], cells)
+        run("finish", [(0, table_buf), (1, final), (2, packed)], cells)
         encoder.copy_buffer_to_buffer(flags, 0, flag_stage, 0, 16)
-        encoder.copy_buffer_to_buffer(canvas, row0 * w * 16, stage, 0, read_bytes)
+        encoder.copy_buffer_to_buffer(packed, 0, stage, 0, cells * 16)
+        submitted = time.perf_counter()
         queue.submit([encoder.finish()])
         flag_stage.map_sync(wgpu.MapMode.READ)
         try:
             overflow = int(np.frombuffer(flag_stage.read_mapped(0, 16, copy=False), np.uint32)[0])
         finally:
             flag_stage.unmap()
+        done = time.perf_counter()
+        counters["wait_ms"] += (done - submitted) * 1000
         stage.map_sync(wgpu.MapMode.READ)
         try:
-            pixels = np.frombuffer(stage.read_mapped(0, read_bytes, copy=False), np.float32).reshape(row1 - row0, w, 4)
-            out[row0:row1] = pixels
+            data = np.frombuffer(stage.read_mapped(0, cells * 16, copy=False), np.float32)
+            for item in items:
+                sx0, sy0, sw, sh = item["rect"]
+                first = item["cell_offset"] * 4
+                out[sy0:sy0 + sh, sx0:sx0 + sw] = data[first:first + sw * sh * 4].reshape(sh, sw, 4)
         finally:
             stage.unmap()
+        counters["read_ms"] += (time.perf_counter() - done) * 1000
     counters["gpu_ms"] += (time.perf_counter() - started) * 1000
     if overflow:
         raise Unsupported(f"more than {MAX_CROSSINGS} crossings on one scanline")

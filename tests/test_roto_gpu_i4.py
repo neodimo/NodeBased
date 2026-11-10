@@ -12,11 +12,14 @@ import os
 import unittest
 from unittest import mock
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
+from PySide6.QtWidgets import QApplication
 
 from nodebased import gpu3d, roto, rotogpu, shapes
 from tests.test_rotofast import blob, point, shape, smooth
 
+APP = QApplication.instance() or QApplication([])
 TOL = 5e-5          # the card fills in 32-bit floats, the drawer in 64-bit; measured worst case 1.2e-5
 REPORT = {}
 
