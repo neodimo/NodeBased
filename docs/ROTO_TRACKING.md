@@ -723,6 +723,32 @@ when the occluder goes. A 24-point shape on 1920 x 1080 frames takes about 130 m
 planar track that steers it costs about 0.6 s a frame on a 640 x 640 px region around the shape (the same cost as "Track shape"), and the frame
 decode comes on top. The run is in the background with progress in the status bar.
 
+## In-betweens (past Nuke)
+
+Between two keyed frames a Roto shape is interpolated blindly, so the artist redraws every in-between the interpolation misses. **Fill
+in-betweens** gives them a draft to correct. It is opt-in: nothing changes until the artist runs the command, existing interpolation is
+untouched, a saved shot stores none of its settings at their defaults, and one undo step reverts a whole run.
+
+**What it does** (`nodebased/rotoinbetween.py`, built on the edge field above). For each frame strictly between the two keys, it takes the
+shape as the renderer resolves it today (interpolated, with its transform and tracker link), runs `rotoedges.fit` on *that frame's* input
+image inside a band, and proposes a key on every point the fit moved by more than a threshold. Points that did not move keep the
+interpolation, and a frame whose points all stayed put gets no key, so a shape the interpolation already fits gains nothing. A key sets all
+six coordinates of the moved point (position and both tangents). A coordinate that was static is first pinned at both ends of the range, so
+no other frame changes. Frames the artist already keyed are skipped, never overwritten, and the end keys are never touched.
+
+**In the app.** "Fill in-betweens" is a button in the Select tools' strip and an entry in the shape list's right-click menu. It acts on the
+selected shapes, between the nearest keys around the current frame (on a key it runs to the next key), or between the strip's **Fill from**
+and **Fill to** frames when they are set (both 0 means the nearest keys). Other strip fields: **Fill band** (px, default 8), **Fill threshold**
+(px, default 0.75) and **Fill every Nth frame** (default 1, so only every Nth frame between the keys is fitted and keyed). Locked shapes and
+shapes in locked layers are skipped. The keys go through the same commit path as a point drag, one undo step covers every shape, and the status
+bar reports "added N keys on M frames" (a key is one point at one frame), or says why nothing was added (no key on both sides of the frame, no
+image on the Roto input, or the interpolation already fits).
+
+Measured on synthetic images (tests/test_roto_inbetween_i3.py): a disc that grows with ease-in between frames 1 and 9, keyed only at those two,
+is missed by plain interpolation by 2.2 to 5.0 px RMS on frames 2 to 8; after the fill every in-between is within 0.2 px RMS of the true edge
+(7 frames and 112 point keys for a 16-point shape). A disc that grows linearly gets no key. The fit on a 24-point shape at 1920 x 1080 takes
+about 30 ms per in-between frame once the plate is rendered; the plate's own evaluation per frame comes on top.
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.
