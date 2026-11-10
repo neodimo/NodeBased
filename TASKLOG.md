@@ -1,3 +1,9 @@
+## 2026-11-09 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step RW2: close the four differences the Roto walkthrough found (integrator tick)
+
+- **What was done:** `main` `cf0a321e` -> `fa817e14` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `fa817e14`: Ran 9519 tests in 1179.985 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-09 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step I1: Roto edge snap and fit-to-edges (integrator tick)
 
 - **What was done:** `main` `6d2653f1` -> `bbdbfe98` plus this docs commit. Evidence and per-lane commit

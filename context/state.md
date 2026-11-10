@@ -1,5 +1,25 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:26 PM on 2026-11-09 PDT)
+
+`main` moved `cf0a321e` -> `fa817e14` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `fa817e14` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1109-2306.log`, started 11:06 PM): **Ran 9519 tests in 1179.985 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step RW2: close the four differences the Roto walkthrough found.** Commits:
+  - `bb089f13` Docs: Roto parity ledger after RW2 (tension, S cycle, layer transforms, Merge blending list, motion blur cell keys) and the walkthrough scenes that cover them
+  - `4bd7eb73` Roto: B-Spline tension, S cycles tool modes, layer transforms, the full blending list and keyable motion blur in the list; fix the empty transform box
+  Diff: 11 files changed, 974 insertions(+), 84 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:56 PM on 2026-11-09 PDT)
 
 `main` moved `6d2653f1` -> `bbdbfe98` (lane commits cherry-picked onto main in lane order) and then to this
