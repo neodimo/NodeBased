@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
                                QPushButton, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit,
-                               QColorDialog, QLabel, QToolButton, QSpinBox)
+                               QColorDialog, QLabel, QToolButton, QSpinBox, QGroupBox)
 
 
 def build_paint_timing_controls(window, key, index):
@@ -344,6 +344,11 @@ def build_panel(window, key):
                 act()
         b.clicked.connect(mutate); buttons.addWidget(b)
     layout.addLayout(buttons)
+    layer_name = getattr(window.viewer, "roto_list_layer", None)
+    layer_entry = next((l for l in window.dispatcher.document.get("node_data", {}).get(key, {}).get("layers", [])
+                        if l["name"] == layer_name), None) if layer_name else None
+    if layer_entry is not None:
+        _layer_transform_controls(window, key, layout, layer_entry, frame, float_slider)
     i=listing.selected_index()
     if 0 <= i < len(shapes):
         shape=shapes[i]
@@ -710,3 +715,45 @@ def build_panel(window, key):
     draw=QPushButton("Draw shape…"); draw.setObjectName("roto-draw-shape"); draw.clicked.connect(lambda:window.begin_roto_draw(key)); layout.addWidget(draw)
     add_tracking_actions(layout, window, key)
     return root
+
+
+def _layer_transform_controls(window, key, layout, layer, frame, float_slider):
+    """The Transform controls of the selected layer: translate, rotate, scale, skew and centre, applied to every shape inside it
+    (identity by default). A value already animated is keyed at the current frame; otherwise the edit sets the value."""
+    from . import shapes as shape_model
+    group = QGroupBox(f"Layer transform: {layer['name']}"); group.setObjectName("roto-layer-transform")
+    box = QVBoxLayout(group)
+    payload = window.dispatcher.document.get("node_data", {}).get(key, {})
+    shown = shape_model.resolve_layer_transform(payload, layer, frame,
+                                                shape_model.resolve_shapes({**payload, "layers": [
+                                                    {k: v for k, v in l.items() if k != "transform"} for l in payload.get("layers", [])]}, frame))
+    name = layer["name"]
+
+    def edit(field, value):
+        data = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}))
+        target = next((l for l in data.get("layers", []) if l["name"] == name), None)
+        if target is None:
+            return
+        transform = target.setdefault("transform", {})
+        for centre in ("center_x", "center_y"):           # pin the centre so an edit does not move it afterwards
+            transform.setdefault(centre, shown[centre])
+        old = transform.get(field, shape_model.TRANSFORM_DEFAULTS[field])
+        if isinstance(old, dict) and old.get("curve"):
+            curve = copy.deepcopy(old["curve"])
+            keys = [entry for entry in curve["keys"] if entry["frame"] != frame]
+            keys.append({"frame": frame, "value": float(value)}); keys.sort(key=lambda entry: entry["frame"])
+            transform[field] = {"value": float(value), "curve": {**curve, "keys": keys}}
+        else:
+            transform[field] = float(value)
+        window.command({"op": "set_shapes", "id": key, "shapes": data.get("shapes", []), "layers": data["layers"]})
+
+    for field, label, lo, hi, step in (("translate_x", "Translate X", -65536, 65536, 1), ("translate_y", "Translate Y", -65536, 65536, 1),
+                                       ("rotate", "Rotate", -360000, 360000, 1), ("scale_x", "Scale X", -1000, 1000, .01),
+                                       ("scale_y", "Scale Y", -1000, 1000, .01), ("center_x", "Center X", -65536, 65536, 1),
+                                       ("center_y", "Center Y", -65536, 65536, 1), ("skew_x", "Skew X", -89, 89, 1),
+                                       ("skew_y", "Skew Y", -89, 89, 1)):
+        control = float_slider(shown[field], lo, hi, step, f"roto-layer-transform-{field}")
+        spin = control.spin; spin.setKeyboardTracking(False)
+        spin.editingFinished.connect(lambda f=field, w=spin: edit(f, float(w.value())))
+        box.addWidget(QLabel(label)); box.addWidget(control)
+    layout.addWidget(group)

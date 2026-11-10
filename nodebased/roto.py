@@ -58,19 +58,50 @@ def drawer():
     return forced if forced in DRAWERS else _drawer
 
 
-def flatten_points(points, closed=True, curve_type="bezier"):
+def tensioned_controls(points, closed=True):
+    """The B-spline control points with each point's `tension` applied (convention: the Nuke 17 guide names the Ctrl+Alt-drag but
+    gives no formula). An effective control is c = P + 0.5 * tension * (P - M), M the midpoint of the point's two neighbours (an end
+    point of an open spline is its own neighbour on the outside). Tension +1 puts the curve through the point (the uniform cubic
+    B-spline reaches (P[i-1] + 4 P[i] + P[i+1]) / 6 at a control, and that equals P when c is 1.5 P - 0.5 M), -1 pulls the control
+    halfway to M for a looser curve, 0 leaves it where it is. Returns `points` itself when none has tension, so the rest is unchanged."""
+    if not any(p.get("tension", 0.0) for p in points):
+        return points
+    count = len(points)
+    result = []
+    for index, point in enumerate(points):
+        tension = float(point.get("tension", 0.0))
+        if not tension:
+            result.append(point)
+            continue
+        before = points[(index - 1) % count] if closed or index > 0 else point
+        after = points[(index + 1) % count] if closed or index < count - 1 else point
+        mx = (float(before["x"]) + float(after["x"])) * 0.5
+        my = (float(before["y"]) + float(after["y"])) * 0.5
+        k = 0.5 * tension
+        result.append({"x": float(point["x"]) + k * (float(point["x"]) - mx),
+                       "y": float(point["y"]) + k * (float(point["y"]) - my),
+                       "feather_x": point.get("feather_x", 0.0), "feather_y": point.get("feather_y", 0.0)})
+    return result
+
+
+def flatten_points(points, closed=True, curve_type="bezier", with_feather=False):
     """Flatten resolved Bezier or uniform cubic B-spline points to a polyline of (x, y) vertices.
 
     Tangent handles are stored relative to their point (the Nuke/After Effects convention), so a
     span whose outgoing and incoming handles are both zero is a straight line and emits exactly one
     segment. That is what lets a polygon be a bezier with no handles rather than a second shape
     type — no `is_polygon` flag, no divergent code path.
+
+    With `with_feather` a B-spline returns (vertices, offsets): each point's feather offset spread over the curve by the same
+    weights, one row per vertex (an open B-spline stroke needs that; a Bezier takes it from `rotofast.stroke_polyline`).
     """
     count = len(points)
     if curve_type == "bspline":
+        points = tensioned_controls(points, closed)
         controls = ([*points] if closed else [points[0], *points, points[-1]] if count else [])
         spans = len(controls) if closed else max(0, len(controls) - 3)
         vertices = []
+        offsets = []
         for index in range(spans):
             control = ([controls[(index + offset) % len(controls)] for offset in range(4)]
                        if closed else controls[index:index + 4])
@@ -85,6 +116,11 @@ def flatten_points(points, closed=True, curve_type="bezier"):
                            (-3*t*t*t+3*t*t+3*t+1)/6.0, t*t*t/6.0)
                 vertices.append((sum(w * float(p["x"]) for w, p in zip(weights, control)),
                                  sum(w * float(p["y"]) for w, p in zip(weights, control))))
+                if with_feather:
+                    offsets.append((sum(w * float(p.get("feather_x", 0.0)) for w, p in zip(weights, control)),
+                                    sum(w * float(p.get("feather_y", 0.0)) for w, p in zip(weights, control))))
+        if with_feather:
+            return np.asarray(vertices, dtype=np.float64), np.asarray(offsets, dtype=np.float64).reshape(-1, 2)
         return np.asarray(vertices, dtype=np.float64)
     count = len(points)
     vertices = []
@@ -232,10 +268,7 @@ def stroke_coverage(points, width, height, stroke_width, feather=0.0, falloff="l
     h, w = int(height), int(width)
     if drawer() != "legacy":
         if curve_type == "bspline":
-            vertices = flatten_points(points, closed=False, curve_type=curve_type)
-            feather_points = [{"x": p.get("feather_x", 0.0), "y": p.get("feather_y", 0.0),
-                               "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0} for p in points]
-            offsets = flatten_points(feather_points, closed=False, curve_type=curve_type)
+            vertices, offsets = flatten_points(points, closed=False, curve_type=curve_type, with_feather=True)
         else:
             vertices, offsets = rotofast.stroke_polyline(points)
         if len(vertices) < 2:
@@ -470,6 +503,13 @@ BLEND_OPS = {
 }
 
 
+# The rest of the blending list is the Merge node's operations, run through Merge's own formula (`Evaluator._merge_op`) on premultiplied
+# RGBA: A is the shape (its colour times its coverage, with that coverage as alpha) and B is what is below. The ten modes above keep their own paths.
+MERGE_BLEND_MODES = ("under", "divide", "mask", "stencil", "in", "out", "atop", "xor", "average", "hypot", "matte",
+                     "disjoint-over", "conjoint-over", "copy", "geometric", "overlay", "hard-light", "soft-light",
+                     "color-dodge", "color-burn")
+
+
 def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, flattened_cache=None,
               shape_cache=None, source_images=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
@@ -633,6 +673,14 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
             shape_rgb = color[:3] if selected_source == "color" else np.divide(source, alpha[..., None], out=np.zeros_like(source), where=alpha[..., None] != 0)
             rgb_patch[:] = np.clip(rgb_patch * (1.0 - cov) + cov * op(shape_rgb, rgb_patch), 0.0, 1.0)
             matte_patch[:] = np.clip(matte_patch * (1.0 - alpha) + alpha * op(np.float32(1.0), matte_patch), 0.0, 1.0)
+        elif blend in MERGE_BLEND_MODES:
+            from .imaging import Evaluator
+            shape_rgb = color[:3] if selected_source == "color" else np.divide(source, alpha[..., None], out=np.zeros_like(source), where=alpha[..., None] != 0)
+            foreground = np.concatenate((shape_rgb * alpha[..., None], alpha[..., None]), axis=2).astype(np.float32)
+            background = np.concatenate((rgb_patch, matte_patch[..., None]), axis=2)
+            merged = np.clip(Evaluator._merge_op(blend, foreground, background), 0.0, 1.0)
+            rgb_patch[:] = merged[..., :3]
+            matte_patch[:] = merged[..., 3]
         elif blend == "multiply":
             shape_rgb = color[:3] if selected_source == "color" else np.divide(source, alpha[..., None], out=np.zeros_like(source), where=alpha[..., None] != 0)
             rgb_patch *= 1.0 - alpha[..., None] + shape_rgb * alpha[..., None]

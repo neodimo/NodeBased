@@ -25,7 +25,7 @@ if str(ROOT) not in sys.path:
 
 from PySide6.QtCore import QEvent, QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QLineEdit, QPushButton, QTreeWidget, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QTreeWidget, QWidget)
 
 from nodebased import shapes as shape_model
 from nodebased.app import STYLE, Window
@@ -329,11 +329,15 @@ def s03(w):
     # Nuke: Ctrl+Alt-drag on a B-Spline point changes its tension.
     w.tool("Select", "Select Points")
     before = copy.deepcopy(w.shape_entries()[0]["points"])
-    w.drag((120, 90), (150, 110), mods=CTRL | Qt.KeyboardModifier.AltModifier)
+    depth = w.undo_depth()
+    w.drag((120, 90), (170, 90), mods=CTRL | Qt.KeyboardModifier.AltModifier)
     after = w.shape_entries()[0]["points"]
-    if after == before or all(all(a.get(k) == b.get(k) for k in ("tension",)) for a, b in zip(after, before)):
-        w.differs("Ctrl+Alt-drag does not change a B-Spline point's tension; the tension control is not implemented "
-                  "(ledger rows 29 and 33 in docs/ROTO_NUKE_UI.md)")
+    moved = [i for i, (a, b) in enumerate(zip(after, before)) if a.get("tension", 0.0) != b.get("tension", 0.0)]
+    w.check(moved == [0], f"Ctrl+Alt-drag sets the tension of the dragged point only (changed: {moved})")
+    w.check(number(after[0]["tension"], field="tension") > 0, "a drag to the right tightens the point")
+    w.check(all(a["x"] == b["x"] and a["y"] == b["y"] for a, b in zip(after, before)), "the point itself does not move")
+    w.check(w.undo_depth() == depth + 1, "the tension change is one undo step")
+    w.note("tension scale: 100 screen pixels of horizontal drag is a tension of 1 (a convention; the guide gives none)")
     w.shot("tension-attempt")
 
 
@@ -386,10 +390,16 @@ def s05(w):
     w.check(number(pt.get("feather_x", 0), field="feather_x") == 0 and number(pt.get("feather_y", 0), field="feather_y") == 0,
             "Shift+E removes the feather point")
     w.shot("feather-points")
-    mode = w.viewer.roto_selection_tool
-    w.key_press(Qt.Key.Key_S)
-    if w.viewer.roto_selection_tool == mode:
-        w.differs("the S key (cycle the selection tool mode) does nothing; ledger row 51 in docs/ROTO_NUKE_UI.md")
+    # The guide: with the pointer over the Viewer, S cycles through the modes of the selected tool.
+    w.tool("Select", "Select All")
+    depth_before_s = w.undo_depth()
+    seen = [w.viewer.roto_selection_tool]
+    for _ in range(4):
+        w.key_press(Qt.Key.Key_S)
+        seen.append(w.viewer.roto_selection_tool)
+    w.check(seen == ["Select All", "Select Splines", "Select Points", "Select Feather Points", "Select All"],
+            f"S steps through the four selection modes and wraps (saw {seen})")
+    w.check(w.undo_depth() == depth_before_s, "S changes the tool only; the document is untouched")
 
 
 @scene(6, "Z and Shift+Z: cusp and smooth points",
@@ -509,9 +519,31 @@ def s08(w):
     w.check([s["name"] for s in w.payload["shapes"]] != names, "dragging a row reorders the list")
     w.shot("layer-and-reorder")
     w.shot_widget("shape-list-after", w.shape_tree())
-    w.differs("a layer's group transform and Nuke's newest-on-top list order are not reproduced (the list order is the render order); "
-              "Roto offers ten blending modes against Nuke's longer list; no View column (no multi-view projects) "
-              "(ledger rows 251, 253 and 256)")
+    # The Blending cell offers the whole list: the Merge node's operations for Roto.
+    combo = w.shape_tree().findChild(QComboBox, "roto-shape-row-blend-0")
+    offered = [combo.itemData(i) for i in range(combo.count())]
+    w.check(len(offered) >= 30 and {"over", "atop", "screen", "soft-light", "color-dodge", "disjoint-over"} <= set(offered),
+            f"the Blending cell offers {len(offered)} modes, the Merge node's list")
+    combo.setCurrentIndex(combo.findData("atop")); w.settle()
+    w.check(w.payload["shapes"][0]["blend_mode"] == "atop", "choosing a mode in the cell stores it")
+    # A layer has its own transform, applied to every shape inside it.
+    tree = w.shape_tree()
+    tree.setCurrentItem(tree.tree_items[("layer", "Layer1")]); w.settle()
+    w.wait(lambda: False, 0.2)
+    spin = w.panel().findChild(QDoubleSpinBox, "roto-layer-transform-translate_x")
+    w.check(spin is not None, "selecting a layer row shows the layer's Transform controls")
+    inside = [i for i, e in enumerate(w.shape_entries()) if e.get("layer") == "Layer1"]
+    before = [number(w.shape_entries()[i]["points"][0]["x"]) for i in inside]
+    spin.setValue(40.0); spin.editingFinished.emit(); w.settle()
+    resolved = shape_model.resolve_shapes(w.payload, 1)
+    w.check(all(abs(resolved[i]["points"][0]["x"] - (b + 40.0)) < 1e-6 for i, b in zip(inside, before)),
+            "a layer's translate moves every shape inside it")
+    w.check(all(number(w.shape_entries()[i]["points"][0]["x"]) == b for i, b in zip(inside, before)), "the shapes' own points are untouched")
+    w.shot("layer-transform")
+    w.note("not reproduced: Nuke lists the newest item on top (here the list order is the render order, top first), and the View column "
+           "is stereo-only (no multi-view projects) (ledger rows 253 and 256 in docs/ROTO_NUKE_UI.md)")
+    w.differs("the list order is the render order rather than Nuke's newest-on-top, and there is no View column "
+              "(Nuke shows it for multi-view projects only; NodeBased has none)")
 
 
 @scene(9, "Autokey: key frame 1, move points on frame 10, step to frame 1 and back, key controls",
@@ -593,8 +625,25 @@ def s10(w):
     combo = w.panel().findChild(QComboBox, "roto-shape-lifetime-type")
     w.check(combo is not None, "the panel has a lifetime type menu")
     w.note("menu entries: " + ", ".join(combo.itemText(i) for i in range(combo.count())))
-    w.differs("the motion-blur samples, shutter and offset fields cannot be keyed, and there is no ripple editing "
-              "(ledger rows 272 and 274 in docs/ROTO_NUKE_UI.md; the guide does not document a ripple workflow)")
+    # The list's Motion blur cell shows and sets keys (on the shutter) with autokey on.
+    w.fresh("roto", shapes=[square("box", 160, 90, 480, 270)], last=24)
+    tree = w.shape_tree()
+    cell = tree.findChild(QCheckBox, "roto-shape-row-motion_blur-0")
+    depth = w.undo_depth()
+    cell.setChecked(True); w.settle()
+    w.check(w.undo_depth() == depth + 1, "ticking the Motion blur cell is one undo step")
+    keys = w.payload["shapes"][0]["motion_blur_shutter"]["curve"]["keys"]
+    w.check([k["frame"] for k in keys] == [1], "with autokey on it sets a key at the current frame")
+    cell = w.shape_tree().findChild(QCheckBox, "roto-shape-row-motion_blur-0")
+    w.check(cell.property("keyState") == "key", "the cell shows that it is keyed on this frame")
+    w.goto(12)
+    cell = w.shape_tree().findChild(QCheckBox, "roto-shape-row-motion_blur-0")
+    w.check(cell.property("keyState") == "animated", "on another frame the cell shows it is animated")
+    cell.setChecked(False); w.settle()
+    keys = w.payload["shapes"][0]["motion_blur_shutter"]["curve"]["keys"]
+    w.check([(k["frame"], k["value"]) for k in keys] == [(1, 0.5), (12, 0.0)], "clearing it on frame 12 keys the blur off from there")
+    w.shot_widget("motion-blur-keys", w.shape_tree())
+    w.note("ripple editing is not implemented; the guide's pages do not document a ripple workflow (ledger row 272 in docs/ROTO_NUKE_UI.md)")
 
 
 # ---- RotoPaint: strokes and tools ------------------------------------------------------------------------------------

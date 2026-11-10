@@ -352,8 +352,16 @@ class ShapeListTree(QTreeWidget):
         combo.setCurrentIndex(max(0, combo.findData(entry.get(blend_field, "over"))))
         combo.currentIndexChanged.connect(lambda _i, c=combo, f=blend_field: edit(f, c.currentData()))
         self.setItemWidget(row, 6, combo)
-        self._check(row, 7, f"{p}-motion_blur-{index}", "Apply motion blur to this item", entry.get("motion_blur", False),
-                    lambda v: edit("motion_blur", v))
+        if stroke:
+            self._check(row, 7, f"{p}-motion_blur-{index}", "Apply motion blur to this item", entry.get("motion_blur", False),
+                        lambda v: edit("motion_blur", v))
+        else:
+            blur_on, blur_key = self.motion_blur_state(entry, frame)
+            box = self._check(row, 7, f"{p}-motion_blur-{index}", self._motion_blur_tip(blur_key, frame), blur_on,
+                              lambda v, i=index: self.edit_motion_blur(i, v))
+            box.setProperty("keyState", blur_key or "none")
+            if blur_key:
+                box.setStyleSheet("QCheckBox { background: %s; }" % ("#7a5a1e" if blur_key == "key" else "#2d4a5e"))
         life = QPushButton(lifetime_text(entry)); life.setObjectName(f"{p}-lifetime-{index}"); life.setFlat(True)
         life.setToolTip("Frames this item exists on; click to edit its lifetime")
         life.clicked.connect(lambda _=False, i=index: self.open_lifetime_editor(i))
@@ -364,6 +372,59 @@ class ShapeListTree(QTreeWidget):
         source.setCurrentIndex(max(0, source.findData(entry.get("source", "color"))))
         source.currentIndexChanged.connect(lambda _i, c=source: edit("source", c.currentData()))
         self.setItemWidget(row, 9, source)
+
+    # -- the Motion blur cell: on or off, keyable through the shutter ------------------------------------------------------
+    @staticmethod
+    def motion_blur_state(entry, frame):
+        """(checked, key state) of the Motion blur cell at `frame`. The cell is keyed through the item's motion-blur shutter: a key of 0
+        is blur off from there, any other value is blur on. The key state is "key" on a frame with a key, "animated" with a curve and
+        none here, and None when the shutter is not animated."""
+        on = bool(entry.get("motion_blur", False))
+        shutter = entry.get("motion_blur_shutter")
+        curve = shutter.get("curve") if isinstance(shutter, dict) else None
+        if not curve:
+            return on, None
+        if on:
+            on = shape_model.resolve_scalar(shutter, frame, "motion_blur_shutter") > 0.0
+        return on, ("key" if any(k["frame"] == frame for k in curve["keys"]) else "animated")
+
+    @staticmethod
+    def _motion_blur_tip(key_state, frame):
+        base = "Apply motion blur to this item"
+        return {"key": f"{base} (keyed at frame {frame})", "animated": f"{base} (animated: keyed on other frames)"}.get(key_state, base)
+
+    def autokey(self):
+        try:
+            return bool(self.window.viewer.roto_toolbar._tool_settings(self.key, "Select Points").get("autokey", False))
+        except Exception:
+            return False
+
+    def edit_motion_blur(self, index, value):
+        """The cell was ticked or cleared. With autokey off it sets the item's flag. With autokey on it sets a key at the current
+        frame on the motion-blur shutter (ticked: the item's shutter, or the default if that is 0; cleared: 0), and ticks the flag; a
+        cleared cell on an item that is not animated yet simply clears the flag."""
+        entries = self.entries()
+        if not 0 <= index < len(entries):
+            return
+        entry = entries[index]
+        if not self.autokey():
+            self.edit_entry(index, "motion_blur", bool(value))
+            return
+        frame = self.frame()
+        old = entry.get("motion_blur_shutter", shape_model.MOTION_BLUR_DEFAULTS["shutter"])
+        animated = isinstance(old, dict) and bool(old.get("curve"))
+        if not value and not animated:
+            entry["motion_blur"] = False
+        else:
+            now = shape_model.resolve_scalar(old, frame, "motion_blur_shutter")
+            target = 0.0 if not value else (now if now > 0.0 else shape_model.MOTION_BLUR_DEFAULTS["shutter"])
+            curve = copy.deepcopy(old["curve"]) if animated else {"interpolation": "smooth", "keys": []}
+            keys = [k for k in curve["keys"] if k["frame"] != frame] + [{"frame": frame, "value": float(target)}]
+            keys.sort(key=lambda k: k["frame"])
+            entry["motion_blur_shutter"] = {"value": float(target), "curve": {**curve, "keys": keys}}
+            if value:
+                entry["motion_blur"] = True
+        self.commit(entries, select=index if self.selected_index() < 0 else None)
 
     # -- cell edits (each is one command, so one undo step) ----------------------------------------------------------------
     def edit_entry(self, index, field, value):
@@ -446,6 +507,9 @@ class ShapeListTree(QTreeWidget):
             self.on_select(ref)
         else:
             self.window.viewer.roto_list_layer = ref
+            if self.is_roto and hasattr(self.window.viewer, "select_roto_layer"):
+                self.window.viewer.select_roto_layer(ref)       # frames the layer in the transform box
+                QTimer.singleShot(0, self.window.rebuild_properties_dock)    # the Transform controls for the layer
 
     def count(self):
         """How many items (not layers) the list holds."""

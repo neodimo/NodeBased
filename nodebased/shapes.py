@@ -21,6 +21,7 @@ scalar carries no curve at all.
 """
 from __future__ import annotations
 
+import copy
 import math
 
 from .animation import (CURVE_INTERPOLATIONS, FRAME_LIMITS, CurveError, evaluate_curve,
@@ -41,6 +42,7 @@ SHAPE_LIMITS = {
     "in_x": (-65536.0, 65536.0), "in_y": (-65536.0, 65536.0),
     "out_x": (-65536.0, 65536.0), "out_y": (-65536.0, 65536.0),
     "feather_x": (-500.0, 500.0), "feather_y": (-500.0, 500.0),
+    "tension": (-1.0, 1.0),
     "opacity": (0.0, 1.0), "feather": (-500.0, 500.0), "enabled": (0.0, 1.0),
     "stroke_width": (0.0, 4096.0),
     "error": (0.0, 1.0),
@@ -57,7 +59,12 @@ TRANSFORM_DEFAULTS = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                      "scale_x": 1.0, "scale_y": 1.0, "center_x": 0.0, "center_y": 0.0,
                      "skew_x": 0.0, "skew_y": 0.0}
 SKEW_ORDERS = ("XY", "YX")
-BLEND_MODES = ("over", "plus", "minus", "multiply", "from", "difference", "exclusion", "max", "min", "screen")
+BLEND_MODES = ("over", "plus", "minus", "multiply", "from", "difference", "exclusion", "max", "min", "screen",
+               # The rest of Nuke's blending list is the Merge node's operations (convention: the guide does not list them for
+               # Roto and the parity inventory holds no list); each runs through Merge's own formula (roto.MERGE_BLEND_MODES).
+               "under", "divide", "mask", "stencil", "in", "out", "atop", "xor", "average", "hypot", "matte",
+               "disjoint-over", "conjoint-over", "copy", "geometric", "overlay", "hard-light", "soft-light",
+               "color-dodge", "color-burn")
 # Roto's per-shape and global motion blur (Nuke's Motion Blur tab), lifetime and open-spline end caps.
 OFFSET_TYPES = ("centred", "start", "end", "custom")
 LIFETIME_TYPES = ("all", "single", "start_to", "to_end", "range")
@@ -66,6 +73,9 @@ MOTION_BLUR_FIELDS = ("motion_blur_samples", "motion_blur_shutter", "motion_blur
 MOTION_BLUR_DEFAULTS = {"samples": 1, "shutter": 0.5, "offset_type": "start", "offset": 0.0}
 POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 FEATHER_POINT_FIELDS = ("feather_x", "feather_y")
+# A B-Spline point's tension (Ctrl+Alt-drag in the Viewer). Optional and animatable like the other point scalars; absent means 0, the
+# uniform cubic B-spline, so a point without it renders exactly as before. Ignored on Bezier points.
+POINT_TENSION_FIELDS = ("tension",)
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
 NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks", "PlanarTracker": "tracks", "RotoPaint": "items", "DustBust": "spots",
@@ -226,9 +236,9 @@ def validate_shape(shape, where):
         raise ValueError(f"{where}.points must hold between {minimum} and {MAXIMUM_SHAPE_POINTS} points")
     for index, point in enumerate(points):
         if (not isinstance(point, dict) or not set(POINT_FIELDS).issubset(point)
-                or set(point) - set(POINT_FIELDS) - set(FEATHER_POINT_FIELDS)):
+                or set(point) - set(POINT_FIELDS) - set(FEATHER_POINT_FIELDS) - set(POINT_TENSION_FIELDS)):
             raise ValueError(f"{where}.points[{index}] defines {list(POINT_FIELDS)} and optional feather offsets")
-        for field in (*POINT_FIELDS, *FEATHER_POINT_FIELDS):
+        for field in (*POINT_FIELDS, *FEATHER_POINT_FIELDS, *POINT_TENSION_FIELDS):
             if field not in point:
                 continue
             validate_scalar(point[field], field, f"{where}.points[{index}]")
@@ -259,8 +269,8 @@ def validate_layers(layers, items, where, slot="items"):
     for index, layer in enumerate(layers):
         at = f"{where}.layers[{index}]"
         if (not isinstance(layer, dict) or "name" not in layer
-                or set(layer) - {"name", "visible", "locked", "layer", "overlay_color"}):
-            raise ValueError(f"{at} defines a name and optional visible, locked, layer and overlay_color")
+                or set(layer) - {"name", "visible", "locked", "layer", "overlay_color", "transform"}):
+            raise ValueError(f"{at} defines a name and optional visible, locked, layer, overlay_color and transform")
         if not isinstance(layer["name"], str) or not 1 <= len(layer["name"]) <= 128:
             raise ValueError(f"{at}.name must contain 1-128 characters")
         if layer["name"] in names:
@@ -269,6 +279,14 @@ def validate_layers(layers, items, where, slot="items"):
         if any(k in layer and type(layer[k]) is not bool for k in ("visible", "locked")):
             raise ValueError(f"{at}: visible and locked must be booleans")
         validate_list_settings(layer, at)
+        transform = layer.get("transform", {})
+        if not isinstance(transform, dict) or set(transform) - set(TRANSFORM_DEFAULTS) - {"skew_order"}:
+            raise ValueError(f"{at}.transform contains unsupported fields")
+        if transform.get("skew_order", "XY") not in SKEW_ORDERS:
+            raise ValueError(f"{at}.transform.skew_order must be one of {list(SKEW_ORDERS)}")
+        for field in TRANSFORM_DEFAULTS:
+            if field in transform:
+                validate_scalar(transform[field], field, f"{at}.transform")
     for index, layer in enumerate(layers):
         seen, parent = {layer["name"]}, layer.get("layer")
         while parent is not None:
@@ -613,15 +631,84 @@ def resolve_shapes(payload, frame, params=None):
     `params` is the Roto node's own parameters; only its global motion-blur settings are read from it.
     """
     states = layer_states(payload)
-    return [apply_layer_state(_resolve_shape(shape, frame, params, blur=True), shape, states)
-            for shape in (payload or {}).get("shapes", [])]
+    resolved = [apply_layer_state(_resolve_shape(shape, frame, params, blur=True), shape, states)
+                for shape in (payload or {}).get("shapes", [])]
+    if any("transform" in layer for layer in (payload or {}).get("layers", [])):
+        _apply_layer_transforms(payload, resolved, frame)
+    return resolved
+
+
+def layer_chain(layers, name):
+    """The layer `name` and every layer around it, innermost first."""
+    by_name = {layer["name"]: layer for layer in layers}
+    chain, seen = [], set()
+    while name is not None and name in by_name and name not in seen:
+        seen.add(name)
+        chain.append(by_name[name])
+        name = by_name[name].get("layer")
+    return chain
+
+
+def layer_bounds(payload, resolved, name):
+    """(min x, min y, max x, max y) of the resolved points of every shape inside layer `name` (nested layers included), before any
+    layer transform; None when the layer holds no shape. Its centre is the default centre of the layer's transform."""
+    layers = payload.get("layers", [])
+    xs, ys = [], []
+    for shape, entry in zip((payload or {}).get("shapes", []), resolved):
+        if any(layer["name"] == name for layer in layer_chain(layers, shape.get("layer"))):
+            for point in entry["points"]:
+                xs.append(point["x"]); ys.append(point["y"])
+    return (min(xs), min(ys), max(xs), max(ys)) if xs else None
+
+
+def resolve_layer_transform(payload, layer, frame, reference=None):
+    """A layer's transform with every scalar resolved at `frame`. The centre defaults to the middle of what the layer holds (as a
+    shape's does), taken from `reference` = the resolved shapes before any layer transform."""
+    stored = layer.get("transform", {})
+    bounds = layer_bounds(payload, reference, layer["name"]) if reference is not None else None
+    default_center = ((bounds[0] + bounds[2]) / 2.0, (bounds[1] + bounds[3]) / 2.0) if bounds else (0.0, 0.0)
+    result = {}
+    for field, default in TRANSFORM_DEFAULTS.items():
+        if field == "center_x": default = default_center[0]
+        elif field == "center_y": default = default_center[1]
+        result[field] = resolve_scalar(stored.get(field, default), frame, field)
+    if stored.get("skew_order", "XY") != "XY":
+        result["skew_order"] = stored["skew_order"]
+    return result
+
+
+def _is_identity_transform(t):
+    return (not t["translate_x"] and not t["translate_y"] and not t["rotate"] and t["scale_x"] == 1.0 and t["scale_y"] == 1.0
+            and not t["skew_x"] and not t["skew_y"])
+
+
+def _apply_layer_transforms(payload, resolved, frame):
+    """Move every shape inside a layer by that layer's transform, in place: the shape's own transform first, then each layer around
+    it from the innermost out. A layer with no transform, or an identity one, changes nothing (so older documents render as before)."""
+    layers = payload.get("layers", [])
+    reference = copy.deepcopy(resolved)               # the centres are taken before any layer moves anything
+    transforms = {layer["name"]: resolve_layer_transform(payload, layer, frame, reference)
+                  for layer in layers if "transform" in layer}
+    for shape, entry in zip(payload.get("shapes", []), resolved):
+        for layer in layer_chain(layers, shape.get("layer")):
+            t = transforms.get(layer["name"])
+            if t is None or _is_identity_transform(t):
+                continue
+            holder = {"points": entry["points"], "transform": t, "stroke_width": entry["stroke_width"],
+                      "feather": entry["feather"], "feather_model": entry.get("feather_model", "box"), "_motion_final": True}
+            apply_shape_transform(holder)
+            entry["stroke_width"], entry["feather"] = holder["stroke_width"], holder["feather"]
+            for sample in entry.get("_motion_samples", ()):
+                apply_shape_transform({"points": sample, "transform": t, "stroke_width": 0.0, "feather": 0.0, "_motion_final": True})
 
 
 def _resolve_shape(shape, frame, params, blur):
     def points_at(at_frame):
         return [{**{field: resolve_scalar(point[field], at_frame, field) for field in POINT_FIELDS},
                  **{field: resolve_scalar(point.get(field, 0.0), at_frame, field)
-                    for field in FEATHER_POINT_FIELDS}}
+                    for field in FEATHER_POINT_FIELDS},
+                 **{field: resolve_scalar(point[field], at_frame, field)
+                    for field in POINT_TENSION_FIELDS if field in point}}
                 for point in shape["points"]]
     resolved_points = points_at(frame)
     center_x = (min(p["x"] for p in resolved_points) + max(p["x"] for p in resolved_points)) / 2.0
