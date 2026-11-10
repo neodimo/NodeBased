@@ -307,10 +307,10 @@ class RotoPaintListTests(RotoListBase):
         self.assertEqual(tree.count(), 3)
         for name in ("name", "visible", "locked", "overlay", "color", "invert", "blend", "motion_blur", "lifetime", "source"):
             self.assertIsNotNone(tree.findChild(QWidget, f"rotopaint-row-{name}-0"), name)
-        # a stroke has no Invert; a shape has no colour of its own to render with
-        self.assertFalse(tree.findChild(QCheckBox, "rotopaint-row-invert-1").isEnabled())
-        self.assertFalse(tree.findChild(QPushButton, "rotopaint-row-color-0").isEnabled())
-        self.assertTrue(tree.findChild(QPushButton, "rotopaint-row-color-1").isEnabled())
+        # the guide's list inverts "shape/stroke/group" and every item has a rendered colour, so these cells are live on both kinds
+        for index in (0, 1):
+            self.assertTrue(tree.findChild(QCheckBox, f"rotopaint-row-invert-{index}").isEnabled())
+            self.assertTrue(tree.findChild(QPushButton, f"rotopaint-row-color-{index}").isEnabled())
 
     def test_each_cell_edits_its_field_and_undoes_in_one_step(self):
         tree = self.tree()
@@ -325,7 +325,8 @@ class RotoPaintListTests(RotoListBase):
         self.assertTrue(stored(0)["invert"])
         tree = self.tree()
         blend = tree.findChild(QComboBox, "rotopaint-row-blend-1")
-        self.assertEqual([blend.itemData(i) for i in range(blend.count())], ["over", "add", "multiply", "screen"])
+        self.assertEqual([blend.itemData(i) for i in range(blend.count())], list(shapes.PAINT_BLEND_MODES))
+        self.assertEqual([blend.itemData(i) for i in range(4)], ["over", "add", "multiply", "screen"])
         self.one_step(lambda: blend.setCurrentIndex(blend.findData("screen")))
         self.assertEqual(stored(1)["blend"], "screen")
         tree = self.tree()
@@ -338,6 +339,10 @@ class RotoPaintListTests(RotoListBase):
         tree = self.tree()
         self.one_step(lambda: tree.set_color(1, [0.1, 0.2, 0.3, 1.0]))
         self.assertEqual(stored(1)["color"], [0.1, 0.2, 0.3, 1.0])
+        self.one_step(lambda: self.tree().set_color(0, [0.9, 0.2, 0.1, 1.0]))
+        self.assertEqual(stored(0)["color"], [0.9, 0.2, 0.1, 1.0])
+        self.one_step(lambda: self.tree().findChild(QCheckBox, "rotopaint-row-invert-1").setChecked(True))
+        self.assertTrue(stored(1)["invert"])
         self.one_step(lambda: self.tree().edit_entry(0, "overlay_color", [0.0, 1.0, 0.0]))
         self.assertEqual(stored(0)["overlay_color"], [0.0, 1.0, 0.0])
 

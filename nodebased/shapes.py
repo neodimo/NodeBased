@@ -65,6 +65,10 @@ BLEND_MODES = ("over", "plus", "minus", "multiply", "from", "difference", "exclu
                "under", "divide", "mask", "stencil", "in", "out", "atop", "xor", "average", "hypot", "matte",
                "disjoint-over", "conjoint-over", "copy", "geometric", "overlay", "hard-light", "soft-light",
                "color-dodge", "color-burn")
+# What a RotoPaint shape or stroke may blend with: its four classic modes (add is the paint engine's own sum, kept for old documents)
+# followed by every other mode Roto offers, drawn through `roto.blend_onto`.
+PAINT_BLEND_MODES = ("over", "add", "multiply", "screen",
+                     *[mode for mode in BLEND_MODES if mode not in ("over", "multiply", "screen")])
 # Roto's per-shape and global motion blur (Nuke's Motion Blur tab), lifetime and open-spline end caps.
 OFFSET_TYPES = ("centred", "start", "end", "custom")
 LIFETIME_TYPES = ("all", "single", "start_to", "to_end", "range")
@@ -445,7 +449,7 @@ def validate_payload(kind, payload, where):
                 if not required_shape.issubset(item) or set(item) - required_shape - set(paintknobs.SHAPE_ITEM_FIELDS):
                     raise ValueError(f"{at}: malformed layered shape")
                 paintknobs.validate_shape_extras(item, at)          # the five required fields too, and the item's own settings
-                if item["blend"] not in ("over", "add", "multiply", "screen") or type(item["visible"]) is not bool:
+                if item["blend"] not in PAINT_BLEND_MODES or type(item["visible"]) is not bool:
                     raise ValueError(f"{at}: invalid shape layer settings")
             else:
                 required = {"kind", "name", "points", "brush", "tool", "lifetime", "color", "source_offset", "source_frame", "opacity", "blend", "visible", "follow_track", "patch_blend"}
@@ -458,7 +462,7 @@ def validate_payload(kind, payload, where):
                     raise ValueError(f"{at}.tool is unsupported")
                 if not _is_number(item["patch_blend"]) or not 0 <= item["patch_blend"] <= 1:
                     raise ValueError(f"{at}.patch_blend must be between 0 and 1")
-                if (item["blend"] not in ("over", "add", "multiply", "screen")
+                if (item["blend"] not in PAINT_BLEND_MODES
                         or type(item["visible"]) is not bool or not _is_number(item["opacity"])
                         or not 0 <= item["opacity"] <= 1):
                     raise ValueError(f"{at}: invalid layer settings")

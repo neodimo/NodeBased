@@ -5,7 +5,7 @@ import math
 
 import numpy as np
 
-from . import paintknobs
+from . import paintknobs, shapes
 
 
 def active(stroke, frame):
@@ -94,7 +94,8 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
     pressure_size = bool(stroke.get("dynamic_size", stroke.get("pressure_size", True)))
     pressure_opacity = bool(stroke.get("dynamic_transparency", stroke.get("pressure_opacity", True)))
     paint_source = stroke.get("source", "color")
-    if tool == "paint" and blend == "over" and paint_source == "color":
+    inverted = bool(stroke.get("invert", False))
+    if tool == "paint" and blend == "over" and paint_source == "color" and not inverted:
         # Most brush marks touch a small part of a tile. Rasterise and composite only that
         # footprint; scanning the whole tile for every dab made a new stroke invalidate hundreds
         # of thousands of pixels it could never affect.
@@ -133,12 +134,14 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
     if dynamic or buildup:
         coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"], brush["size"], brush["spacing"],
                                   brush["hardness"], origin, dynamic, float(brush["opacity"]) if buildup else None)
-        alpha = coverage[..., None] * np.float32(stroke["opacity"] if buildup else brush["opacity"] * stroke["opacity"])
+        gain = np.float32(stroke["opacity"] if buildup else brush["opacity"] * stroke["opacity"])
     else:
         coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"],
                                   brush["size"], brush["spacing"], brush["hardness"], origin,
                                   pressure_size=pressure_size, pressure_opacity=pressure_opacity)
-        alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
+        gain = np.float32(brush["opacity"] * stroke["opacity"])
+    # Invert (Nuke's list column "Invert shape/stroke/group"): the stroke affects everything but its own footprint.
+    alpha = (np.float32(1.0) - coverage[..., None] if inverted else coverage[..., None]) * gain
     tool = stroke["tool"]
     if tool == "paint" and paint_source != "color":
         # Source foreground paints the node's second image, background the plate; either shows where the stroke is.
@@ -237,9 +240,23 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
     elif blend == "multiply":
         out = base.copy(); out[..., :3] *= (1-alpha + target[..., :3] * alpha)
         out[..., 3:4] = target[..., 3:4] * alpha + base[..., 3:4] * (1-alpha)
-    else:
+    elif blend == "screen":
         out = base.copy(); out[..., :3] = 1-(1-base[..., :3])*(1-target[..., :3]*alpha)
         out[..., 3:4] = target[..., 3:4] * alpha + base[..., 3:4] * (1-alpha)
+    else:
+        # Any other mode of Roto's blending list: the stroke's colour (target, undone from its premultiplication) laid over the
+        # picture by Roto's own formula, with the target's alpha folded into the coverage.
+        from . import roto
+        target_alpha = target[..., 3:4]
+        colour = np.divide(target[..., :3], target_alpha, out=np.zeros_like(target[..., :3]), where=target_alpha > 0)
+        # Like a Roto shape, the mode acts only inside the stroke's own reach (modes such as in, out and mask would otherwise
+        # clear the picture everywhere the stroke does not touch); an inverted stroke reaches the whole frame.
+        out = base.copy()
+        reach = None if inverted else _stroke_region(base.shape[1], base.shape[0], stroke["points"], brush["size"], origin)
+        if inverted or reach is not None:
+            x0, y0, x1, y1 = (0, 0, base.shape[1], base.shape[0]) if inverted else reach
+            out[y0:y1, x0:x1] = roto.blend_onto(base[y0:y1, x0:x1], colour[y0:y1, x0:x1],
+                                                (alpha * target_alpha)[y0:y1, x0:x1], blend)
     return np.asarray(out, np.float32)
 
 
@@ -283,7 +300,9 @@ def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
             from . import roto
             if any(k in item for k in ("transform", "extra_matrix", "feather_falloff", "falloff_power", "invert", "closed",
                                        "stroke_width", "cap_start", "cap_end", "feather_model", "_motion_samples")):
-                shape = item          # resolved with Roto's own settings: the rasteriser reads them
+                # Resolved with Roto's own settings: the rasteriser reads them. Its blending mode is the shape's own Roto
+                # mode, which only means something against other shapes; in RotoPaint the item's `blend` is drawn below.
+                shape = item if item.get("blend_mode", "over") == "over" else {**item, "blend_mode": "over"}
             else:
                 shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
             full_w, full_h = canvas_size or (image.shape[1], image.shape[0])
@@ -291,7 +310,11 @@ def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
                                    region=(origin[0], origin[1], image.shape[1], image.shape[0]))[..., 3:4]
             alpha = matte * np.float32(item["opacity"] if item["visible"] else 0.0)
             base = out.copy()
-            colour = np.float32(1.0)             # a shape paints white unless it paints a picture
+            colour = np.float32(1.0)             # a shape paints its own colour (white when it has none) unless it paints a picture
+            if "color" in item:
+                rgb = [float(shapes.resolve_scalar(c, frame, "opacity")) for c in item["color"][:3]]
+                if rgb != [1.0, 1.0, 1.0]:
+                    colour = np.asarray(rgb, np.float32)     # its alpha is already in the matte (the rasteriser applies it)
             picture = paintknobs.shape_picture(item, plate, reveal, base)
             if picture is not None:
                 colour = picture[..., :3]
@@ -309,5 +332,17 @@ def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
             elif item["blend"] == "screen":
                 out = base.copy(); out[..., :3] = 1 - (1-base[..., :3]) * (1-alpha * colour)
                 out[..., 3:4] = alpha + base[..., 3:4] * (1-alpha)
+            else:
+                # The rest of Roto's blending list, by Roto's formulas and, as in Roto, only inside the shape's own bounds.
+                out = base.copy()
+                bounds = None if item.get("invert") else roto._shape_bounds(shape)
+                if bounds is None:
+                    y0, y1, x0, x1 = 0, base.shape[0], 0, base.shape[1]
+                else:
+                    x0, y0 = max(0, int(math.floor(bounds[0])) - int(origin[0])), max(0, int(math.floor(bounds[1])) - int(origin[1]))
+                    x1, y1 = min(base.shape[1], int(math.ceil(bounds[2])) - int(origin[0])), min(base.shape[0], int(math.ceil(bounds[3])) - int(origin[1]))
+                if x1 > x0 and y1 > y0:
+                    patch_colour = colour[y0:y1, x0:x1] if getattr(colour, "ndim", 0) == 3 else colour
+                    out[y0:y1, x0:x1] = roto.blend_onto(base[y0:y1, x0:x1], patch_colour, alpha[y0:y1, x0:x1], item["blend"])
             out = out.astype(np.float32)
     return out

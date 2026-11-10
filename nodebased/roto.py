@@ -510,6 +510,39 @@ MERGE_BLEND_MODES = ("under", "divide", "mask", "stencil", "in", "out", "atop", 
                      "color-dodge", "color-burn")
 
 
+def blend_onto(base, shape_rgb, cover, blend):
+    """Composite a layer onto premultiplied RGBA `base` with one of Roto's blending modes, by the same formulas `rasterise` uses.
+
+    `shape_rgb` is the layer's colour (three numbers, or an array shaped like `base`'s colour) and `cover` its coverage (height x
+    width x 1, already scaled by opacity). RotoPaint shapes and strokes draw their non-classic blending modes through this, so a
+    mode reads the same in Roto and in RotoPaint. Returns a new float32 array; `base` is not changed.
+    """
+    rgb, matte = base[..., :3].astype(np.float32), base[..., 3].astype(np.float32)
+    cov = cover.astype(np.float32)
+    alpha = cov[..., 0]
+    colour = np.broadcast_to(np.asarray(shape_rgb, np.float32), rgb.shape)
+    if blend == "plus":
+        rgb = np.clip(rgb + colour * cov, 0.0, 1.0)
+        matte = np.clip(matte + alpha, 0.0, 1.0)
+    elif blend in BLEND_OPS:
+        op = BLEND_OPS[blend]
+        rgb = np.clip(rgb * (1.0 - cov) + cov * op(colour, rgb), 0.0, 1.0)
+        matte = np.clip(matte * (1.0 - alpha) + alpha * op(np.float32(1.0), matte), 0.0, 1.0)
+    elif blend in MERGE_BLEND_MODES:
+        from .imaging import Evaluator
+        foreground = np.concatenate((colour * cov, cov), axis=2).astype(np.float32)
+        background = np.concatenate((rgb, matte[..., None]), axis=2)
+        merged = np.clip(Evaluator._merge_op(blend, foreground, background), 0.0, 1.0)
+        rgb, matte = merged[..., :3], merged[..., 3]
+    elif blend == "multiply":
+        rgb = rgb * (1.0 - cov + colour * cov)
+        matte = alpha + matte * (1.0 - alpha)
+    else:                                                                   # over
+        rgb = colour * cov + rgb * (1.0 - cov)
+        matte = alpha + matte * (1.0 - alpha)
+    return np.concatenate((rgb, matte[..., None]), axis=2).astype(np.float32)
+
+
 def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, flattened_cache=None,
               shape_cache=None, source_images=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""

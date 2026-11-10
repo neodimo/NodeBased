@@ -25,7 +25,7 @@ COLUMNS = ("Name", "Visible", "Lock", "Overlay color", "Color", "Invert", "Blend
 COLUMN_TIPS = ("Name of the item or layer", "Show or hide", "Lock against editing", "Colour of the outline in the Viewer",
                "Rendered colour", "Invert the shape", "Blending mode", "Apply motion blur", "Frames the item exists on",
                "Source: colour, foreground or background")
-PAINT_BLENDS = ("over", "add", "multiply", "screen")
+PAINT_BLENDS = shape_model.PAINT_BLEND_MODES
 DEFAULT_OVERLAY = "#58d7ff"      # the stock outline colour of the Viewer (Viewer.roto_handle_colour's default)
 LIFETIME_NAMES = {"all": "All frames", "single": "Single", "start_to": "Start to", "to_end": "To end", "range": "Range",
                   "from_current": "From current"}
@@ -355,12 +355,12 @@ class ShapeListTree(QTreeWidget):
         rgb = overlay if overlay else QColor(DEFAULT_OVERLAY).getRgbF()[:3]
         self._swatch(row, 3, f"{p}-overlay-{index}", "Outline colour of this item in the Viewer", rgb,
                      lambda i=index, c=rgb: self.pick_color("Overlay color", c, lambda v: self.edit_entry(i, "overlay_color", v)))
-        has_color = self.is_roto or stroke
+        has_color = True                                  # every item has its own rendered colour
         color = [shape_model.resolve_scalar(c, frame, "opacity") for c in entry.get("color", [1, 1, 1, 1])]
         self._swatch(row, 4, f"{p}-color-{index}", "Rendered colour", color,
                      lambda i=index, c=color: self.pick_color("Colour", c, lambda v: self.set_color(i, v), alpha=True), has_color)
         self._check(row, 5, f"{p}-invert-{index}", "Invert this shape's matte", entry.get("invert", False),
-                    lambda v: edit("invert", v), not stroke)
+                    lambda v: edit("invert", v))
         blend_field, values = ("blend_mode", shape_model.BLEND_MODES) if self.is_roto else ("blend", PAINT_BLENDS)
         combo = QComboBox(); combo.setObjectName(f"{p}-blend-{index}"); combo.setToolTip("Blending mode")
         for value in values:
