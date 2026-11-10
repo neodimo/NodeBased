@@ -307,50 +307,41 @@ def smoke_mask(image):
     return (luma > np.quantile(luma, .5)) & (luma <= np.quantile(luma, .98))
 
 
-def _box_sum(field, width):
-    """Sum over a `width` x `width` window (edge replicated), per pixel."""
-    out = np.asarray(field, np.float64)
-    half = width // 2
-    for axis in (0, 1):
-        padded = np.pad(out, [(half + 1, half) if a == axis else (0, 0) for a in range(out.ndim)], mode='edge')
-        total = np.cumsum(padded, axis=axis)
-        n = out.shape[axis]
-        out = np.take(total, np.arange(width, width + n), axis=axis) - np.take(total, np.arange(0, n), axis=axis)
-    return out
 
+def projected_curl(density, velocity, origin, voxel, camera, target, cell=.02, threshold=30.0, floor=.05):
+    """Image-plane curl of the smoke's velocity, from the velocity field itself (no rendering, no noise).
 
-def _shrink(field, factor):
-    h, w = (field.shape[0] // factor) * factor, (field.shape[1] // factor) * factor
-    return field[:h, :w].reshape(h // factor, factor, w // factor, factor, *field.shape[2:]).mean(axis=(1, 3))
+    The velocity of every voxel is split along the camera's right and up axes and averaged, weighted by the voxel's density, into
+    cells of `cell` metres in the image plane (an orthographic projection, which is close at the shot's distance); the curl is
+    d(up component)/d(right) - d(right component)/d(up) in 1/s. Over the cells whose smoke is at least `floor` of the thickest cell's
+    (the smoke and its edge, not the empty air): the share with |curl| above `threshold`, and the mean, 90th percentile and rms.
+    `origin` is the world position of voxel (0, 0, 0) and `voxel` its size."""
+    forward = np.asarray(target, np.float64) - np.asarray(camera, np.float64)
+    forward /= np.linalg.norm(forward)
+    right = np.cross(forward, [0.0, 1.0, 0.0])
+    right /= np.linalg.norm(right)
+    up = np.cross(right, forward)
+    nx, ny, nz = density.shape
+    grid = np.stack(np.meshgrid(np.arange(nx), np.arange(ny), np.arange(nz), indexing='ij'), axis=-1).reshape(-1, 3)
+    world = np.asarray(origin, np.float64) + grid * float(voxel)
+    keep = density.reshape(-1) > 1e-6
+    weight = density.reshape(-1)[keep].astype(np.float64)
+    world, vel = world[keep], velocity.reshape(-1, 3)[keep].astype(np.float64)
+    u, v = (world - np.asarray(camera)) @ right, (world - np.asarray(camera)) @ up
+    iu, iv = np.floor((u - u.min()) / cell).astype(int), np.floor((v - v.min()) / cell).astype(int)
+    shape = (iu.max() + 1, iv.max() + 1)
+    total = np.zeros(shape)
+    np.add.at(total, (iu, iv), weight)
+    vu, vv = np.zeros(shape), np.zeros(shape)
+    np.add.at(vu, (iu, iv), weight * (vel @ right))
+    np.add.at(vv, (iu, iv), weight * (vel @ up))
+    live = total > floor * total.max()
+    safe = np.where(live, total, 1.0)
+    vu, vv = np.where(live, vu / safe, 0.0), np.where(live, vv / safe, 0.0)
+    curl = (np.gradient(vv, cell, axis=0) - np.gradient(vu, cell, axis=1))
+    inner = live & (np.roll(live, 1, 0) & np.roll(live, -1, 0) & np.roll(live, 1, 1) & np.roll(live, -1, 1))
+    mag = np.abs(curl[inner])
+    return {'cells': int(inner.sum()), 'share_above': round(float((mag > threshold).mean()), 4), 'mean_abs': round(float(mag.mean()), 3),
+            'p90': round(float(np.quantile(mag, .9)), 3), 'rms': round(float(np.sqrt((mag ** 2).mean())), 3), 'threshold': threshold,
+            'cell_metres': cell}
 
-
-def image_curl(frame_a, frame_b, mask, factor=2, window=9, threshold=.05):
-    """Curl of the smoke's apparent motion between two renders of consecutive frames (same noise seed).
-
-    Lucas-Kanade optical flow on the luminance (each image shrunk by `factor`, a `window`-pixel box per pixel, pixels where the
-    gradient structure is too weak to give a flow are dropped), then the image-plane vorticity dv/dx - du/dy in 1/frame. Over the
-    smoke pixels that have a flow: the share with |vorticity| above `threshold`, and the mean and rms |vorticity|. The estimate sees
-    any moving brightness pattern, so it is read as a comparison between two settings of one shot, not as a physical vorticity."""
-    la = _shrink(np.asarray(frame_a[..., :3], np.float64) @ LUMA, factor)
-    lb = _shrink(np.asarray(frame_b[..., :3], np.float64) @ LUMA, factor)
-    area = _shrink(np.asarray(mask, np.float64), factor) > .5
-    la, lb = _box_sum(la, 3) / 9, _box_sum(lb, 3) / 9
-    iy, ix = np.gradient(la)
-    it = lb - la
-    a, b, c = _box_sum(ix * ix, window), _box_sum(ix * iy, window), _box_sum(iy * iy, window)
-    p, q = -_box_sum(ix * it, window), -_box_sum(iy * it, window)
-    det = a * c - b * b
-    trace = a + c
-    good = area & (det > 1e-3 * trace * trace + 1e-30) & (trace > 1e-8 * max(float(trace.max()), 1e-30))
-    safe = np.where(good, det, 1.0)
-    u = np.where(good, (c * p - b * q) / safe, 0.0)
-    v = np.where(good, (a * q - b * p) / safe, 0.0)
-    u, v = _box_sum(u, 5) / 25, _box_sum(v, 5) / 25
-    curl = np.gradient(v, axis=1) - np.gradient(u, axis=0)
-    inside = good & (_box_sum(good.astype(np.float64), 7) > 40)
-    if not inside.any():
-        return {'pixels': 0, 'share_above': 0.0, 'mean_abs': 0.0, 'rms': 0.0, 'threshold': threshold}
-    mag = np.abs(curl[inside])
-    return {'pixels': int(inside.sum()), 'share_above': round(float((mag > threshold).mean()), 5), 'mean_abs': round(float(mag.mean()), 5),
-            'rms': round(float(np.sqrt((mag ** 2).mean())), 5), 'threshold': threshold, 'factor': factor,
-            'mean_flow_px': round(float(np.hypot(u, v)[inside].mean()) * factor, 4)}

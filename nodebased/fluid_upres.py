@@ -16,7 +16,7 @@ from .sparsevol import SparseGrid, TILE
 
 DEFAULTS = {"upres_factor": 2, "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
             "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",
-            "swirl": 0.0, "swirl_scale": 3.0,
+            "swirl": 0.0, "swirl_scale": 6.0,
             "cache_memory_mb": 256, "cache_disk_mb": 2048}
 
 # Swirl (docs/FLUIDS_SPIKE.md, "Fluids 17 B"): small-scale rotational motion added to the velocity that carries the fine field.
@@ -126,7 +126,7 @@ def swirl_dense_cpu(guide, factor, low, dims, waves, strength, voxel):
 def swirl_blocks(guide, coords, factor, params, frame, voxel, backend):
     """The swirl velocity at every voxel of the given fine tiles, shape (len(coords), 8, 8, 8, 3)."""
     strength = float(params.get("swirl", 0.0))
-    waves = swirl_waves(int(params.get("seed", 0)), float(params.get("swirl_scale", 3.0)), factor, int(frame or 0))
+    waves = swirl_waves(int(params.get("seed", 0)), float(params.get("swirl_scale", 6.0)), factor, int(frame or 0))
     low, dims = swirl_box(coords)
     if backend == "gpu":
         from .fluid_upres_gpu import swirl_dense
@@ -159,20 +159,25 @@ def _sparse_blocks(fields, coords, shape, coarse_shape, backend, guide, previous
     velocity = None
     if guide is not None:
         velocity = np.stack([fluid3d.trilerp(guide[..., axis], *sample) for axis in range(3)], axis=-1)
-        carry = velocity if swirl is None else velocity + swirl
-        back = [xyz[axis].astype(np.float32) - carry[..., axis] * np.float32(step)
+        back = [xyz[axis].astype(np.float32) - velocity[..., axis] * np.float32(step)
                 for axis in range(3)]
         back = [np.clip(back[axis], 0, shape[axis] - 1) for axis in range(3)]
+        if swirl is not None:
+            # The smoke density alone is carried by the guide plus the swirl; the flame, temperature and fuel keep the guide.
+            carry = velocity + swirl
+            swirled = [np.clip(xyz[axis].astype(np.float32) - carry[..., axis] * np.float32(step), 0, shape[axis] - 1)
+                       for axis in range(3)]
     else:
         back = [p.astype(np.float32) for p in xyz]
     blocks = {}
     for name, field in fields.items():
         prior = getattr(previous, name) if previous is not None else None
+        place = swirled if swirl is not None and name == "density" else back
         if prior is not None:
-            block = fluid3d.trilerp(prior, *back).astype(np.float32)
+            block = fluid3d.trilerp(prior, *place).astype(np.float32)
         elif guide is not None:
-            coarse_back = [back[axis] * np.float32((coarse_shape[axis] - 1) /
-                                                   (shape[axis] - 1)) for axis in range(3)]
+            coarse_back = [place[axis] * np.float32((coarse_shape[axis] - 1) /
+                                                    (shape[axis] - 1)) for axis in range(3)]
             block = fluid3d.trilerp(field, *coarse_back).astype(np.float32)
         else:
             block = fluid3d.trilerp(field, *sample).astype(np.float32)
@@ -272,7 +277,7 @@ def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previo
             before = {name: getattr(previous_source, name) for name in fields if getattr(previous_source, name, None) is not None}
             carried = _sparse_blocks(before, coords, shape, coarse_shape, backend, guide, None, step)
             for name in fields:
-                if name in carried and swirl is not None:
+                if name in carried and swirl is not None and name == "density":
                     # The fine field was carried by the guide plus the swirl, the coarse one by the guide alone: what is left
                     # is the swirl's displacement of the smoke plus the carried detail, kept and relaxed back to the coarse field.
                     blocks[name] = now[name] + np.float32(SWIRL_KEEP) * (blocks[name] - carried[name])

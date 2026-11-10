@@ -1486,7 +1486,7 @@ SPECS["FluidUpres3D"] = {"inputs": ["volume"], "params": {
     "upres_factor": "2", "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
     "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",
     # Swirl (Fluids 17 B): curl noise plus vorticity confinement on the fine grid, scaled by the coarse flow's speed.
-    "swirl": 0.0, "swirl_scale": 3.0,
+    "swirl": 0.0, "swirl_scale": 6.0,
     "cache_memory_mb": 256, "cache_disk_mb": 2048}}
 
 # Rigid-body simulation values (nodebased/rigid3d.py). Bodies are authored independently and

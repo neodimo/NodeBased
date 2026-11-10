@@ -138,7 +138,7 @@ class SwirlRegistrationTests(unittest.TestCase):
     def test_knobs_default_off_and_ranges(self):
         params_ = core.SPECS["FluidUpres3D"]["params"]
         self.assertEqual(params_["swirl"], 0.0)
-        self.assertEqual(params_["swirl_scale"], 3.0)
+        self.assertEqual(params_["swirl_scale"], 6.0)
         self.assertIn("swirl", core.LIMITS)
         self.assertIn("swirl_scale", core.LIMITS)
 
@@ -150,7 +150,7 @@ class SwirlRegistrationTests(unittest.TestCase):
         loaded = core.upgrade_document(doc)
         core.validate(loaded)
         self.assertEqual(loaded["nodes"]["up"]["params"]["swirl"], 0.0)
-        self.assertEqual(loaded["nodes"]["up"]["params"]["swirl_scale"], 3.0)
+        self.assertEqual(loaded["nodes"]["up"]["params"]["swirl_scale"], 6.0)
 
 
 class SwirlGpuTests(unittest.TestCase):

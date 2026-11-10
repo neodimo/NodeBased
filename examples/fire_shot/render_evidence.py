@@ -596,6 +596,38 @@ def upres_time(args):
     print(json.dumps(out))
 
 
+def effective_curl(evaluator, document, settings, frame=16):
+    """Image-plane curl of the velocity that carries the smoke at `frame`: the coarse cache's velocity sampled on the fine grid plus the swirl
+    the settings add, projected onto the camera's image plane and averaged along the view, weighted by the up-res smoke (`flame_metrics.projected_curl`)."""
+    from nodebased import fluid3d, fluid_upres
+    with gpu_lock():
+        coarse = evaluator.evaluate_raster(document, 'cache', frame=frame, typed=True)
+        fine = evaluator.evaluate_raster(document, 'upres', frame=frame, typed=True)
+    params = {**fluid_upres.DEFAULTS, 'upres_factor': '2', **settings}
+    factor = int(params['upres_factor'])
+    grid = fine.sparse if fine.sparse is not None else fine.to_sparse()
+    density = grid.to_dense()['density']
+    low, dims = fluid_upres.swirl_box(grid.coords)
+    voxel = float(coarse.voxel_size) / factor
+    guide = coarse.velocity
+    axes = [np.arange(dims[a], dtype=np.float32) + np.float32(low[a]) for a in range(3)]
+    ratio = [(guide.shape[a] - 1) / (guide.shape[a] * factor - 1) for a in range(3)]
+    q = [np.clip(axes[a] * np.float32(ratio[a]), 0, guide.shape[a] - 1) for a in range(3)]
+    qx, qy, qz = np.meshgrid(*q, indexing='ij')
+    velocity = np.stack([fluid3d.trilerp(guide[..., a], qx, qy, qz) for a in range(3)], axis=-1)
+    if float(params['swirl']) > 0:
+        waves = fluid_upres.swirl_waves(int(params['seed']), float(params['swirl_scale']), factor, frame)
+        velocity = velocity + fluid_upres.swirl_dense_cpu(guide, factor, low, dims, waves, float(params['swirl']), voxel)
+    lo = np.maximum(low, 0)
+    hi = np.minimum(low + dims, density.shape)
+    inside = tuple(slice(int(lo[a] - low[a]), int(hi[a] - low[a])) for a in range(3))
+    world = tuple(slice(int(lo[a]), int(hi[a])) for a in range(3))
+    origin = np.asarray(coarse.origin, np.float64) + lo * voxel
+    camera = document['nodes']['camera']['params']
+    return flame_metrics.projected_curl(density[world], velocity[inside], origin, voxel, (camera['tx'], camera['ty'], camera['tz']),
+                                        (0.0, camera['target_y'], 0.0))
+
+
 def upres_compare(args):
     """The shaped shot against the same shot through the up-res pass: smoke structure (field and image), flame measures, grain, times, stills."""
     images_dir = REPO / 'docs' / 'images' / 'fire_shot'
@@ -626,18 +658,11 @@ def upres_compare(args):
             pictures[name][frame] = (first, second)
             write_png(images_dir / f'fire-smoke-upres-{name}-{frame:03d}.png' if not args.upres_before else
                       images_dir / f'fire-smoke-swirl-{name}-{frame:03d}.png', first)
-        if args.upres_before:        # the curl of the apparent motion between frames 15 and 16 (same seed, 128 samples)
-            with gpu_lock():
-                params.update(render_output='rgba', pt_samples=128, pt_seed=1)
-                before_frame = evaluator.evaluate_raster(document, 'render', frame=15).pixels.copy()
-            pictures[name]['curl_pair'] = (before_frame, pictures[name][16][0])
+        if args.upres_before:
+            run['projected_curl'] = effective_curl(evaluator, document, option)
+            print(name, 'projected curl', json.dumps(run['projected_curl']), flush=True)
         runs[name] = run
         print(name, json.dumps({'bake': run['bake_seconds'], **run['summary']}), flush=True)
-    if args.upres_before:
-        mask16 = flame_metrics.smoke_mask(pictures['before'][16][0])
-        for name in ('before', 'after'):
-            runs[name]['image_curl'] = {str(factor): flame_metrics.image_curl(*pictures[name]['curl_pair'], mask16, factor)
-                                        for factor in (2, 4)}
     for frame in FRAMES:                  # smoke structure on the pixels the unprocessed shot calls smoke, for both
         mask = flame_metrics.smoke_mask(pictures['before'][frame][0])
         for name in ('before', 'after'):

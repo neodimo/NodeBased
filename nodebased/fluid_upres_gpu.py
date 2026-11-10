@@ -345,7 +345,8 @@ def reconstruct_sparse(fields, coords, fine, guide=None, previous=None, step=0.0
                              {"src": src, "coords": coord_buf, "tilemap": tilemap_buf,
                               "vx": guide_buf[0], "vy": guide_buf[1], "vz": guide_buf[2], "sv": swirl_buf, "out": out},
                              _u(a=(*fine, len(coords)), b=(*coarse, start),
-                                c=(step, 1.0 if prior is not None else 0.0, 0.0 if swirl is None else 1.0)),
+                                c=(step, 1.0 if prior is not None else 0.0,
+                                   1.0 if swirl is not None and name == "density" else 0.0)),
                              ("wg", (workgroups, 1, 1)))
             packed[start:start + length] = ctx.read(out, length * 4).view(np.float32)
         result[name] = packed.reshape(-1, 8, 8, 8)
