@@ -1,3 +1,9 @@
+## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) Lane 2 step RW4 (Tue 11/10): the last Roto and RotoPaint parity rows (integrator tick)
+
+- **What was done:** `main` `69635256` -> `f4ae8fd0` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `f4ae8fd0`: Ran 9629 tests in 1194.883 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) Lane 2 step RW3 (Tue 11/10): the shape list order Nuke uses, and a tour of the new Roto tools, Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step I4 (Tue 11/10): Roto mattes on the GPU, behind a switch (integrator tick)
 
 - **What was done:** `main` `7a48cc51` -> `a57fc39a` plus this docs commit. Evidence and per-lane commit

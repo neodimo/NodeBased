@@ -1,5 +1,28 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:56 PM on 2026-11-10 PDT)
+
+`main` moved `69635256` -> `f4ae8fd0` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `f4ae8fd0` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-1228.log`, started 12:28 PM): **Ran 9629 tests in 1194.883 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Lane 2 step RW4 (Tue 11/10): the last Roto and RotoPaint parity rows.** Commits:
+  - `9cde8344` Roto: walkthrough shows ripple edit and the RotoPaint list cells; ROTO_NUKE_UI counts and RW4 notes (ledger at 100)
+  - `0f318d9c` Roto UI ledger: View rows are not applicable (no multi-view projects) and take no part in the score; strip blending lists follow the node kind
+  - `517f3af9` RotoPaint: shapes render their own colour, strokes and shapes both invert, and both offer Roto's whole blending list through Roto's formulas
+  - `827389fa` Roto parity reference: cite the Deleting or Rippling Keyframes page
+  - `dc2c3bbc` Roto: ripple edit (all, from start, to end, range) spreads a point edit over the shape's other keys, one undo step
+  Diff: 18 files changed, 789 insertions(+), 99 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:06 AM on 2026-11-10 PDT)
 
 `main` moved `7a48cc51` -> `a57fc39a` (lane commits cherry-picked onto main in lane order) and then to this
