@@ -351,12 +351,17 @@ class EvaluatorTests(unittest.TestCase):
         _, pooled = self.evaluators(workers=2)
         events = []
         lock = threading.Lock()
+        # Under a loaded machine the pool thread can start the Roto after the walk reaches the Blur (11/10 full
+        # suite). The Blur waits until the Roto has begun, so the test asks only whether the walk goes on while the
+        # Roto computes: a walk that blocked on the Roto would log the Blur after "roto end".
+        roto_started = threading.Event()
         real_matte = pooled._roto_matte
         real_inner = Evaluator._windowed_kernel_inner
 
         def slow_matte(params, data):
             with lock:
                 events.append("roto begin")
+            roto_started.set()
             time.sleep(0.4)
             try:
                 return real_matte(params, data)
@@ -366,6 +371,7 @@ class EvaluatorTests(unittest.TestCase):
 
         def inner(kind, *args, **kwargs):
             if kind == "Blur":
+                roto_started.wait(5)
                 with lock:
                     events.append("blur")
             return real_inner(kind, *args, **kwargs)
