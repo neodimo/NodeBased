@@ -1,5 +1,24 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (9:46 PM on 2026-11-09 PDT)
+
+`main` moved `6079e0ae` -> `f26b2ecc` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `f26b2ecc` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1109-2126.log`, started 9:26 PM): **Ran 9467 tests in 1118.098 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: a faster Roto feather, and the Roto matte off the playback thread's lock.** Commits:
+  - `27d7da58` Move Roto read-ahead matte work into a process
+  Diff: 4 files changed, 100 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) (1:16 PM on 2026-11-08 PDT)
 
 `main` moved `cccd2d6d` -> `03333543` (lane commits cherry-picked onto main in lane order) and then to this

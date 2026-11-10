@@ -1,3 +1,9 @@
+## 2026-11-09 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: a faster Roto feather, and the Roto matte off the playback thread's lock (integrator tick)
+
+- **What was done:** `main` `6079e0ae` -> `f26b2ecc` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `f26b2ecc`: Ran 9467 tests in 1118.098 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-08 — continuous mode merge: Lane 9 (2D behaviour B, GPT-6 Luna) step AB: the next nodes under 80: Root, Sampler, Histogram, HistEQ and GenerateLUT (integrator tick)
 
 - **What was done:** `main` `cccd2d6d` -> `03333543` plus this docs commit. Evidence and per-lane commit
