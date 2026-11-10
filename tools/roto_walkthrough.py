@@ -12,11 +12,14 @@ import argparse
 import copy
 import gc
 import json
+import math
 import os
 import sys
 import time
 import traceback
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,7 +30,9 @@ from PySide6.QtCore import QEvent, QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QTreeWidget, QWidget)
 
-from nodebased import shapes as shape_model
+import numpy as np
+
+from nodebased import roto as roto_model, rotoinbetween, shapes as shape_model
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
 
@@ -38,6 +43,7 @@ SHIFT = Qt.KeyboardModifier.ShiftModifier
 LEFT = Qt.MouseButton.LeftButton
 WIDTH, HEIGHT = 640, 360
 
+PAST_NUKE_FIRST = 17    # scenes from here on are NodeBased additions with no Nuke counterpart
 SCENES = []  # (number, title, guide pages, what Nuke does, function)
 
 
@@ -56,10 +62,11 @@ class Result:
     def __init__(self, number, title, pages, nuke_does):
         self.number, self.title, self.pages, self.nuke_does = number, title, pages, nuke_does
         self.status, self.notes, self.screens, self.error, self.seconds = "works", [], [], "", 0.0
+        self.captions = []
 
     def as_dict(self):
         return dict(number=self.number, title=self.title, pages=self.pages, nuke_does=self.nuke_does,
-                    status=self.status, notes=self.notes, screens=self.screens, error=self.error,
+                    status=self.status, notes=self.notes, screens=self.screens, captions=self.captions, error=self.error,
                     seconds=round(self.seconds, 1))
 
 
@@ -73,7 +80,7 @@ class Walk:
         self.shots = 0
 
     # -- documents -----------------------------------------------------------------------------------------------------
-    def fresh(self, kind="roto", shapes=None, items=None, last=24, current=1):
+    def fresh(self, kind="roto", shapes=None, items=None, last=24, current=1, plate=None, size=None):
         self.close()
         QSettings("NodeBased", "NodeBased").clear()
         dispatcher = Dispatcher(empty_document())
@@ -81,9 +88,14 @@ class Walk:
         if kind == "roto":
             self.key = "r"
             commands = [{"op": "create", "id": "r", "type": "Roto", "pos": [0, 0]},
-                        {"op": "set", "id": "r", "param": "width", "value": WIDTH},
-                        {"op": "set", "id": "r", "param": "height", "value": HEIGHT},
-                        {"op": "view", "id": "r"}]
+                        {"op": "set", "id": "r", "param": "width", "value": (size or (WIDTH, HEIGHT))[0]},
+                        {"op": "set", "id": "r", "param": "height", "value": (size or (WIDTH, HEIGHT))[1]}]
+            if plate:      # `plate(dispatcher)` adds the nodes behind the Roto and connects its bg input
+                for command in commands:
+                    dispatcher.execute(command)
+                plate(dispatcher)
+                commands = []
+            commands += [{"op": "view", "id": "r"}]
         else:
             self.key = "paint"
             commands = [{"op": "create", "id": "plate", "type": "Checker", "params": {"width": WIDTH, "height": HEIGHT, "size": 40}},
@@ -213,14 +225,15 @@ class Walk:
         return panel.findChild(QTreeWidget, "roto-shape-list")
 
     # -- results -------------------------------------------------------------------------------------------------------
-    def shot(self, label):
+    def shot(self, label, caption=None):
         self.shots += 1
         self.settle()
         name = f"{self.result.number:02d}-{self.shots}-{label}.png"
         self.window.grab().save(str(self.out_dir / name))
         self.result.screens.append(name)
+        self.result.captions.append(caption or label.replace("-", " ").capitalize())
 
-    def shot_widget(self, label, widget, size=(1000, 260)):
+    def shot_widget(self, label, widget, size=(1000, 260), caption=None):
         """A screenshot of one widget (for panels the dock shows below the fold, such as the shape list)."""
         self.shots += 1
         widget.resize(*size)
@@ -228,6 +241,7 @@ class Walk:
         name = f"{self.result.number:02d}-{self.shots}-{label}.png"
         widget.grab().save(str(self.out_dir / name))
         self.result.screens.append(name)
+        self.result.captions.append(caption or label.replace("-", " ").capitalize())
 
     def note(self, text):
         self.result.notes.append(text)
@@ -761,6 +775,231 @@ def s16(w):
     w.shot("dustbust")
 
 
+# ---- Past Nuke: tools NodeBased adds on top of Nuke's Roto (lane 9 steps I1 and I2, lane 2 step I3) ----------------------
+# Every image below is computed from a formula (a white disc on black, a textured disc that stretches), so the pack can be
+# regenerated exactly; nothing is downloaded.
+def ring(count, radius, centre, radial=None, handles=True):
+    """A closed Bezier circle of `count` points; `radial` adds a per-point wobble in pixels."""
+    k = 4.0 / 3.0 * math.tan(math.pi / (2 * count))
+    points = []
+    for i in range(count):
+        a = 2 * math.pi * i / count
+        r = radius + (radial[i] if radial is not None else 0.0)
+        tx, ty = -math.sin(a), math.cos(a)
+        h = k * radius if handles else 0.0
+        points.append({"x": centre[0] + r * math.cos(a), "y": centre[1] + r * math.sin(a),
+                       "in_x": -tx * h, "in_y": -ty * h, "out_x": tx * h, "out_y": ty * h})
+    return points
+
+
+def ring_error(points, centre, radius):
+    """Root-mean-square distance in pixels of a shape's outline from a circle."""
+    outline = roto_model.flatten_points(points, closed=True)
+    return math.sqrt(sum((math.hypot(x - centre[0], y - centre[1]) - radius) ** 2 for x, y in outline) / len(outline))
+
+
+def ring_shape(name, points, **extra):
+    return {"name": name, "mode": "union", "opacity": 1.0, "feather": 0.0, "closed": True, "points": points, **extra}
+
+
+def disc_plate(box, keys=None):
+    """A plate function for `Walk.fresh`: a hard-edged white disc on black filling `box` = (x, y, width, height)."""
+    def build(dispatcher):
+        dispatcher.execute({"op": "create", "id": "plate", "type": "Radial"})
+        for name, value in dict(width=WIDTH, height=HEIGHT, box_x=box[0], box_y=box[1], box_width=box[2], box_height=box[3],
+                                softness=0.0).items():
+            dispatcher.execute({"op": "set", "id": "plate", "param": name, "value": value})
+        for frame, (x, y, width, height) in (keys or {}).items():
+            for name, value in (("box_x", x), ("box_y", y), ("box_width", width), ("box_height", height)):
+                dispatcher.execute({"op": "set_key", "id": "plate", "param": name, "frame": frame, "value": value})
+        dispatcher.execute({"op": "connect", "id": "r", "input": "bg", "source": "plate"})
+    return build
+
+
+SUBJECT = (320.0, 180.0)
+SUBJECT_R = 100.0
+EDGE_BIAS = 25.08 / 25.0      # a hard Radial of box radius r has an area-equivalent edge radius of r times this
+
+
+@scene(17, "Snap to edges and Fit to edges",
+       ["working_toolbars.html", "drawing_shapes.html"],
+       "Nuke has no edge snapping: points land where you click, and fitting a shape to the picture is done by hand, point by point.")
+def s17(w):
+    wobble = [6.0, -9.0, 11.0, -5.0, 8.0, -12.0, 4.0, 10.0, -7.0, 9.0, -10.0, 5.0, 12.0, -6.0, 7.0, -8.0]
+    rough = ring_shape("rough", ring(16, SUBJECT_R * EDGE_BIAS, (SUBJECT[0] + 9, SUBJECT[1] - 7), wobble))
+    box = (SUBJECT[0] - SUBJECT_R, SUBJECT[1] - SUBJECT_R, 2 * SUBJECT_R, 2 * SUBJECT_R)
+    w.fresh("roto", shapes=[rough], last=3, current=2, plate=disc_plate(box))
+    w.viewer.roto_selected_shape_index = 0
+    w.tool("Select", "Select Points")
+    w.settle()
+    before = ring_error(shape_model.resolve_shapes(w.payload, 2)[0]["points"], SUBJECT, SUBJECT_R * EDGE_BIAS)
+    w.check(before > 5.0, f"the rough outline starts well off the subject's edge ({before:.1f} px)")
+    w.shot("rough-before-fit", "A rough outline around the white subject: it wobbles several pixels off the real edge.")
+    w.viewer.roto_toolbar.set_setting("r", "Select Points", "fit_band", 18.0)      # how far a point may travel to find the edge
+    button = w.viewer.roto_toolbar.settings_widgets["fit_to_edges"]
+    button.click(); w.settle(); w.wait(lambda: False, 0.3)
+    after = ring_error(shape_model.resolve_shapes(w.payload, 2)[0]["points"], SUBJECT, SUBJECT_R * EDGE_BIAS)
+    w.check(after < 1.0, f"Fit to edges settles the outline on the edge ({before:.1f} px off before, {after:.2f} px after)")
+    w.shot("after-fit-to-edges", f"After Fit to edges: the same outline now hugs the subject, {after:.1f} px off instead of {before:.1f}.")
+    w.note(f"Fit to edges: outline error {before:.1f} px to {after:.2f} px")
+    # Snap: with Snap to edges on, a point clicked a few pixels away from the edge lands on it.
+    w.viewer.roto_toolbar.set_setting("r", "Select Points", "snap_edges", True)
+    w.viewer.roto_toolbar.set_setting("r", "Select Points", "snap_radius", 12.0)
+    w.tool("Shapes", "Bezier")
+    w.check(w.viewer.begin_roto_draw("r"), "begin drawing with the Bezier tool")
+    clicks = 8
+    for i in range(clicks):
+        angle = 2 * math.pi * (i + 0.3) / clicks
+        w.click(SUBJECT[0] + (SUBJECT_R * EDGE_BIAS + 8) * math.cos(angle), SUBJECT[1] + (SUBJECT_R * EDGE_BIAS + 8) * math.sin(angle))
+    w.check(w.viewer.finish_roto_draw(closed=True), "the drawing is finished")
+    w.settle()
+    drawn = w.shape_entries()[-1]["points"]
+    errors = [abs(math.hypot(number(p["x"]) - SUBJECT[0], number(p["y"]) - SUBJECT[1]) - SUBJECT_R * EDGE_BIAS) for p in drawn]
+    w.check(len(drawn) == clicks and max(errors) < 1.0,
+            f"every clicked point snapped onto the edge (largest miss {max(errors):.2f} px, clicked 8 px outside)")
+    w.shot("snapped-clicks", "A second outline clicked 8 pixels outside the edge, with Snap to edges on: every point landed on the edge.")
+    w.note(f"Snap to edges: points clicked 8 px outside landed within {max(errors):.2f} px of the edge")
+
+
+# The subject of scene 18: a textured disc whose right half stretches a few percent every frame, so a plain move/scale
+# of the whole outline cannot follow it but each point following its own patch of picture can.
+TRACK_CENTRE = (240.0, 180.0)
+TRACK_R = 90.0
+STRETCH = 0.06
+
+
+def _texture(u, v):
+    return (0.5 + 0.12 * np.sin(0.61 * u + 0.2) + 0.12 * np.cos(0.47 * v + 1.1) + 0.10 * np.sin(0.33 * (u + v) + 0.7)
+            + 0.09 * np.cos(0.52 * (u - 1.3 * v)) + 0.08 * np.sin(0.83 * u - 0.29 * v + 2.0) + 0.06 * np.cos(0.71 * (u + 0.4 * v)))
+
+
+def stretching_disc(frame, width, height, x0=0, y0=0):
+    t = frame - 1
+    ys, xs = np.mgrid[y0:y0 + height, x0:x0 + width].astype(np.float64)
+    x, y = xs + 0.5, ys + 0.5
+    u = np.where(x > TRACK_CENTRE[0], TRACK_CENTRE[0] + (x - TRACK_CENTRE[0]) / (1 + STRETCH * t), x)
+    coverage = np.clip(TRACK_R - np.hypot(u - TRACK_CENTRE[0], y - TRACK_CENTRE[1]) + 0.5, 0.0, 1.0)
+    return 0.2 * (1 - coverage) + coverage * _texture(u, y)
+
+
+def stretched_position(point, frame):
+    """Where a point of the frame-1 outline sits on `frame`: the right half stretches, the left half stays."""
+    if point["x"] > TRACK_CENTRE[0]:
+        return TRACK_CENTRE[0] + (point["x"] - TRACK_CENTRE[0]) * (1 + STRETCH * (frame - 1)), point["y"]
+    return point["x"], point["y"]
+
+
+class StretchingPlate:
+    """Stands in for the plate's pixels (the same stand-in the point-tracking tests use): the textured stretching disc, with an
+    optional square of flat grey laid over a point on chosen frames to take away the picture it follows."""
+
+    def __init__(self, occlusions=None):
+        self.occlusions = occlusions or {}
+
+    def __call__(self, _executor, _doc, _source, region, frame, **_kwargs):
+        gray = stretching_disc(frame, region.width, region.height, region.x, region.y)
+        rect = self.occlusions.get(frame)
+        if rect is not None:
+            x0, y0, x1, y1 = rect
+            gray[max(0, y0 - region.y):max(0, y1 - region.y), max(0, x0 - region.x):max(0, x1 - region.x)] = 0.5
+        rgba = np.stack(np.broadcast_arrays(gray, gray, gray, np.ones_like(gray)), axis=-1).astype(np.float32)
+        return SimpleNamespace(pixels=rgba, tiled=True, tile_hits=0, tile_misses=0, fallback_nodes=())
+
+
+@scene(18, "Track points: an outline that follows a bending subject",
+       ["animating_strokes_shapes.html"],
+       "Nuke's planar track moves the whole outline as one flat patch, so a subject that bends or stretches drifts away from it; the points are re-keyed by hand.")
+def s18(w):
+    from nodebased.tileexec import TileExecutor
+    count = 24
+    start = ring(count, TRACK_R, TRACK_CENTRE)
+    victim = 0                                   # the point on the right edge, which moves the most
+    occlusions = {}
+    for frame in (6, 7, 8):
+        x, y = stretched_position(start[victim], frame)
+        occlusions[frame] = (int(x) - 30, int(y) - 30, int(x) + 31, int(y) + 31)
+    plate = StretchingPlate(occlusions)
+    with patch.object(TileExecutor, "compose_region", lambda *a, **k: plate(*a, **k)):
+        def behind(dispatcher):      # a stand-in plate; its pixels are replaced by the stretching disc above
+            dispatcher.execute({"op": "create", "id": "plate", "type": "Checker", "params": {"width": WIDTH, "height": HEIGHT}})
+            dispatcher.execute({"op": "connect", "id": "r", "input": "bg", "source": "plate"})
+        w.fresh("roto", shapes=[ring_shape("subject", start)], last=10, current=1, plate=behind)
+        w.viewer.roto_selected_shape_index = 0
+        w.tool("Select", "Select Points")
+        w.wait(lambda: False, 0.5)
+        w.shot("frame-1", "Frame 1: the outline is drawn around the textured subject.")
+        messages = []
+        w.window.statusBar().messageChanged.connect(messages.append)
+        w.check(w.window.track_roto_points("r"), "Track points starts from frame 1")
+        w.check(w.wait(lambda: w.window._points_future is None, 120), "the point track finishes")
+        w.settle()
+        named = [m for m in messages if "low-confidence" in m]
+        w.check(named and "point 1 (frames 6" in named[-1], "the status bar names the flagged point and its frames")
+        errors = {}
+        for frame in range(1, 11):
+            resolved = shape_model.resolve_shapes(w.payload, frame)[0]["points"]
+            truth = [stretched_position(p, frame) for p in start]
+            errors[frame] = [math.hypot(r["x"] - t[0], r["y"] - t[1]) for r, t in zip(resolved, truth)]
+        clear = [i for i in range(count) if i != victim and math.hypot(start[i]["x"] - start[victim]["x"],
+                                                                        start[i]["y"] - start[victim]["y"]) > 45]
+        worst = max(errors[f][i] for f in (5, 10) for i in clear)
+        w.check(worst < 2.5, f"the outline follows the stretching subject on frames 5 and 10 (worst point {worst:.2f} px off)")
+        w.check(len(w.window.dispatcher.undo_stack) >= 1, "tracking is recorded as one edit")
+        for frame in (5, 10):
+            w.goto(frame); w.wait(lambda: False, 0.5)
+            w.shot(f"frame-{frame}", f"Frame {frame}: the right side has stretched and every point of the outline stayed on its patch of picture.")
+        flagged = {f: w.viewer.roto_flagged_points("r", f, 0, count) for f in range(1, 11)}
+        w.check(all((victim in flagged[f]) == (f in (6, 7, 8)) for f in flagged),
+                "the point whose picture is covered is flagged on exactly the frames it was covered")
+        w.goto(7); w.wait(lambda: False, 0.5)
+        w.shot("frame-7-low-confidence",
+               "Frame 7: a grey patch hides the picture one point follows, so that point is flagged red; it keeps to the planar guess.")
+        w.note(f"Track points: worst clear point {worst:.2f} px off over frames 2 to 10; flagged point named in the status bar")
+        w.goto(1)
+
+
+@scene(19, "Fill in-betweens: two keys, the frames between fitted to the picture",
+       ["animating_strokes_shapes.html", "editing_existing_timing.html"],
+       "Nuke interpolates between keys only, so a subject that does not move at an even pace drifts away from the outline between them; extra keys are added by hand.")
+def s19(w):
+    centre = SUBJECT
+    r0, r1 = 40.0, 110.0
+    last = 6
+
+    def radius(frame, bias=1.0):
+        t = (frame - 1) / (last - 1)
+        return (r0 + (r1 - r0) * t * t) * bias
+
+    keys = {f: (centre[0] - radius(f), centre[1] - radius(f), 2 * radius(f), 2 * radius(f)) for f in range(1, last + 1)}
+    first, final = ring(16, r0 * EDGE_BIAS, centre), ring(16, r1 * EDGE_BIAS, centre)
+    shape = ring_shape("subject", [{name: {"value": a[name], "curve": {"interpolation": "linear", "keys": [
+        {"frame": 1, "value": a[name]}, {"frame": last, "value": b[name]}]}} for name in a} for a, b in zip(first, final)])
+    w.fresh("roto", shapes=[shape], last=last, current=3, plate=disc_plate(keys[1], keys))
+    w.viewer.roto_selected_shape_index = 0
+    w.tool("Select", "Select Points")
+
+    def error(frame):
+        points = shape_model.resolve_shapes(w.payload, frame)[0]["points"]
+        return ring_error(points, centre, radius(frame, EDGE_BIAS))
+
+    w.wait(lambda: False, 0.5)
+    middle_before = [error(f) for f in range(2, last)]
+    w.check(max(middle_before) > 4.0, f"between the keys the plain interpolation drifts off the subject ({max(middle_before):.1f} px)")
+    w.shot("interpolated-only", f"Frame 3 with keys only on frames 1 and {last}: the subject grows slowly at first, so the evenly interpolated outline sits {error(3):.0f} pixels outside its edge.")
+    keyed_before = sorted(rotoinbetween.key_frames(w.payload["shapes"][0]))
+    w.check(w.viewer.roto_toolbar.settings_widgets["fill_inbetweens"] is not None, "the strip has a Fill in-betweens button")
+    w.viewer.roto_toolbar.set_setting("r", "Select Points", "fill_band", 30.0)      # how far a point may travel to find the edge
+    undo = len(w.window.dispatcher.undo_stack)
+    w.viewer.roto_toolbar.settings_widgets["fill_inbetweens"].click(); w.settle(); w.wait(lambda: False, 0.5)
+    middle_after = [error(f) for f in range(2, last)]
+    w.check(max(middle_after) < 1.0, f"after Fill in-betweens every middle frame sits on the edge (worst {max(middle_after):.2f} px)")
+    w.check(len(w.window.dispatcher.undo_stack) == undo + 1, "the fill is one undo step")
+    w.check(sorted(rotoinbetween.key_frames(w.payload["shapes"][0])) == list(range(1, last + 1)),
+            "the fill added keys on the frames between, and left the first and last keys alone")
+    w.shot("after-fill", f"Frame 3 after Fill in-betweens: the same frame now follows the subject's edge, {error(3):.1f} pixels off instead of {middle_before[1]:.0f}.")
+    w.note(f"Fill in-betweens: worst middle frame {max(middle_before):.1f} px off before, {max(middle_after):.2f} px after; keys {keyed_before} to 1 through {last}")
+
+
 # ---- Running ---------------------------------------------------------------------------------------------------------
 def run(out_dir, only=None):
     out_dir = Path(out_dir)
@@ -812,17 +1051,30 @@ def write_readme(results, out_dir):
              "afterwards, so a verdict of **works** is a passed check. Guide images and text are not copied; the page is linked.", "",
              f"**{counts['works']} work, {counts['differs']} differ, {counts['broken']} broken** out of {len(results)} scenes.", "",
              "Re-run: `QT_QPA_PLATFORM=offscreen python tools/roto_walkthrough.py --out <dir>`.", "",
-             "| # | Workflow | Guide | What Nuke does | NodeBased | Verdict |", "|---|---|---|---|---|---|"]
-    for r in results:
+             ]
+    header = ["| # | Workflow | Guide | What Nuke does | NodeBased | Verdict |", "|---|---|---|---|---|---|"]
+
+    def row(r):
         pages = "<br>".join(f"[{page.rsplit('/', 1)[1].replace('.html', '')}]({page})" for page in r.pages)
-        shots = "<br>".join(f"[![{name}]({name})]({name})" for name in r.screens[:3])
-        extra = "" if len(r.screens) <= 3 else "<br>" + " ".join(f"[{i}]({name})" for i, name in enumerate(r.screens[3:], 4))
+        captions = r.captions + [""] * (len(r.screens) - len(r.captions))
+        shots = "<br>".join(f"[![{name}]({name})]({name})" + (f"<br><sub>{caption.replace('|', '/')}</sub>" if caption else "")
+                            for name, caption in zip(r.screens[:3], captions))
+        extra = "" if len(r.screens) <= 3 else "<br>" + "<br>".join(
+            f"[![{name}]({name})]({name})" + (f"<br><sub>{caption.replace('|', '/')}</sub>" if caption else "")
+            for name, caption in zip(r.screens[3:], captions[3:]))
         verdict = {"works": "**works**", "differs": "**differs**", "broken": "**broken**"}[r.status]
         detail = [n for n in r.notes if not n.startswith("Traceback")]
         if r.error:
             detail.insert(0, r.error)
         text = verdict + ("<br>" + "<br>".join(d.replace("|", "/").replace("\n", " ") for d in detail) if detail else "")
-        lines.append(f"| {r.number} | {r.title} | {pages} | {r.nuke_does} | {shots}{extra} | {text} |")
+        return f"| {r.number} | {r.title} | {pages} | {r.nuke_does} | {shots}{extra} | {text} |"
+
+    lines += header + [row(r) for r in results if r.number < PAST_NUKE_FIRST]
+    past = [r for r in results if r.number >= PAST_NUKE_FIRST]
+    if past:
+        lines += ["", "## Past Nuke", "",
+                  "Tools NodeBased adds on top of Nuke's Roto. Each scene runs on a picture computed from a formula, so the pack can be "
+                  "regenerated exactly, and each screenshot has a one-line caption saying what it shows.", ""] + header + [row(r) for r in past]
     (out_dir / "README.md").write_text("\n".join(lines) + "\n")
 
 
