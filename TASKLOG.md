@@ -1,3 +1,9 @@
+## 2026-11-09 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step RW: the Roto and RotoPaint walkthrough against Nuke's guide (the "matches Nuke" sign-off pack) (integrator tick)
+
+- **What was done:** `main` `7f9359d7` -> `22d68ed6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `22d68ed6`: Ran 9468 tests in 1156.975 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-09 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: a faster Roto feather, and the Roto matte off the playback thread's lock (integrator tick)
 
 - **What was done:** `main` `6079e0ae` -> `f26b2ecc` plus this docs commit. Evidence and per-lane commit

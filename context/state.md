@@ -1,5 +1,25 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:16 PM on 2026-11-09 PDT)
+
+`main` moved `7f9359d7` -> `22d68ed6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `22d68ed6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1109-2156.log`, started 9:56 PM): **Ran 9468 tests in 1156.975 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step RW: the Roto and RotoPaint walkthrough against Nuke's guide (the "matches Nuke" sign-off pack).** Commits:
+  - `1e8c7abd` Add the Roto and RotoPaint walkthrough: sixteen guide workflows driven through the viewer
+  - `f90ad369` Use the Ctrl-dragged clone offset for new RotoPaint clone strokes
+  Diff: 3 files changed, 849 insertions(+), 1 deletion(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (9:46 PM on 2026-11-09 PDT)
 
 `main` moved `6079e0ae` -> `f26b2ecc` (lane commits cherry-picked onto main in lane order) and then to this
