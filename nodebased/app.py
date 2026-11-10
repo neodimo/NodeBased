@@ -3959,9 +3959,15 @@ class Viewer(PanZoomView):
                                                                     local[field_name], animated)
             changed = True
         if changed:
-            self._commit_roto_shapes(key, node, shapes)
+            self._commit_roto_shapes(key, node, shapes, ripple=True)
             self.viewport().update()
         return changed
+
+    def _ripple_skipped_suffix(self, tool):
+        """With ripple edit on, the status-bar note that `tool` writes keys of its own over a range, so ripple does not apply."""
+        if self.roto_ripple_window() is None:
+            return ""
+        return f" · ripple edit does not apply: {tool} writes its own keys"
 
     def fill_roto_inbetweens(self, shape_indices=None):
         """Fill the frames between two keys with edge-fitted keys: one undo step for every shape.
@@ -4035,7 +4041,8 @@ class Viewer(PanZoomView):
         if total_keys:
             self._commit_roto_shapes(key, node, shapes)
             self.viewport().update()
-            bar.showMessage(f"Fill in-betweens: added {total_keys} keys on {total_frames} frames", 6000)
+            bar.showMessage(f"Fill in-betweens: added {total_keys} keys on {total_frames} frames"
+                            + self._ripple_skipped_suffix("Fill in-betweens"), 6000)
             return True
         if no_image and not no_range:
             bar.showMessage("Fill in-betweens: connect an image to the Roto input", 4000)
@@ -16165,6 +16172,7 @@ class Window(QMainWindow):
             listed = [f"{name} point {number} (frames {min(frames_)}–{max(frames_)})"
                       for (name, number), frames_ in sorted(by_point.items())]
             summary += f" · {len(by_point)} low-confidence: " + ", ".join(listed[:6]) + (f" and {len(listed) - 6} more" if len(listed) > 6 else "")
+        summary += self.viewer._ripple_skipped_suffix("Track points")
         self.statusBar().showMessage(summary)
         self.viewer.viewport().update()
         self.rebuild_properties_dock()

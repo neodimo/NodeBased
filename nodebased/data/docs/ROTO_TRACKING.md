@@ -660,6 +660,13 @@ kept, tangents turn and scale with their neighbours, a cusped corner goes to the
 relative to their point. With Autokey on it writes a key at the current frame (the same commit path as a point drag), with Autokey off it
 changes the static shape. One undo step covers all selected shapes; locked shapes and shapes in locked layers are skipped.
 
+**Ripple through Fit to edges.** With the Select tools' Ripple edit on, Fit to edges on the current frame is treated like a hand point edit
+(`rotoripple.ripple_shapes`): each point's fitted offset, the difference between its fitted and its previous coordinate at the current frame,
+is added to that point's other keys inside the ripple range (all, from start, to end or range), keys outside the range stay put, and a point
+with no keys simply takes the fitted value. The fit and the ripple are one command, so one undo restores every key. Track points and Fill
+in-betweens already write keys of their own over a range of frames, so ripple edit does not apply to them: when it is on and one of them runs,
+the status bar adds "ripple edit does not apply: ... writes its own keys".
+
 Measured on synthetic images (tests/test_roto_edges_i1.py): a snap from 5 px outside a disc lands within 0.09 px of its edge; a 16-point circle
 perturbed by up to 4 px fits to 0.3 px RMS; a perturbed square reaches its corners within 0.25 px; fitting a 24-point shape on a 1920 x 1080
 plate computes a 672 x 672 px region in about 15 ms and fits in about 15 ms. The plate of the playback fixture is a smooth gradient with no
