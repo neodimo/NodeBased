@@ -1,0 +1,82 @@
+{
+ "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+ "reps": 7,
+ "passes": 3,
+ "rows": [
+  {
+   "size": "1080p",
+   "case": "shots30",
+   "title": "30 shapes, 12-point curves, feather 12 (box)",
+   "shapes": 30,
+   "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+   "cpu_ms": [
+    35.91,
+    35.61,
+    35.83
+   ],
+   "gpu_ms": [
+    29.48,
+    28.83,
+    29.58
+   ],
+   "gpu_plan_ms": [
+    3.21,
+    3.19,
+    3.19
+   ],
+   "faster_by": 1.22,
+   "max_diff": 4.76837158203125e-07,
+   "mean_diff": 4.966418831742203e-09
+  },
+  {
+   "size": "1080p",
+   "case": "shots30_heavy",
+   "title": "30 shapes, 50-point curves, feather 18 (box), larger",
+   "shapes": 30,
+   "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+   "cpu_ms": [
+    66.36,
+    66.97,
+    67.46
+   ],
+   "gpu_ms": [
+    65.28,
+    57.17,
+    57.8
+   ],
+   "gpu_plan_ms": [
+    4.91,
+    4.92,
+    4.93
+   ],
+   "faster_by": 1.16,
+   "max_diff": 5.960464477539062e-07,
+   "mean_diff": 1.0735019984053906e-08
+  },
+  {
+   "size": "1080p",
+   "case": "one_blob",
+   "title": "1 shape, 50-point curve, feather 18 (box)",
+   "shapes": 1,
+   "adapter": "llvmpipe (LLVM 22.1.8, 256 bits)",
+   "cpu_ms": [
+    10.26,
+    10.33,
+    10.12
+   ],
+   "gpu_ms": [
+    12.7,
+    13.07,
+    12.95
+   ],
+   "gpu_plan_ms": [
+    0.34,
+    0.34,
+    0.34
+   ],
+   "faster_by": 0.79,
+   "max_diff": 3.5762786865234375e-07,
+   "mean_diff": 1.1311120928780838e-09
+  }
+ ]
+}

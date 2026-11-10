@@ -749,6 +749,95 @@ is missed by plain interpolation by 2.2 to 5.0 px RMS on frames 2 to 8; after th
 (7 frames and 112 point keys for a 16-point shape). A disc that grows linearly gets no key. The fit on a 24-point shape at 1920 x 1080 takes
 about 30 ms per in-between frame once the plate is rendered; the plate's own evaluation per frame comes on top.
 
+## GPU mattes (past Nuke)
+
+Roto shapes can be drawn on the graphics card instead of the processor. It is a switch, **off by default**: nothing changes for anyone
+who has not turned it on, and the processor drawer stays the reference. **Settings → Interface → "Draw Roto mattes on the graphics card
+(experimental)"** turns it on at once (the cached mattes are dropped so the picture shows the new path); `NODEBASED_ROTO_GPU=1` or `0`
+overrides the saved choice and Settings says so under the row. The code is `nodebased/rotogpu.py`; `roto.rasterise` offers it every
+full-frame request first and draws on the processor whenever it answers "no".
+
+**What runs on the card.** Closed Bezier and B-Spline shapes with the box feather, per shape, in the processor drawer's own order:
+the fill (non-zero winding, eight sub-scanlines per pixel row, exact horizontal coverage), the box blur of the feather (the Blur node's
+window, edge pixels repeated at the patch edge), clamp, the falloff curve (linear, smooth or gaussian) and falloff power, the shape's
+own invert, opacity and colour alpha, and the shape's blend: over, plus, multiply, minus, from, difference, exclusion, max, min,
+screen, and the subtract mode. The processor flattens each outline and works out which sub-scanlines every edge crosses, in double
+precision, by the drawer's own rule, so no sub-scanline is gained or lost; the card does the rest in 32-bit floats. All shapes of a
+matte go through four compute passes in all (fill every row of every shape, blur across, blur down, then one finishing pass that
+composites each pixel through the shapes that cover it in order), and only the shapes' patches come back, because copying the whole
+frame back costs about 11 ms at 1080p (3 GB/s from the card) whatever is drawn. A compute pass was chosen over a render pass: the fill
+needs a sort of each sub-scanline's crossings and a sum into a row one thread owns, and a rasteriser's multisample patterns cannot
+give the drawer's exact horizontal coverage.
+
+**What stays on the processor** (the whole matte, so a mixed Roto is never half-drawn on the card): open strokes and RotoPaint
+brushes, the signed-distance ("edge") feather of a Bezier shape, motion blur samples, picture sources (clone, reveal, the
+background and foreground sources), the Merge-style blend modes (under, atop, overlay and the rest), any request for a region of the
+frame (the tile path), a feather wider than 256 pixels, a scanline crossed more than 128 times, patches larger than the card's buffer
+limit, and the read-ahead matte process (a child process never touches the card; with the switch on, the read-ahead takes the thread
+path instead, so the card draws those mattes too). A graphics error of any kind (no adapter, lost device, a shader that will not
+compile) falls back to the processor matte for that call and is counted (`rotogpu.counters`); three errors in a row turn the path
+off for the session until Settings turns it on again.
+
+**How close.** Not bit-identical: the card fills in 32-bit floats where the drawer fills in 64-bit, so edge positions differ by a few
+millionths of a pixel and a coverage by up to about 1e-5. The largest difference over all 32 test cases is 1.2e-5 (an 8-bit step is
+3.9e-3, so the worst difference is about 1/300 of one level and only a pixel sitting on a rounding boundary can land a level apart) and the mean difference is 3e-8 or less. The same cases give the same figures on all three
+adapters on this machine (RTX 3080 Ti, Radeon 8060S, llvmpipe). Per case, the largest and mean absolute difference over the whole RGBA
+frame against the processor drawer (`tests/test_roto_gpu_i4.py`; `benchmarks/2d-playback/roto-gpu-1110/parity-*.json` has all 32; `playback-summary.json` and `matte-gpu-*.json` hold the timings):
+
+| Case | Largest difference | Mean difference |
+|---|---|---|
+| convex quad | 3.6e-07 | 5.6e-10 |
+| concave curve | 8.1e-06 | 9.9e-09 |
+| concave comb | 6.9e-06 | 2.1e-09 |
+| self-crossing bowtie | 5.1e-06 | 1.6e-08 |
+| self-crossing star | 4.6e-06 | 2.4e-08 |
+| tiny triangle | 3.0e-08 | 1.5e-11 |
+| sub-pixel sliver | 8.9e-08 | 7.5e-11 |
+| huge feather 90 | 2.7e-07 | 2.1e-08 |
+| feather 12 linear | 3.0e-07 | 8.9e-09 |
+| feather 12 smooth | 3.0e-07 | 8.2e-09 |
+| feather 12 gaussian | 4.2e-07 | 1.2e-08 |
+| falloff power 0.5 | 1.5e-06 | 9.9e-09 |
+| rotated, scaled, moved | 3.0e-07 | 5.0e-09 |
+| b-spline | 2.4e-07 | 4.6e-09 |
+| half off the frame | 2.4e-07 | 6.2e-09 |
+| subtract mode | 4.2e-07 | 1.0e-08 |
+| plus blend | 6.3e-06 | 5.8e-09 |
+| multiply blend | 2.5e-06 | 4.4e-09 |
+| difference blend | 8.3e-07 | 8.1e-09 |
+| 30 shapes at 1080p | 1.2e-05 | 4.6e-09 |
+
+Tolerance of the tests: 5e-5. Because the result is not bit-identical the switch stays off until DiMo approves the tolerance.
+
+**Speed** (`tools/benchmark_roto_gpu.py`, `roto.rasterise` on resolved shapes, no evaluator and no window; median of seven or nine
+drawings per pass, range over three alternating passes; the machine was idle, 1080p; `matte-gpu-*.json`).
+
+| 1080p | Processor ms | Card ms (RTX 3080 Ti) | Faster by | Card ms (Radeon 8060S) | Card ms (llvmpipe) |
+|---|---|---|---|---|---|
+| 30 shapes, 12-point curves, feather 12 | 35.7 to 36.8 | 15.7 to 17.3 | 2.2x | 10.0 to 11.3 (3.3x) | 28.8 to 29.6 (1.2x) |
+| 30 shapes, 50-point curves, feather 18, larger | 65.7 to 70.2 | 26.2 to 26.9 | 2.5x | 14.9 to 15.1 (4.4x) | 57.2 to 65.3 (1.2x) |
+| 10 shapes, 12-point curves, feather 12 | 13.1 to 14.7 | 8.1 to 10.2 | 1.6x | | |
+| 1 shape, 50-point curve, feather 18 | 10.7 to 11.5 | 9.8 to 12.8 | 1.2x | 7.0 to 7.2 (1.5x) | 12.7 to 13.1 (0.8x) |
+
+At 4K the 30-shape cases take 122 to 129 ms and 242 to 244 ms on the processor against 48 to 50 ms and 87 to 89 ms on the RTX
+3080 Ti (2.5x and 2.7x). The card's time is mostly the copy back to the processor (about 3 GB/s on the discrete card, so a patch the
+size of the frame costs 11 ms to read) and, when the card has been idle, its clocks falling: with 0.25 s between drawings the same 30
+shapes took 41 ms instead of 17. A Radeon sharing memory with the processor pays almost nothing for the copy, hence its larger gain.
+The processor's own figure is 36 ms because that drawer is the fast one of the Roto drawer setting.
+
+Through the evaluator, the Roto node of the 30-shape comp takes 42 ms per frame on the processor and 25 ms on the card (frames 2 to
+24, uncached, same pictures to 6e-7).
+
+**Playback: no gain yet.** `benchmark_2d_playback.py` on the real display (`--display :0`, no sampler, uncached, 1080p, 48 frames),
+with the playback comp's Roto replaced by 30 animated shapes (`tools/benchmark_roto_gpu.py --write-comp`), three alternating passes
+each: the processor path (matte read ahead in its own process) gives 6.9 frames per second on the first lap and an interval p95 of
+154 to 155 ms; the processor on the thread path (`NODEBASED_ROTO_PROCESS=0`) 6.9 to 7.0 and 156 to 158 ms; the card 6.4 to 6.6 and 161
+to 172 ms. The matte is not what limits this comp: it is already drawn ahead of the playhead on a spare core, so a faster matte buys
+nothing, and the card's work, its idle clocks and the copy back cost a few milliseconds on the frames that pace the run. Where the
+matte is on the critical path (a Roto node evaluated while the artist scrubs or edits) the card is the faster draw. Follow-ups that
+could change the playback result: keep the matte on the card inside the 2D island instead of reading it back, and raise the card's
+clocks for a play with `cardclock` as the 3D path does; neither is part of this switch.
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.

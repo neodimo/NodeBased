@@ -1,0 +1,207 @@
+{
+ "adapter": "NVIDIA GeForce RTX 3080 Ti",
+ "reps": 9,
+ "passes": 3,
+ "rows": [
+  {
+   "size": "1080p",
+   "case": "shots30",
+   "title": "30 shapes, 12-point curves, feather 12 (box)",
+   "shapes": 30,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    35.73,
+    35.97,
+    36.85
+   ],
+   "gpu_ms": [
+    17.26,
+    16.11,
+    15.72
+   ],
+   "gpu_plan_ms": [
+    3.12,
+    3.14,
+    3.18
+   ],
+   "faster_by": 2.23,
+   "max_diff": 4.172325134277344e-07,
+   "mean_diff": 4.723332391876056e-09
+  },
+  {
+   "size": "1080p",
+   "case": "shots30_heavy",
+   "title": "30 shapes, 50-point curves, feather 18 (box), larger",
+   "shapes": 30,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    68.01,
+    65.7,
+    70.21
+   ],
+   "gpu_ms": [
+    26.2,
+    26.9,
+    26.87
+   ],
+   "gpu_plan_ms": [
+    4.65,
+    4.72,
+    4.7
+   ],
+   "faster_by": 2.53,
+   "max_diff": 5.364418029785156e-07,
+   "mean_diff": 9.576066162253483e-09
+  },
+  {
+   "size": "1080p",
+   "case": "one_blob",
+   "title": "1 shape, 50-point curve, feather 18 (box)",
+   "shapes": 1,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    11.49,
+    11.39,
+    10.71
+   ],
+   "gpu_ms": [
+    9.78,
+    9.8,
+    12.76
+   ],
+   "gpu_plan_ms": [
+    0.34,
+    0.34,
+    0.48
+   ],
+   "faster_by": 1.16,
+   "max_diff": 3.5762786865234375e-07,
+   "mean_diff": 1.131142624011261e-09
+  },
+  {
+   "size": "1080p",
+   "case": "shots10",
+   "title": "10 shapes, 12-point curves, feather 12 (box)",
+   "shapes": 10,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    13.09,
+    13.11,
+    14.74
+   ],
+   "gpu_ms": [
+    10.19,
+    8.06,
+    8.08
+   ],
+   "gpu_plan_ms": [
+    1.54,
+    2.12,
+    1.37
+   ],
+   "faster_by": 1.62,
+   "max_diff": 4.172325134277344e-07,
+   "mean_diff": 1.5136077946564797e-09
+  },
+  {
+   "size": "4k",
+   "case": "shots30",
+   "title": "30 shapes, 12-point curves, feather 12 (box)",
+   "shapes": 30,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    128.77,
+    121.83,
+    122.6
+   ],
+   "gpu_ms": [
+    49.0,
+    48.12,
+    49.73
+   ],
+   "gpu_plan_ms": [
+    4.79,
+    4.9,
+    4.94
+   ],
+   "faster_by": 2.5,
+   "max_diff": 4.76837158203125e-07,
+   "mean_diff": 4.9723798412060205e-09
+  },
+  {
+   "size": "4k",
+   "case": "shots30_heavy",
+   "title": "30 shapes, 50-point curves, feather 18 (box), larger",
+   "shapes": 30,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    242.34,
+    243.79,
+    242.27
+   ],
+   "gpu_ms": [
+    88.61,
+    88.59,
+    87.23
+   ],
+   "gpu_plan_ms": [
+    7.63,
+    7.53,
+    7.65
+   ],
+   "faster_by": 2.74,
+   "max_diff": 7.152557373046875e-07,
+   "mean_diff": 1.0281716811277875e-08
+  },
+  {
+   "size": "4k",
+   "case": "one_blob",
+   "title": "1 shape, 50-point curve, feather 18 (box)",
+   "shapes": 1,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    44.66,
+    45.27,
+    46.07
+   ],
+   "gpu_ms": [
+    28.38,
+    29.39,
+    31.16
+   ],
+   "gpu_plan_ms": [
+    0.64,
+    0.6,
+    1.27
+   ],
+   "faster_by": 1.54,
+   "max_diff": 2.980232238769531e-07,
+   "mean_diff": 1.0196808952755987e-09
+  },
+  {
+   "size": "4k",
+   "case": "shots10",
+   "title": "10 shapes, 12-point curves, feather 12 (box)",
+   "shapes": 10,
+   "adapter": "NVIDIA GeForce RTX 3080 Ti",
+   "cpu_ms": [
+    45.14,
+    48.59,
+    50.38
+   ],
+   "gpu_ms": [
+    20.66,
+    21.07,
+    51.14
+   ],
+   "gpu_plan_ms": [
+    1.62,
+    4.99,
+    1.64
+   ],
+   "faster_by": 2.31,
+   "max_diff": 4.76837158203125e-07,
+   "mean_diff": 1.5916370443846972e-09
+  }
+ ]
+}

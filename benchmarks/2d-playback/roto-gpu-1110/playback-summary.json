@@ -1,0 +1,221 @@
+{
+ "comp": "30 animated 12-point shapes, feather 12 (tools/benchmark_roto_gpu.py --write-comp)",
+ "runs": [
+  {
+   "set": "roto30",
+   "mode": "processor (read-ahead process)",
+   "pass": 1,
+   "achieved_fps": 14.3,
+   "first_pass_fps": 6.864,
+   "frames_dropped_counted": 26,
+   "frame_interval_ms": {
+    "p50": 33.09,
+    "p95": 154.756,
+    "p99": 187.169
+   },
+   "worker_to_handoff_ms": {
+    "p50": 16.764,
+    "p95": 25.222,
+    "p99": 35.592
+   }
+  },
+  {
+   "set": "roto30",
+   "mode": "processor (read-ahead process)",
+   "pass": 2,
+   "achieved_fps": 14.6,
+   "first_pass_fps": 6.9,
+   "frames_dropped_counted": 26,
+   "frame_interval_ms": {
+    "p50": 31.745,
+    "p95": 154.397,
+    "p99": 174.775
+   },
+   "worker_to_handoff_ms": {
+    "p50": 16.182,
+    "p95": 24.127,
+    "p99": 28.015
+   }
+  },
+  {
+   "set": "roto30",
+   "mode": "processor (read-ahead process)",
+   "pass": 3,
+   "achieved_fps": 14.6,
+   "first_pass_fps": 6.893,
+   "frames_dropped_counted": 27,
+   "frame_interval_ms": {
+    "p50": 31.295,
+    "p95": 154.895,
+    "p99": 161.537
+   },
+   "worker_to_handoff_ms": {
+    "p50": 16.398,
+    "p95": 27.289,
+    "p99": 38.958
+   }
+  },
+  {
+   "set": "roto30b",
+   "mode": "processor (thread path)",
+   "pass": 1,
+   "achieved_fps": 14.2,
+   "first_pass_fps": 6.874,
+   "frames_dropped_counted": 31,
+   "frame_interval_ms": {
+    "p50": 33.086,
+    "p95": 156.227,
+    "p99": 169.263
+   },
+   "worker_to_handoff_ms": {
+    "p50": 17.053,
+    "p95": 23.057,
+    "p99": 25.414
+   }
+  },
+  {
+   "set": "roto30b",
+   "mode": "processor (thread path)",
+   "pass": 2,
+   "achieved_fps": 14.4,
+   "first_pass_fps": 6.949,
+   "frames_dropped_counted": 25,
+   "frame_interval_ms": {
+    "p50": 32.371,
+    "p95": 155.895,
+    "p99": 162.7
+   },
+   "worker_to_handoff_ms": {
+    "p50": 17.237,
+    "p95": 23.478,
+    "p99": 26.009
+   }
+  },
+  {
+   "set": "roto30b",
+   "mode": "processor (thread path)",
+   "pass": 3,
+   "achieved_fps": 14.6,
+   "first_pass_fps": 6.993,
+   "frames_dropped_counted": 25,
+   "frame_interval_ms": {
+    "p50": 32.709,
+    "p95": 157.544,
+    "p99": 163.903
+   },
+   "worker_to_handoff_ms": {
+    "p50": 17.118,
+    "p95": 24.152,
+    "p99": 30.747
+   }
+  },
+  {
+   "set": "roto30",
+   "mode": "card",
+   "pass": 1,
+   "achieved_fps": 13.6,
+   "first_pass_fps": 6.601,
+   "frames_dropped_counted": 22,
+   "frame_interval_ms": {
+    "p50": 31.863,
+    "p95": 163.943,
+    "p99": 176.021
+   },
+   "worker_to_handoff_ms": {
+    "p50": 16.642,
+    "p95": 32.804,
+    "p99": 46.786
+   }
+  },
+  {
+   "set": "roto30",
+   "mode": "card",
+   "pass": 2,
+   "achieved_fps": 13.7,
+   "first_pass_fps": 6.614,
+   "frames_dropped_counted": 29,
+   "frame_interval_ms": {
+    "p50": 31.425,
+    "p95": 161.254,
+    "p99": 178.088
+   },
+   "worker_to_handoff_ms": {
+    "p50": 16.706,
+    "p95": 36.802,
+    "p99": 48.204
+   }
+  },
+  {
+   "set": "roto30",
+   "mode": "card",
+   "pass": 3,
+   "achieved_fps": 13.1,
+   "first_pass_fps": 6.425,
+   "frames_dropped_counted": 34,
+   "frame_interval_ms": {
+    "p50": 31.252,
+    "p95": 165.949,
+    "p99": 192.732
+   },
+   "worker_to_handoff_ms": {
+    "p50": 16.202,
+    "p95": 36.304,
+    "p99": 44.117
+   }
+  },
+  {
+   "set": "roto30b",
+   "mode": "card",
+   "pass": 1,
+   "achieved_fps": 12.9,
+   "first_pass_fps": 6.447,
+   "frames_dropped_counted": 24,
+   "frame_interval_ms": {
+    "p50": 31.982,
+    "p95": 169.192,
+    "p99": 175.666
+   },
+   "worker_to_handoff_ms": {
+    "p50": 17.037,
+    "p95": 38.949,
+    "p99": 44.51
+   }
+  },
+  {
+   "set": "roto30b",
+   "mode": "card",
+   "pass": 2,
+   "achieved_fps": 12.1,
+   "first_pass_fps": 6.501,
+   "frames_dropped_counted": 36,
+   "frame_interval_ms": {
+    "p50": 43.627,
+    "p95": 165.596,
+    "p99": 191.088
+   },
+   "worker_to_handoff_ms": {
+    "p50": 21.053,
+    "p95": 34.196,
+    "p99": 42.766
+   }
+  },
+  {
+   "set": "roto30b",
+   "mode": "card",
+   "pass": 3,
+   "achieved_fps": 12.3,
+   "first_pass_fps": 6.477,
+   "frames_dropped_counted": 34,
+   "frame_interval_ms": {
+    "p50": 40.728,
+    "p95": 172.392,
+    "p99": 192.892
+   },
+   "worker_to_handoff_ms": {
+    "p50": 20.827,
+    "p95": 32.117,
+    "p99": 38.875
+   }
+  }
+ ]
+}

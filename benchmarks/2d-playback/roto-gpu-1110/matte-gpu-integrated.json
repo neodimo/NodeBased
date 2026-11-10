@@ -1,0 +1,82 @@
+{
+ "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+ "reps": 7,
+ "passes": 3,
+ "rows": [
+  {
+   "size": "1080p",
+   "case": "shots30",
+   "title": "30 shapes, 12-point curves, feather 12 (box)",
+   "shapes": 30,
+   "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "cpu_ms": [
+    36.77,
+    35.91,
+    36.04
+   ],
+   "gpu_ms": [
+    10.81,
+    11.27,
+    10.05
+   ],
+   "gpu_plan_ms": [
+    3.13,
+    3.13,
+    3.19
+   ],
+   "faster_by": 3.34,
+   "max_diff": 4.172325134277344e-07,
+   "mean_diff": 4.630310801445603e-09
+  },
+  {
+   "size": "1080p",
+   "case": "shots30_heavy",
+   "title": "30 shapes, 50-point curves, feather 18 (box), larger",
+   "shapes": 30,
+   "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "cpu_ms": [
+    65.57,
+    66.16,
+    65.81
+   ],
+   "gpu_ms": [
+    15.03,
+    14.91,
+    15.07
+   ],
+   "gpu_plan_ms": [
+    4.71,
+    4.72,
+    4.79
+   ],
+   "faster_by": 4.38,
+   "max_diff": 5.364418029785156e-07,
+   "mean_diff": 9.565642500319882e-09
+  },
+  {
+   "size": "1080p",
+   "case": "one_blob",
+   "title": "1 shape, 50-point curve, feather 18 (box)",
+   "shapes": 1,
+   "adapter": "AMD Radeon 8060S Graphics (RADV STRIX_HALO)",
+   "cpu_ms": [
+    10.48,
+    10.52,
+    10.43
+   ],
+   "gpu_ms": [
+    7.03,
+    7.12,
+    7.23
+   ],
+   "gpu_plan_ms": [
+    0.34,
+    0.34,
+    0.34
+   ],
+   "faster_by": 1.47,
+   "max_diff": 3.5762786865234375e-07,
+   "mean_diff": 1.131142624011261e-09
+  }
+ ]
+}

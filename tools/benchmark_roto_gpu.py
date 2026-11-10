@@ -71,6 +71,18 @@ CASES = {
 }
 
 
+def write_heavy_comp(path, count=30):
+    """The playback fixture with its one Roto shape replaced by `count` animated 12-point curves (each point moves 40 pixels
+    over frames 1 to 48), feathered 12 (box): the Roto-heavy shot for `benchmark_2d_playback.py --comp PATH`."""
+    document = json.loads((ROOT / "tests/fixtures/playback_comp.nbcomp").read_text())
+    shape_list = scene(count, 1.0, 12, 12.0)
+    for shape in shape_list:
+        shape["points"] = [{**p, "x": {"value": p["x"], "curve": {"interpolation": "linear", "keys": [
+            {"frame": 1, "value": p["x"] - 20.0}, {"frame": 48, "value": p["x"] + 20.0}]}}} for p in shape["points"]]
+    document["node_data"]["roto"] = {"shapes": shape_list}
+    pathlib.Path(path).write_text(json.dumps(document))
+
+
 def resolve(shape_list):
     return shapes.resolve_shapes({"shapes": shape_list}, 1, None)
 
@@ -92,7 +104,11 @@ def main():
     parser.add_argument("--reps", type=int, default=7)
     parser.add_argument("--force-adapter", choices=("default", "integrated", "cpu"), default="default")
     parser.add_argument("--output", type=pathlib.Path)
+    parser.add_argument("--write-comp", type=pathlib.Path, help="write the 30-shape playback comp here and stop")
     args = parser.parse_args()
+    if args.write_comp:
+        write_heavy_comp(args.write_comp)
+        return
     if args.force_adapter != "default":
         original = gpu3d._state
         gpu3d._state = lambda choice=None: original(args.force_adapter if (choice or "default") == "default" else choice)
