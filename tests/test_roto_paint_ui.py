@@ -346,18 +346,28 @@ class RotoPaintLayerEditorTests(unittest.TestCase):
         self.assertTrue(item["source_round"])
         self.assertEqual(item["source_filter"], "mitchell")
 
-    def test_move_up_swaps_the_selected_item_earlier_in_one_undo_step(self):
-        self.window.viewer.paint_selected_item_index = 1
+    def test_move_up_brings_the_selected_item_forward_in_one_undo_step(self):
+        # The list shows the front-most item on top (Nuke's order): stored index 0 (shape1) is at the back,
+        # displayed at the bottom; Move up puts it in front of stroke1, which is later in the stored order.
+        self.window.viewer.paint_selected_item_index = 0
         panel = self.panel()
         before = len(self.window.dispatcher.undo_stack)
         up_button = panel.findChild(QPushButton, "rotopaint-layer-move-up")
+        down_button = panel.findChild(QPushButton, "rotopaint-layer-move-down")
         self.assertTrue(up_button.isEnabled())
+        self.assertFalse(down_button.isEnabled())
         up_button.click()
         items = self.items()
         self.assertEqual(items[0]["name"], "stroke1")
         self.assertEqual(items[1]["name"], "shape1")
         self.assertEqual(len(self.window.dispatcher.undo_stack), before + 1)
-        self.assertEqual(self.window.viewer.paint_selected_item_index, 0)
+        self.assertEqual(self.window.viewer.paint_selected_item_index, 1)
+
+    def test_move_up_is_disabled_on_the_front_most_item(self):
+        self.window.viewer.paint_selected_item_index = 1
+        panel = self.panel()
+        self.assertFalse(panel.findChild(QPushButton, "rotopaint-layer-move-up").isEnabled())
+        self.assertTrue(panel.findChild(QPushButton, "rotopaint-layer-move-down").isEnabled())
 
     def test_delete_layer_removes_the_selected_item_in_one_undo_step(self):
         self.window.viewer.paint_selected_item_index = 1

@@ -14747,11 +14747,21 @@ class Window(QMainWindow):
                 layer_buttons = QHBoxLayout()
                 up_button = QPushButton("Move up")
                 up_button.setObjectName("rotopaint-layer-move-up")
-                up_button.setEnabled(selected is not None and selected > 0)
+                # The list shows the front-most item on top (Nuke's order), so "up" follows the displayed
+                # position among the item's siblings, not the stored index.
+                up_ok = down_ok = False
+                if selected is not None and 0 <= selected < len(layer_items):
+                    try:
+                        siblings, position, _ = rotolist._locate(
+                            layer_list.display_tree(layer_list.entries(), layer_list.layers()), ("item", selected))
+                        up_ok, down_ok = position > 0, position < len(siblings) - 1
+                    except Exception:
+                        up_ok = down_ok = False
+                up_button.setEnabled(up_ok)
                 up_button.clicked.connect(lambda: move_layer(-1))
                 down_button = QPushButton("Move down")
                 down_button.setObjectName("rotopaint-layer-move-down")
-                down_button.setEnabled(selected is not None and selected < len(layer_items) - 1)
+                down_button.setEnabled(down_ok)
                 down_button.clicked.connect(lambda: move_layer(1))
                 delete_button = QPushButton("Delete layer")
                 delete_button.setObjectName("rotopaint-layer-delete")
