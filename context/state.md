@@ -1,5 +1,34 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:06 AM on 2026-11-10 PDT)
+
+`main` moved `7a48cc51` -> `a57fc39a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a57fc39a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-1037.log`, started 10:37 AM): **Ran 9598 tests in 1163.797 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Lane 2 step RW3 (Tue 11/10): the shape list order Nuke uses, and a tour of the new Roto tools.** Commits:
+  - `5ade4fdb` RotoPaint layer editor: Move up/down enable by displayed position (front-most on top); test follows Nuke's list order
+  - `236ba974` Roto walkthrough: Past Nuke scenes 17 to 19 (snap and fit to edges, track points, fill in-betweens) with captions; scene 8 now works
+  - `718fc11d` Roto list: show the front-most shape first, as Nuke does; stored render order unchanged
+  Diff: 10 files changed, 486 insertions(+), 59 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step I4 (Tue 11/10): Roto mattes on the GPU, behind a switch.** Commits:
+  - `ac3ce39d` Docs: GPU mattes (past Nuke) with measured parity and timings; benchmark data and 30-shape comp writer
+  - `82bd6272` Roto read-ahead: the matte process steps aside when Roto mattes are drawn on the graphics card
+  - `332c4323` Roto GPU matte: one pass set for all shapes, per-row edge lists, only the shape patches read back; benchmark tool
+  - `bd8831f1` Settings: Roto mattes on the graphics card switch (off by default, environment wins, applied at once)
+  - `ea46cc43` Roto: opt-in GPU matte kernel (fill, box feather, falloff, blend) with processor fallback, parity tests on three adapters
+  Diff: 16 files changed, 2368 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (12:56 AM on 2026-11-10 PDT)
 
 `main` moved `03b6d5ac` -> `7e730826` (lane commits cherry-picked onto main in lane order) and then to this
