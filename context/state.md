@@ -1,5 +1,28 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:56 PM on 2026-11-09 PDT)
+
+`main` moved `6d2653f1` -> `bbdbfe98` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `bbdbfe98` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1109-2236.log`, started 10:36 PM): **Ran 9496 tests in 1154.785 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step I1: Roto edge snap and fit-to-edges.** Commits:
+  - `d2b5174e` Roto list menu test expects the new Fit to edges entry
+  - `dff48a75` Test Fit to edges on a RotoPaint shape
+  - `6f9bf5c9` docs: Roto edge snap and fit to edges (past Nuke)
+  - `8555ab19` Roto: Snap to edges in the shape and Select tools, and Fit to edges for selected shapes
+  - `c9684891` Add Roto edge field: snap to the strongest edge and fit shapes to image edges
+  Diff: 8 files changed, 1228 insertions(+), 11 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:16 PM on 2026-11-09 PDT)
 
 `main` moved `7f9359d7` -> `22d68ed6` (lane commits cherry-picked onto main in lane order) and then to this
