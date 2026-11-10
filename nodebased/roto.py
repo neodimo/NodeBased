@@ -514,6 +514,12 @@ def rasterise(shapes, width, height, invert=False, *, region=None, stats=None, f
               shape_cache=None, source_images=None):
     """Rasterise resolved shapes into a premultiplied RGBA float32 image."""
     h, w = int(height), int(width)
+    if region is None and not source_images:
+        # Opt-in graphics-card drawer (nodebased/rotogpu.py): None when it is off, cannot draw these shapes or failed.
+        from . import rotogpu
+        drawn = rotogpu.try_rasterise(shapes, w, h, invert, flattened_cache=flattened_cache)
+        if drawn is not None:
+            return drawn
     if region is None:
         rx, ry, rw, rh = 0, 0, w, h
     else:
