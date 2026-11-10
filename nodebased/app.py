@@ -1715,6 +1715,8 @@ class RotoViewerToolbar(QWidget):
                                         "tool": "__global__", "settings": global_settings}, render=False)
             return
         values = self._tool_settings(key, tool); values[setting] = value
+        if setting == "source_offset" and tool == "Clone":
+            self.viewer.paint_source_offset = [float(v) for v in value]
         defaults = {self._setting_key(c["label"]): self._setting_default(c)
                     for c in TOOL_CONTROLS.get(tool, [])}
         stored = {name: item for name, item in values.items()
@@ -2803,6 +2805,13 @@ class Viewer(PanZoomView):
         self.viewport().update()
         return True
 
+    def _clone_source_offset(self, tool_settings):
+        """The clone offset a new stroke records: the live one a Ctrl-drag (or the strip field) set, else the strip's stored value."""
+        offset = [float(v) for v in self.paint_source_offset]
+        if not any(offset):
+            offset = [float(v) for v in tool_settings.get("source_offset", offset)]
+        return offset
+
     def _finish_paint(self):
         drag = self.paint_drag
         self.paint_drag = None
@@ -2833,7 +2842,7 @@ class Viewer(PanZoomView):
                       "tool": tool, "lifetime": lifetime,
                       "color": list(tool_settings.get("color", self.paint_color)),
                       "source": str(tool_settings.get("source", "color")),
-                      "source_offset": list(tool_settings.get("source_offset", self.paint_source_offset)),
+                      "source_offset": self._clone_source_offset(tool_settings),
                       "source_frame": "relative" if self.dustbust_preset else
                                       (self.paint_source_frame if tool == "clone" else frame),
                       "opacity": float(tool_settings.get("opacity", self.paint_layer_opacity)), "blend": self.paint_blend,
