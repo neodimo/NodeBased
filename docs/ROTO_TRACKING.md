@@ -958,9 +958,9 @@ stroke painted on frame 1; distance from every point to where the plate really c
 The tests hold 0.5 px mean and 1.5 px maximum, on every frame on the way. The rotation reported on frame 10 of the rotating plate is 0.108 rad
 (true 0.108), and the scale on a zooming plate 1.135 (true 1.135). A clone offset of 40 x -25 px carried to frame 10 of the rotating plate puts
 the source within 0.2 px of where the plate carried it. With a patch of a different texture sweeping over the stroke on frames 3 to 9, the
-stroke falls back on frames 4 to 9, stays within XXOCCMEAN px mean and XXOCCMAX px at worst on those frames, and is back on its texture when the
+stroke falls back on frames 4 to 9, stays within 0.4 px mean and 0.8 px at worst on those frames, and is back on its texture when the
 patch has gone. In the app the stroke ends frame 11 within 0.22 px mean and 0.56 px maximum.
-**Timing**, quiet machine, one thread: XXTIMING.
+**Timing**, quiet machine, one thread: 0.68 s a frame (16.4 s for 24 frames) for a 32-point stroke about 520 px wide on a 1920 x 1080 plate, working on the 779 x 459 pixel region around it. The time grows with the size of that region and the number of frames, and a short stroke is faster. The planar tracker's own pass over the range is added once, and only when too few samples match to fit a plane directly.
 
 **Limits.** The stroke follows the picture, not the object it is painted on: a stroke on a surface that the plate hides for good, or on pixels
 that are not in the plate at all, has nothing to follow. A plate with no texture under the stroke (a flat wall) has no motion to measure; the
