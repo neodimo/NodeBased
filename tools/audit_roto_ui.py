@@ -6,6 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SECTIONS = ("toolbar", "tool_settings", "shape_list", "viewer_editing", "timing_animation")
 WEIGHTS = {"match": 1.0, "differs": 0.5, "missing": 0.0}
+# "not_applicable" rows (stereo or multi-view controls, in a product with no multi-view projects) stay in the inventory and are
+# counted, but they take no part in the score: they are neither a hit nor a miss.
+NOT_APPLICABLE = "not_applicable"
+STATUSES = (*WEIGHTS, NOT_APPLICABLE)
 
 def entries_for(section, sections):
     entries = []
@@ -29,15 +33,17 @@ def score(reference, measured):
     result = {}
     total = hits = 0.0
     for section in SECTIONS:
-        rows = entries_for(section, measured)
+        all_rows = entries_for(section, measured)
+        rows = [e for e in all_rows if e["status"] != NOT_APPLICABLE]
         section_hits = sum(WEIGHTS[e["status"]] for e in rows)
+        counts = {s: sum(e["status"] == s for e in all_rows) for s in STATUSES}
         result[section] = {"score": round(100.0 * section_hits / len(rows), 1) if rows else 0.0,
-                           "counts": {s: sum(e["status"] == s for e in rows) for s in WEIGHTS},
-                           "entries": len(rows)}
+                           "counts": counts, "entries": len(all_rows), "scored_entries": len(rows)}
         total += section_hits
         hits += len(rows)
     result["overall"] = round(100.0 * total / hits, 1) if hits else 0.0
     return result
+
 
 def main():
     ref = json.loads((ROOT / "docs/parity/nuke_roto_ui.json").read_text())

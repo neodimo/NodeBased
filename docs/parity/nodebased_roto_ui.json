@@ -1187,9 +1187,9 @@
         },
         {
           "label": "View",
-          "status": "differs",
-          "location": "RotoViewerToolbar.settings_strip; Viewer.finish_roto_draw / Viewer._finish_paint",
-          "difference": "Selected-item and tool-specific parity remains incomplete."
+          "status": "not_applicable",
+          "location": "No view list: a project here has one view (the control is shown by Nuke only for multi-view projects).",
+          "difference": "Not applicable: the Clone tool's View control picks the stereo or multi-view source and the guide shows it only when the project has multiple views; NodeBased has no multi-view projects."
         },
         {
           "label": "Opacity",
@@ -1497,21 +1497,21 @@
     },
     {
       "name": "Color",
-      "status": "differs",
-      "location": "`rotolist.ShapeListTree` Color column (`*-row-color-*`)",
-      "difference": "RotoPaint shape items carry no colour of their own, so their Color cell is disabled; strokes and Roto shapes edit theirs."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Color column (`*-row-color-*`); `paint.rasterise` draws a RotoPaint shape in its own colour (its alpha scales the coverage)",
+      "difference": ""
     },
     {
       "name": "Invert",
-      "status": "differs",
-      "location": "`rotolist.ShapeListTree` Invert column (`*-row-invert-*`)",
-      "difference": "A RotoPaint stroke has no invert setting, so its cell is disabled; shapes edit theirs."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Invert column (`*-row-invert-*`); shapes invert their matte in `roto.rasterise`, strokes invert their footprint in `paint.apply_stroke`",
+      "difference": ""
     },
     {
       "name": "Blending",
-      "status": "differs",
-      "location": "`rotolist.ShapeListTree` Blending column (`*-row-blend-*`); `shapes.BLEND_MODES`; `roto.MERGE_BLEND_MODES`",
-      "difference": "Roto offers the Merge node's thirty operations (each through Merge's own formula; the guide gives no Roto list, so this is a convention). RotoPaint shapes and strokes still offer four."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` Blending column (`*-row-blend-*`); `shapes.BLEND_MODES` (Roto) and `shapes.PAINT_BLEND_MODES` (RotoPaint); `roto.blend_onto`",
+      "difference": ""
     },
     {
       "name": "Motion blur",
@@ -1521,9 +1521,9 @@
     },
     {
       "name": "View",
-      "status": "missing",
-      "location": "No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`.",
-      "difference": "Stereo-only column; NodeBased has no multi-view project support, so it stays out of scope."
+      "status": "not_applicable",
+      "location": "No View column: a project here has one view (the column is shown by Nuke only for multi-view projects).",
+      "difference": "Not applicable: the View column lists the views an item appears in and the guide shows it only for multi-view projects; NodeBased has no multi-view projects."
     },
     {
       "name": "Lifetime",

@@ -1831,7 +1831,10 @@ class RotoViewerToolbar(QWidget):
                 widget.clicked.connect(lambda _=False: self.viewer.fit_roto_to_edges())
         elif kind == "dropdown":
             widget = QComboBox(self.settings_strip); widget.setObjectName("roto-setting-"+setting)
-            choices = {"Source": ["color", "foreground", "background"], "Blending mode": ["over", "plus", "multiply", "screen"],
+            context = self.viewer._roto_context()
+            blend_list = (shape_model.BLEND_MODES if context is not None and context[1]["type"] == "Roto"
+                          else shape_model.PAINT_BLEND_MODES)
+            choices = {"Source": ["color", "foreground", "background"], "Blending mode": list(blend_list),
                        "Feather type": ["linear", "smooth", "gaussian"], "Lifetime type": ["all frames", "single frame", "range", "from current"],
                        "Skew order": ["XY", "YX"], "Filter": ["Impulse", "Cubic", "Keys", "Simon", "Rifman", "Mitchell", "Parzen", "Notch"],
                        "Time offset type": ["relative", "absolute"], "View": ["current"],
