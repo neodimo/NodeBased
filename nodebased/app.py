@@ -1957,6 +1957,7 @@ class Viewer(PanZoomView):
         self.roto_draw_press = None
         self.roto_drag = None
         self.roto_selected_points = set()
+        self.roto_track_flags = None         # Track points: low-confidence points per frame, drawn in the overlay only
         self.roto_selected_shape_index = -1
         self.roto_transform_box_enabled = True
         self.warp_drawing = False
@@ -3852,6 +3853,13 @@ class Viewer(PanZoomView):
         x, y = field.snap(point, radius)
         return [x, y]
 
+    def roto_flagged_points(self, key, frame, shape_index, point_count):
+        """Indices of the points Track points flagged on `frame` for a shape (overlay only; empty once the shape's point count changed)."""
+        flags = self.roto_track_flags
+        if not flags or flags.get("key") != key or flags.get("points", {}).get(shape_index) != point_count:
+            return frozenset()
+        return frozenset(flags["frames"].get(int(frame), {}).get(shape_index, ()))
+
     def fit_roto_to_edges(self, shape_indices=None):
         """Refine the selected shapes to the image edges within the strip's Fit band: one undo step.
 
@@ -5247,12 +5255,16 @@ class Viewer(PanZoomView):
                 painter.setPen(pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 if not hide_splines: painter.drawPath(path)
+                flagged_points = self.roto_flagged_points(context[0], frame, shape_index, len(points))
                 for point_index, point in enumerate(points):
                     if hide_points: continue
                     center = self._roto_scene_point(point, tier)
                     radius = 5.0 / max(abs(self.view_zoom()), 0.05)
                     painter.setBrush(QColor("#f4ce63") if (shape_index, point_index) in self.roto_selected_points else QColor("#202127"))
-                    painter.drawEllipse(center, radius, radius)
+                    if point_index in flagged_points:        # Track points: this point's match was below the threshold on this frame
+                        painter.setBrush(QColor("#ff3b30")); painter.drawEllipse(center, radius*1.5, radius*1.5)
+                    else:
+                        painter.drawEllipse(center, radius, radius)
                     if select_settings.get("label_points", False):
                         painter.setPen(QPen(QColor("#f4ce63"), 1))
                         painter.drawText(QPointF(center.x()+radius, center.y()-radius), str(point_index+1))
@@ -10039,6 +10051,9 @@ class Window(QMainWindow):
         self._planar_future = None
         self._planar_cancel = None
         self._planar_job = None
+        self._points_future = None          # Roto Track points (lane 9 step I2)
+        self._points_cancel = None
+        self._points_job = None
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
         self.cache_budget = SharedMemoryBudget()
@@ -15738,6 +15753,238 @@ class Window(QMainWindow):
         xs, ys = [float(p["x"]) for p in points], [float(p["y"]) for p in points]
         corners = [(min(xs), min(ys)), (max(xs), min(ys)), (max(xs), max(ys)), (min(xs), max(ys))]
         return self.analyse_planar(key, corners_override=corners)
+
+    # -- Track points: per-point tracking that follows a deforming shape (lane 9 step I2) -------------------------------------
+    def _roto_track_shapes(self, node, payload):
+        """The shapes Track points can act on, in the order the viewer numbers them (a RotoPaint node's shape items)."""
+        if node["type"] == "RotoPaint":
+            return [item for item in payload.get("items", []) if item.get("kind") == "shape"]
+        return payload.get("shapes", [])
+
+    def _roto_track_selection(self, node, payload):
+        """Shape indices selected in the viewer (the list's selection reaches the viewer through `roto_selected_shape_index`)."""
+        if node["type"] == "RotoPaint":
+            index = getattr(self.viewer, "paint_selected_item_index", None)
+            items = payload.get("items", [])
+            if index is None or not 0 <= index < len(items) or items[index].get("kind") != "shape":
+                return []
+            return [[i for i, item in enumerate(items) if item.get("kind") == "shape"].index(index)]
+        chosen = {si for si, _ in getattr(self.viewer, "roto_selected_points", ())}
+        index = int(getattr(self.viewer, "roto_selected_shape_index", -1))
+        if index >= 0:
+            chosen.add(index)
+        return sorted(chosen)
+
+    def track_roto_points(self, key, direction="both", first_frame=None, last_frame=None, shape_indices=None):
+        """Track every control point of the selected Roto shapes from the current frame: one undo step.
+
+        Each point follows its own patch, regularised by the planar track of the shape and smoothed along the outline
+        (nodebased/rotopointtrack.py); tangents and feather offsets move with their points. Keys land on every tracked frame
+        through the Autokey rules of the Roto commit path; locked shapes are skipped; points whose confidence fell under the
+        threshold on a frame are flagged on that frame (viewer overlay only) and named in the status bar.
+        """
+        from . import rotopointtrack as point_track
+        if self._planar_future is not None or self._tracker_future is not None or self._points_future is not None:
+            return False
+        document = self.dispatcher.document
+        node = document["nodes"].get(key)
+        if node is None or node["type"] not in ("Roto", "RotoPaint"):
+            self._show_command_error(ValueError("Track points needs a Roto or RotoPaint node")); return False
+        payload = document.get("node_data", {}).get(key, {})
+        shapes = self._roto_track_shapes(node, payload)
+        chosen = list(shape_indices) if shape_indices is not None else self._roto_track_selection(node, payload)
+        chosen = [si for si in chosen if 0 <= si < len(shapes)]
+        if not chosen:
+            self._show_command_error(ValueError("Select a Roto shape before tracking its points")); return False
+        source = node["inputs"].get("image") or node["inputs"].get("bg")
+        if source is None:
+            self._show_command_error(ValueError("Connect an image before tracking points")); return False
+        ref = int(document["time"]["current"])
+        resolved = shape_model.resolve_roto_shapes({"shapes": shapes, "layers": payload.get("layers", [])}, ref, document, 1)
+        targets = [si for si in chosen if not resolved[si].get("locked") and len(resolved[si]["points"]) >= 2]
+        if not targets:
+            self.statusBar().showMessage("Track points: the selected shapes are locked or have too few points", 5000)
+            return False
+        timeline = document["time"]
+        lo = int(timeline["first"] if first_frame is None else first_frame)
+        hi = int(timeline["last"] if last_frame is None else last_frame)
+        try:
+            passes = point_track.frame_order(ref, min(lo, ref), max(hi, ref), direction)
+        except point_track.PointTrackError as error:
+            self._show_command_error(error); return False
+        passes = [order for order in passes if order]
+        if not passes:
+            self._show_command_error(ValueError("There are no frames to track in that direction from the current frame")); return False
+        frames_wanted = sorted(f for order in passes for f in order)
+        if frames_wanted[-1] - frames_wanted[0] > 5000:
+            self._show_command_error(ValueError("Point tracking is limited to 5,001 frames")); return False
+        doc = copy.deepcopy(document)
+        cancel = threading.Event()
+        job = {"key": key, "kind": node["type"], "targets": targets, "ref": ref, "direction": direction,
+               "base_shapes": copy.deepcopy(shapes), "base_items": copy.deepcopy(payload.get("items", [])),
+               "base_payload": copy.deepcopy(payload), "frames": len(frames_wanted),
+               "progress": {"frame": ref, "completed": 0, "total": len(frames_wanted)}}
+        self._points_job, self._points_cancel = job, cancel
+        reference_points = {si: copy.deepcopy(resolved[si]["points"]) for si in targets}
+        closed = {si: bool(resolved[si].get("closed", True)) for si in targets}
+        params = node["params"]
+
+        def analyse():
+            from . import tracker as point_tracker, planar as planar_model
+            roi_executor = TileExecutor(tile_edge=self.tile_executor.tile_edge)
+            bounds = roi_executor.canvas_region(doc, source, ref, tier=1)
+            xs = [float(p["x"]) for si in targets for p in reference_points[si]]
+            ys = [float(p["y"]) for si in targets for p in reference_points[si]]
+            margin = max(64, int(math.ceil(max(max(xs) - min(xs), max(ys) - min(ys)) * .5)))
+            left = max(bounds.x, int(math.floor(min(xs) - margin)))
+            top = max(bounds.y, int(math.floor(min(ys) - margin)))
+            right = min(bounds.right, int(math.ceil(max(xs) + margin)))
+            bottom = min(bounds.bottom, int(math.ceil(max(ys) + margin)))
+            roi = TileRegion(left, top, right - left, bottom - top, full_width=bounds.width, full_height=bounds.height,
+                             full_x=bounds.x, full_y=bounds.y)
+            channel = params.get("tracking_channels", "rgb")
+            channel = {"rgba": "rgb", "all": "rgb", "none": "luminance"}.get(channel, channel)
+            cache = {}
+
+            def gray(frame):
+                if frame not in cache:
+                    if cancel.is_set():
+                        raise CancelledError()
+                    pixels = roi_executor.compose_region(doc, source, roi, frame=frame, tier=1, cancel=cancel).pixels
+                    prepared, _origin = point_tracker._analysis_pixels(
+                        pixels, channel, params.get("pretrack_filter", "none"), bool(int(params.get("clamp_footage", 0))))
+                    cache[frame] = prepared.astype(np.float32)
+                    job["progress"].update(frame=frame, completed=min(len(cache), job["progress"]["total"]))
+                return cache[frame]
+            span = range(frames_wanted[0], frames_wanted[-1] + 1)
+            results = {}
+            for si in targets:
+                local = [{**p, "x": float(p["x"]) - left, "y": float(p["y"]) - top} for p in reference_points[si]]
+                try:
+                    matrices = point_track.planar_matrices(gray, local, ref, list(span), cancel=cancel)
+                except planar_model.PlanarTrackingError:
+                    matrices = None          # a plain or too-small subject: each point searches around where it was
+                per_frame = {}
+                for order in passes:
+                    tracked = point_track.track_points(gray, local, ref, order, planar=matrices, closed=closed[si],
+                                                       cancel=cancel)
+                    per_frame.update(tracked)
+                for data in per_frame.values():
+                    for point in data["points"]:
+                        point["x"] += left
+                        point["y"] += top
+                results[si] = per_frame
+            return results
+
+        self._points_future = self.executor.submit(analyse)
+        self.statusBar().showMessage(f"Roto Track points: 0/{len(frames_wanted)} frames")
+        QTimer.singleShot(50, self._poll_roto_points)
+        return True
+
+    def cancel_roto_points(self):
+        if self._points_cancel is not None:
+            self._points_cancel.set()
+            self.statusBar().showMessage("Roto Track points: cancelling…")
+
+    def _poll_roto_points(self):
+        future = self._points_future
+        if future is None:
+            return
+        job = self._points_job
+        if not future.done():
+            progress = job["progress"]
+            self.statusBar().showMessage(f"Roto Track points: {progress['completed']}/{progress['total']} frames"
+                                         f" · frame {progress['frame']}")
+            QTimer.singleShot(50, self._poll_roto_points)
+            return
+        cancel = self._points_cancel
+        self._points_future = self._points_cancel = self._points_job = None
+        try:
+            if cancel is not None and cancel.is_set():
+                raise CancelledError()
+            results = future.result()
+            self._commit_roto_points(job, results)
+        except CancelledError:
+            self.statusBar().showMessage("Roto Track points cancelled; document unchanged")
+        except Exception as error:
+            self._show_command_error(error)
+
+    def _commit_roto_points(self, job, results):
+        """Write the tracked points as keys in one command (one undo step) and record the low-confidence points."""
+        from . import rotopointtrack as point_track
+        document = self.dispatcher.document
+        key = job["key"]
+        node = document["nodes"].get(key)
+        if node is None or node["type"] != job["kind"]:
+            raise ValueError("The Roto node changed during point tracking; results discarded")
+        payload = document.get("node_data", {}).get(key, {})
+        if payload != job["base_payload"]:
+            raise ValueError(f"{node['type']} shapes changed during point tracking; results discarded")
+        shapes = copy.deepcopy(self._roto_track_shapes(node, payload))
+        raw = self._roto_track_shapes(node, payload)
+        auto_key = bool(self.viewer.roto_toolbar._tool_settings(key, "Select Points").get("autokey", False))
+        ref = job["ref"]
+        changed_points = 0
+        flags = {}
+        names = {}
+        for si, per_frame in results.items():
+            shape = shapes[si]
+            names[si] = shape.get("name", f"Shape {si + 1}")
+            updates = [{field: {} for field in point_track.POINT_FIELDS} for _ in shape["points"]]
+            for frame, data in per_frame.items():
+                for pi, new in enumerate(data["points"]):
+                    local = shape_model.unresolve_roto_point(new, raw[si], document, frame, 1)
+                    feather = shape_model.unresolve_feather_vector((new["feather_x"], new["feather_y"]), raw[si], document, frame)
+                    values = {field: float(local[field]) for field in ("x", "y", "in_x", "in_y", "out_x", "out_y")}
+                    values["feather_x"], values["feather_y"] = float(feather[0]), float(feather[1])
+                    for field, number in values.items():
+                        updates[pi][field][frame] = number
+                    if data["flagged"][pi]:
+                        flags.setdefault(frame, {}).setdefault(si, []).append(pi)
+            for pi, point in enumerate(shape["points"]):
+                moved = False
+                for field in point_track.POINT_FIELDS:
+                    current = point.get(field, 0.0)
+                    base = shape_model.resolve_scalar(current, ref)
+                    series = updates[pi][field]
+                    animated = isinstance(current, dict) and bool(current.get("curve"))
+                    if not animated and field not in ("x", "y") and all(abs(v - base) < 1e-6 for v in series.values()):
+                        continue                     # a tangent or feather offset that never moved stays as it was
+                    keyed = point_track.key_scalar(current, series, ref, auto_key)
+                    if keyed is not current and keyed != current:
+                        point[field] = keyed
+                        moved = True
+                changed_points += int(moved)
+        if not changed_points:
+            self.statusBar().showMessage("Track points: nothing was keyed. Turn Autokey on, or key the shape first", 6000)
+            return False
+        if node["type"] == "RotoPaint":
+            items = copy.deepcopy(payload.get("items", []))
+            positions = [i for i, item in enumerate(items) if item.get("kind") == "shape"]
+            for local_index, item_index in enumerate(positions):
+                items[item_index] = shapes[local_index]
+            self.command({"op": "set_paint_items", "id": key, "items": items})
+        else:
+            self.command({"op": "set_shapes", "id": key, "shapes": shapes})
+        self.viewer.roto_track_flags = {"key": key, "frames": flags,
+                                        "points": {si: len(shapes[si]["points"]) for si in results}}
+        parts = []
+        for frame in sorted(flags):
+            for si, indices in flags[frame].items():
+                parts.append((names[si], frame, indices))
+        summary = f"Roto Track points: {changed_points} points keyed over {job['frames']} frames"
+        if parts:
+            by_point = {}
+            for name, frame, indices in parts:
+                for pi in indices:
+                    by_point.setdefault((name, pi + 1), []).append(frame)
+            listed = [f"{name} point {number} (frames {min(frames_)}–{max(frames_)})"
+                      for (name, number), frames_ in sorted(by_point.items())]
+            summary += f" · {len(by_point)} low-confidence: " + ", ".join(listed[:6]) + (f" and {len(listed) - 6} more" if len(listed) > 6 else "")
+        self.statusBar().showMessage(summary)
+        self.viewer.viewport().update()
+        self.rebuild_properties_dock()
+        return True
 
     def begin_planar_pick(self, key):
         context = self._planar_context(key)

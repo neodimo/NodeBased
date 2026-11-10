@@ -665,6 +665,63 @@ perturbed by up to 4 px fits to 0.3 px RMS; a perturbed square reaches its corne
 plate computes a 672 x 672 px region in about 15 ms and fits in about 15 ms. The plate of the playback fixture is a smooth gradient with no
 edges, so Fit to edges leaves a shape on it unchanged, by design.
 
+## Point tracking (past Nuke)
+
+"Track shape" planar-tracks the shape's bounding quad, so an outline follows a rigid or perspective move but not a subject that bends or
+stretches; in Nuke a deforming subject needs a SmartVector or tracker-linking setup. **Track points** tracks every control point with its
+own small patch of the image and uses the planar track only to steer and steady it. It is a separate command: "Track shape" behaves as
+before, and a saved shot stores nothing new until the command is run, so saved shots render bit-identical.
+
+**Where.** A "Track points" button beside "Track selected shape or stroke" in the Roto and RotoPaint panels, with a direction (Forward and
+backward, Forward, Backward) and the first and last frame (they start at the timeline's), and "Track points" in the shape list's right-click
+menu (forward and backward over the timeline). The reference frame is the current frame, the one whose outline is on screen: tracking runs
+away from it, so keys before it (when tracking forward) and after it (when tracking backward) are left alone. Select the shapes in the viewer
+or the list first.
+
+**How a frame is tracked** (`nodebased/rotopointtrack.py`, pure numpy; the planar track of the shape's bounding quad is
+`planar.track_region`, the one "Track shape" uses). For each point:
+
+1. The search window (12 px, patch 7 px either side of its centre) is centred on where the planar track puts the point plus the offset the
+   point's own match last had from the plane.
+2. A normalised cross-correlation finds the best whole-pixel position of the patch, and Lucas-Kanade steps refine it to a fraction of a pixel.
+   The refinement lets the patch stretch and shear a little (a six-parameter warp held toward identity by a small ridge) so a point on a
+   subject that is deforming is not dragged toward the side that deforms least; the confidence is the correlation of the warped patch. The
+   patch is grabbed again from the frame only when its correlation falls under 0.92, so small errors do not add up. Samples use a cubic
+   filter because a bilinear one blurs a half-pixel sample more than a whole-pixel one and the two then disagree by half a pixel.
+3. The point is the planar position pulled toward its own match by the confidence: none of it under 0.7, all of it above 0.8.
+4. Each confident point's offset from the plane is then moved a quarter of the way toward the confidence-weighted average of its two
+   neighbours' offsets along the outline, so a noisy match does not tear the shape. Points under the threshold are left exactly on the
+   planar prediction and take no part in their neighbours' averages.
+5. Tangent and feather offsets turn and scale with the planar map at the point (its local 2x2 linear part), so a rotating or scaling subject
+   carries them round; they do not take on the local deformation of the points around them.
+
+**What is written.** One undo step for the whole run, through the same commit path as a point drag (`set_shapes` or `set_paint_items`). Every
+tracked frame gets a key on each point's anchor, and on a tangent or feather offset only where it moved; the reference frame gets a key too
+when a point was static, so it stays where it was. Autokey rules apply: a shape already keyed has its keys written (and overwritten) at each
+tracked frame whatever the Autokey switch says; a static shape is keyed only with Autokey on, and with it off the command changes nothing and
+says so in the status bar. Locked shapes and shapes in locked layers are skipped. Shape transforms and tracker links are inverted frame by
+frame, so keys land in the shape's own space as for any point edit (a shape with a rotating transform whose centre is left at its default
+follows the points' bounding box, which moves with the keys: set the centre if that matters).
+
+**Flags.** A point whose confidence is under 0.7 on a frame is drawn larger in red at that frame in the viewer, and the status bar names
+the points and their frame ranges ("disc point 4 (frames 6–8)"), so the artist can fix them. The flags are viewer state only: the document
+holds no trace of them, and they disappear from a shape whose point count changed. A flagged point is not lost: its patch is kept from the
+last good frame and its search stays centred near the plane, so it picks itself up again when the cause (an occluder, a blink of motion
+blur) passes.
+
+**Limits.** Matching uses the channels, pre-track filter and clamp of the node's tracking settings, like "Track shape". A region too plain
+for the planar tracker (fewer than four visible features) falls back to searching around each point's own position, which needs small motion.
+Under a deformation faster than about 7% of the patch per frame, the patch is grabbed again every frame and drift can show: key the shape
+at intervals. A flagged point falls back to the planar position, which on a deforming subject can sit several pixels from where the point
+was; its neighbours' good matches do not pull it back.
+
+Measured on synthetic frames (tests/test_roto_point_track_i2.py): a textured disc translating 1.3 and 0.7 px a frame is followed by all 24
+points of its outline to within 0.38 px over 10 frames (the planar track alone: 0.19 px); the same disc with its right half stretching 7%
+of its reference width every frame is followed by the right-side points to within 0.5 px where the planar track alone misses by up to
+3.6 px; an occluded patch drops under the threshold on the frames it is hidden, nothing else is flagged, and the point rejoins its patch
+when the occluder goes. A 24-point shape on 1920 x 1080 frames takes about 170 ms a frame for the matching (frames already decoded; the
+planar track of the shape's region and the frame decode come on top, and the run is in the background with progress in the status bar).
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.

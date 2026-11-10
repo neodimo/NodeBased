@@ -120,12 +120,36 @@ def delete_scalar_key(value, at):
     return updated["value"] if not updated["curve"]["keys"] else updated
 
 
+def add_point_tracking(layout, window, key):
+    """Track points beside Track shape: direction and frame range, then the command (lane 9 step I2, past Nuke)."""
+    from PySide6.QtWidgets import QComboBox, QSpinBox
+    time = window.dispatcher.document.get("time", {})
+    row = QHBoxLayout()
+    direction = QComboBox(); direction.setObjectName("roto-track-points-direction")
+    for label, value in (("Forward and backward", "both"), ("Forward", "forward"), ("Backward", "backward")):
+        direction.addItem(label, value)
+    first, last = QSpinBox(), QSpinBox()
+    for spin, name, value in ((first, "roto-track-points-first", time.get("first", 1)),
+                              (last, "roto-track-points-last", time.get("last", 1))):
+        spin.setRange(-100000, 100000); spin.setValue(int(value)); spin.setObjectName(name)
+    row.addWidget(direction); row.addWidget(QLabel("From")); row.addWidget(first)
+    row.addWidget(QLabel("to")); row.addWidget(last)
+    layout.addLayout(row)
+    button = QPushButton("Track points")
+    button.setObjectName("roto-track-points")
+    button.setToolTip("Track every control point of the selected shape from the current frame; points keep their own patch, "
+                      "so the shape follows a deforming subject. Keys every tracked frame; low-confidence points are flagged.")
+    button.clicked.connect(lambda: window.track_roto_points(key, direction.currentData(), first.value(), last.value()))
+    layout.addWidget(button)
+
+
 def add_tracking_actions(layout, window, key):
     track = QPushButton("Track selected shape or stroke")
     track.setObjectName("roto-track-shape")
     track.setToolTip("Track the selected item's bounding quad from the reference frame")
     track.clicked.connect(lambda: window.track_roto_shape(key))
     layout.addWidget(track)
+    add_point_tracking(layout, window, key)
     layout.addWidget(QLabel("Export"))
     export = QPushButton("Create")
     export.setObjectName("roto-create-tracking-export")

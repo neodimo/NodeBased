@@ -10,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 
 from nodebased import rotopointtrack as rp
+from nodebased import shapes as shape_model
 
 WIDTH, HEIGHT = 200, 160
 CENTRE = (80.0, 80.0)
@@ -24,10 +25,10 @@ def texture(u, v):
             + 0.06 * np.cos(0.71 * (u + 0.4 * v)))
 
 
-def disc_frame(frame, mode, width=WIDTH, height=HEIGHT):
+def disc_frame(frame, mode, width=WIDTH, height=HEIGHT, x0=0, y0=0):
     """A textured disc on a flat ground; texture and edge are analytic in the disc's own coordinates, so the truth is exact."""
     t = frame - 1
-    ys, xs = np.mgrid[0:height, 0:width].astype(np.float64)
+    ys, xs = np.mgrid[y0:y0 + height, x0:x0 + width].astype(np.float64)
     x, y = xs + 0.5, ys + 0.5
     if mode == "translate":
         u, v = x - 1.3 * t, y - 0.7 * t
@@ -286,6 +287,259 @@ class TimingTests(unittest.TestCase):
         print(f"\n24 points at 1080p: {per_frame * 1000:.0f} ms per frame (frames pre-rendered)")
         self.assertFalse(any(any(result[f]["flagged"]) for f in (2, 3, 4)))
         self.assertLess(per_frame, 1.0)
+
+
+# -- group 2: in the app ------------------------------------------------------------------------------------------------
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from PySide6.QtCore import QSettings
+
+from nodebased.app import Window
+from nodebased.core import Dispatcher, empty_document
+from nodebased.tileexec import TileExecutor
+from tests.test_roto_ui import APP
+from tests.waiting import wait_until
+
+
+def roto_shape(name="disc", count=24, **extra):
+    shape = {"name": name, "mode": "union", "opacity": 1.0, "feather": 0.0, "closed": True,
+             "points": [{k: float(p[k]) for k in ("x", "y", "in_x", "in_y", "out_x", "out_y")} for p in circle_points(count)]}
+    shape.update(extra)
+    return shape
+
+
+class WindowCase(unittest.TestCase):
+    """A Roto node over a plate that the stretching-disc frames replace (the compositor call is patched, as the other tracking tests do)."""
+    mode = "stretch"
+    occlusions = None             # {frame: (x0, y0, x1, y1)} painted flat over the plate
+
+    def make_window(self, shapes, last=11, current=1, node_type="Roto", autokey=True, view=False):
+        QSettings("NodeBased", "NodeBased").clear()
+        dispatcher = Dispatcher(empty_document())
+        dispatcher.execute({"op": "create", "id": "plate", "type": "Checker"})
+        dispatcher.execute({"op": "create", "id": "roto", "type": node_type})
+        dispatcher.execute({"op": "connect", "id": "roto", "input": "bg" if node_type == "Roto" else "image", "source": "plate"})
+        dispatcher.document["time"].update(first=1, last=last, current=current)
+        if node_type == "Roto":
+            dispatcher.execute({"op": "set_shapes", "id": "roto", "shapes": shapes})
+        else:
+            dispatcher.execute({"op": "set_paint_items", "id": "roto", "items": [{"kind": "shape", "blend": "over", "visible": True, **s} for s in shapes]})
+        if view:
+            dispatcher.execute({"op": "view", "id": "roto"})
+        if not autokey:
+            dispatcher.execute({"op": "set_roto_tool_settings", "id": "roto", "tool": "__global__", "settings": {"autokey": False}})
+        window = Window(dispatcher.document)
+        self.addCleanup(lambda: (setattr(window, "saved_document", window.dispatcher.document), window.close(),
+                                 window.executor.shutdown(wait=True, cancel_futures=True), APP.processEvents()))
+        return window
+
+    def compose(self, _executor, _doc, _source, region, frame, **_kwargs):
+        gray = disc_frame(frame, self.mode, region.width, region.height, region.x, region.y)
+        rect = (self.occlusions or {}).get(frame)
+        if rect is not None:
+            x0, y0, x1, y1 = rect
+            gray[max(0, y0 - region.y):max(0, y1 - region.y), max(0, x0 - region.x):max(0, x1 - region.x)] = 0.5
+        rgba = np.stack(np.broadcast_arrays(gray, gray, gray, np.ones_like(gray)), axis=-1).astype(np.float32)
+        return SimpleNamespace(pixels=rgba)
+
+    def run_tracking(self, window, *args, **kwargs):
+        with patch.object(TileExecutor, "compose_region", lambda *a, **k: self.compose(*a, **k)):
+            self.assertTrue(window.track_roto_points("roto", *args, **kwargs))
+            self.assertTrue(wait_until(lambda: window._points_future is None, timeout=120))
+
+    def shapes(self, window):
+        payload = window.dispatcher.document["node_data"]["roto"]
+        return payload["shapes"] if "shapes" in payload else [i for i in payload["items"] if i.get("kind") == "shape"]
+
+    def resolved(self, window, frame, index=0):
+        payload = window.dispatcher.document["node_data"]["roto"]
+        shapes = self.shapes(window)
+        return shape_model.resolve_shapes({"shapes": shapes}, frame)[index]["points"]
+
+
+class TrackPointsInTheAppTests(WindowCase):
+    def test_keys_land_on_every_frame_and_follow_the_stretch(self):
+        window = self.make_window([roto_shape()])
+        window.viewer.roto_selected_shape_index = 0
+        undo = len(window.dispatcher.undo_stack)
+        self.run_tracking(window)
+        self.assertEqual(len(window.dispatcher.undo_stack), undo + 1)                 # one undo step for the whole run
+        points = circle_points(24)
+        for frame in range(1, 12):
+            resolved = self.resolved(window, frame)
+            for i, point in enumerate(points):
+                tx, ty = truth(point, frame, "stretch")
+                limit = 1.0 if point["x"] > CENTRE[0] + 5 else 1.2
+                if abs(point["x"] - CENTRE[0]) <= 5:
+                    continue
+                self.assertLess(math.hypot(resolved[i]["x"] - tx, resolved[i]["y"] - ty), limit, (frame, i))
+        # every point carries a key on each tracked frame, plus the reference frame
+        keys = self.shapes(window)[0]["points"][0]["x"]["curve"]["keys"]
+        self.assertEqual([k["frame"] for k in keys], list(range(1, 12)))
+
+    def test_the_app_matches_the_tracker_module_run_by_itself(self):
+        window = self.make_window([roto_shape()])
+        window.viewer.roto_selected_shape_index = 0
+        self.run_tracking(window)
+        Sequences.prepare()
+        direct = rp.track_points(Sequences.stretch_source, Sequences.points, 1, FRAMES, planar=Sequences.stretch)
+        worst = 0.0
+        for frame in FRAMES:
+            resolved = self.resolved(window, frame)
+            for i in range(24):
+                worst = max(worst, math.hypot(resolved[i]["x"] - direct[frame]["points"][i]["x"],
+                                              resolved[i]["y"] - direct[frame]["points"][i]["y"]))
+        print(f"\nin the app against the module run alone: worst difference {worst:.3f} px")
+        self.assertLess(worst, 0.5)
+
+    def test_one_undo_removes_every_key(self):
+        window = self.make_window([roto_shape()])
+        window.viewer.roto_selected_shape_index = 0
+        before = copy.deepcopy(window.dispatcher.document["node_data"]["roto"])
+        self.run_tracking(window)
+        self.assertNotEqual(window.dispatcher.document["node_data"]["roto"], before)
+        window.command({"op": "undo"})
+        self.assertEqual(window.dispatcher.document["node_data"]["roto"], before)
+        window.command({"op": "redo"})
+        self.assertIn("curve", self.shapes(window)[0]["points"][0]["x"])
+
+    def test_flags_appear_only_on_the_occluded_frames_and_are_named_in_the_status_bar(self):
+        victim = 0
+        self.mode = "translate"
+        self.occlusions = {}
+        for frame in (6, 7, 8):
+            x, y = truth(circle_points(24)[victim], frame, "translate")
+            self.occlusions[frame] = (int(x) - 30, int(y) - 30, int(x) + 31, int(y) + 31)
+        window = self.make_window([roto_shape()])
+        window.viewer.roto_selected_shape_index = 0
+        self.run_tracking(window)
+        for frame in range(1, 12):
+            flagged = window.viewer.roto_flagged_points("roto", frame, 0, 24)
+            self.assertEqual(victim in flagged, frame in (6, 7, 8), frame)
+            far = {i for i, p in enumerate(circle_points(24)) if math.hypot(p["x"] - circle_points(24)[victim]["x"],
+                                                                            p["y"] - circle_points(24)[victim]["y"]) > 45}
+            self.assertFalse(flagged & far, frame)
+        message = window.statusBar().currentMessage()
+        self.assertIn("low-confidence", message)
+        self.assertIn("disc point 1 (frames 6–8)", message)
+        # the flags live in the viewer only: the document holds no trace of them
+        self.assertNotIn("flag", repr(window.dispatcher.document["node_data"]["roto"]).lower())
+        # and they follow the point count: an edited shape draws none
+        self.assertEqual(window.viewer.roto_flagged_points("roto", 6, 0, 23), frozenset())
+
+    def test_locked_shapes_are_skipped(self):
+        window = self.make_window([roto_shape("free"), roto_shape("locked", locked=True)])
+        locked_before = copy.deepcopy(self.shapes(window)[1])
+        self.run_tracking(window, shape_indices=[0, 1])
+        self.assertEqual(self.shapes(window)[1], locked_before)
+        self.assertIn("curve", self.shapes(window)[0]["points"][0]["x"])
+        window2 = self.make_window([roto_shape("locked", locked=True)])
+        window2.viewer.roto_selected_shape_index = 0
+        with patch.object(TileExecutor, "compose_region", lambda *a, **k: self.compose(*a, **k)):
+            self.assertFalse(window2.track_roto_points("roto"))
+
+    def test_autokey_off_leaves_a_static_shape_alone_but_updates_a_keyed_one(self):
+        window = self.make_window([roto_shape()], autokey=False)
+        before = copy.deepcopy(window.dispatcher.document["node_data"]["roto"])
+        undo = len(window.dispatcher.undo_stack)
+        self.run_tracking(window, shape_indices=[0])
+        self.assertEqual(window.dispatcher.document["node_data"]["roto"], before)
+        self.assertEqual(len(window.dispatcher.undo_stack), undo)
+        self.assertIn("Autokey", window.statusBar().currentMessage())
+        # key the shape at the reference frame, then the run writes its keys with Autokey still off
+        shapes = copy.deepcopy(before["shapes"])
+        for point in shapes[0]["points"]:
+            for name in ("x", "y"):
+                point[name] = {"value": point[name], "curve": {"interpolation": "smooth", "keys": [{"frame": 1, "value": point[name]}]}}
+        window.command({"op": "set_shapes", "id": "roto", "shapes": shapes})
+        self.run_tracking(window, shape_indices=[0])
+        keys = self.shapes(window)[0]["points"][0]["x"]["curve"]["keys"]
+        self.assertEqual([k["frame"] for k in keys], list(range(1, 12)))
+
+    def test_backward_tracking_from_the_last_frame(self):
+        self.mode = "translate"
+        points = circle_points(24)
+        moved = [{k: float(p[k]) + (1.3 * 10 if k == "x" else 0.7 * 10 if k == "y" else 0.0)
+                  for k in ("x", "y", "in_x", "in_y", "out_x", "out_y")} for p in points]
+        for m, p in zip(moved, points):
+            m["in_x"], m["in_y"], m["out_x"], m["out_y"] = p["in_x"], p["in_y"], p["out_x"], p["out_y"]
+        window = self.make_window([{**roto_shape(), "points": moved}], current=11)
+        window.viewer.roto_selected_shape_index = 0
+        self.run_tracking(window, "backward")
+        for frame in (10, 6, 1):
+            resolved = self.resolved(window, frame)
+            for i, point in enumerate(points):
+                tx, ty = truth(point, frame, "translate")
+                self.assertLess(math.hypot(resolved[i]["x"] - tx, resolved[i]["y"] - ty), 0.7, (frame, i))
+
+    def test_forward_only_leaves_earlier_frames_alone(self):
+        window = self.make_window([roto_shape()], current=4)
+        window.viewer.roto_selected_shape_index = 0
+        self.mode = "translate"
+        self.run_tracking(window, "forward")
+        keys = [k["frame"] for k in self.shapes(window)[0]["points"][0]["x"]["curve"]["keys"]]
+        self.assertEqual(keys, list(range(4, 12)))
+
+    def test_a_roto_paint_shape_is_tracked_through_its_items(self):
+        self.mode = "translate"
+        window = self.make_window([roto_shape()], node_type="RotoPaint")
+        item_index = 0
+        window.viewer.paint_selected_item_index = item_index
+        self.run_tracking(window)
+        resolved = self.resolved(window, 11)
+        for i, point in enumerate(circle_points(24)):
+            tx, ty = truth(point, 11, "translate")
+            self.assertLess(math.hypot(resolved[i]["x"] - tx, resolved[i]["y"] - ty), 0.7, i)
+
+    def test_a_shape_needs_selecting_and_an_input(self):
+        window = self.make_window([roto_shape()])
+        window.viewer.roto_selected_shape_index = -1
+        self.assertFalse(window.track_roto_points("roto"))
+        window.viewer.roto_selected_shape_index = 0
+        self.assertFalse(window.track_roto_points("missing"))
+
+
+class CommandPlacementTests(WindowCase):
+    def test_the_panel_has_track_points_beside_track_shape(self):
+        window = self.make_window([roto_shape()])
+        window.graph.items_by_id["roto"].setSelected(True)
+        APP.processEvents()
+        from nodebased import rotopanel
+        from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QComboBox, QSpinBox
+        root = QWidget(); layout = QVBoxLayout(root)
+        rotopanel.add_tracking_actions(layout, window, "roto")
+        self.assertIsNotNone(root.findChild(QPushButton, "roto-track-shape"))
+        self.assertIsNotNone(root.findChild(QPushButton, "roto-track-points"))
+        direction = root.findChild(QComboBox, "roto-track-points-direction")
+        self.assertEqual([direction.itemData(i) for i in range(direction.count())], ["both", "forward", "backward"])
+        self.assertEqual((root.findChild(QSpinBox, "roto-track-points-first").value(),
+                          root.findChild(QSpinBox, "roto-track-points-last").value()), (1, 11))
+        calls = []
+        window.track_roto_points = lambda key, *a, **k: calls.append((key, a, k)) or True
+        root.findChild(QComboBox, "roto-track-points-direction").setCurrentIndex(1)
+        root.findChild(QSpinBox, "roto-track-points-last").setValue(8)
+        root.findChild(QPushButton, "roto-track-points").click()
+        self.assertEqual(calls, [("roto", ("forward", 1, 8), {})])
+
+    def test_the_shape_list_menu_has_track_points(self):
+        window = self.make_window([roto_shape("a"), roto_shape("b")], view=True)
+        window.show()
+        self.assertTrue(wait_until(lambda: window.frame is not None, timeout=90))
+        window.graph.items_by_id["roto"].setSelected(True)
+        APP.processEvents()
+        panel = window.build_node_panel("roto")
+        window.set_properties_widget(panel)
+        from PySide6.QtWidgets import QTreeWidget
+        tree = panel.findChild(QTreeWidget, "roto-shape-list")
+        tree.select_ids([("item", 1)])
+        action = [a for a in tree.build_menu().actions() if a.text() == "Track points"]
+        self.assertEqual(len(action), 1)
+        self.assertTrue(action[0].isEnabled())
+        calls = []
+        window.track_roto_points = lambda key, direction, **k: calls.append((key, direction, k)) or True
+        action[0].trigger()
+        self.assertEqual(calls, [("roto", "both", {"shape_indices": [1]})])
 
 
 if __name__ == "__main__":
