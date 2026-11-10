@@ -2351,6 +2351,60 @@ Radeon 8060S (`force-adapter.py integrated`) and on llvmpipe (`cpu`).
 **Not verified.** Windows (no Windows machine in this lane; the CI build covers it); the real display (stills read from saved images); factor 4 is now rendered (frame times above) but its field measures come from the sweep, not the 17-frame pass; a solver or `FluidUpres3D` default (none changed); the older carry-only pass for old
 documents with up-res nodes now reinjects too (their cached up-res frames are rebuilt); a cheaper render path that would let the up-res meet the frame-time gate.
 
+### Fluids 17 B swirl: curl noise and vorticity confinement inside the up-res pass, off by default (2026-11-10)
+
+Step A put the fire shot's smoke through `FluidUpres3D` and got finer, mottled smoke but no curls: the pass moved the detail with the coarse velocity only. This step adds
+small-scale swirl to the velocity that carries the fine smoke. Two new knobs on the node, `swirl` (strength, default 0 = off) and `swirl_scale` (wavelength of the largest swirl
+in coarse cells, default 6). **Result: in the field the swirl gives the smoke 57 % more curl in the velocity that carries it (image-plane, 18.4 to 28.9 per second mean) and 78 % more density contrast (0.33 to 0.59),
+the flame measures hold and grain stays under its gate (0.0061); but the picture's smoke structure moves by 1 % (0.081 to 0.081 at frame 16, the same at every blur width), and in the stills the smoke
+shows soft folds and a few curled wisps, not curls. The bake (20 s) meets its gate and the 128-sample frame (1.7 to 3.1 s) is far above the 0.75 s gate with or without the swirl (the finer volume costs it,
+not the swirl, which adds 0.2 to 0.9 s). The swirl stays off by default.** Bake and frame times were taken while the integrator's suite was running part of the time, so they are upper bounds; the verdict does not depend on them.
+
+**What it does** (`fluid_upres.swirl_dense_cpu`, `fluid_upres_gpu.swirl_dense`; `swirl_blocks` runs either):
+
+- *Curl noise.* A sum of 24 plane waves `C cos(K . x + phase)` with `C` perpendicular to `K` (so the sum is divergence-free by construction, not by a numerical projection), wavelengths
+  from `swirl_scale` coarse cells down to half of it, amplitude falling as wavelength^(5/6) (a Kolmogorov spectrum), normalised to unit rms speed, seeded by the node's `seed`,
+  phases drifting every frame. Band-limited, so it adds only the scale the 64-cell solve cannot carry. `swirl_waves` makes the waves on the host; the card and the processor read the same table.
+- *Gated by the coarse flow.* The noise is multiplied by `swirl` times the coarse speed at the voxel (trilinear), so there is no swirl in still air (a test: a zero velocity gives exactly zero),
+  and the swirl follows the coarse flow's local energy as wavelet turbulence does (Kim et al., 2008). Doubling the coarse velocity doubles the swirl (a test).
+- *Vorticity confinement on the fine grid.* The curl of (coarse + noise) is taken on the fine grid (central differences, edge-clamped), and `2 x swirl x h x (N x curl)` is added, `N` the unit
+  gradient of its magnitude: a velocity that spins each fine vortex up. The added velocity is limited to twice the coarse speed at the voxel.
+- *How it acts.* Only the smoke density is carried by the coarse velocity plus the swirl; flame, temperature and fuel keep the coarse velocity (the first try swirled them too and broke the flame into
+  sparks; `test_flame_temperature_and_fuel_ignore_the_swirl`). The carried fine density is `coarse now + 0.92 x (fine carried by guide + swirl - coarse carried by guide)`: the swirl's displacement of the smoke is
+  kept for about a dozen frames and relaxes back to the coarse field, so it cannot drift away from it, and the pass's mass match still holds. With `swirl` 0 the older formula runs, byte for byte
+  (`test_swirl_off_is_the_old_result_bit_for_bit`; documents saved before the knobs load with it off, `load_document` adds the two params).
+- *Strength.* `swirl` is a multiple of the local coarse speed. 2 or more stirs the smoke into a wide, dim halo and 1 at scale 3 turns it to dust (the first stills); the 0.3 to 0.5 range at scale 5 to 8 gives
+  billows with rolled edges. The picked setting is `swirl` 0.5, `swirl_scale` 6.
+
+**Curl measure** (`flame_metrics.projected_curl`, `render_evidence.py --upres --upres-before`). The velocity of every fine voxel that carries the smoke at frame 16 (coarse velocity sampled on the fine grid plus
+the swirl and confinement) is projected onto the camera's right and up axes, averaged along the view weighted by the smoke density into 2 cm cells (orthographic, close at the shot's distance), and the curl is
+d(up)/d(right) - d(right)/d(up) in 1 per second. The measure is the share of the smoke cells (at least 5 % of the thickest cell) with |curl| above 30 per second, with the mean, 90th percentile and rms. It reads the
+velocity, not the picture: an optical-flow estimate on the rendered frames 15 and 16 was tried first and discarded (the grain and the flame's flicker made it report 14 pixel flows).
+
+| Fire shot, factor 2, RTX 3080 Ti | up-res, swirl off (step A at 2x) | swirl 0.5, scale 6 | Gate |
+|---|---|---|---|
+| Image-plane curl of the carrying velocity, frame 16: share above 30 per second | 18.4 % | 35.5 % | up clearly |
+| Same: mean / 90th percentile / rms \|curl\| (per second) | 18.4 / 44.3 / 28.2 | 28.9 / 63.9 / 40.6 | |
+| Smoke density contrast in the field (mean of frames 8 to 24) | 0.334 | 0.594 | up |
+| Flame core position (field) / tongues per slice / top over bottom | 0.3048 / 1.117 / 0.684 | 0.3036 / 1.117 / 0.666 | hold: **met** |
+| Bake to frame 24 (shot alone) | 13.7 s | 20.0 s | 30 s: **met** |
+| 128-sample frame, frames 8 / 16 / 24 (median of five) | 1.46 / 2.28 / 2.23 s | 1.69 / 2.57 / 3.12 s | under 0.75 s: **not met** |
+| Frame-16 grain | 0.0063 | 0.0061 | at most 0.0071: **met** |
+| Image smoke structure, frames 8 / 16 / 24 (15-pixel high-pass) | 0.062 / 0.081 / 0.078 | 0.063 / 0.081 / 0.078 | |
+
+**Stills** (`docs/images/fire_shot/fire-smoke-swirl-{before,after}-{008,016,024}.png`, the contact sheet `fire-smoke-swirl-before-after-swirl-2026-11-10.png` and the 3x close-up `...-zoom-...`). The flame is the same in
+every pair. With the swirl the smoke has darker folds and gaps at the scale of the swirl and soft rolled edges on the plume's flanks at frames 16 and 24, a few curled wisps; the difference is small in the 3x close-up and
+slight in the contact sheet. It does not curl: the body of the smoke is still a mottled cloud, and a viewer would call it billowing rather than swirling. The picked strength is the largest that keeps the smoke from spreading
+into a halo; stronger swirl spreads the smoke instead of rolling it, because the carried displacement is a stir, not an accumulated rotation (the coarse flow's own velocity noise is already 18 per second of image-plane curl).
+
+**Adapters.** `tests/test_fluid_upres_swirl.py` (15 tests: the waves are divergence-free and unit-rms, deterministic by seed and frame, no swirl in still air, swirl scales with speed, the limit, off is the
+old result bit for bit, flame/temperature/fuel unchanged, mass kept, a still plume is not stirred, old documents load with it off, and the card against the processor for the dense swirl velocity and for two
+reinjected frames) with `tests/test_fluid_upres.py` and `tests/test_fluid_upres_reinject.py` (36 tests; the flame-unchanged test was added after the adapter runs and ran on the processor path) pass on the RTX 3080 Ti, on the AMD Radeon 8060S (`force-adapter.py integrated`) and on llvmpipe (`cpu`); `tests.test_knobs`,
+`test_tiers`, `test_core`, `test_desktop.FluidPropertiesPanelTests`, `PropertiesLabelTests`, `test_bypass` and `test_nodecatalog` pass (130 tests with the up-res modules).
+
+**Not verified.** Windows (no Windows machine here); the real display (stills read from saved images); the factor 4 setting with swirl (not rendered: its bake was 73 s without it); the swirl at the shot's other
+settings; a cheaper render path for the finer volume, which is what stops the up-res from being the shot's default. `make_shot.build_document(smoke_upres={"swirl": 0.5, "swirl_scale": 6.0})` builds the shot with the swirl.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
