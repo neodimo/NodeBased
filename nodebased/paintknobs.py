@@ -51,7 +51,7 @@ SHAPE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "feather_falloff", "feather_model
                      "falloff_power", "lifetime", "cap_start", "cap_end", "color", "blend_mode", *ROTO_SOURCE_FIELDS)
 STROKE_ITEM_FIELDS = (*COMMON_FIELDS, "invert", "effect", "dynamic_hardness", "buildup", "write_on", "source_transform", "source_round",
                       "source_filter", "source_black_outside", "source_time_offset", "source_time_offset_type",
-                      "pressure_opacity", "pressure_size", "dynamic_size", "dynamic_transparency")
+                      "pressure_opacity", "pressure_size", "dynamic_size", "dynamic_transparency", "stick")
 SOURCE_TRANSFORM_DEFAULTS = {"rotate": 0.0, "scale_x": 1.0, "scale_y": 1.0, "skew_x": 0.0, "skew_y": 0.0,
                              "center_x": 0.0, "center_y": 0.0}
 def roto_source_spec(shape):
@@ -147,6 +147,8 @@ def validate_common(item, where):
 
 def validate_stroke_extras(item, where):
     validate_common(item, where)
+    if "stick" in item:
+        validate_stick(item["stick"], where)
     if "effect" in item and not (_number(item["effect"]) and 0.0 <= item["effect"] <= 4096.0):
         raise ValueError(f"{where}.effect must be a number between 0 and 4096")
     for field in ("invert", "dynamic_hardness", "buildup", "source_round", "source_black_outside", "pressure_opacity", "pressure_size",
@@ -227,6 +229,46 @@ def shape_input(item):
 
 def needs_resolving(item):
     return any(field in item for field in ("transform", "extra_matrix", "motion_blur", *shapes.MOTION_BLUR_FIELDS))
+
+
+# -------------------------------------------------------------------------------------------- stick to plate
+def sticks(item):
+    """True for a stroke that follows the plate (lane 9 step I7): its points are keyed per frame and `stick` keys the scale and turn."""
+    return bool(item.get("stick")) or any(isinstance(p.get(k), dict) for p in item.get("points", ()) for k in ("x", "y"))
+
+
+def validate_stick(stick, where):
+    if not isinstance(stick, dict) or set(stick) - {"scale", "rotation"}:
+        raise ValueError(f"{where}.stick defines scale and rotation")
+    for field, value in stick.items():
+        if _number(value):
+            continue
+        if not isinstance(value, dict) or set(value) not in ({"value"}, {"value", "curve"}) or not _number(value["value"]):
+            raise ValueError(f"{where}.stick.{field} must be a number or an animatable scalar object")
+        if value.get("curve") is not None:
+            shapes.validate_curve(value["curve"], f"{where}.stick.{field}")
+
+
+def resolve_stuck(item, frame):
+    """The stroke at `frame` with its keyed points as plain numbers and its brush size and clone offset carried with the plate.
+
+    `stick.scale` multiplies the brush size and the clone offset; `stick.rotation` (radians, y down) turns the clone offset, so the
+    source keeps its place relative to the stroke as the picture turns and stretches under it. Both are 1 and 0 where not keyed.
+    """
+    out = dict(item)
+    out["points"] = [dict(p, x=shapes.resolve_scalar(p["x"], frame, "x"), y=shapes.resolve_scalar(p["y"], frame, "y"))
+                     for p in item["points"]]
+    stick = item.get("stick") or {}
+    scale = shapes.resolve_scalar(stick["scale"], frame) if "scale" in stick else 1.0
+    rotation = shapes.resolve_scalar(stick["rotation"], frame) if "rotation" in stick else 0.0
+    out.pop("stick", None)
+    if scale != 1.0:
+        out["brush"] = {**item["brush"], "size": min(4096.0, max(0.1, float(item["brush"]["size"]) * scale))}
+    if (scale != 1.0 or rotation != 0.0) and item.get("source_offset"):
+        dx, dy = (float(v) for v in item["source_offset"])
+        cosine, sine = math.cos(rotation) * scale, math.sin(rotation) * scale
+        out["source_offset"] = [cosine * dx - sine * dy, sine * dx + cosine * dy]
+    return out
 
 
 def resolve_stroke(item, frame, params):

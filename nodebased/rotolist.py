@@ -762,6 +762,15 @@ class ShapeListTree(QTreeWidget):
             indices = [order.index(ref) for ref in shape_refs if ref in order]
         return self.window.track_roto_points(self.key, "both", shape_indices=indices)
 
+    def cmd_stick_to_plate(self):
+        """Carry the selected paint strokes with the picture over the timeline from the current frame (past Nuke, lane 9 step I7)."""
+        entries = self.entries()
+        refs = [ref for kind, ref in self.selected_ids()
+                if kind == "item" and 0 <= ref < len(entries) and entries[ref].get("kind") == "stroke"]
+        if not refs or self.is_roto:
+            return False
+        return self.window.stick_roto_strokes(self.key, "both", item_indices=refs)
+
     def cmd_fit_to_edges(self):
         """Fit the selected shapes to the image edges (the viewer's Fit to edges command)."""
         entries = self.entries()
@@ -830,6 +839,9 @@ class ShapeListTree(QTreeWidget):
         add(menu, "Fit to edges", self.cmd_fit_to_edges, "roto-list-fit-to-edges", has_curves)
         add(menu, "Track points", self.cmd_track_points, "roto-list-track-points", has_curves)
         add(menu, "Fill in-betweens", self.cmd_fill_inbetweens, "roto-list-fill-inbetweens", has_curves)
+        has_strokes = (not self.is_roto) and any(kind == "item" and self.entries()[ref].get("kind") == "stroke"
+                                                 for kind, ref in self.selected_ids())
+        add(menu, "Stick to plate", self.cmd_stick_to_plate, "roto-list-stick-to-plate", has_strokes)
         return menu
 
     def _show_menu(self, position):

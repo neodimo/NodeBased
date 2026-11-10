@@ -141,6 +141,12 @@ def add_point_tracking(layout, window, key):
                       "so the shape follows a deforming subject. Keys every tracked frame; low-confidence points are flagged.")
     button.clicked.connect(lambda: window.track_roto_points(key, direction.currentData(), first.value(), last.value()))
     layout.addWidget(button)
+    stick = QPushButton("Stick to plate")
+    stick.setObjectName("roto-stick-to-plate")
+    stick.setToolTip("Carry the selected paint stroke with the picture from the current frame, over the same frames: its points are "
+                     "keyed to follow the plate, and its brush size and clone offset follow the motion. Past Nuke.")
+    stick.clicked.connect(lambda: window.stick_roto_strokes(key, direction.currentData(), first.value(), last.value()))
+    layout.addWidget(stick)
 
 
 def add_tracking_actions(layout, window, key):

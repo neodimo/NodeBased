@@ -1828,6 +1828,8 @@ class RotoViewerToolbar(QWidget):
             widget = QPushButton(label, self.settings_strip); widget.setObjectName("roto-setting-"+setting)
             if setting == "fill_inbetweens":
                 widget.clicked.connect(lambda _=False: self.viewer.fill_roto_inbetweens())
+            elif setting == "stick_to_plate":
+                widget.clicked.connect(lambda _=False, k=key: self.viewer.window.stick_roto_strokes(k, "both"))
             else:
                 widget.clicked.connect(lambda _=False: self.viewer.fit_roto_to_edges())
         elif kind == "dropdown":
@@ -5540,9 +5542,10 @@ class Viewer(PanZoomView):
             if context[1]["type"] == "RotoPaint" and not hide_splines and select_settings.get("show_paint_stroke_splines", False):
                 raw_items = self.window.dispatcher.document.get("node_data", {}).get(context[0], {}).get("items", [])
                 painter.setPen(QPen(QColor("#68d8ff"), 1.5)); painter.setBrush(Qt.BrushStyle.NoBrush)
+                at_frame = int(self.window.dispatcher.document["time"]["current"])
                 for item in raw_items:
                     if item.get("kind") != "stroke" or not item.get("points"): continue
-                    points = item["points"]
+                    points = paintknobs.resolve_stuck(item, at_frame)["points"] if paintknobs.sticks(item) else item["points"]
                     line = QPainterPath(self._roto_scene_point(points[0], tier))
                     for point in points[1:]: line.lineTo(self._roto_scene_point(point, tier))
                     painter.drawPath(line)
@@ -16196,7 +16199,8 @@ class Window(QMainWindow):
         job = self._points_job
         if not future.done():
             progress = job["progress"]
-            self.statusBar().showMessage(f"Roto Track points: {progress['completed']}/{progress['total']} frames"
+            label = job.get("label", "Roto Track points")
+            self.statusBar().showMessage(f"{label}: {progress['completed']}/{progress['total']} frames"
                                          f" · frame {progress['frame']}")
             QTimer.singleShot(50, self._poll_roto_points)
             return
@@ -16206,9 +16210,12 @@ class Window(QMainWindow):
             if cancel is not None and cancel.is_set():
                 raise CancelledError()
             results = future.result()
-            self._commit_roto_points(job, results)
+            if job.get("stick"):
+                self._commit_roto_stick(job, results)
+            else:
+                self._commit_roto_points(job, results)
         except CancelledError:
-            self.statusBar().showMessage("Roto Track points cancelled; document unchanged")
+            self.statusBar().showMessage(f"{job.get('label', 'Roto Track points')} cancelled; document unchanged")
         except Exception as error:
             self._show_command_error(error)
 
@@ -16285,6 +16292,138 @@ class Window(QMainWindow):
                       for (name, number), frames_ in sorted(by_point.items())]
             summary += f" · {len(by_point)} low-confidence: " + ", ".join(listed[:6]) + (f" and {len(listed) - 6} more" if len(listed) > 6 else "")
         summary += self.viewer._ripple_skipped_suffix("Track points")
+        self.statusBar().showMessage(summary)
+        self.viewer.viewport().update()
+        self.rebuild_properties_dock()
+        return True
+
+    # -- Stick to plate: paint strokes that follow the picture (lane 9 step I7, past Nuke) -----------------------------------
+    def _selected_paint_strokes(self, payload):
+        """Item indices of the strokes selected in the viewer or the shape list (a RotoPaint node's items)."""
+        items = payload.get("items", [])
+        index = getattr(self.viewer, "paint_selected_item_index", None)
+        if index is None or not 0 <= index < len(items) or items[index].get("kind") != "stroke":
+            return []
+        return [index]
+
+    def stick_roto_strokes(self, key, direction="both", first_frame=None, last_frame=None, item_indices=None):
+        """Carry the selected paint strokes with the picture from the current frame: one undo step.
+
+        The picture under each stroke is followed by optical flow checked against the painted frame (nodebased/rotostick.py);
+        the stroke's points are keyed on every frame in range, and its brush size and clone offset follow the local scale and turn
+        of the motion. Where the plate is covered the stroke falls back to the planar motion of its region and the frames are
+        named in the status bar. Nothing changes until the command is run.
+        """
+        from . import rotostick
+        if self._planar_future is not None or self._tracker_future is not None or self._points_future is not None:
+            return False
+        document = self.dispatcher.document
+        node = document["nodes"].get(key)
+        if node is None or node["type"] != "RotoPaint":
+            self._show_command_error(ValueError("Stick to plate needs a RotoPaint node with paint strokes")); return False
+        payload = document.get("node_data", {}).get(key, {})
+        items = payload.get("items", [])
+        chosen = list(item_indices) if item_indices is not None else self._selected_paint_strokes(payload)
+        chosen = [i for i in chosen if 0 <= i < len(items) and items[i].get("kind") == "stroke"]
+        if not chosen:
+            self._show_command_error(ValueError("Select a paint stroke before using Stick to plate")); return False
+        source = node["inputs"].get("image") or node["inputs"].get("bg")
+        if source is None:
+            self._show_command_error(ValueError("Connect an image before using Stick to plate")); return False
+        busy = [i for i in chosen if items[i].get("locked") or any(f in items[i] for f in ("transform", "extra_matrix"))]
+        targets = [i for i in chosen if i not in busy]
+        if not targets:
+            self.statusBar().showMessage("Stick to plate: the selected strokes are locked or have a transform of their own", 6000)
+            return False
+        ref = int(document["time"]["current"])
+        timeline = document["time"]
+        lo = int(timeline["first"] if first_frame is None else first_frame)
+        hi = int(timeline["last"] if last_frame is None else last_frame)
+        try:
+            passes = [order for order in rotostick.frame_order(ref, min(lo, ref), max(hi, ref), direction) if order]
+        except rotostick.StickError as error:
+            self._show_command_error(error); return False
+        if not passes:
+            self._show_command_error(ValueError("There are no frames to follow in that direction from the current frame")); return False
+        frames_wanted = sorted(f for order in passes for f in order)
+        if frames_wanted[-1] - frames_wanted[0] > 5000:
+            self._show_command_error(ValueError("Stick to plate is limited to 5,001 frames")); return False
+        reference = {i: paintknobs.resolve_stuck(items[i], ref) if paintknobs.sticks(items[i]) else items[i] for i in targets}
+        reference_points = {i: [{"x": float(p["x"]), "y": float(p["y"])} for p in reference[i]["points"]] for i in targets}
+        brush = {i: float(reference[i]["brush"]["size"]) for i in targets}
+        doc = copy.deepcopy(document)
+        cancel = threading.Event()
+        job = {"key": key, "kind": "RotoPaint", "stick": True, "label": "Stick to plate", "targets": targets, "ref": ref,
+               "base_payload": copy.deepcopy(payload), "frames": len(frames_wanted),
+               "progress": {"frame": ref, "completed": 0, "total": len(frames_wanted)}, "skipped": len(busy)}
+        self._points_job, self._points_cancel = job, cancel
+        params = node["params"]
+
+        def analyse():
+            from . import tracker as point_tracker
+            roi_executor = TileExecutor(tile_edge=self.tile_executor.tile_edge)
+            bounds = roi_executor.canvas_region(doc, source, ref, tier=1)
+            cache = {}
+            results = {}
+            channel = params.get("tracking_channels", "rgb")
+            channel = {"rgba": "rgb", "all": "rgb", "none": "luminance"}.get(channel, channel)
+            for si in targets:
+                xs = [p["x"] for p in reference_points[si]]; ys = [p["y"] for p in reference_points[si]]
+                margin = max(96, int(math.ceil(max(max(xs) - min(xs), max(ys) - min(ys), brush[si]) * .75)))
+                left = max(bounds.x, int(math.floor(min(xs) - margin))); top = max(bounds.y, int(math.floor(min(ys) - margin)))
+                right = min(bounds.right, int(math.ceil(max(xs) + margin))); bottom = min(bounds.bottom, int(math.ceil(max(ys) + margin)))
+                roi = TileRegion(left, top, right - left, bottom - top, full_width=bounds.width, full_height=bounds.height,
+                                 full_x=bounds.x, full_y=bounds.y)
+
+                def gray(frame, roi=roi, region_key=(left, top, right, bottom)):
+                    if (region_key, frame) not in cache:
+                        if cancel.is_set():
+                            raise CancelledError()
+                        pixels = roi_executor.compose_region(doc, source, roi, frame=frame, tier=1, cancel=cancel).pixels
+                        prepared, _origin = point_tracker._analysis_pixels(
+                            pixels, channel, params.get("pretrack_filter", "none"), bool(int(params.get("clamp_footage", 0))))
+                        cache[(region_key, frame)] = prepared.astype(np.float32)
+                        job["progress"].update(frame=frame, completed=min(len(cache), job["progress"]["total"]))
+                    return cache[(region_key, frame)]
+                local = [{"x": p["x"] - left, "y": p["y"] - top} for p in reference_points[si]]
+                per_frame = {}
+                for order in passes:
+                    tracked = rotostick.stick_stroke(gray, local, ref, order, brush_size=brush[si], cancel=cancel)
+                    per_frame.update(tracked)
+                for data in per_frame.values():
+                    data["points"] = [(x + left, y + top) for x, y in data["points"]]
+                results[si] = per_frame
+            return results
+
+        self._points_future = self.executor.submit(analyse)
+        self.statusBar().showMessage(f"Stick to plate: 0/{len(frames_wanted)} frames")
+        QTimer.singleShot(50, self._poll_roto_points)
+        return True
+
+    def _commit_roto_stick(self, job, results):
+        """Write the followed strokes as keys in one command (one undo step) and name the frames that fell back to planar motion."""
+        from . import rotostick
+        document = self.dispatcher.document
+        key = job["key"]
+        node = document["nodes"].get(key)
+        if node is None or node["type"] != "RotoPaint":
+            raise ValueError("The RotoPaint node changed during Stick to plate; results discarded")
+        payload = document.get("node_data", {}).get(key, {})
+        if payload != job["base_payload"]:
+            raise ValueError("RotoPaint strokes changed during Stick to plate; results discarded")
+        items = copy.deepcopy(payload.get("items", []))
+        notes = []
+        for index, per_frame in results.items():
+            items[index] = rotostick.key_stroke(items[index], per_frame, job["ref"])
+            note = rotostick.describe_fallback(items[index].get("name", f"stroke {index + 1}"), per_frame)
+            if note:
+                notes.append(note)
+        self.command({"op": "set_paint_items", "id": key, "items": items})
+        summary = f"Stick to plate: {len(results)} stroke{'s' if len(results) != 1 else ''} keyed over {job['frames']} frames"
+        if notes:
+            summary += " \u00b7 " + "; ".join(notes)
+        if job.get("skipped"):
+            summary += f" \u00b7 {job['skipped']} locked or transformed stroke{'s' if job['skipped'] != 1 else ''} left alone"
         self.statusBar().showMessage(summary)
         self.viewer.viewport().update()
         self.rebuild_properties_dock()

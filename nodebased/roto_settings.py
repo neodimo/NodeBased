@@ -220,12 +220,14 @@ RIPPLE_CONTROLS = [{'label': 'Ripple edit', 'widget_kind': 'toggle', 'default': 
 # Outline from click (Lane 9, step I5): with this on, a click inside a subject with the Bezier or B-Spline tool
 # outlines it; Shift-drag draws a box first. Off by default and shared by the node, like the snap controls.
 OUTLINE_CONTROLS = [{'label': 'Outline from click', 'widget_kind': 'toggle', 'default': False}]
+# Stick to plate (Lane 9, step I7): carries the selected paint strokes with the picture; a command, not a stored setting.
+STICK_CONTROLS = [{'label': 'Stick to plate', 'widget_kind': 'button', 'default': None}]
 GLOBAL_SETTINGS = {'autokey': True, 'snap_edges': False, 'snap_radius': 8.0, 'fit_band': 12.0, 'outline_click': False,
                    'fill_band': 8.0, 'fill_threshold': 0.75, 'fill_step': 1.0, 'fill_from': 0.0, 'fill_to': 0.0,
                    'ripple_edit': False, 'ripple_mode': 'all', 'ripple_from': 1.0, 'ripple_to': 1.0}
 
 for _tool in ('Select All', 'Select Splines', 'Select Points', 'Select Feather Points'):
-    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS + INBETWEEN_CONTROLS + RIPPLE_CONTROLS)
+    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS + INBETWEEN_CONTROLS + STICK_CONTROLS + RIPPLE_CONTROLS)
 for _tool in ('Add Points', 'Bezier', 'Cusped Bezier', 'B-Spline', 'Ellipse', 'Rectangle',
               'Cusped Rectangle', 'Open Spline'):
     TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS)

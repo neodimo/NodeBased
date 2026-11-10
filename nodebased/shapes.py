@@ -469,10 +469,15 @@ def validate_payload(kind, payload, where):
                 if not isinstance(item["points"], list) or not item["points"]:
                     raise ValueError(f"{at}.points must contain at least one point")
                 for p in item["points"]:
-                    if not isinstance(p, dict) or set(p) != {"x", "y", "pressure"} or any(not _is_number(p[k]) for k in p):
+                    # A stroke that sticks to the plate (lane 9 step I7) has x and y keyed per frame, as scalars with a curve.
+                    if (not isinstance(p, dict) or set(p) != {"x", "y", "pressure"} or not _is_number(p["pressure"])
+                            or any(not (_is_number(p[k]) or isinstance(p[k], dict)) for k in ("x", "y"))):
                         raise ValueError(f"{at}.points must contain finite x, y and pressure")
-                    if any(abs(p[k]) > 65536 for k in ("x", "y")):
-                        raise ValueError(f"{at}.points coordinates must be between -65536 and 65536")
+                    for k in ("x", "y"):
+                        if isinstance(p[k], dict):
+                            validate_scalar(p[k], k, f"{at}.points")
+                        elif abs(p[k]) > 65536:
+                            raise ValueError(f"{at}.points coordinates must be between -65536 and 65536")
                     if not 0 <= p["pressure"] <= 1: raise ValueError(f"{at}.pressure must be between 0 and 1")
                 brush = item["brush"]
                 if not isinstance(brush, dict) or set(brush) != {"size", "hardness", "opacity", "spacing", "strength"}:
@@ -1104,7 +1109,10 @@ def resolve_paint_items(payload, frame, params=None):
             visible = bool(item.get("visible", True))
             resolved.update(_resolve_shape(shape, frame, params, blur=True))
             resolved["visible"] = visible and resolved["visible"]       # outside its lifetime a shape is hidden, as in Roto
-        elif paintknobs.needs_resolving(item) or (params and (params.get("global_motionblur_on", 0))):
-            resolved = paintknobs.resolve_stroke(item, frame, params or {})
+        else:
+            if paintknobs.sticks(item):
+                item = resolved = paintknobs.resolve_stuck(item, frame)       # keyed points, brush size and clone offset at this frame
+            if paintknobs.needs_resolving(item) or (params and (params.get("global_motionblur_on", 0))):
+                resolved = paintknobs.resolve_stroke(item, frame, params or {})
         items.append(apply_layer_state(resolved, item, states))
     return items
