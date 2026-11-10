@@ -916,6 +916,57 @@ block with two holes and a disc with one hole and a 3 px speck each give the exp
 every pixel that disagrees with the true coverage lies within 0.93 px of the true edge. A hole that touches the subject's edge is part of the
 background, not a hole; an island of a different colour inside a hole is cut out with the hole.
 
+## Strokes that stick to the plate (past Nuke)
+
+In Nuke a RotoPaint stroke painted on one frame stays where it was painted. To make it follow a moving plate the artist links it to a
+tracker, or builds a SmartVector and a VectorDistort. Here a stroke (paint, eraser, clone, reveal, blur, sharpen, smear, dodge, burn) has a
+**Stick to plate** command that carries it with the picture. It is **off unless run**: a stroke with no keys renders exactly as before, and a
+saved shot that never used the command is unchanged.
+
+* **Where.** Select a stroke, go to the frame it was painted on, and use **Stick to plate** in the Tracking section of the RotoPaint properties
+  (next to Track points, with the same direction and frame range), in the right-click menu of the shape list, or in the strip of the Select
+  tools. One undo step covers every key it writes. A locked stroke, or one with a transform of its own, is left alone and the status bar says so.
+* **What it writes.** The stroke's points get keys on every frame in the range (and keep the painted frame exactly as painted), the same
+  kind of key Track points gives a shape point, so lifetime, ripple, undo and the curve tools treat it as ordinary animation. The stroke
+  also gets a `stick` entry with the local scale and turn of the motion, keyed the same way: the **brush size follows the scale** and the **clone
+  offset follows the scale and turn**, so a clone keeps its source in the same place relative to the stroke as the picture turns and stretches under it.
+* **Before the painted frame and after the range** the stroke holds the position of its first or last key.
+
+**How it follows the picture** (`nodebased/rotostick.py`; pure numpy, reuses `opticalflow.flow_pair`):
+
+1. A dense flow from the previous frame to the next is composed into a field that tells where every pixel of the painted frame has gone. A chain
+   of small steps is accurate, but its errors add up.
+2. Every third frame the picture is warped back by the field and a second flow, against the painted frame, adds the small leftover motion to
+   it, so drift does not build up. This is the direct check.
+3. Each point of the stroke moves by the field averaged over a 7 x 7 pixel neighbourhood. The mean 2 x 2 map of the field over the stroke gives
+   the scale and the turn.
+4. **When the plate is covered.** The warped picture is compared with the painted frame at up to 48 anchors along the stroke (normalised
+   correlation of a 13 x 13 patch). A stroke whose anchors no longer match (an object passes over it, or the flow failed) falls back to the planar
+   motion of its region: a homography fitted through the samples around the stroke that still match, and the planar tracker (`planar.track_region`)
+   when too few do. The status bar names the frames ("stroke1: planar motion on frames 4\u20139"), and the field is reset to the planar motion so
+   the chain picks the plate up again when it shows. A few low anchors on an otherwise good frame put only those points on the planar motion.
+
+**Measured** (`tests/test_roto_paint_stick_i7.py`; a 320 x 240 smoothed random texture rendered through an analytic map, a 24-point curved
+stroke painted on frame 1; distance from every point to where the plate really carried it, on frame 10):
+
+| Plate motion | Mean | Max |
+| --- | --- | --- |
+| Translating (1.2 px right, 0.7 px down a frame) | 0.23 px | 0.64 px |
+| Rotating (0.012 rad a frame, 6.2 deg in all, with a drift) | 0.22 px | 0.67 px |
+| Bending (a non-rigid sine warp that moves points by different amounts) | 0.21 px | 0.72 px |
+
+The tests hold 0.5 px mean and 1.5 px maximum, on every frame on the way. The rotation reported on frame 10 of the rotating plate is 0.108 rad
+(true 0.108), and the scale on a zooming plate 1.135 (true 1.135). A clone offset of 40 x -25 px carried to frame 10 of the rotating plate puts
+the source within 0.2 px of where the plate carried it. With a patch of a different texture sweeping over the stroke on frames 3 to 9, the
+stroke falls back on frames 4 to 9, stays within XXOCCMEAN px mean and XXOCCMAX px at worst on those frames, and is back on its texture when the
+patch has gone. In the app the stroke ends frame 11 within 0.22 px mean and 0.56 px maximum.
+**Timing**, quiet machine, one thread: XXTIMING.
+
+**Limits.** The stroke follows the picture, not the object it is painted on: a stroke on a surface that the plate hides for good, or on pixels
+that are not in the plate at all, has nothing to follow. A plate with no texture under the stroke (a flat wall) has no motion to measure; the
+planar fallback then reports it. The stroke's own transform (Roto transform knobs) is not combined with it. The clone offset keeps the stretch
+and turn of the picture, not shear.
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.

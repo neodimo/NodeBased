@@ -839,9 +839,9 @@ class ShapeListTree(QTreeWidget):
         add(menu, "Fit to edges", self.cmd_fit_to_edges, "roto-list-fit-to-edges", has_curves)
         add(menu, "Track points", self.cmd_track_points, "roto-list-track-points", has_curves)
         add(menu, "Fill in-betweens", self.cmd_fill_inbetweens, "roto-list-fill-inbetweens", has_curves)
-        has_strokes = (not self.is_roto) and any(kind == "item" and self.entries()[ref].get("kind") == "stroke"
-                                                 for kind, ref in self.selected_ids())
-        add(menu, "Stick to plate", self.cmd_stick_to_plate, "roto-list-stick-to-plate", has_strokes)
+        if not self.is_roto:          # paint strokes exist only in RotoPaint (lane 9 step I7)
+            has_strokes = any(kind == "item" and self.entries()[ref].get("kind") == "stroke" for kind, ref in self.selected_ids())
+            add(menu, "Stick to plate", self.cmd_stick_to_plate, "roto-list-stick-to-plate", has_strokes)
         return menu
 
     def _show_menu(self, position):
