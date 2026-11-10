@@ -719,8 +719,9 @@ Measured on synthetic frames (tests/test_roto_point_track_i2.py): a textured dis
 points of its outline to within 0.38 px over 10 frames (the planar track alone: 0.19 px); the same disc with its right half stretching 7%
 of its reference width every frame is followed by the right-side points to within 0.5 px where the planar track alone misses by up to
 3.6 px; an occluded patch drops under the threshold on the frames it is hidden, nothing else is flagged, and the point rejoins its patch
-when the occluder goes. A 24-point shape on 1920 x 1080 frames takes about 170 ms a frame for the matching (frames already decoded; the
-planar track of the shape's region and the frame decode come on top, and the run is in the background with progress in the status bar).
+when the occluder goes. A 24-point shape on 1920 x 1080 frames takes about 130 ms a frame for the matching (frames already decoded, quiet machine); the
+planar track that steers it costs about 0.6 s a frame on a 640 x 640 px region around the shape (the same cost as "Track shape"), and the frame
+decode comes on top. The run is in the background with progress in the status bar.
 
 ## Lane 8 step notes
 
