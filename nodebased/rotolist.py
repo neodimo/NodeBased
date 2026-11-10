@@ -753,6 +753,20 @@ class ShapeListTree(QTreeWidget):
             indices = [order.index(ref) for ref in shape_refs if ref in order]
         return self.window.viewer.fit_roto_to_edges(indices)
 
+    def cmd_fill_inbetweens(self):
+        """Edge-fit the frames between the selected shapes' keys (the viewer's Fill in-betweens command)."""
+        entries = self.entries()
+        shape_refs = [ref for kind, ref in self.selected_ids()
+                      if kind == "item" and 0 <= ref < len(entries) and entries[ref].get("kind", "shape") == "shape"]
+        if not shape_refs:
+            return False
+        if self.is_roto:
+            indices = list(shape_refs)
+        else:
+            order = [i for i, item in enumerate(entries) if item.get("kind") == "shape"]
+            indices = [order.index(ref) for ref in shape_refs if ref in order]
+        return self.window.viewer.fill_roto_inbetweens(indices)
+
     def ask_lifetime(self):
         dialog = QDialog(self); dialog.setWindowTitle("Set lifetime / frame range")
         form = QFormLayout(dialog)
@@ -792,6 +806,7 @@ class ShapeListTree(QTreeWidget):
         add(menu, "Planar-track", self.cmd_planar_track, "roto-list-planar-track", has_curves)
         add(menu, "Fit to edges", self.cmd_fit_to_edges, "roto-list-fit-to-edges", has_curves)
         add(menu, "Track points", self.cmd_track_points, "roto-list-track-points", has_curves)
+        add(menu, "Fill in-betweens", self.cmd_fill_inbetweens, "roto-list-fill-inbetweens", has_curves)
         return menu
 
     def _show_menu(self, position):

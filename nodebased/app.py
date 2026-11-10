@@ -48,7 +48,7 @@ from . import radialcommands
 from . import graphlook
 from . import gpu3d
 from . import roto
-from . import rotoedges
+from . import rotoedges, rotoinbetween
 from . import paintknobs
 from . import rotolist
 from . import gpupicture
@@ -1679,7 +1679,9 @@ class RotoViewerToolbar(QWidget):
                 "Constant selection mode": "constant_selection_mode", "Label points": "label_points",
                 "Feather link": "feather_link", "Autokey": "autokey",
                 "Snap to edges": "snap_edges", "Snap radius": "snap_radius", "Fit band": "fit_band",
-                "Fit to edges": "fit_to_edges"}.get(
+                "Fit to edges": "fit_to_edges", "Fill band": "fill_band", "Fill threshold": "fill_threshold",
+                "Fill every Nth frame": "fill_step", "Fill from": "fill_from", "Fill to": "fill_to",
+                "Fill in-betweens": "fill_inbetweens"}.get(
                     label, label.lower().replace(" ", "_").replace("/", "_"))
 
     @staticmethod
@@ -1807,7 +1809,10 @@ class RotoViewerToolbar(QWidget):
             widget.toggled.connect(lambda checked, k=key, t=tool, s=setting: self.set_setting(k, t, s, bool(checked)))
         elif kind == "button":
             widget = QPushButton(label, self.settings_strip); widget.setObjectName("roto-setting-"+setting)
-            widget.clicked.connect(lambda _=False: self.viewer.fit_roto_to_edges())
+            if setting == "fill_inbetweens":
+                widget.clicked.connect(lambda _=False: self.viewer.fill_roto_inbetweens())
+            else:
+                widget.clicked.connect(lambda _=False: self.viewer.fit_roto_to_edges())
         elif kind == "dropdown":
             widget = QComboBox(self.settings_strip); widget.setObjectName("roto-setting-"+setting)
             choices = {"Source": ["color", "foreground", "background"], "Blending mode": ["over", "plus", "multiply", "screen"],
@@ -3818,7 +3823,7 @@ class Viewer(PanZoomView):
             "tool_settings", {}).get("__global__", {})
         return bool(shared.get("snap_edges", False)), max(0.5, float(shared.get("snap_radius", 8.0)))
 
-    def _roto_edge_field(self, context, x0, y0, x1, y1):
+    def _roto_edge_field(self, context, x0, y0, x1, y1, frame=None):
         """The edge field over a data-space box of the image the Roto node sees at its input, or None.
 
         Reads the input through the evaluator at the current frame (never changes it) and keeps only
@@ -3829,7 +3834,7 @@ class Viewer(PanZoomView):
         if source is None:
             return None
         document = self.window.dispatcher.document
-        frame = int(document["time"]["current"])
+        frame = int(document["time"]["current"]) if frame is None else int(frame)
         try:
             raster, digest = self.window.evaluator.evaluate_raster(
                 document, target=source, frame=frame, return_digest=True)
@@ -3913,6 +3918,89 @@ class Viewer(PanZoomView):
             self._commit_roto_shapes(key, node, shapes)
             self.viewport().update()
         return changed
+
+    def fill_roto_inbetweens(self, shape_indices=None):
+        """Fill the frames between two keys with edge-fitted keys: one undo step for every shape.
+
+        Each selected, unlocked shape is filled between the keys around the current frame, or
+        between the strip's Fill from and Fill to frames when those are set. The fit runs on each
+        frame's own input image and keys only the points that moved past the threshold; frames the
+        artist already keyed are left alone. Returns True when keys were added.
+        """
+        context = self._roto_context()
+        if context is None:
+            return False
+        key, node, payload, tier = context
+        document = self.window.dispatcher.document
+        current = int(document["time"]["current"])
+        shared = payload.get("tool_settings", {}).get("__global__", {})
+        band = max(1.0, float(shared.get("fill_band", rotoinbetween.DEFAULT_BAND)))
+        threshold = max(0.0, float(shared.get("fill_threshold", rotoinbetween.DEFAULT_THRESHOLD)))
+        step = max(1, int(round(float(shared.get("fill_step", rotoinbetween.DEFAULT_STEP)))))
+        first, last = int(round(float(shared.get("fill_from", 0)))), int(round(float(shared.get("fill_to", 0))))
+        shapes = copy.deepcopy(payload.get("shapes", []))
+        resolved = self._roto_resolved(context)
+        if shape_indices is None:
+            chosen = {si for si, _ in self.roto_selected_points}
+            if 0 <= self.roto_selected_shape_index < len(shapes):
+                chosen.add(self.roto_selected_shape_index)
+            shape_indices = sorted(chosen)
+        targets = [si for si in shape_indices if 0 <= si < len(shapes) and not resolved[si].get("locked")
+                   and len(resolved[si]["points"]) >= 2]
+        bar = self.window.statusBar()
+        self.last_inbetween_results = {}
+        if not targets:
+            bar.showMessage("Fill in-betweens: select an unlocked shape first", 4000)
+            return False
+        total_keys = total_frames = 0
+        no_range = no_image = 0
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            for si in targets:
+                stored = shapes[si]
+                keyed = rotoinbetween.key_frames(stored)
+                if first or last:
+                    span = (min(first, last), max(first, last))
+                else:
+                    span = rotoinbetween.surrounding_keys(stored, current)
+                if span is None or span[1] - span[0] < 2:
+                    no_range += 1
+                    continue
+
+                def shape_at(frame, si=si):
+                    return shape_model.resolve_roto_shapes(payload, frame, document, tier)[si]
+
+                def field_for(frame, box):
+                    return self._roto_edge_field(context, *box, frame=frame)
+
+                result = rotoinbetween.fill_inbetweens(
+                    shape_at, field_for, span[0], span[1], band=band, threshold=threshold, step=step,
+                    skip_frames=keyed)
+                self.last_inbetween_results[si] = result
+                if not result.examined:
+                    no_image += 1
+                    continue
+
+                def local(frame, point, stored=copy.deepcopy(stored)):
+                    return shape_model.unresolve_roto_point(point, stored, document, frame, tier)
+
+                total_keys += rotoinbetween.write_keys(stored, result.keys, span[0], span[1], local)
+                total_frames += result.frames_keyed
+        finally:
+            QApplication.restoreOverrideCursor()
+        if total_keys:
+            self._commit_roto_shapes(key, node, shapes)
+            self.viewport().update()
+            bar.showMessage(f"Fill in-betweens: added {total_keys} keys on {total_frames} frames", 6000)
+            return True
+        if no_image and not no_range:
+            bar.showMessage("Fill in-betweens: connect an image to the Roto input", 4000)
+        elif no_range and not self.last_inbetween_results:
+            bar.showMessage("Fill in-betweens: select a shape keyed on both sides of this frame, "
+                            "or set Fill from and Fill to", 5000)
+        else:
+            bar.showMessage("Fill in-betweens: added 0 keys (the interpolation already fits)", 5000)
+        return False
 
     def _roto_scalar_at_frame(self, value, frame, replacement, auto_key=False):
         """Change a point coordinate while retaining its v8 animated scalar envelope."""

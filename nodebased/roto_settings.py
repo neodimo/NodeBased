@@ -202,10 +202,19 @@ SNAP_CONTROLS = [{'label': 'Snap to edges', 'widget_kind': 'toggle', 'default': 
                  {'label': 'Snap radius', 'widget_kind': 'field', 'default': 8.0}]
 FIT_CONTROLS = [{'label': 'Fit band', 'widget_kind': 'field', 'default': 12.0},
                 {'label': 'Fit to edges', 'widget_kind': 'button', 'default': None}]
-GLOBAL_SETTINGS = {'autokey': True, 'snap_edges': False, 'snap_radius': 8.0, 'fit_band': 12.0}
+# Fill in-betweens (Lane 2, step I3): edge-fits every frame between two keys and keys only the points that
+# moved. "Fill from" and "Fill to" at 0 and 0 mean the keys around the current frame.
+INBETWEEN_CONTROLS = [{'label': 'Fill band', 'widget_kind': 'field', 'default': 8.0},
+                      {'label': 'Fill threshold', 'widget_kind': 'field', 'default': 0.75},
+                      {'label': 'Fill every Nth frame', 'widget_kind': 'field', 'default': 1.0},
+                      {'label': 'Fill from', 'widget_kind': 'field', 'default': 0.0},
+                      {'label': 'Fill to', 'widget_kind': 'field', 'default': 0.0},
+                      {'label': 'Fill in-betweens', 'widget_kind': 'button', 'default': None}]
+GLOBAL_SETTINGS = {'autokey': True, 'snap_edges': False, 'snap_radius': 8.0, 'fit_band': 12.0,
+                   'fill_band': 8.0, 'fill_threshold': 0.75, 'fill_step': 1.0, 'fill_from': 0.0, 'fill_to': 0.0}
 
 for _tool in ('Select All', 'Select Splines', 'Select Points', 'Select Feather Points'):
-    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS)
+    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS + INBETWEEN_CONTROLS)
 for _tool in ('Add Points', 'Bezier', 'Cusped Bezier', 'B-Spline', 'Ellipse', 'Rectangle',
               'Cusped Rectangle', 'Open Spline'):
     TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS)

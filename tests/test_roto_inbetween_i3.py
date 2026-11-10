@@ -8,10 +8,16 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+from PySide6.QtCore import QSettings
 
 from nodebased import rotoedges, rotoinbetween, roto
 from nodebased import shapes as shape_model
+from nodebased.app import Window
+from nodebased.core import Dispatcher, empty_document
+from nodebased.rotolist import ShapeListTree
 from tests.test_roto_edges_i1 import CENTRE, circle_points, disc_image
+from tests.test_roto_ui import APP
+from tests.waiting import wait_until
 
 START, END = 1, 9
 R0, R1 = 30.0, 50.0
@@ -185,6 +191,205 @@ class FillTests(unittest.TestCase):
         per_frame = elapsed / max(len(result.examined), 1)
         print(f"\nI3 time per in-between, 24 points at 1080p (field and fit; the plate is already rendered): {per_frame * 1000:.0f} ms")
         self.assertLess(per_frame, 2.0)
+
+
+# -- the window: a Radial plate whose disc grows non-linearly over frames 1 to 9 ---------------------
+
+PLATE_CENTRE = (50.0, 50.0)
+PLATE_R0, PLATE_R1 = 15.0, 35.0
+EDGE_BIAS = 25.08 / 25.0       # a hard Radial of box radius r has an area-equivalent edge radius of r * this
+
+
+def plate_radius(frame):
+    return PLATE_R0 + (PLATE_R1 - PLATE_R0) * ease_in((frame - START) / (END - START))
+
+
+def growing_plate_document(shapes=None, current=5, layers=None):
+    document = empty_document()
+    document["nodes"] = {}
+    document["view"] = None
+    document["time"].update(first=START, last=END, current=current)
+    dispatcher = Dispatcher(document)
+    dispatcher.execute({"op": "create", "id": "plate", "type": "Radial"})
+    for name, value in dict(width=100, height=100, softness=0.0).items():
+        dispatcher.execute({"op": "set", "id": "plate", "param": name, "value": value})
+    for frame in range(START, END + 1):
+        radius = plate_radius(frame)
+        for name, value in (("box_x", PLATE_CENTRE[0] - radius), ("box_y", PLATE_CENTRE[1] - radius),
+                            ("box_width", 2 * radius), ("box_height", 2 * radius)):
+            dispatcher.execute({"op": "set_key", "id": "plate", "param": name, "frame": frame, "value": value})
+    dispatcher.execute({"op": "create", "id": "r", "type": "Roto", "pos": [0, 0]})
+    dispatcher.execute({"op": "set", "id": "r", "param": "width", "value": 100})
+    dispatcher.execute({"op": "set", "id": "r", "param": "height", "value": 100})
+    dispatcher.execute({"op": "connect", "id": "r", "input": "bg", "source": "plate"})
+    dispatcher.execute({"op": "view", "id": "r"})
+    if shapes:
+        command = {"op": "set_shapes", "id": "r", "shapes": shapes}
+        if layers:
+            command["layers"] = layers
+        dispatcher.execute(command)
+    return dispatcher.document
+
+
+def plate_shape(name="disc", **extra):
+    """A circle keyed at frames 1 and 9 only, on the plate's disc."""
+    first = circle_points(16, PLATE_R0 * EDGE_BIAS, PLATE_CENTRE)
+    last = circle_points(16, PLATE_R1 * EDGE_BIAS, PLATE_CENTRE)
+    shape = {"name": name, "mode": "union", "opacity": 1.0, "feather": 0.0, "closed": True, "points": [
+        {n: {"value": a[n], "curve": {"interpolation": "linear", "keys": [
+            {"frame": START, "value": a[n]}, {"frame": END, "value": b[n]}]}}
+         for n in rotoedges.POINT_FIELDS} for a, b in zip(first, last)]}
+    shape.update(extra)
+    return shape
+
+
+class WindowTests(unittest.TestCase):
+    def setUp(self):
+        QSettings("NodeBased", "NodeBased").clear()
+        rotoedges.CACHE.clear()
+        self.window = None
+
+    def tearDown(self):
+        if self.window is not None:
+            self.window.saved_document = self.window.dispatcher.document
+            self.window.close()
+            APP.processEvents()
+
+    def open(self, shapes, current=5):
+        self.window = Window(growing_plate_document(shapes, current))
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True)
+        APP.processEvents()
+        self.viewer = self.window.viewer
+        self.viewer.select_roto_tool("Select", "Select Points")
+        return self.viewer
+
+    def shapes(self):
+        return self.window.dispatcher.document["node_data"]["r"]["shapes"]
+
+    def error_at(self, shape, frame):
+        points = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["points"]
+        return rms_to_radius_about(points, PLATE_CENTRE, plate_radius(frame) * EDGE_BIAS)
+
+    def test_fill_through_the_window_fits_every_middle_frame(self):
+        self.open([plate_shape()])
+        self.viewer.roto_selected_shape_index = 0
+        before = [self.error_at(self.shapes()[0], f) for f in range(2, 9)]
+        self.assertGreater(max(before), 1.5)
+        undo = len(self.window.dispatcher.undo_stack)
+        self.assertTrue(self.viewer.fill_roto_inbetweens())
+        self.assertEqual(len(self.window.dispatcher.undo_stack), undo + 1)
+        after = [self.error_at(self.shapes()[0], f) for f in range(2, 9)]
+        for frame, value in zip(range(2, 9), after):
+            self.assertLess(value, 0.75, (frame, before, after))
+        self.assertEqual(sorted(rotoinbetween.key_frames(self.shapes()[0])), list(range(1, 10)))
+        message = self.window.statusBar().currentMessage()
+        self.assertIn("Fill in-betweens: added", message)
+        self.assertIn("keys on 7 frames", message)
+
+    def test_strip_button_runs_the_fill_and_the_settings_are_read(self):
+        self.open([plate_shape()])
+        self.viewer.roto_selected_shape_index = 0
+        toolbar = self.viewer.roto_toolbar
+        toolbar.choose("Select", "Select Points")
+        toolbar.set_setting("r", "Select Points", "fill_step", 4.0)
+        toolbar.set_setting("r", "Select Points", "fill_threshold", 0.5)
+        toolbar.set_setting("r", "Select Points", "fill_band", 10.0)
+        toolbar.settings_widgets["fill_inbetweens"].click()
+        APP.processEvents()
+        self.assertEqual(rotoinbetween.key_frames(self.shapes()[0]), [1, 5, 9])
+        self.assertLess(self.error_at(self.shapes()[0], 5), 0.75)
+
+    def test_from_and_to_set_the_range_and_the_current_frame_is_not_needed(self):
+        shape = plate_shape()
+        self.open([shape], current=1)
+        self.viewer.roto_selected_shape_index = 0
+        toolbar = self.viewer.roto_toolbar
+        toolbar.set_setting("r", "Select Points", "fill_from", 3.0)
+        toolbar.set_setting("r", "Select Points", "fill_to", 7.0)
+        self.assertTrue(self.viewer.fill_roto_inbetweens())
+        self.assertEqual(rotoinbetween.key_frames(self.shapes()[0]), [1, 4, 5, 6, 9])
+
+    def test_one_undo_removes_every_added_key(self):
+        self.open([plate_shape("a"), plate_shape("b")])
+        before = copy.deepcopy(self.shapes())
+        self.assertTrue(self.viewer.fill_roto_inbetweens([0, 1]))
+        self.assertNotEqual(self.shapes(), before)
+        for shape in self.shapes():
+            self.assertEqual(rotoinbetween.key_frames(shape), list(range(1, 10)))
+        self.window.command({"op": "undo"})
+        self.assertEqual(self.shapes(), before)
+
+    def test_locked_shapes_and_shapes_in_locked_layers_are_untouched(self):
+        locked = plate_shape("locked", locked=True)
+        layered = plate_shape("layered", layer="L")
+        free = plate_shape("free")
+        document = growing_plate_document([locked, layered, free],
+                                          layers=[{"name": "L", "visible": True, "locked": True}])
+        self.window = Window(document)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["r"].setSelected(True)
+        APP.processEvents()
+        self.viewer = self.window.viewer
+        before = copy.deepcopy(self.shapes())
+        self.assertTrue(self.viewer.fill_roto_inbetweens([0, 1, 2]))
+        after = self.shapes()
+        self.assertEqual(after[0], before[0])
+        self.assertEqual(after[1], before[1])
+        self.assertNotEqual(after[2], before[2])
+        self.window.command({"op": "undo"})
+        self.assertFalse(self.viewer.fill_roto_inbetweens([0, 1]))
+        self.assertEqual(self.shapes(), before)
+
+    def test_a_shape_with_no_keys_around_the_frame_is_reported_not_changed(self):
+        static = {"name": "plain", "mode": "union", "opacity": 1.0, "feather": 0.0, "closed": True,
+                  "points": circle_points(16, 20.0, PLATE_CENTRE)}
+        self.open([static])
+        before = copy.deepcopy(self.shapes())
+        undo = len(self.window.dispatcher.undo_stack)
+        self.assertFalse(self.viewer.fill_roto_inbetweens([0]))
+        self.assertEqual(self.shapes(), before)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), undo)
+        self.assertIn("keyed on both sides", self.window.statusBar().currentMessage())
+
+    def test_an_existing_key_between_the_ends_is_kept(self):
+        shape = plate_shape()
+        for point in shape["points"]:
+            for name in rotoedges.POINT_FIELDS:
+                keys = point[name]["curve"]["keys"]
+                keys.insert(1, {"frame": 5, "value": keys[0]["value"] + (keys[1]["value"] - keys[0]["value"]) * 0.5})
+        self.open([shape], current=3)
+        self.viewer.roto_selected_shape_index = 0
+        before = {n: [dict(k) for k in shape["points"][0][n]["curve"]["keys"] if k["frame"] == 5] for n in ("x", "y")}
+        self.assertTrue(self.viewer.fill_roto_inbetweens())
+        keys = self.shapes()[0]["points"][0]["x"]["curve"]["keys"]
+        self.assertEqual([k for k in keys if k["frame"] == 5], before["x"])
+        self.assertEqual(sorted(k["frame"] for k in keys), [1, 2, 3, 4, 5, 9])      # filled between 1 and 5 only
+
+    def test_list_menu_has_fill_in_betweens(self):
+        self.open([plate_shape()])
+        self.window.rebuild_properties_dock()
+        APP.processEvents()
+        lists = self.window.findChildren(ShapeListTree)
+        if not lists:
+            self.skipTest("no Roto list in this layout")
+        names = [a.objectName() for a in lists[0].build_menu().actions()]
+        self.assertIn("roto-list-fill-inbetweens", names)
+
+    def test_old_documents_have_the_fill_settings_at_their_defaults(self):
+        self.open([plate_shape()])
+        settings = self.viewer.roto_toolbar._tool_settings("r", "Select Points")
+        self.assertEqual((settings["fill_band"], settings["fill_threshold"], settings["fill_step"]),
+                         (8.0, 0.75, 1.0))
+        self.assertEqual(self.window.dispatcher.document["node_data"]["r"].get("tool_settings", {}), {})
+
+
+def rms_to_radius_about(points, centre, radius):
+    outline = roto.flatten_points(points, closed=True)
+    d = [math.hypot(x - centre[0], y - centre[1]) - radius for x, y in outline]
+    return math.sqrt(sum(v * v for v in d) / len(d))
 
 
 if __name__ == "__main__":
