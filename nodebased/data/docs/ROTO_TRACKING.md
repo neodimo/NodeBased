@@ -845,6 +845,58 @@ matte is on the critical path (a Roto node evaluated while the artist scrubs or 
 could change the playback result: keep the matte on the card inside the 2D island instead of reading it back, and raise the card's
 clocks for a play with `cardclock` as the 3D path does; neither is part of this switch.
 
+## Outline from a click (past Nuke)
+
+In Nuke the artist clicks every point of the first outline by hand. Here the Bezier and B-Spline tools can outline a subject from one click.
+It is a switch, **off by default**: with **Outline from click** off (a toggle in the strip of the Bezier and B-Spline tools, shared by the
+node and left out of a saved shot while off) nothing changes, and the tools draw point by point as before. With it on:
+
+* **Click inside the subject.** The outline appears as an ordinary new shape (a closed Bezier, or a B-Spline for that tool), selected, in
+  **one undo step**. Everything that works on a shape works on it: move points, edge fit, in-betweens, point tracking.
+* **Shift-drag draws a box first** for a harder subject (a subject the same colour as part of its background, or touching a twin). The box
+  stays on the picture; the next click inside it outlines the subject inside the box and nothing outside it. A click outside the box ignores it.
+* **Esc** cancels a pending box. A click where nothing can be found, or on a Roto node with no picture connected to its background input,
+  says so in the status bar and changes nothing.
+
+**How it finds the outline** (`nodebased/rotooutline.py`; pure numpy, no new dependency):
+
+1. *Segmentation* by a continuous min-cut. GrabCut's graph cut needs a max-flow solver and numpy has none, so the cut is solved in its convex
+   form, `min sum g |grad u| + sum f u` for `0 <= u <= 1`, with the Chambolle-Pock primal-dual iteration (a few array operations per step).
+   `f` is the log-likelihood ratio of each pixel's colour under a foreground and a background colour mixture (three full-covariance Gaussians
+   fitted by EM); the foreground model starts from a small disc around the click and the background model from the frame border, or from
+   everything outside the box. `g` is small across strong colour edges so the cut follows them. As in GrabCut the mixtures are refitted from the
+   result and the cut is solved again (three rounds). It runs on a copy of the picture reduced to 256 pixels on the long side; without a box a
+   second, finer pass runs on the subject's bounding box.
+2. *Contour*: the region connected to the click, holes filled, traced with marching squares (sub-pixel). The outline is the silhouette, so a
+   hole through the subject is not cut out.
+3. *Edge refinement*: the contour is resampled evenly and refined to the full-resolution edges with the active contour of the edge-snap
+   feature (above).
+4. *Bezier fit*: corners are found from the turning angle and Schneider's least-squares cubic fit runs between them. The error tolerance grows
+   until there are at most 40 points, so straight runs get few points and curves more; a straight span gets zero tangents; a result with fewer than
+   8 points is subdivided to 8. A last fit-to-edges pass is kept only if it raises the edge response along the outline without moving a point
+   more than 1.5 px (on corners it rounds them off, and then it is not used). For the B-Spline tool the Bezier outline is turned into B-spline
+   control points that pass through it; a B-spline has no corners, so sharp tips round off there.
+
+**Measured** (`tests/test_roto_outline_i5.py`, 320 x 280 synthetic subjects at 4x oversampling; distance from every vertex of the outline to
+the true boundary):
+
+| Subject | Points | Mean | Max |
+| --- | --- | --- | --- |
+| Disc, radius 70 | 8 | 0.19 px | 0.45 px |
+| Rounded rectangle | 14 | 0.26 px | 0.71 px |
+| Five-point star, concave points found within 2.5 px | 16 | 0.20 px | 0.67 px |
+| Disc on a noisy background | 8 | 0.25 px | 0.56 px |
+| Low contrast (a 0.08 step with sensor noise) | 8 | 0.19 px | 0.49 px |
+
+The tests hold a mean of 1.0 px and a maximum of 3.0 px (1.5 and 4.0 for low contrast) and 8 to 40 points. A click off the subject's centre gives the
+same outline, and a box separates a subject from an overlapping twin that is otherwise taken as one blob. **Timing**, quiet machine, one
+thread: 0.47 to 0.67 s for a 320 x 280 frame and 0.9 s for a 1920 x 1080 frame (a 220 px subject on a patterned plate; the radius comes out within
+0.7 px). The viewer runs it on the click, with a wait cursor.
+
+**Limits.** A subject the same colour as its background everywhere has no outline to find: draw a box, or place points by hand. The background
+model comes from the frame border, so a subject that fills the frame needs a box. Fur, hair and motion blur have a soft edge that this does not
+model; the outline follows the strongest edge.
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.
