@@ -3944,9 +3944,10 @@ class Viewer(PanZoomView):
         try:
             raster = self.window.evaluator.evaluate_raster(document, target=source, frame=int(document["time"]["current"]))
             image = raster.to_display()
-            points = rotooutline.outline_from_click(image, seed, box)
+            points, holes = rotooutline.outline_with_holes(image, seed, box)
             if self.roto_shape_tool == "B-Spline":
                 points = rotooutline.bspline_controls(points)
+                holes = [rotooutline.bspline_controls(hole) for hole in holes]
         except rotooutline.OutlineError as error:
             self.window.statusBar().showMessage(f"Outline from click: {error}", 6000)
             return False
@@ -3958,15 +3959,16 @@ class Viewer(PanZoomView):
         if not self.begin_roto_draw(key):
             return False
         self.roto_draw_points = [dict(p, scene=self._roto_scene_point(p, tier)) for p in points]
-        if not self.finish_roto_draw(closed=True):
+        if not self.finish_roto_draw(closed=True, holes=holes):
             return False
         context = self._roto_context()
         if context is not None:
-            index = len(context[2].get("shapes", [])) - 1
+            index = len(context[2].get("shapes", [])) - 1 - len(holes)
             self.roto_selected_shape_index = index
             self.roto_selected_points = {(index, i) for i in range(len(points))}
             self.window.rebuild_properties_dock()
-        self.window.statusBar().showMessage(f"Outline from click: {len(points)} points", 4000)
+        note = f" and {len(holes)} hole{'s' if len(holes) != 1 else ''} (shapes that subtract)" if holes else ""
+        self.window.statusBar().showMessage(f"Outline from click: {len(points)} points{note}", 4000)
         self.viewport().update()
         return True
 
@@ -4227,7 +4229,9 @@ class Viewer(PanZoomView):
         self.hide_prompt()
         self.viewport().update()
 
-    def finish_roto_draw(self, closed=False):
+    def finish_roto_draw(self, closed=False, holes=None):
+        """Commit the shape being drawn. `holes` (Outline from click) are closed point lists added in the same command as
+        extra shapes set to subtract, right after the new shape, so they cut it out and one undo removes them all."""
         if not self.roto_drawing:
             return False
         context = self._roto_context()
@@ -4269,7 +4273,13 @@ class Viewer(PanZoomView):
         if self.roto_shape_tool == "B-Spline":
             shape["curve_type"] = "bspline"
             shape["feather_model"] = "box"
-        shapes.append(shape)
+        new_shapes = [shape]
+        for hole in holes or ():
+            while f"shape{index}" in names or any(f"shape{index}" == other["name"] for other in new_shapes):
+                index += 1
+            new_shapes.append({**copy.deepcopy(shape), "name": f"shape{index}", "mode": "subtract",
+                               "points": [{field: p[field] for field in shape_model.POINT_FIELDS} for p in hole]})
+        shapes.extend(new_shapes)
         self.cancel_roto_edit()
         # Whole-payload replacement is the Dispatcher validation/undo boundary.  The local frame
         # variable documents that this draw is static; future point drags key animated scalars.
@@ -4278,8 +4288,11 @@ class Viewer(PanZoomView):
         else:
             paint_shape = {k: shape[k] for k in ("name", "mode", "opacity", "feather", "points", "closed", "curve_type",
                                                    "feather_on", "falloff_power", "feather_falloff", "blend_mode", "source", "color", "lifetime") if k in shape}
-            layer_blend = {"plus": "add", "over": "over"}.get(shape.get("blend_mode", "over"), shape.get("blend_mode", "over"))
-            items.append({"kind": "shape", **paint_shape, "blend": layer_blend, "visible": True})
+            for added in new_shapes:
+                paint_shape = {k: added[k] for k in ("name", "mode", "opacity", "feather", "points", "closed", "curve_type",
+                                                       "feather_on", "falloff_power", "feather_falloff", "blend_mode", "source", "color", "lifetime") if k in added}
+                layer_blend = {"plus": "add", "over": "over"}.get(added.get("blend_mode", "over"), added.get("blend_mode", "over"))
+                items.append({"kind": "shape", **paint_shape, "blend": layer_blend, "visible": True})
             self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
 

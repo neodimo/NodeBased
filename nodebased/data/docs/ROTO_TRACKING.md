@@ -897,6 +897,25 @@ thread: 0.47 to 0.67 s for a 320 x 280 frame and 0.9 s for a 1920 x 1080 frame (
 model comes from the frame border, so a subject that fills the frame needs a box. Fur, hair and motion blur have a soft edge that this does not
 model; the outline follows the strongest edge.
 
+## Lane 2 step notes
+
+### Lane 2 I6: outlines with holes
+
+Outline from click (`nodebased/rotooutline.py`) now cuts the holes out of a subject. `outline_with_holes(image, seed, box)` returns the
+outline of the whole subject (what `outline_from_click` returns: the silhouette, holes filled) and one closed outline per interior hole.
+The hole finder compares the segmented subject with its silhouette: whatever the silhouette holds that the subject does not is a hole.
+A hole counts only when it covers **at least 1% of the silhouette's area and at least 16 cells of the 256 px working image**
+(`MIN_HOLE_FRACTION`, `MIN_HOLE_CELLS`); a smaller region is a speck and stays part of the subject. Each hole goes through the same
+contour, edge refinement and Bezier fit as the outline, so it follows the image's edges to the same accuracy. In the viewer the click adds
+the outline and then each hole as a shape set to **subtract**, directly after the outline in the shape list (biggest hole first), all in one
+command: one undo removes the outline and every hole, and the outline is the selected shape. With the B-Spline tool the holes are
+B-Spline shapes too. Holes take the settings of the outline's tool except the blending mode, which is subtract.
+
+Measured on synthetic subjects with 4 x 4 supersampled edges (tests/test_roto_outline_holes_i6.py): a ring (disc with a hole), a letter-like
+block with two holes and a disc with one hole and a 3 px speck each give the expected number of holes (1, 2 and 1), and in the rendered matte
+every pixel that disagrees with the true coverage lies within 0.93 px of the true edge. A hole that touches the subject's edge is part of the
+background, not a hole; an island of a different colour inside a hole is cut out with the hole.
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.

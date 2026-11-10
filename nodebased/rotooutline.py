@@ -49,6 +49,8 @@ BORDER = 0.025             # width of the background sample strip, of the long s
 ROUNDS = (160, 90, 60)     # primal-dual iterations for each GrabCut round
 DATA_WEIGHT = 0.12         # lambda: data term against the boundary length term
 DATA_CLIP = 6.0            # a pixel's evidence is limited to this many nats
+MIN_HOLE_FRACTION = 0.01   # a hole must cover at least this share of the subject's area ...
+MIN_HOLE_CELLS = 16        # ... and at least this many cells of the working image (about 4 x 4 px at full size or less)
 COMPONENTS = 3             # colour mixture size
 REGULARISE = 5e-4          # added to the colour covariances (sigma about 0.022)
 
@@ -204,8 +206,8 @@ def _grow(seed, allowed, limit=4000):
     return reached
 
 
-def _silhouette(mask, seed_xy):
-    """The component of `mask` holding the seed, with its holes filled."""
+def _body_and_silhouette(mask, seed_xy):
+    """(body, silhouette): the component of `mask` holding the seed, and that component with its holes filled."""
     sx, sy = int(seed_xy[0]), int(seed_xy[1])
     h, w = mask.shape
     seed = np.zeros_like(mask)
@@ -213,7 +215,7 @@ def _silhouette(mask, seed_xy):
     if not mask[sy, sx]:
         near = np.argwhere(mask)
         if not len(near):
-            return mask & False
+            return mask & False, mask & False
         d = np.hypot(near[:, 0] - sy, near[:, 1] - sx)
         sy, sx = near[int(np.argmin(d))]
     seed[sy, sx] = True
@@ -221,10 +223,48 @@ def _silhouette(mask, seed_xy):
     outside = np.zeros_like(mask)
     outside[0, :] = outside[-1, :] = outside[:, 0] = outside[:, -1] = True
     outside = _grow(outside & ~body, ~body)
-    return ~outside
+    return body, ~outside
 
 
-def _segment(rgb, seed, box, init=None, rounds=ROUNDS):
+def _silhouette(mask, seed_xy):
+    """The component of `mask` holding the seed, with its holes filled."""
+    return _body_and_silhouette(mask, seed_xy)[1]
+
+
+def _components(mask):
+    """The 4-connected components of a boolean mask, as a list of boolean masks (largest first)."""
+    remaining = {(int(i), int(j)) for i, j in np.argwhere(mask)}
+    found = []
+    while remaining:
+        start = remaining.pop()
+        stack, cells = [start], [start]
+        while stack:
+            i, j = stack.pop()
+            for neighbour in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)):
+                if neighbour in remaining:
+                    remaining.discard(neighbour)
+                    stack.append(neighbour)
+                    cells.append(neighbour)
+        found.append(cells)
+    found.sort(key=len, reverse=True)
+    out = []
+    for cells in found:
+        part = np.zeros_like(mask)
+        index = np.array(cells)
+        part[index[:, 0], index[:, 1]] = True
+        out.append(part)
+    return out
+
+
+def find_holes(body, silhouette, min_fraction=MIN_HOLE_FRACTION, min_cells=MIN_HOLE_CELLS):
+    """The interior holes of a subject: components of `silhouette & ~body` covering at least `min_fraction` of the
+    silhouette's area and `min_cells` cells (smaller ones are specks, not holes)."""
+    area = float(silhouette.sum())
+    threshold = max(float(min_cells), min_fraction * area)
+    return [part for part in _components(silhouette & ~body) if part.sum() >= threshold]
+
+
+def _segment(rgb, seed, box, init=None, rounds=ROUNDS, want_body=False):
     """The subject mask of the working image `rgb` (HxWx3), as a float field u in [0, 1].
 
     `seed` and `box` are (x, y) and (x0, y0, x1, y1) in working pixels; `init` is an earlier mask to start from.
@@ -263,16 +303,17 @@ def _segment(rgb, seed, box, init=None, rounds=ROUNDS):
         f = (DATA_WEIGHT * np.clip(evidence, -DATA_CLIP, DATA_CLIP)).astype(np.float32)
         start = (f < 0).astype(np.float32) if u is None else u
         u = _primal_dual(f, g, fixed_fg, fixed_bg, start, iterations)
-        mask = _silhouette(u >= 0.5, seed)
+        body, mask = _body_and_silhouette(u >= 0.5, seed)
         if not mask.any():
             raise OutlineError("no subject found at that point")
-        # the next round learns from the settled interior and the settled exterior
-        inner = mask.copy()
-        inner[1:] &= mask[:-1]; inner[:-1] &= mask[1:]; inner[:, 1:] &= mask[:, :-1]; inner[:, :-1] &= mask[:, 1:]
+        # the next round learns from the settled interior and the settled exterior (a hole is not interior when holes are kept)
+        learn = body if want_body else mask
+        inner = learn.copy()
+        inner[1:] &= learn[:-1]; inner[:-1] &= learn[1:]; inner[:, 1:] &= learn[:, :-1]; inner[:, :-1] &= learn[:, 1:]
         fg_samples = inner | fixed_fg
         far = ~_dilate(mask, 2)
         sample_bg = far | sample_bg if box is None else (far & ~outside) | sample_bg
-    return mask
+    return (mask, body) if want_body else mask
 
 
 def _dilate(mask, steps=1):
@@ -558,7 +599,7 @@ def _work_region(width, height, box):
             min(width, int(math.ceil(x1 + pad))), min(height, int(math.ceil(y1 + pad))))
 
 
-def _mask_in_region(rgb, region, seed, box, init_box=None, init_mask=None):
+def _mask_in_region(rgb, region, seed, box, init_box=None, init_mask=None, want_body=False):
     """Segment the subject inside the pixel `region` of `rgb`; returns (mask, scale, work_box) with the mask
     on a grid of `scale` full-resolution pixels per cell whose origin is the region's corner."""
     x0, y0, x1, y1 = region
@@ -572,23 +613,26 @@ def _mask_in_region(rgb, region, seed, box, init_box=None, init_mask=None):
     init = None
     if init_mask is not None:
         init = init_mask(size, region)
-    mask = _segment(small, work_seed, work_box, init=init, rounds=ROUNDS if init is None else ROUNDS[1:])
-    return mask, (1.0 / sx, 1.0 / sy), region
+    result = _segment(small, work_seed, work_box, init=init, rounds=ROUNDS if init is None else ROUNDS[1:], want_body=want_body)
+    if want_body:
+        return result[0], result[1], (1.0 / sx, 1.0 / sy), region
+    return result, (1.0 / sx, 1.0 / sy), region
 
 
-def outline_from_click(image, seed, box=None, min_points=MIN_POINTS, max_points=MAX_POINTS):
-    """A closed Bezier outline of the subject under `seed` = (x, y) in the `image` (HxWx3/4 float).
-
-    `box` = (x0, y0, x1, y1) optionally confines the subject. Returns a list of point dicts
-    ``x, y, in_x, in_y, out_x, out_y`` (tangents relative to their point), or raises `OutlineError`.
-    """
+def _find_subject(image, seed, box, holes):
+    """Segment the subject under `seed`. Returns (rgb, mask, body, x0, y0, sx, sy, width, height): the silhouette `mask`
+    (holes filled) and, when `holes` is set, the `body` that keeps them (otherwise `body` is None), on a grid whose cell
+    (i, j) covers [x0 + j * sx, x0 + (j + 1) * sx) by the same in y, in full-resolution pixels."""
     array = np.asarray(image)
     height, width = array.shape[:2]
     if not (0 <= seed[0] < width and 0 <= seed[1] < height):
         raise OutlineError("the click is outside the picture")
     rgb = _rgb(array)
     region = _work_region(width, height, box)
-    mask, (sx, sy), region = _mask_in_region(rgb, region, seed, box)
+    if holes:
+        mask, body, (sx, sy), region = _mask_in_region(rgb, region, seed, box, want_body=True)
+    else:
+        (mask, (sx, sy), region), body = _mask_in_region(rgb, region, seed, box), None
     x0, y0 = region[0], region[1]
     # a second, finer pass on the subject itself when the first was coarse
     if SECOND_PASS and max(sx, sy) > 1.6:
@@ -596,7 +640,7 @@ def outline_from_click(image, seed, box=None, min_points=MIN_POINTS, max_points=
         pad = 0.12 * max(xs.max() - xs.min(), ys.max() - ys.min()) + 3
         fine = (max(0, int(math.floor(x0 + (xs.min() - pad) * sx))), max(0, int(math.floor(y0 + (ys.min() - pad) * sy))),
                 min(width, int(math.ceil(x0 + (xs.max() + 1 + pad) * sx))), min(height, int(math.ceil(y0 + (ys.max() + 1 + pad) * sy))))
-        coarse, coarse_region, coarse_scale = mask, region, (sx, sy)
+        coarse, coarse_region, coarse_scale = (body if holes else mask), region, (sx, sy)
 
         def init_mask(size, fine_region, coarse=coarse, coarse_region=coarse_region, coarse_scale=coarse_scale):
             fy = (np.arange(size[0]) + 0.5) * (fine_region[3] - fine_region[1]) / size[0] + fine_region[1]
@@ -605,13 +649,21 @@ def outline_from_click(image, seed, box=None, min_points=MIN_POINTS, max_points=
             ix = np.clip(((fx - coarse_region[0]) / coarse_scale[0]).astype(int), 0, coarse.shape[1] - 1)
             return coarse[iy][:, ix]
         box_fine = None if box is None else box
-        mask, (sx, sy), region = _mask_in_region(rgb, fine, seed, box_fine, init_mask=init_mask)
+        if holes:
+            mask, body, (sx, sy), region = _mask_in_region(rgb, fine, seed, box_fine, init_mask=init_mask, want_body=True)
+        else:
+            mask, (sx, sy), region = _mask_in_region(rgb, fine, seed, box_fine, init_mask=init_mask)
         x0, y0 = region[0], region[1]
     area = float(mask.sum())
     if area < 12:
         raise OutlineError("the subject is too small")
     if area > 0.9 * mask.size:
         raise OutlineError("the region found fills the picture; draw a box around the subject")
+    return rgb, mask, body, x0, y0, sx, sy, width, height
+
+
+def _bezier_outline(rgb, mask, x0, y0, sx, sy, width, height, min_points, max_points):
+    """The closed Bezier outline of the boolean `mask` (grid as in `_find_subject`)."""
     contour = trace_contour(mask)
     # the mask cell (i, j) covers [j, j + 1) working units, `sx`, `sy` full-resolution pixels per unit
     polygon = np.stack([x0 + contour[:, 0] * sx, y0 + contour[:, 1] * sy], axis=1)
@@ -641,6 +693,37 @@ def outline_from_click(image, seed, box=None, min_points=MIN_POINTS, max_points=
     if not FINAL_FIT:
         return result
     return _guarded_fit(field, result)
+
+
+def outline_from_click(image, seed, box=None, min_points=MIN_POINTS, max_points=MAX_POINTS):
+    """A closed Bezier outline of the subject under `seed` = (x, y) in the `image` (HxWx3/4 float).
+
+    `box` = (x0, y0, x1, y1) optionally confines the subject. Returns a list of point dicts
+    ``x, y, in_x, in_y, out_x, out_y`` (tangents relative to their point), or raises `OutlineError`.
+    Holes in the subject are filled: this is the silhouette (see `outline_with_holes`).
+    """
+    rgb, mask, _, x0, y0, sx, sy, width, height = _find_subject(image, seed, box, holes=False)
+    return _bezier_outline(rgb, mask, x0, y0, sx, sy, width, height, min_points, max_points)
+
+
+def outline_with_holes(image, seed, box=None, min_points=MIN_POINTS, max_points=MAX_POINTS,
+                       min_hole_fraction=MIN_HOLE_FRACTION, min_hole_cells=MIN_HOLE_CELLS):
+    """The outline of the subject under `seed` and one closed outline per interior hole: ``(outer, [hole, ...])``.
+
+    `outer` is what `outline_from_click` returns (the silhouette). Each hole is a region inside the silhouette that the
+    segmentation left out of the subject, as long as it covers at least `min_hole_fraction` of the silhouette's area and
+    `min_hole_cells` cells of the working image; smaller ones are specks and stay part of the subject. Holes are returned
+    biggest first. Rendered with the holes as shapes that subtract, the matte is the subject with its holes cut out.
+    """
+    rgb, mask, body, x0, y0, sx, sy, width, height = _find_subject(image, seed, box, holes=True)
+    outer = _bezier_outline(rgb, mask, x0, y0, sx, sy, width, height, min_points, max_points)
+    holes = []
+    for part in find_holes(body, mask, min_hole_fraction, min_hole_cells):
+        try:
+            holes.append(_bezier_outline(rgb, part, x0, y0, sx, sy, width, height, min_points, max_points))
+        except Exception:
+            continue    # a hole whose contour cannot be traced is left as part of the subject
+    return outer, holes
 
 
 def _edge_score(field, points):
