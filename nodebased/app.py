@@ -48,6 +48,7 @@ from . import radialcommands
 from . import graphlook
 from . import gpu3d
 from . import roto
+from . import rotogpu
 from . import rotoedges, rotoinbetween
 from . import paintknobs
 from . import rotolist
@@ -774,6 +775,7 @@ class Preferences:
     PLAYBACK_DECODE_WORKERS = "playback/decode_workers"
     PLAYBACK_SOURCE_WORKERS = "playback/source_workers"
     PLAYBACK_ROTO_DRAWER = "playback/roto_drawer"
+    PLAYBACK_ROTO_GPU = "playback/roto_gpu"
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -877,6 +879,17 @@ class Preferences:
             self._store.setValue(self.PLAYBACK_ROTO_DRAWER, name)
         else:
             self._store.remove(self.PLAYBACK_ROTO_DRAWER)
+        self._store.sync()
+
+    def roto_gpu(self):
+        """Whether Roto mattes are drawn on the graphics card (off until the artist turns it on)."""
+        return playbackprefs.roto_gpu(self._store.value(self.PLAYBACK_ROTO_GPU, None), environ={})
+
+    def set_roto_gpu(self, on):
+        if on:
+            self._store.setValue(self.PLAYBACK_ROTO_GPU, 1)
+        else:
+            self._store.remove(self.PLAYBACK_ROTO_GPU)
         self._store.sync()
 
     def _set_workers(self, key, count, maximum):
@@ -9385,7 +9398,7 @@ class ProjectSettingsDialog(QDialog):
                  max_panels=5, cache_float32=False, auto_3d=False,
                  adapters=(), graphics_adapter="", graph_opengl=False, direct_edit=True, adapter_now=None,
                  gpu_nodes=False, gpu_nodes_note="", decode_workers=None, source_workers=None,
-                 automatic_workers=(0, 0), workers_note="", roto_drawer="fast", roto_drawer_note=""):
+                 automatic_workers=(0, 0), workers_note="", roto_drawer="fast", roto_drawer_note="", roto_gpu=False, roto_gpu_note=""):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -9509,6 +9522,19 @@ class ProjectSettingsDialog(QDialog):
         self.roto_drawer_note.setObjectName("roto-drawer-note")
         self.roto_drawer_note.setVisible(bool(roto_drawer_note))
         interface.addRow("", self.roto_drawer_note)
+        self.roto_gpu = QCheckBox("Draw Roto mattes on the graphics card (experimental)")
+        self.roto_gpu.setObjectName("roto-gpu")
+        self.roto_gpu.setChecked(bool(roto_gpu))
+        self.roto_gpu.setToolTip("Draws closed Bezier and B-Spline Roto shapes on the graphics card instead of the processor, with the "
+                                 "same fill, feather and blends to within about 1e-5 of a pixel value. Open strokes, RotoPaint, the "
+                                 "edge feather, motion blur and picture sources still use the processor, and so does a matte if "
+                                 "the card reports an error. Off by default; takes effect at once.")
+        interface.addRow("", self.roto_gpu)
+        self.roto_gpu_note = QLabel(roto_gpu_note)
+        self.roto_gpu_note.setWordWrap(True)
+        self.roto_gpu_note.setObjectName("roto-gpu-note")
+        self.roto_gpu_note.setVisible(bool(roto_gpu_note))
+        interface.addRow("", self.roto_gpu_note)
         layout.addLayout(interface)
         theme_note = QLabel("The theme is stored per machine, not in the project: a comp handed to "
                             "another artist keeps their colours, not yours. Node colours stay fixed "
@@ -10168,6 +10194,7 @@ class Window(QMainWindow):
         self.evaluator.source_pool = self.source_pool
         # The Roto matte drawer: the fast one unless Settings or NODEBASED_ROTO_DRAWER says otherwise (rotofast.py).
         roto.set_drawer(playbackprefs.roto_drawer(self.preferences.roto_drawer()))
+        rotogpu.set_enabled(playbackprefs.roto_gpu(self.preferences.roto_gpu()))
         # While a played frame is finished and shown, the pool computes the Roto matte of the next frames
         # (rotoahead.py); NODEBASED_ROTO_AHEAD=0 turns it off.
         self.roto_ahead = RotoAhead(self.evaluator, self.source_pool)
@@ -12956,6 +12983,13 @@ class Window(QMainWindow):
         self.request_preview()
         return drawer
 
+    def apply_roto_gpu(self):
+        """Draw Roto mattes on the graphics card (or not) from the next frame on; the cached mattes are dropped."""
+        on = rotogpu.set_enabled(playbackprefs.roto_gpu(self.preferences.roto_gpu()))
+        self.evaluator.clear()
+        self.request_preview()
+        return on
+
     def apply_playback_workers(self):
         """Resize the decode and source pools to the saved choice (or the environment's); takes effect at once."""
         decode = playbackprefs.decode_workers(self.preferences.decode_workers())
@@ -13103,7 +13137,10 @@ class Window(QMainWindow):
                                        workers_note=self.workers_note_text(),
                                        roto_drawer=playbackprefs.roto_drawer(self.preferences.roto_drawer()),
                                        roto_drawer_note=(f"{playbackprefs.ROTO_DRAWER_ENV} decides the drawer."
-                                                         if playbackprefs.roto_drawer_forced() else ""))
+                                                         if playbackprefs.roto_drawer_forced() else ""),
+                                       roto_gpu=playbackprefs.roto_gpu(self.preferences.roto_gpu()),
+                                       roto_gpu_note=(f"{playbackprefs.ROTO_GPU_ENV} decides this."
+                                                      if playbackprefs.roto_gpu_forced() else ""))
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -13139,6 +13176,11 @@ class Window(QMainWindow):
                 self.preferences.set_roto_drawer(chosen_drawer)
                 self.apply_roto_drawer()
                 self.statusBar().showMessage(f"Roto drawer: {'fast' if chosen_drawer == 'fast' else 'previous'}", 6000)
+            chosen_gpu = dialog.roto_gpu.isChecked()
+            if chosen_gpu != playbackprefs.roto_gpu(self.preferences.roto_gpu()):
+                self.preferences.set_roto_gpu(chosen_gpu)
+                self.apply_roto_gpu()
+                self.statusBar().showMessage(f"Roto mattes on the graphics card: {'on' if chosen_gpu else 'off'}", 6000)
             new_cache_float32 = dialog.cache_float32.isChecked()
             if new_cache_float32 != self.preferences.display_cache_float32():
                 self.preferences.set_display_cache_float32(new_cache_float32)

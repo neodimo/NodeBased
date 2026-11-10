@@ -278,6 +278,78 @@ class SwitchTests(unittest.TestCase):
         self.assertLess(float(np.abs(got - expected).max()), TOL)
 
 
+class SettingTests(unittest.TestCase):
+    """Settings -> Interface -> the Roto GPU row: off by default, the environment wins, applied at once."""
+
+    def setUp(self):
+        from nodebased import playbackprefs
+        self.prefs = playbackprefs
+        self.saved = rotogpu._wanted, rotogpu._wanted_pid, rotogpu._failures
+        patcher = mock.patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.environ.pop(rotogpu.ENV, None)
+
+    def tearDown(self):
+        rotogpu._wanted, rotogpu._wanted_pid, rotogpu._failures = self.saved
+
+    def test_the_default_is_off_and_the_environment_wins(self):
+        self.assertFalse(self.prefs.DEFAULT_ROTO_GPU)
+        self.assertFalse(self.prefs.roto_gpu(None))
+        self.assertTrue(self.prefs.roto_gpu(1))
+        self.assertTrue(self.prefs.roto_gpu("1"))
+        self.assertFalse(self.prefs.roto_gpu("nonsense"))
+        self.assertTrue(self.prefs.roto_gpu(False, environ={self.prefs.ROTO_GPU_ENV: "1"}))
+        self.assertFalse(self.prefs.roto_gpu(True, environ={self.prefs.ROTO_GPU_ENV: "0"}))
+        self.assertTrue(self.prefs.roto_gpu_forced({self.prefs.ROTO_GPU_ENV: "0"}))
+        self.assertFalse(self.prefs.roto_gpu_forced({}))
+        self.assertEqual(self.prefs.ROTO_GPU_ENV, rotogpu.ENV)
+
+    def test_the_choice_round_trips_through_the_saved_preferences(self):
+        from nodebased.app import Preferences
+        preferences = Preferences()
+        self.addCleanup(preferences.set_roto_gpu, False)
+        preferences.set_roto_gpu(False)
+        self.assertFalse(Preferences().roto_gpu())
+        preferences.set_roto_gpu(True)
+        self.assertTrue(Preferences().roto_gpu())
+        preferences.set_roto_gpu(False)                # off is stored as no choice at all
+        self.assertFalse(Preferences().roto_gpu())
+
+    def test_the_settings_dialog_shows_and_returns_the_switch(self):
+        from nodebased.app import ProjectSettingsDialog
+        from nodebased.core import empty_document
+        dialog = ProjectSettingsDialog(empty_document()["settings"], roto_gpu=True, roto_gpu_note="fixed by the environment")
+        try:
+            self.assertTrue(dialog.roto_gpu.isChecked())
+            self.assertFalse(dialog.roto_gpu_note.isHidden())
+            dialog.roto_gpu.setChecked(False)
+            self.assertFalse(dialog.roto_gpu.isChecked())
+        finally:
+            dialog.close()
+        plain = ProjectSettingsDialog(empty_document()["settings"])
+        try:
+            self.assertFalse(plain.roto_gpu.isChecked())
+            self.assertTrue(plain.roto_gpu_note.isHidden())
+        finally:
+            plain.close()
+
+    def test_a_running_window_switches_the_path_and_redraws(self):
+        from nodebased.app import Window
+        window = Window()
+        self.addCleanup(window.close)
+        self.addCleanup(window.preferences.set_roto_gpu, False)
+        self.assertFalse(rotogpu.enabled(environ={}))                 # a new window starts with it off
+        window.evaluator.cache["stale"] = object()
+        window.preferences.set_roto_gpu(True)
+        self.assertTrue(window.apply_roto_gpu())
+        self.assertTrue(rotogpu.enabled(environ={}))
+        self.assertNotIn("stale", window.evaluator.cache)            # the mattes of the other drawer are dropped
+        window.preferences.set_roto_gpu(False)
+        self.assertFalse(window.apply_roto_gpu())
+        self.assertFalse(rotogpu.enabled(environ={}))
+
+
 def tearDownModule():
     path = os.environ.get("NODEBASED_ROTO_GPU_REPORT")
     if path and REPORT:

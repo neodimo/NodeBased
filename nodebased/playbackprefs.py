@@ -33,6 +33,9 @@ DECODE_WORKERS_ENV = "NODEBASED_DECODE_AHEAD_WORKERS"
 SOURCE_WORKERS_ENV = "NODEBASED_SOURCE_WORKERS"
 ROTO_DRAWER_ENV = "NODEBASED_ROTO_DRAWER"
 ROTO_DRAWERS = ("fast", "legacy")
+# Roto mattes on the graphics card (nodebased/rotogpu.py): off unless Settings or the environment turns it on.
+ROTO_GPU_ENV = "NODEBASED_ROTO_GPU"
+DEFAULT_ROTO_GPU = False
 
 _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
@@ -179,3 +182,21 @@ def roto_drawer(setting=None, environ=None):
 def roto_drawer_forced(environ=None):
     """True when the environment fixes the drawer, so the Settings choice has no effect."""
     return (os.environ if environ is None else environ).get(ROTO_DRAWER_ENV, "").strip().lower() in ROTO_DRAWERS
+
+
+def roto_gpu(setting=None, environ=None):
+    """Whether Roto mattes are drawn on the graphics card: the environment (1 or 0) when it says, else the saved choice, else off."""
+    forced = (os.environ if environ is None else environ).get(ROTO_GPU_ENV, "").strip().lower()
+    if forced in ("1", "true", "on", "yes"):
+        return True
+    if forced in ("0", "false", "off", "no"):
+        return False
+    if isinstance(setting, str):
+        return setting.strip().lower() in ("1", "true", "on", "yes")
+    return bool(setting) if setting is not None else DEFAULT_ROTO_GPU
+
+
+def roto_gpu_forced(environ=None):
+    """True when the environment fixes the switch, so the Settings choice has no effect."""
+    return (os.environ if environ is None else environ).get(ROTO_GPU_ENV, "").strip().lower() in (
+        "1", "true", "on", "yes", "0", "false", "off", "no")
