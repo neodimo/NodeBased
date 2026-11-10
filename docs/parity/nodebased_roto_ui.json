@@ -1596,13 +1596,13 @@
     {
       "name": "Add point",
       "status": "match",
-      "location": "`Viewer.mousePressEvent` → `Viewer._insert_roto_point`.",
+      "location": "`Viewer.mousePressEvent` \u2192 `Viewer._insert_roto_point`.",
       "difference": ""
     },
     {
       "name": "Delete point",
       "status": "match",
-      "location": "`Viewer.keyPressEvent` → `Viewer._delete_roto_points`.",
+      "location": "`Viewer.keyPressEvent` \u2192 `Viewer._delete_roto_points`.",
       "difference": ""
     },
     {
@@ -1660,13 +1660,13 @@
     {
       "name": "Cusp point",
       "status": "match",
-      "location": "`Viewer.keyPressEvent` Shift+Z → `Viewer._set_roto_tangent_mode(True)`.",
+      "location": "`Viewer.keyPressEvent` Shift+Z \u2192 `Viewer._set_roto_tangent_mode(True)`.",
       "difference": ""
     },
     {
       "name": "Smooth point",
       "status": "match",
-      "location": "`Viewer.keyPressEvent` Z → `Viewer._set_roto_tangent_mode(False)`.",
+      "location": "`Viewer.keyPressEvent` Z \u2192 `Viewer._set_roto_tangent_mode(False)`.",
       "difference": ""
     },
     {
@@ -1814,9 +1814,9 @@
     },
     {
       "name": "Ripple editing",
-      "status": "missing",
-      "location": "No ripple timing control is implemented. The traversed official Nuke chapter and Reference Guide pages do not document a ripple workflow.",
-      "difference": "Undocumented in the cited official sources; behavior remains unimplemented rather than inferred."
+      "status": "match",
+      "location": "Select tools' settings strip: Ripple edit toggle, Ripple mode (all, from start, to end, range) with Ripple from/to, a red border on the Viewer while on; `rotoripple.ripple_shapes` applied in `Viewer._commit_roto_shapes` for drags and keypad nudges, one undo step.",
+      "difference": ""
     },
     {
       "name": "Per-shape keyframe controls",

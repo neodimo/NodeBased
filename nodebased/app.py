@@ -49,7 +49,7 @@ from . import graphlook
 from . import gpu3d
 from . import roto
 from . import rotogpu
-from . import rotoedges, rotoinbetween
+from . import rotoedges, rotoinbetween, rotoripple
 from . import paintknobs
 from . import rotolist
 from . import gpupicture
@@ -1694,7 +1694,8 @@ class RotoViewerToolbar(QWidget):
                 "Snap to edges": "snap_edges", "Snap radius": "snap_radius", "Fit band": "fit_band",
                 "Fit to edges": "fit_to_edges", "Fill band": "fill_band", "Fill threshold": "fill_threshold",
                 "Fill every Nth frame": "fill_step", "Fill from": "fill_from", "Fill to": "fill_to",
-                "Fill in-betweens": "fill_inbetweens"}.get(
+                "Fill in-betweens": "fill_inbetweens", "Ripple edit": "ripple_edit",
+                "Ripple mode": "ripple_mode", "Ripple from": "ripple_from", "Ripple to": "ripple_to"}.get(
                     label, label.lower().replace(" ", "_").replace("/", "_"))
 
     @staticmethod
@@ -1731,7 +1732,9 @@ class RotoViewerToolbar(QWidget):
         if setting in GLOBAL_SETTINGS:
             payload = self.viewer.window.dispatcher.document.get("node_data", {}).get(key, {})
             global_settings = copy.deepcopy(payload.get("tool_settings", {}).get("__global__", {}))
-            global_settings[setting] = bool(value) if isinstance(GLOBAL_SETTINGS[setting], bool) else float(value)
+            default = GLOBAL_SETTINGS[setting]
+            global_settings[setting] = (bool(value) if isinstance(default, bool)
+                                        else str(value) if isinstance(default, str) else float(value))
             if setting != "autokey" and global_settings[setting] == GLOBAL_SETTINGS[setting]:
                 global_settings.pop(setting)   # defaults are not stored: an old document equals a new one
             self.viewer.window.command({"op": "set_roto_tool_settings", "id": key,
@@ -1831,7 +1834,8 @@ class RotoViewerToolbar(QWidget):
             choices = {"Source": ["color", "foreground", "background"], "Blending mode": ["over", "plus", "multiply", "screen"],
                        "Feather type": ["linear", "smooth", "gaussian"], "Lifetime type": ["all frames", "single frame", "range", "from current"],
                        "Skew order": ["XY", "YX"], "Filter": ["Impulse", "Cubic", "Keys", "Simon", "Rifman", "Mitchell", "Parzen", "Notch"],
-                       "Time offset type": ["relative", "absolute"], "View": ["current"]}.get(label, [str(value)])
+                       "Time offset type": ["relative", "absolute"], "View": ["current"],
+                       "Ripple mode": list(rotoripple.MODES)}.get(label, [str(value)])
             for choice in choices: widget.addItem(choice, choice)
             index = widget.findData(value); widget.setCurrentIndex(max(0, index))
             widget.currentIndexChanged.connect(lambda i, w=widget, k=key, t=tool, s=setting: self.set_setting(k, t, s, w.itemData(i)))
@@ -3649,12 +3653,36 @@ class Viewer(PanZoomView):
                 "translate_x": values["translate_x"] + m00*dx + m01*dy,
                 "translate_y": values["translate_y"] + m10*dx + m11*dy}
 
-    def _commit_roto_shapes(self, key, node, shapes):
+    def roto_ripple_window(self, key=None):
+        """The (low, high) frames a ripple edit touches, or None when the ripple edit button is off."""
+        context = self._roto_context()
+        if context is None or (key is not None and context[0] != key):
+            return None
+        document = self.window.dispatcher.document
+        shared = document.get("node_data", {}).get(context[0], {}).get("tool_settings", {}).get("__global__", {})
+        return rotoripple.settings_window(shared, document["time"])
+
+    def _ripple_roto_shapes(self, key, node, shapes):
+        """With ripple edit on, spread each point change in `shapes` over the other keys in the ripple range."""
+        window = self.roto_ripple_window(key)
+        if window is None:
+            return shapes
+        payload = self.window.dispatcher.document.get("node_data", {}).get(key, {})
+        if node["type"] == "RotoPaint":
+            stored = [item for item in payload.get("items", []) if item.get("kind") == "shape"]
+        else:
+            stored = payload.get("shapes", [])
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        return rotoripple.ripple_shapes(stored, shapes, frame, *window)
+
+    def _commit_roto_shapes(self, key, node, shapes, ripple=False):
         """Commit a viewer shape edit through the common payload/undo boundary.
 
         Coordinate changes are prepared by `_roto_scalar_at_frame`, which reads the node-level
         Autokey switch before this single commit path records them.
         """
+        if ripple:
+            shapes = self._ripple_roto_shapes(key, node, shapes)
         if node["type"] == "RotoPaint":
             items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
             shape_items = [i for i, item in enumerate(items) if item.get("kind") == "shape"]
@@ -4220,7 +4248,7 @@ class Viewer(PanZoomView):
                     value = shape_model.resolve_scalar(point[field], frame, field) + delta
                     point[field] = self._roto_scalar_at_frame(point[field], frame, value, animated)
             self.roto_drag = None
-            self._commit_roto_shapes(key, node, shapes)
+            self._commit_roto_shapes(key, node, shapes, ripple=True)
             return True
         if drag.get("kind") == "box":
             shapes = copy.deepcopy(payload.get("shapes", []))
@@ -4315,7 +4343,7 @@ class Viewer(PanZoomView):
                         target[field] = self._roto_scalar_at_frame(target[field], frame,
                                                                    local_point[field], animated)
             self.roto_drag = None
-            self._commit_roto_shapes(key, node, shapes)
+            self._commit_roto_shapes(key, node, shapes, ripple=True)
             self.viewport().update()
             return True
         shape_index, point_index = drag["point"]
@@ -4353,7 +4381,7 @@ class Viewer(PanZoomView):
             for field, value in zip(shape_model.FEATHER_POINT_FIELDS, desired_local):
                 point[field] = self._roto_scalar_at_frame(point.get(field, 0.0), frame, value, animated)
             self.roto_drag = None
-            self._commit_roto_shapes(key, node, shapes)
+            self._commit_roto_shapes(key, node, shapes, ripple=True)
             self.viewport().update()
             return True
         if drag.get("kind") == "tension":
@@ -4362,7 +4390,7 @@ class Viewer(PanZoomView):
             value = min(max(drag["start_tension"] + delta, -1.0), 1.0)
             point["tension"] = self._roto_scalar_at_frame(point.get("tension", 0.0), frame, value, animated)
             self.roto_drag = None
-            self._commit_roto_shapes(key, node, shapes)
+            self._commit_roto_shapes(key, node, shapes, ripple=True)
             self.viewport().update()
             return True
         if drag.get("kind") == "tangent":
@@ -4394,7 +4422,7 @@ class Viewer(PanZoomView):
             point["x"] = self._roto_scalar_at_frame(point["x"], frame, x, animated)
             point["y"] = self._roto_scalar_at_frame(point["y"], frame, y, animated)
         self.roto_drag = None
-        self._commit_roto_shapes(key, node, shapes)
+        self._commit_roto_shapes(key, node, shapes, ripple=True)
         return True
 
     def _preview_document_drag(self, drag_attribute, commit):
@@ -4504,7 +4532,7 @@ class Viewer(PanZoomView):
                     point[field]=self._roto_scalar_at_frame(point[field],frame,
                         shape_model.resolve_scalar(point[field],frame,field)+delta,
                         isinstance(point[field],dict) and point[field].get("curve") is not None)
-            self._commit_roto_shapes(key,node,shapes);event.accept();return
+            self._commit_roto_shapes(key,node,shapes, ripple=True);event.accept();return
         if (event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier
                 and self._has_key_focus() and self._roto_context() is not None):
             context = self._roto_context()
@@ -5267,6 +5295,17 @@ class Viewer(PanZoomView):
         if hook is not None:
             hook()
 
+    def _paint_ripple_border(self, painter, rect):
+        """A red border around the Viewer shows that ripple edit is on (the guide's cue)."""
+        painter.save()
+        painter.resetTransform()
+        pen = QPen(QColor("#e02020"), 4)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        view = self.viewport().rect()
+        painter.drawRect(view.adjusted(2, 2, -2, -2))
+        painter.restore()
+
     def paint_overlays(self, painter, rect):
         if self.paint_drag is not None and self.paint_drag["points"]:
             painter.save()
@@ -5288,6 +5327,8 @@ class Viewer(PanZoomView):
         if context is not None:
             _, _, payload, tier = context
             self._paint_reveal_onion(painter, context)
+            if self.roto_ripple_window(context[0]) is not None:
+                self._paint_ripple_border(painter, rect)
             overlay_tool = (self.roto_toolbar.tool_by_group.get("Points")
                             if self.roto_active_group == "Points" else self.roto_selection_tool)
             select_settings = payload.get("tool_settings", {}).get(overlay_tool, {})

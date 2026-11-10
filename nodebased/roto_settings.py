@@ -210,11 +210,19 @@ INBETWEEN_CONTROLS = [{'label': 'Fill band', 'widget_kind': 'field', 'default': 
                       {'label': 'Fill from', 'widget_kind': 'field', 'default': 0.0},
                       {'label': 'Fill to', 'widget_kind': 'field', 'default': 0.0},
                       {'label': 'Fill in-betweens', 'widget_kind': 'button', 'default': None}]
+# Ripple edit (Lane 2, step RW4): Nuke's "Deleting or Rippling Keyframes" page puts the ripple edit button in the tool
+# settings of the Select All tool, with a dropdown of all, from start, to end and range beside it. A point edit at one
+# frame then moves that point's other keys in the range by the same offset. From and To apply to the range choice.
+RIPPLE_CONTROLS = [{'label': 'Ripple edit', 'widget_kind': 'toggle', 'default': False},
+                   {'label': 'Ripple mode', 'widget_kind': 'dropdown', 'default': 'all'},
+                   {'label': 'Ripple from', 'widget_kind': 'field', 'default': 1.0},
+                   {'label': 'Ripple to', 'widget_kind': 'field', 'default': 1.0}]
 GLOBAL_SETTINGS = {'autokey': True, 'snap_edges': False, 'snap_radius': 8.0, 'fit_band': 12.0,
-                   'fill_band': 8.0, 'fill_threshold': 0.75, 'fill_step': 1.0, 'fill_from': 0.0, 'fill_to': 0.0}
+                   'fill_band': 8.0, 'fill_threshold': 0.75, 'fill_step': 1.0, 'fill_from': 0.0, 'fill_to': 0.0,
+                   'ripple_edit': False, 'ripple_mode': 'all', 'ripple_from': 1.0, 'ripple_to': 1.0}
 
 for _tool in ('Select All', 'Select Splines', 'Select Points', 'Select Feather Points'):
-    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS + INBETWEEN_CONTROLS)
+    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS + INBETWEEN_CONTROLS + RIPPLE_CONTROLS)
 for _tool in ('Add Points', 'Bezier', 'Cusped Bezier', 'B-Spline', 'Ellipse', 'Rectangle',
               'Cusped Rectangle', 'Open Spline'):
     TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS)

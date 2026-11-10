@@ -1966,9 +1966,9 @@
     },
     {
       "name": "Ripple editing",
-      "binding_or_values": "Not stated in the traversed Nuke 17 guide pages",
-      "fact": "No ripple timing operation is specified in the official RotoPaint chapter or reference pages.",
-      "source_page": "https://learn.foundry.com/nuke/content/comp_environment/rotopaint/editing_existing_timing.html"
+      "binding_or_values": "Ripple edit button in the Select All tool settings with a dropdown: all, from start, to end, range",
+      "fact": "With ripple edit on (red border around the Viewer), a change to a stroke/shape point at one frame is applied as the same relative adjustment to the point across all frames or the chosen range.",
+      "source_page": "https://learn.foundry.com/nuke/11.2/content/comp_environment/rotopaint/deleting_rippling_keys.html"
     },
     {
       "name": "Per-shape keyframe controls",
@@ -1987,7 +1987,7 @@
     "group_default": "Guide offers configurable startup tools but does not specify one fixed tool default per group.",
     "list_order": "Exact Nuke 17.0 list order comes from the official control reference table, page 212.",
     "stereo_only": "The View list column and clone source view control appear only for multi-view/stereoscopic projects.",
-    "ripple": "Ripple editing is referenced in a third-party course description but is not described by the linked official Nuke 17 chapter/reference pages; not scored as a documented control."
+    "ripple": "Ripple editing is documented in the Deleting or Rippling Keyframes page of the RotoPaint chapter (the controls are the ripple edit button and its all, from start, to end and range dropdown)."
   },
   "reference_version_note": "Facts use the Nuke 17.0 chapter help pages plus the official Nuke 17.0v3 Reference Guide page references for defaults, list columns and key controls. No guide prose is copied."
 }
