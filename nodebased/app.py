@@ -19366,7 +19366,7 @@ class Window(QMainWindow):
         self.queue_panel.runner.shutdown(wait=False, cancel_futures=True)
         self.job_queue._pool.shutdown(wait=False, cancel_futures=True)
         self.decode_pool.shutdown()
-        self.roto_ahead.cancel()
+        self.roto_ahead.shutdown()
         self.source_pool.shutdown(wait=True, timeout=2)
         backend = self.evaluator.gpu2d
         if backend is not None:

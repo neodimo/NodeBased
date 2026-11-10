@@ -26,16 +26,87 @@ from __future__ import annotations
 
 import hashlib
 import json
+import multiprocessing
 import os
 import threading
+from concurrent.futures import ProcessPoolExecutor, TimeoutError
 
 from . import cachetier, groups, sourcepool
+from .cancellation import Cancelled
 
 # The 1080p GPU playback trace still found 27 ms p95 Roto kernels on the
 # foreground walk with a two-frame queue.  Keep one more matte in flight so
 # the single preview worker has a better chance of finding it complete.
 DEFAULT_FRAMES = 3
 DEFAULT_BYTE_CAP = 256 << 20
+
+
+def _build_matte(params, data):
+    """Process entry point: build the same immutable Roto matte as Evaluator.
+
+    This stays module-level so it is picklable under both fork and spawn.  The
+    ndarray result is copied back through the executor's buffer; the evaluator
+    remains the only owner of its caches.
+    """
+    from . import roto
+    raster = roto.rasterise(data or [], params["width"], params["height"],
+                            bool(params.get("invert", 0)))
+    raster.flags.writeable = False
+    return raster
+
+
+class MatteProcessPool:
+    """One optional process used only by Roto read-ahead.
+
+    A failed or unavailable executor deliberately falls back to the existing
+    source-pool thread.  The process is lazy so headless/unit-test evaluators
+    never pay a child startup unless playback actually queues a matte.
+    """
+    def __init__(self):
+        self._executor = None
+        self._lock = threading.Lock()
+        self.available = os.environ.get("NODEBASED_ROTO_PROCESS", "1") != "0"
+        self.runs = 0
+        self.fallbacks = 0
+
+    def build(self, params, data, cancel):
+        if not self.available:
+            return None
+        # Test/instrumentation wrappers must remain visible to the existing
+        # thread-path tests and profiling hooks; child processes cannot inherit
+        # their in-memory replacement safely.
+        from . import roto
+        if getattr(roto.rasterise, "__module__", None) != "nodebased.roto":
+            self.fallbacks += 1
+            return None
+        with self._lock:
+            if self._executor is None:
+                try:
+                    self._executor = ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+                except Exception:
+                    self.available = False
+                    self.fallbacks += 1
+                    return None
+            future = self._executor.submit(_build_matte, params, data)
+        while True:
+            if cancel is not None and cancel.is_set():
+                future.cancel()
+                raise Cancelled()
+            try:
+                raster = future.result(timeout=0.02)
+                self.runs += 1
+                return raster
+            except TimeoutError:
+                continue
+            except Exception:
+                self.fallbacks += 1
+                return None
+
+    def shutdown(self):
+        with self._lock:
+            executor, self._executor = self._executor, None
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
 
 # Kinds after which the frame a node sees is not the frame the walk asked for (or is fetched by a nested call).
 _TIME_KINDS = ("TimeOffset", "FrameHold", "Retime", "TimeClip", "FrameRange", "AppendClip",
@@ -111,6 +182,7 @@ class RotoAhead:
         self._epoch = threading.Event()
         self._tasks = {}
         self._static = set()
+        self.matte_pool = MatteProcessPool()
         self.scheduled = 0
         self.cancelled = 0
         self.epochs = 0
@@ -166,7 +238,7 @@ class RotoAhead:
                         continue
 
                     def run(key=key, frame=int(frame), cancel=epoch):
-                        return self.evaluator.read_ahead_node(flat, key, frame, tier, cancel)
+                        return self.evaluator.read_ahead_node(flat, key, frame, tier, cancel, self.matte_pool)
                     task = self.pool.submit_ahead(run, size, key)
                     if task is None:
                         return queued
@@ -179,3 +251,8 @@ class RotoAhead:
         with self._lock:
             return {"frames": self.frames, "scheduled": self.scheduled, "cancelled": self.cancelled,
                     "epochs": self.epochs, "pending": len(self._tasks)}
+
+    def shutdown(self):
+        """Stop the optional process once the desktop window is closing."""
+        self.cancel()
+        self.matte_pool.shutdown()

@@ -1276,10 +1276,13 @@ class Evaluator:
                 self._roto_mattes[key] = cached
                 return cached
             self.roto_matte_misses += 1
-        from . import roto
-        raster = roto.rasterise(
-            data or [], params["width"], params["height"], bool(params.get("invert", 0)),
-            shape_cache=self._roto_shape_matte)
+        builder = getattr(self._ahead_local, "matte_pool", None)
+        raster = builder.build(params, data, getattr(self._ahead_local, "cancel", None)) if builder else None
+        if raster is None:
+            from . import roto
+            raster = roto.rasterise(
+                data or [], params["width"], params["height"], bool(params.get("invert", 0)),
+                shape_cache=self._roto_shape_matte)
         raster.flags.writeable = False
         with self._lock:
             if raster.nbytes <= self._roto_matte_budget:
@@ -1368,7 +1371,7 @@ class Evaluator:
             prints.append(["later", *digests])
         return moments, later, ["motion", *prints]
 
-    def read_ahead_node(self, doc, key, frame, tier, cancel):
+    def read_ahead_node(self, doc, key, frame, tier, cancel, matte_pool=None):
         """Compute one source node (a Roto with no input) for `frame`, before the walk of that frame reaches it.
 
         This is the nested `evaluate_raster` the source pool runs for a source, so the result enters the cache under the
@@ -1380,6 +1383,8 @@ class Evaluator:
         done = threading.Event()
         local = self._ahead_local
         local.done = done
+        local.matte_pool = matte_pool
+        local.cancel = cancel
         try:
             raster, digest = self.evaluate_raster(doc, key, cancel=cancel, frame=frame, tier=tier, typed=True,
                                                   return_digest=True)
@@ -1388,6 +1393,8 @@ class Evaluator:
             return digest
         finally:
             local.done = None
+            local.matte_pool = None
+            local.cancel = None
             with self._lock:
                 for digest_key in [d for d, event in self._ahead_inflight.items() if event is done]:
                     del self._ahead_inflight[digest_key]

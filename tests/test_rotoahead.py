@@ -211,10 +211,18 @@ class ReadAheadTests(unittest.TestCase):
         self.ahead.source_pool = self.pool
         self.scheduler = RotoAhead(self.ahead, self.pool, frames=2, byte_cap=1 << 40)
         self.addCleanup(self.pool.shutdown, True, 2)
-        self.addCleanup(self.scheduler.cancel)
+        self.addCleanup(self.scheduler.shutdown)
 
     def settle(self):
         self.assertTrue(wait_for(lambda: all(task._done.is_set() for task in list(self.scheduler._tasks.values()))))
+
+    def test_ahead_matte_can_be_built_in_its_process_and_matches_the_walk(self):
+        self.assertEqual(self.scheduler.schedule(self.doc, "colorcorrect", [2], 1), 1)
+        self.settle()
+        self.assertGreater(self.scheduler.matte_pool.runs, 0)
+        self.assertTrue(np.array_equal(
+            self.ahead.evaluate_raster(self.doc, "roto", frame=2).pixels,
+            self.serial.evaluate_raster(self.doc, "roto", frame=2).pixels))
 
     def test_a_matte_computed_ahead_is_the_matte_the_walk_computes(self):
         for tier in (1, 2):
