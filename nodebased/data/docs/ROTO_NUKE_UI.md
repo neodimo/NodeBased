@@ -8,16 +8,15 @@ Baseline facts are sourced from the Nuke 17.0v3 RotoPaint chapter, its linked to
 |---|---:|---:|---:|---:|
 | Toolbar and tools | 32 | 0 | 0 | 100.0 |
 | Tool settings | 189 | 1 | 0 | 99.7 |
-| Stroke/shape list | 15 | 4 | 1 | 85.0 |
+| Stroke/shape list | 16 | 3 | 1 | 87.5 |
 | Viewer editing | 31 | 0 | 0 | 100.0 |
 | Timing and animation | 9 | 0 | 1 | 90.0 |
-| Overall | — | — | — | 98.4 |
+| Overall | — | — | — | 98.6 |
 ## Largest gaps
 
 1. Clone view selection depends on multi-view projects, which NodeBased does not support.
 2. Ripple editing is undocumented in the traversed official guide and is not implemented.
 3. The stroke/shape list still lacks the View column, a Color cell for RotoPaint shapes and an Invert cell for strokes; RotoPaint offers four blending modes where Roto offers Merge's thirty.
-4. Nuke's newest-on-top list order is not reproduced.
 
 ## Proposed implementation steps
 
@@ -297,7 +296,7 @@ Each step is a bounded 40–60 minute implementation slice; the ledger below is 
 | 253 | R3 · panel side | View | missing | No multiview support or view list in `RotoPanel.build_panel` / `Window.build_node_panel`. | Stereo-only column; NodeBased has no multi-view project support, so it stays out of scope. |
 | 254 | R3 · panel side | Lifetime | match | `rotolist.ShapeListTree` Lifetime column (`*-row-lifetime-*`): shows the type and range, opens the panel's lifetime editor |  |
 | 255 | R3 · panel side | Source | match | `rotolist.ShapeListTree` Source column (`*-row-source-*`) |  |
-| 256 | R3 · panel side | Layers and folders | differs | `rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; a layer's own transform (`shapes.resolve_layer_transform`) is applied to every shape inside it, edited from the panel's Layer transform controls and by the transform box with the layer row selected | Nuke's newest-on-top list order is not reproduced; the list order stays the render order. |
+| 256 | R3 · panel side | Layers and folders | match | `rotolist.ShapeListTree` tree, front-most item first at every level as in Nuke (`rotolist.reverse_tree`; the stored order stays render order, so saved shots render as before): layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; a layer's own transform (`shapes.resolve_layer_transform`) is applied to every shape inside it, edited from the panel's Layer transform controls and by the transform box with the layer row selected |  |
 | 257 | R3 · panel side | Add new layer | match | `rotolist.ShapeListTree`.cmd_add_layer, context menu `roto-list-add-layer` |  |
 | 258 | R3 · panel side | Duplicate | match | `rotolist.ShapeListTree`.cmd_duplicate, context menu `roto-list-duplicate` (items and layers with their contents) |  |
 | 259 | R3 · panel side | Copy > Curve | match | `rotolist.ShapeListTree`.cmd_copy, context menu Copy > Curve | Strokes have no curve and are skipped. |

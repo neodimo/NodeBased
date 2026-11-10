@@ -228,7 +228,7 @@ class RotoArtistPanelTests(unittest.TestCase):
         self.window.command({"op":"set_shapes","id":"r","shapes":copy.deepcopy(self.shapes)})
         before=self.window.evaluator.evaluate_raster(self.window.dispatcher.document,target="r").pixels.copy()
         panel=self.panel(); panel.findChild(QListWidget,"roto-shape-list").setCurrentRow(0)
-        panel.findChild(QPushButton,"roto-shape-down").click()
+        panel.findChild(QPushButton,"roto-shape-up").click()
         after=self.window.evaluator.evaluate_raster(self.window.dispatcher.document,target="r").pixels
         self.assertFalse(np.allclose(before[40,40],after[40,40]))
         panel=self.panel(); cb=panel.findChild(QCheckBox,"roto-shape-row-visible-0")

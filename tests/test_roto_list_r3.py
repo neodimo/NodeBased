@@ -230,19 +230,19 @@ class RotoListTests(RotoListBase):
         self.assertEqual([(s["name"], s.get("layer")) for s in shapes_],
                          [("red", None), ("blue", None), ("green", "Layer1")])
         tree = self.tree()
-        # the list order is render order: moving blue below green puts blue on top of green in the layer
-        tree.move_ids([("item", 0)], ("item", 1), "below")
+        # the list shows the front-most item first: dropping red above blue puts red in front of blue
+        tree.move_ids([("item", 0)], ("item", 1), "above")
         self.assertEqual([s["name"] for s in self.payload()["shapes"]], ["blue", "red", "green"])
         tree = self.tree()
         tree.move_ids([("item", 2)], ("item", 0), "above")
         self.assertEqual([(s["name"], s.get("layer")) for s in self.payload()["shapes"]],
-                         [("green", None), ("blue", None), ("red", None)])
+                         [("blue", None), ("green", None), ("red", None)])
         self.assertEqual(self.payload()["layers"], [{"name": "Layer1"}])
 
     def test_reordering_changes_stacking(self):
         before = self.window.evaluator.evaluate_raster(self.doc(), target="r").pixels.copy()
         tree = self.tree(); tree.setCurrentRow(0)
-        tree.cmd_move(1)
+        tree.cmd_move(-1)       # up the list: red moves in front of blue
         after = self.window.evaluator.evaluate_raster(self.doc(), target="r").pixels
         self.assertEqual([s["name"] for s in self.payload()["shapes"]], ["blue", "red", "green"])
         self.assertFalse(np.allclose(before[40, 40], after[40, 40]))
@@ -258,8 +258,8 @@ class RotoListTests(RotoListBase):
         only_green = roto.rasterise(shapes.resolve_shapes({"shapes": [self.shapes[2]]}, 1), 100, 100)
         np.testing.assert_allclose(hidden, only_green, atol=1e-6)
         resolved = shapes.resolve_shapes(self.payload(), 1)
-        # the shapes moved into a layer at the end of the list sit above green in the stack
-        self.assertEqual([s["name"] for s in resolved], ["green", "red", "blue"])
+        # the shapes moved into a layer sit in front of green in the stack, red above blue as dropped
+        self.assertEqual([s["name"] for s in resolved], ["green", "blue", "red"])
         self.assertEqual([s["visible"] for s in resolved], [True, False, False])
         self.tree().edit_layer("Layer1", "locked", True)
         self.assertEqual([s["locked"] for s in shapes.resolve_shapes(self.payload(), 1)], [False, True, True])
@@ -406,11 +406,11 @@ class RotoPaintListTests(RotoListBase):
         tree.move_ids([("item", 0), ("item", 1)], ("layer", "Layer1"), "into")
         items = self.payload()["items"]
         self.assertEqual([(i["name"], i.get("layer")) for i in items],
-                         [("shape2", None), ("shape1", "Layer1"), ("stroke1", "Layer1")])
+                         [("shape2", None), ("stroke1", "Layer1"), ("shape1", "Layer1")])
         tree = self.tree()
-        tree.move_ids([("item", 0)], ("item", 1), "above")      # next to shape1 puts it in the layer, above shape1
+        tree.move_ids([("item", 0)], ("item", 1), "above")      # next to stroke1 puts it in the layer, above stroke1
         self.assertEqual([(i["name"], i.get("layer")) for i in self.payload()["items"]],
-                         [("shape2", "Layer1"), ("shape1", "Layer1"), ("stroke1", "Layer1")])
+                         [("stroke1", "Layer1"), ("shape2", "Layer1"), ("shape1", "Layer1")])
         self.tree().edit_layer("Layer1", "visible", False)
         resolved = shapes.resolve_paint_items(self.payload(), 1)
         self.assertEqual([i["visible"] for i in resolved], [False, False, False])
@@ -424,6 +424,92 @@ class RotoPaintListTests(RotoListBase):
         self.window.command({"op": "set_paint_items", "id": "paint", "items": items})
         self.assertEqual([l["name"] for l in self.payload()["layers"]], ["Layer1", "Layer2"])
         self.assertEqual(self.payload()["layers"][1]["layer"], "Layer1")
+
+
+class FrontFirstListTests(RotoListBase):
+    """Nuke's order: the top row of the list is the item composited last, in front; the stored order stays render order."""
+    list_name = "roto-shape-list"
+
+    def setUp(self):
+        self.shapes = [box("back", 10, 10, 60, 60, color=[1, 0, 0, 1]),
+                       box("middle", 30, 30, 80, 80, color=[0, 0, 1, 1]),
+                       box("front", 50, 50, 95, 95, color=[0, 1, 0, 1])]
+        self.start(roto_document(copy.deepcopy(self.shapes)))
+
+    def rows(self):
+        tree = self.tree()
+        order = []
+        iterator = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
+        for item in iterator:
+            order.append(tree.parse_id(item.data(0, 0x100)))
+        return order
+
+    def pixel(self, x, y):
+        return self.window.evaluator.evaluate_raster(self.doc(), target="r").pixels[y, x][:3]
+
+    def names_top_down(self):
+        entries = self.payload()["shapes"]
+        return [entries[ref]["name"] for kind, ref in self.rows() if kind == "item"]
+
+    def test_the_top_row_is_the_front_most_item_and_the_stored_order_is_unchanged(self):
+        self.assertEqual(self.names_top_down(), ["front", "middle", "back"])
+        self.assertEqual([s["name"] for s in self.payload()["shapes"]], ["back", "middle", "front"])
+        np.testing.assert_allclose(self.pixel(55, 55), [0, 1, 0], atol=1e-4)      # front covers the others
+        np.testing.assert_allclose(self.pixel(40, 40), [0, 0, 1], atol=1e-4)      # middle covers back
+
+    def test_dropping_above_an_item_puts_the_dragged_one_in_front_of_it(self):
+        np.testing.assert_allclose(self.pixel(40, 40), [0, 0, 1], atol=1e-4)
+        tree = self.tree()
+        self.one_step(lambda: tree.move_ids([("item", 0)], ("item", 1), "above"))      # back dropped above middle
+        self.assertEqual(self.names_top_down(), ["front", "back", "middle"])
+        np.testing.assert_allclose(self.pixel(40, 40), [1, 0, 0], atol=1e-4)      # back is now in front of middle
+        np.testing.assert_allclose(self.pixel(55, 55), [0, 1, 0], atol=1e-4)      # still behind front
+
+    def test_dropping_below_an_item_puts_the_dragged_one_behind_it(self):
+        tree = self.tree()
+        tree.move_ids([("item", 2)], ("item", 0), "below")      # front dropped below back
+        self.assertEqual(self.names_top_down(), ["middle", "back", "front"])
+        self.assertEqual([s["name"] for s in self.payload()["shapes"]], ["front", "back", "middle"])
+        np.testing.assert_allclose(self.pixel(55, 55), [0, 0, 1], atol=1e-4)      # middle now covers front
+
+    def test_move_up_and_down_follow_the_list(self):
+        tree = self.tree(); tree.setCurrentRow(0)          # back, bottom row
+        tree.cmd_move(-1)
+        self.assertEqual(self.names_top_down(), ["front", "back", "middle"])
+        np.testing.assert_allclose(self.pixel(40, 40), [1, 0, 0], atol=1e-4)
+        tree = self.tree()
+        tree.cmd_move(1)
+        self.assertEqual(self.names_top_down(), ["front", "middle", "back"])
+        self.assertFalse(self.tree().cmd_move(1))      # already at the bottom
+
+    def test_a_dropped_item_lands_at_the_top_of_its_layer(self):
+        tree = self.tree(); tree.cmd_add_layer(); tree = self.tree()
+        self.assertEqual(self.rows()[0], ("layer", "Layer1"))      # a new layer is the front-most thing in the list
+        tree.move_ids([("item", 0)], ("layer", "Layer1"), "into")
+        tree = self.tree()
+        tree.move_ids([("item", 0)], ("layer", "Layer1"), "into")      # middle (now item 0) dropped into the layer after back
+        names = [(s["name"], s.get("layer")) for s in self.payload()["shapes"]]
+        self.assertEqual(names, [("front", None), ("back", "Layer1"), ("middle", "Layer1")])
+        # middle is the layer's top row, so it renders in front of back
+        np.testing.assert_allclose(self.pixel(40, 40), [0, 0, 1], atol=1e-4)
+
+    def test_duplicate_appears_directly_above_the_original_in_front_of_it(self):
+        tree = self.tree(); tree.select_ids([("item", 1)])
+        self.one_step(tree.cmd_duplicate)
+        self.assertEqual(self.names_top_down(), ["front", "middle copy", "middle", "back"])
+        self.assertEqual([s["name"] for s in self.payload()["shapes"]], ["back", "middle", "middle copy", "front"])
+
+    def test_paste_goes_in_front_of_the_selected_item(self):
+        tree = self.tree(); tree.select_ids([("item", 0)])
+        self.assertTrue(tree.cmd_copy())
+        tree = self.tree(); tree.select_ids([("item", 1)])
+        self.one_step(tree.cmd_paste)
+        self.assertEqual(self.names_top_down(), ["front", "back 2", "middle", "back"])
+
+    def test_a_new_shape_from_the_viewer_is_the_top_row(self):
+        shapes_ = copy.deepcopy(self.payload()["shapes"]) + [box("newest", 0, 0, 20, 20)]
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": shapes_})
+        self.assertEqual(self.names_top_down()[0], "newest")
 
 
 class TreeArithmeticTests(unittest.TestCase):

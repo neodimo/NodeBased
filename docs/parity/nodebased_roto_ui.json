@@ -1539,9 +1539,9 @@
     },
     {
       "name": "Layers and folders",
-      "status": "differs",
-      "location": "`rotolist.ShapeListTree` tree: layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; `shapes.layer_states`; `shapes.resolve_layer_transform`; the layer Transform controls in `rotopanel._layer_transform_controls`; the transform box with the layer row selected",
-      "difference": "Nuke's newest-on-top list order is not reproduced; the list order stays the render order. A layer's own transform (translate, rotate, scale, skew, centre) is applied to every shape inside it."
+      "status": "match",
+      "location": "`rotolist.ShapeListTree` tree, front-most item first at every level as in Nuke (`rotolist.reverse_tree`; the stored order stays render order): layers as folders, drag in/out and reorder, a layer's Visible and Lock apply to its children; `shapes.layer_states`; `shapes.resolve_layer_transform`; the layer Transform controls in `rotopanel._layer_transform_controls`; the transform box with the layer row selected",
+      "difference": ""
     },
     {
       "name": "Add new layer",

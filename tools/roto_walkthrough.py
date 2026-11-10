@@ -495,6 +495,9 @@ def s08(w):
                             square("blue", 200, 120, 400, 260, color=[0, 0, 1, 1]),
                             square("green", 340, 70, 560, 200, color=[0, 1, 0, 1])])
     tree = w.shape_tree()
+    top_rows = [tree.parse_id(tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole)) for i in range(tree.topLevelItemCount())]
+    w.check(top_rows == [("item", 2), ("item", 1), ("item", 0)],
+            "the list shows the front-most shape first, as Nuke does (the stored order stays render order)")
     w.shot("list")
     w.shot_widget("shape-list-before", tree)
     name = tree.findChild(QLineEdit, "roto-shape-row-name-1")
@@ -515,7 +518,7 @@ def s08(w):
     w.check(w.payload["shapes"][2].get("layer") == "Layer1", "dragging a shape onto a layer puts it inside")
     tree = w.shape_tree()
     names = [s["name"] for s in w.payload["shapes"]]
-    tree.move_ids([("item", 0)], ("item", 1), "below"); w.settle()
+    tree.move_ids([("item", 0)], ("item", 1), "above"); w.settle()
     w.check([s["name"] for s in w.payload["shapes"]] != names, "dragging a row reorders the list")
     w.shot("layer-and-reorder")
     w.shot_widget("shape-list-after", w.shape_tree())
@@ -540,10 +543,7 @@ def s08(w):
             "a layer's translate moves every shape inside it")
     w.check(all(number(w.shape_entries()[i]["points"][0]["x"]) == b for i, b in zip(inside, before)), "the shapes' own points are untouched")
     w.shot("layer-transform")
-    w.note("not reproduced: Nuke lists the newest item on top (here the list order is the render order, top first), and the View column "
-           "is stereo-only (no multi-view projects) (ledger rows 253 and 256 in docs/ROTO_NUKE_UI.md)")
-    w.differs("the list order is the render order rather than Nuke's newest-on-top, and there is no View column "
-              "(Nuke shows it for multi-view projects only; NodeBased has none)")
+    w.note("not applicable: the View column is for multi-view projects, which NodeBased does not have (ledger row 253 in docs/ROTO_NUKE_UI.md)")
 
 
 @scene(9, "Autokey: key frame 1, move points on frame 10, step to frame 1 and back, key controls",

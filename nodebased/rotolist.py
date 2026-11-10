@@ -3,7 +3,12 @@
 Columns, in Nuke's order: Name, Visible, Lock, Overlay color, Color, Invert, Blending, Motion blur, Lifetime, Source (View is
 stereo-only and has no column here). Each cell edits a field the item already stores (or, for Overlay color, the one new field),
 in one undo step through the same `set_shapes` / `set_paint_items` command the properties panel uses. Layers are folders in the
-tree; the order of the list is the render order, and a layer's Visible and Lock apply to everything inside it.
+tree, and a layer's Visible and Lock apply to everything inside it.
+
+The list is shown the way Nuke shows it: the front-most item (the one composited last) is the top row, at every level, and a new
+item appears at the top. The stored order stays render order (back first), so `build_tree` and `flatten` work in render order and
+the list reads the tree through `reverse_tree`, which turns render order into display order and back again. Drops, Duplicate,
+Paste and the Move up / Move down buttons all work on the displayed order.
 
 The tree arithmetic (`build_tree`, `move_nodes`, `flatten` and friends) is plain Python so tests can drive it without a window.
 """
@@ -50,6 +55,12 @@ def build_tree(entries, layers):
     return top
 
 
+def reverse_tree(top):
+    """The same tree with the children of every level reversed: render order (back first) to display order (front first), and
+    back. A copy; the input is left alone."""
+    return [{"id": node["id"], "children": reverse_tree(node["children"])} for node in reversed(top)]
+
+
 def flatten(top, entries, layers):
     """Write a tree back as (entries in render order, layers in outline order, old index of each new entry)."""
     by_name = {layer["name"]: layer for layer in layers}
@@ -92,9 +103,11 @@ def _contains(node, node_id):
     return node["id"] == node_id or any(_contains(child, node_id) for child in node["children"])
 
 
-def move_nodes(top, moving, target, where):
+def move_nodes(top, moving, target, where, into_first=False):
     """Move nodes by id to above/below/into a target node (`where` of "end", or no target, appends to the top level).
 
+    `into_first` puts nodes dropped into a layer at the start of its children instead of the end: the list, which shows the
+    front-most item first, uses it so that a dropped item lands at the top of its layer.
     Returns False and leaves the tree alone when a layer would move into itself."""
     found = [(_locate(top, node_id)) for node_id in moving]
     nodes = [f[2] for f in found if f]
@@ -111,7 +124,10 @@ def move_nodes(top, moving, target, where):
         return True
     siblings, position, anchor = _locate(top, target)
     if where == "into" and anchor["id"][0] == "layer":
-        anchor["children"].extend(nodes)
+        if into_first:
+            anchor["children"][0:0] = nodes
+        else:
+            anchor["children"].extend(nodes)
     else:
         at = position + (1 if where in ("below", "into") else 0)
         siblings[at:at] = nodes
@@ -270,7 +286,7 @@ class ShapeListTree(QTreeWidget):
                 add(row, child)
             row.setExpanded(True)
 
-        for node in build_tree(entries, layers):
+        for node in self.display_tree(entries, layers):
             add(None, node)
         selected = self.selected_index()
         layer = getattr(self.window.viewer, "roto_list_layer", None)
@@ -532,8 +548,14 @@ class ShapeListTree(QTreeWidget):
                 self.tree_items[node_id].setSelected(True)
 
     # -- structure commands ------------------------------------------------------------------------------------------------
+    @staticmethod
+    def display_tree(entries, layers):
+        """The list as it is shown: front-most first at every level."""
+        return reverse_tree(build_tree(entries, layers))
+
     def _write(self, top, entries, layers, selected_old=None):
-        new_entries, new_layers, order = flatten(top, entries, layers)
+        """Commit a tree given in display order (front-most first)."""
+        new_entries, new_layers, order = flatten(reverse_tree(top), entries, layers)
         select = None
         if selected_old is not None and selected_old in order:
             select = order.index(selected_old)
@@ -544,8 +566,8 @@ class ShapeListTree(QTreeWidget):
     def move_ids(self, ids, target, where):
         """Drag-and-drop in plain form: move the nodes to `where` ("above", "below", "into", "end") of `target`."""
         entries, layers = self.entries(), self.layers()
-        top = build_tree(entries, layers)
-        if not move_nodes(top, ids, target, where):
+        top = self.display_tree(entries, layers)
+        if not move_nodes(top, ids, target, where, into_first=True):
             return False
         current = self.selected_index()
         self._write(top, entries, layers, current if 0 <= current < len(entries) else None)
@@ -569,12 +591,13 @@ class ShapeListTree(QTreeWidget):
         self.move_ids(ids, target, where)
 
     def cmd_move(self, delta):
-        """Swap the selected item with its neighbour at the same level (inside its layer, or at the top)."""
+        """Swap the selected item with its neighbour in the list at the same level (inside its layer, or at the top):
+        -1 moves it up the list, in front of the neighbour above; +1 moves it down."""
         entries, layers = self.entries(), self.layers()
         index = self.selected_index()
         if not 0 <= index < len(entries):
             return False
-        top = build_tree(entries, layers)
+        top = self.display_tree(entries, layers)
         siblings, position, _ = _locate(top, ("item", index))
         target = position + delta
         if not 0 <= target < len(siblings):
@@ -645,10 +668,10 @@ class ShapeListTree(QTreeWidget):
             kind, ref = node["id"]
             parent = entries[ref].get("layer") if kind == "item" else next((l.get("layer") for l in layers if l["name"] == ref), None)
             new_roots.append((node["id"], copy_node(node, parent, {})))
-        top = build_tree(entries, layers)
+        top = self.display_tree(entries, layers)
         for original, new in reversed(new_roots):
-            move_nodes(top, [new], original, "below")
-        new_entries, new_layers, order = flatten(top, entries, layers)
+            move_nodes(top, [new], original, "above")      # the copy sits directly above the original, in front of it
+        new_entries, new_layers, order = flatten(reverse_tree(top), entries, layers)
         first_new = new_roots[-1][1]
         select = order.index(first_new[1]) if first_new[0] == "item" else None
         self.commit(new_entries, new_layers, select)
@@ -687,10 +710,10 @@ class ShapeListTree(QTreeWidget):
             entries.append(entry); added.append(len(entries) - 1)
         if not added:
             return False
-        top = build_tree(entries, layers)
+        top = self.display_tree(entries, layers)
         if anchor and anchor[0] == "item":
-            move_nodes(top, [("item", i) for i in added], anchor, "below")
-        new_entries, new_layers, order = flatten(top, entries, layers)
+            move_nodes(top, [("item", i) for i in reversed(added)], anchor, "above")     # in front of the item that was selected
+        new_entries, new_layers, order = flatten(reverse_tree(top), entries, layers)
         self.commit(new_entries, new_layers, order.index(added[-1]))
         return True
 
