@@ -601,8 +601,9 @@ def upres_compare(args):
     images_dir = REPO / 'docs' / 'images' / 'fire_shot'
     images_dir.mkdir(parents=True, exist_ok=True)
     settings = json.loads(args.upres_settings)
+    before_settings = json.loads(args.upres_before) if args.upres_before else False      # `--upres-before`: compare two up-res settings
     runs, pictures = {}, {}
-    for name, option in (('before', False), ('after', settings)):
+    for name, option in (('before', before_settings), ('after', settings)):
         document = build_document(args.width, args.height, smoke_upres=option)
         params = document['nodes']['render']['params']
         node = 'upres' if option is not False else 'cache'
@@ -623,10 +624,20 @@ def upres_compare(args):
             run['render'][str(frame)] = {'grain_rms': float(np.sqrt(((first[..., :3] - second[..., :3]) ** 2).mean() / 2)),
                                          'mean_linear_rgb': float(first[..., :3].mean())}
             pictures[name][frame] = (first, second)
-            if frame == 16:
-                write_png(images_dir / f'fire-smoke-upres-{name}-{frame:03d}.png', first)
+            write_png(images_dir / f'fire-smoke-upres-{name}-{frame:03d}.png' if not args.upres_before else
+                      images_dir / f'fire-smoke-swirl-{name}-{frame:03d}.png', first)
+        if args.upres_before:        # the curl of the apparent motion between frames 15 and 16 (same seed, 128 samples)
+            with gpu_lock():
+                params.update(render_output='rgba', pt_samples=128, pt_seed=1)
+                before_frame = evaluator.evaluate_raster(document, 'render', frame=15).pixels.copy()
+            pictures[name]['curl_pair'] = (before_frame, pictures[name][16][0])
         runs[name] = run
         print(name, json.dumps({'bake': run['bake_seconds'], **run['summary']}), flush=True)
+    if args.upres_before:
+        mask16 = flame_metrics.smoke_mask(pictures['before'][16][0])
+        for name in ('before', 'after'):
+            runs[name]['image_curl'] = {str(factor): flame_metrics.image_curl(*pictures[name]['curl_pair'], mask16, factor)
+                                        for factor in (2, 4)}
     for frame in FRAMES:                  # smoke structure on the pixels the unprocessed shot calls smoke, for both
         mask = flame_metrics.smoke_mask(pictures['before'][frame][0])
         for name in ('before', 'after'):
@@ -634,32 +645,33 @@ def upres_compare(args):
             runs[name]['render'][str(frame)]['smoke_image_by_blur_width'] = {
                 str(width): flame_metrics.smoke_structure(*pictures[name][frame], mask, width)['structure'] for width in (7, 15, 31, 63)}
         runs['after']['render'][str(frame)]['smoke_pixels'] = int(mask.sum())
-    for name, option in (('before', 'off'), ('after', 'on')):
+    for name, option in (('before', 'on' if before_settings else 'off'), ('after', 'on')):
         if name == 'after' and args.timing_from:      # the factor-4 timing process alone takes 20 minutes: its saved output is read back
             measured = json.loads(args.timing_from.read_text().strip().splitlines()[-1])
         else:
             timing = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--workdir', str(args.workdir), '--width', str(args.width),
-                                     '--height', str(args.height), '--upres-time', option, '--upres-settings', args.upres_settings],
+                                     '--height', str(args.height), '--upres-time', option, '--upres-settings',
+                                     args.upres_before if name == 'before' and before_settings else args.upres_settings],
                                     check=True, capture_output=True, text=True)
             measured = json.loads(timing.stdout.strip().splitlines()[-1])
         for frame, numbers in measured.pop('frames').items():
             runs[name]['render'][frame].update(numbers)
         runs[name]['timing_process'] = measured
     sheet = [np.concatenate([downsample(pictures[n][f][0]) for f in FRAMES], axis=1) for n in ('before', 'after')]
-    sheet_name = f'fire-smoke-upres-before-after-{args.tag}.png'
+    sheet_name = f'fire-smoke-{"swirl" if args.upres_before else "upres"}-before-after-{args.tag}.png'
     write_png(images_dir / sheet_name, np.concatenate(sheet, axis=0))
     crops = []
     for name in ('before', 'after'):
         crop = pictures[name][16][0][40:200, 330:650]
         crops.append(np.repeat(np.repeat(crop, 3, axis=0), 3, axis=1))
-    zoom_name = f'fire-smoke-upres-before-after-zoom-{args.tag}.png'
+    zoom_name = f'fire-smoke-{"swirl" if args.upres_before else "upres"}-before-after-zoom-{args.tag}.png'
     write_png(images_dir / zoom_name, np.concatenate(crops, axis=0))
     with gpu_lock():
         device = gpu3d._state()['info'].get('device', 'unknown')
-    result = {'date': args.date, 'device': device, 'resolution': [args.width, args.height], 'samples': 128, 'upres_settings': settings,
+    result = {'date': args.date, 'device': device, 'resolution': [args.width, args.height], 'samples': 128, 'upres_settings': settings, 'upres_before_settings': before_settings,
               'before': runs['before'], 'after': runs['after'], 'contact_sheet': f'docs/images/fire_shot/{sheet_name}',
               'contact_sheet_rows': ['before', 'after'], 'contact_sheet_columns': list(FRAMES), 'zoom': f'docs/images/fire_shot/{zoom_name}'}
-    (REPO / 'benchmarks' / 'fire_shot' / f'fire-smoke-upres-{args.tag}.json').write_text(json.dumps(result, indent=2) + '\n')
+    (REPO / 'benchmarks' / 'fire_shot' / f'fire-smoke-{"swirl" if args.upres_before else "upres"}-{args.tag}.json').write_text(json.dumps(result, indent=2) + '\n')
 
 
 def upres_render(args):
@@ -812,6 +824,8 @@ def main():
     parser.add_argument('--timing-from', type=Path, help='--upres-render: read the up-res timing from this saved `--upres-time on` output')
     parser.add_argument('--upres-time', choices=('off', 'on'), help=argparse.SUPPRESS)
     parser.add_argument('--upres-settings', default='{}', help='FluidUpres3D settings as JSON for --upres')
+    parser.add_argument('--upres-before', default=None, help='--upres: FluidUpres3D settings as JSON for the "before" side instead of no up-res '
+                        '(the swirl step compares swirl off against swirl on); also measures the image-plane curl')
     parser.add_argument('--curl-sweep', action='store_true', help='render 64 cells with sideways curl strengths')
     parser.add_argument('--tag', default='2026-10-30')
     parser.add_argument('--date', default='2026-10-30')

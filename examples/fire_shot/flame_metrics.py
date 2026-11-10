@@ -305,3 +305,52 @@ def smoke_mask(image):
     """Pixels of the smoke above the flame in an image: brighter than the median pixel and outside the brightest 2 % (the flame)."""
     luma = np.asarray(image[..., :3], np.float64) @ LUMA
     return (luma > np.quantile(luma, .5)) & (luma <= np.quantile(luma, .98))
+
+
+def _box_sum(field, width):
+    """Sum over a `width` x `width` window (edge replicated), per pixel."""
+    out = np.asarray(field, np.float64)
+    half = width // 2
+    for axis in (0, 1):
+        padded = np.pad(out, [(half + 1, half) if a == axis else (0, 0) for a in range(out.ndim)], mode='edge')
+        total = np.cumsum(padded, axis=axis)
+        n = out.shape[axis]
+        out = np.take(total, np.arange(width, width + n), axis=axis) - np.take(total, np.arange(0, n), axis=axis)
+    return out
+
+
+def _shrink(field, factor):
+    h, w = (field.shape[0] // factor) * factor, (field.shape[1] // factor) * factor
+    return field[:h, :w].reshape(h // factor, factor, w // factor, factor, *field.shape[2:]).mean(axis=(1, 3))
+
+
+def image_curl(frame_a, frame_b, mask, factor=2, window=9, threshold=.05):
+    """Curl of the smoke's apparent motion between two renders of consecutive frames (same noise seed).
+
+    Lucas-Kanade optical flow on the luminance (each image shrunk by `factor`, a `window`-pixel box per pixel, pixels where the
+    gradient structure is too weak to give a flow are dropped), then the image-plane vorticity dv/dx - du/dy in 1/frame. Over the
+    smoke pixels that have a flow: the share with |vorticity| above `threshold`, and the mean and rms |vorticity|. The estimate sees
+    any moving brightness pattern, so it is read as a comparison between two settings of one shot, not as a physical vorticity."""
+    la = _shrink(np.asarray(frame_a[..., :3], np.float64) @ LUMA, factor)
+    lb = _shrink(np.asarray(frame_b[..., :3], np.float64) @ LUMA, factor)
+    area = _shrink(np.asarray(mask, np.float64), factor) > .5
+    la, lb = _box_sum(la, 3) / 9, _box_sum(lb, 3) / 9
+    iy, ix = np.gradient(la)
+    it = lb - la
+    a, b, c = _box_sum(ix * ix, window), _box_sum(ix * iy, window), _box_sum(iy * iy, window)
+    p, q = -_box_sum(ix * it, window), -_box_sum(iy * it, window)
+    det = a * c - b * b
+    trace = a + c
+    good = area & (det > 1e-3 * trace * trace + 1e-30) & (trace > 1e-8 * max(float(trace.max()), 1e-30))
+    safe = np.where(good, det, 1.0)
+    u = np.where(good, (c * p - b * q) / safe, 0.0)
+    v = np.where(good, (a * q - b * p) / safe, 0.0)
+    u, v = _box_sum(u, 5) / 25, _box_sum(v, 5) / 25
+    curl = np.gradient(v, axis=1) - np.gradient(u, axis=0)
+    inside = good & (_box_sum(good.astype(np.float64), 7) > 40)
+    if not inside.any():
+        return {'pixels': 0, 'share_above': 0.0, 'mean_abs': 0.0, 'rms': 0.0, 'threshold': threshold}
+    mag = np.abs(curl[inside])
+    return {'pixels': int(inside.sum()), 'share_above': round(float((mag > threshold).mean()), 5), 'mean_abs': round(float(mag.mean()), 5),
+            'rms': round(float(np.sqrt((mag ** 2).mean())), 5), 'threshold': threshold, 'factor': factor,
+            'mean_flow_px': round(float(np.hypot(u, v)[inside].mean()) * factor, 4)}

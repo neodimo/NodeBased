@@ -2262,6 +2262,8 @@ KNOB_LAYOUT.update({
                             KnobGroup("enum", ("upres_backend",), label="Backend"),
                             KnobGroup("float", ("turbulence",), label="Turbulence"),
                             KnobGroup("float", ("swirl_size",), label="Swirl size"),
+                            KnobGroup("float", ("swirl",), label="Swirl strength"),
+                            KnobGroup("float", ("swirl_scale",), label="Swirl scale"),
                             KnobGroup("int", ("grain",), label="Grain"),
                             KnobGroup("float", ("pulse_length",), label="Pulse length"),
                             KnobGroup("float", ("shredding",), label="Shredding"),

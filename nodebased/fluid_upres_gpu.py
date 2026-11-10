@@ -65,7 +65,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 
 _kernel("upres_sparse_guided", [_c("src"), _c("coords", "u32"), _c("tilemap", "u32"),
-                                  _c("vx"), _c("vy"), _c("vz"), _c("out", acc="rw")], """
+                                  _c("vx"), _c("vy"), _c("vz"), _c("sv"), _c("out", acc="rw")], """
 fn coarse_get(axis: u32, dims: vec3<i32>, c: vec3<i32>) -> f32 {
     if (any(c < vec3<i32>(0)) || any(c >= dims)) { return 0.0; }
     let i = u32((c.x * dims.y + c.y) * dims.z + c.z);
@@ -120,14 +120,175 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let q = vec3<f32>(p) * scale;
     let velocity = vec3<f32>(coarse_sample(0u, coarse, q),
                              coarse_sample(1u, coarse, q), coarse_sample(2u, coarse, q));
-    let back = clamp(vec3<f32>(p) - velocity * P.c.x, vec3<f32>(0.0), vec3<f32>(fine-1));
+    var carry = velocity;
+    if (P.c.z > 0.5) { carry = velocity + vec3<f32>(sv[index*3u], sv[index*3u+1u], sv[index*3u+2u]); }
+    let back = clamp(vec3<f32>(p) - carry * P.c.x, vec3<f32>(0.0), vec3<f32>(fine-1));
     let prior = P.c.y > 0.5;
     out[gid.x] = scalar_sample(select(coarse, fine, prior), select(back * scale, back, prior), prior);
 }
 """, cellwise=False)
 
 
-def reconstruct_sparse(fields, coords, fine, guide=None, previous=None, step=0.0):
+# --- swirl: dense velocity on the box around the active tiles (see fluid_upres.swirl_dense_cpu for the maths) -----------------
+# `waves` holds a 16-float header (strength, confinement, wave count, voxel size, fine x y z, low x y z, speed limit) and then 8 floats
+# per wave (K xyz, C xyz, phase, pad). P.a = box size, P.b = coarse size.
+_SWIRL_LIB = """
+fn glin(gid: vec3<u32>) -> u32 { return gid.x + gid.y * 16776960u; }
+fn cell3(i: u32) -> vec3<i32> {
+    let nz = P.a.z; let ny = P.a.y;
+    return vec3<i32>(i32(i / (ny * nz)), i32((i / nz) % ny), i32(i % nz));
+}
+fn cidx(c: vec3<i32>) -> u32 {
+    let d = vec3<i32>(P.a.xyz);
+    let k = clamp(c, vec3<i32>(0), d - vec3<i32>(1));
+    return u32((k.x * d.y + k.y) * d.z + k.z);
+}
+"""
+
+_kernel("swirl_u", [_c("cvx"), _c("cvy"), _c("cvz"), _c("waves"), _c("ux", acc="rw"), _c("uy", acc="rw"), _c("uz", acc="rw")], """
+fn cget(a: u32, c: vec3<i32>, d: vec3<i32>) -> f32 {
+    let i = u32((c.x * d.y + c.y) * d.z + c.z);
+    if (a == 0u) { return cvx[i]; }
+    if (a == 1u) { return cvy[i]; }
+    return cvz[i];
+}
+fn csample(a: u32, q: vec3<f32>, d: vec3<i32>) -> f32 {
+    let lo = vec3<i32>(floor(q)); let f = q - vec3<f32>(lo);
+    let hi = min(lo + vec3<i32>(1), d - vec3<i32>(1));
+    let x0 = mix(mix(cget(a, vec3<i32>(lo.x,lo.y,lo.z), d), cget(a, vec3<i32>(lo.x,lo.y,hi.z), d), f.z),
+                 mix(cget(a, vec3<i32>(lo.x,hi.y,lo.z), d), cget(a, vec3<i32>(lo.x,hi.y,hi.z), d), f.z), f.y);
+    let x1 = mix(mix(cget(a, vec3<i32>(hi.x,lo.y,lo.z), d), cget(a, vec3<i32>(hi.x,lo.y,hi.z), d), f.z),
+                 mix(cget(a, vec3<i32>(hi.x,hi.y,lo.z), d), cget(a, vec3<i32>(hi.x,hi.y,hi.z), d), f.z), f.y);
+    return mix(x0, x1, f.x);
+}
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = glin(gid);
+    if (i >= P.a.x * P.a.y * P.a.z) { return; }
+    let c = cell3(i);
+    let fine = vec3<f32>(waves[4], waves[5], waves[6]);
+    let low = vec3<f32>(waves[7], waves[8], waves[9]);
+    let d = vec3<i32>(P.b.xyz);
+    let p = vec3<f32>(c) + low;
+    let q = clamp(p * (vec3<f32>(d) - vec3<f32>(1.0)) / (fine - vec3<f32>(1.0)), vec3<f32>(0.0), vec3<f32>(d) - vec3<f32>(1.0));
+    let vc = vec3<f32>(csample(0u, q, d), csample(1u, q, d), csample(2u, q, d));
+    var noise = vec3<f32>(0.0);
+    let n = u32(waves[2]);
+    for (var w = 0u; w < n; w++) {
+        let o = 16u + w * 8u;
+        let k = vec3<f32>(waves[o], waves[o+1u], waves[o+2u]);
+        let amp = vec3<f32>(waves[o+3u], waves[o+4u], waves[o+5u]);
+        noise += amp * cos(dot(k, p) + waves[o+6u]);
+    }
+    let u = vc + waves[0] * length(vc) * noise;
+    ux[i] = u.x; uy[i] = u.y; uz[i] = u.z;
+}
+""", lib=_SWIRL_LIB, cellwise=False)
+
+_kernel("swirl_omega", [_c("ux"), _c("uy"), _c("uz"), _c("wx", acc="rw"), _c("wy", acc="rw"), _c("wz", acc="rw")], """
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = glin(gid);
+    if (i >= P.a.x * P.a.y * P.a.z) { return; }
+    let c = cell3(i);
+    let s = 0.5 / P.c.x;
+    let xp = cidx(c + vec3<i32>(1,0,0)); let xm = cidx(c - vec3<i32>(1,0,0));
+    let yp = cidx(c + vec3<i32>(0,1,0)); let ym = cidx(c - vec3<i32>(0,1,0));
+    let zp = cidx(c + vec3<i32>(0,0,1)); let zm = cidx(c - vec3<i32>(0,0,1));
+    wx[i] = ((uz[yp] - uz[ym]) - (uy[zp] - uy[zm])) * s;
+    wy[i] = ((ux[zp] - ux[zm]) - (uz[xp] - uz[xm])) * s;
+    wz[i] = ((uy[xp] - uy[xm]) - (ux[yp] - ux[ym])) * s;
+}
+""", lib=_SWIRL_LIB, cellwise=False)
+
+_kernel("swirl_conf", [_c("wx"), _c("wy"), _c("wz"), _c("ux", acc="rw"), _c("uy", acc="rw"), _c("uz", acc="rw")], """
+fn wmag(i: u32) -> f32 { return length(vec3<f32>(wx[i], wy[i], wz[i])); }
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = glin(gid);
+    if (i >= P.a.x * P.a.y * P.a.z) { return; }
+    let c = cell3(i);
+    let s = 0.5 / P.c.x;
+    let eta = vec3<f32>(wmag(cidx(c + vec3<i32>(1,0,0))) - wmag(cidx(c - vec3<i32>(1,0,0))),
+                        wmag(cidx(c + vec3<i32>(0,1,0))) - wmag(cidx(c - vec3<i32>(0,1,0))),
+                        wmag(cidx(c + vec3<i32>(0,0,1))) - wmag(cidx(c - vec3<i32>(0,0,1)))) * s;
+    let unit = eta / (length(eta) + 1e-20);
+    let f = P.c.y * P.c.x * cross(unit, vec3<f32>(wx[i], wy[i], wz[i]));
+    ux[i] = ux[i] + f.x; uy[i] = uy[i] + f.y; uz[i] = uz[i] + f.z;
+}
+""", lib=_SWIRL_LIB, cellwise=False)
+
+_kernel("swirl_final", [_c("cvx"), _c("cvy"), _c("cvz"), _c("waves"), _c("ux", acc="rw"), _c("uy", acc="rw"), _c("uz", acc="rw")], """
+fn cget(a: u32, c: vec3<i32>, d: vec3<i32>) -> f32 {
+    let i = u32((c.x * d.y + c.y) * d.z + c.z);
+    if (a == 0u) { return cvx[i]; }
+    if (a == 1u) { return cvy[i]; }
+    return cvz[i];
+}
+fn csample(a: u32, q: vec3<f32>, d: vec3<i32>) -> f32 {
+    let lo = vec3<i32>(floor(q)); let f = q - vec3<f32>(lo);
+    let hi = min(lo + vec3<i32>(1), d - vec3<i32>(1));
+    let x0 = mix(mix(cget(a, vec3<i32>(lo.x,lo.y,lo.z), d), cget(a, vec3<i32>(lo.x,lo.y,hi.z), d), f.z),
+                 mix(cget(a, vec3<i32>(lo.x,hi.y,lo.z), d), cget(a, vec3<i32>(lo.x,hi.y,hi.z), d), f.z), f.y);
+    let x1 = mix(mix(cget(a, vec3<i32>(hi.x,lo.y,lo.z), d), cget(a, vec3<i32>(hi.x,lo.y,hi.z), d), f.z),
+                 mix(cget(a, vec3<i32>(hi.x,hi.y,lo.z), d), cget(a, vec3<i32>(hi.x,hi.y,hi.z), d), f.z), f.y);
+    return mix(x0, x1, f.x);
+}
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = glin(gid);
+    if (i >= P.a.x * P.a.y * P.a.z) { return; }
+    let c = cell3(i);
+    let fine = vec3<f32>(waves[4], waves[5], waves[6]);
+    let low = vec3<f32>(waves[7], waves[8], waves[9]);
+    let d = vec3<i32>(P.b.xyz);
+    let p = vec3<f32>(c) + low;
+    let q = clamp(p * (vec3<f32>(d) - vec3<f32>(1.0)) / (fine - vec3<f32>(1.0)), vec3<f32>(0.0), vec3<f32>(d) - vec3<f32>(1.0));
+    let vc = vec3<f32>(csample(0u, q, d), csample(1u, q, d), csample(2u, q, d));
+    let added = vec3<f32>(ux[i], uy[i], uz[i]) - vc;
+    let cap = waves[10] * length(vc);
+    let size = length(added);
+    let k = min(1.0, cap / max(size, 1e-20));
+    ux[i] = added.x * k; uy[i] = added.y * k; uz[i] = added.z * k;
+}
+""", lib=_SWIRL_LIB, cellwise=False)
+
+
+def swirl_dense(guide, factor, low, dims, waves, strength, confine, limit, voxel):
+    """GPU twin of `fluid_upres.swirl_dense_cpu`: the swirl velocity on the dense box, shape (*dims, 3)."""
+    ctx = _Ctx()
+    coarse = tuple(int(n) for n in guide.shape[:3])
+    count = int(np.prod(dims))
+    if 4 * count > ctx.max_binding:
+        raise Unsupported("the swirl box exceeds the adapter's storage buffer limit")
+    K, C, phase = waves
+    head = np.zeros(16, np.float32)
+    head[:11] = (strength, confine, len(phase), voxel, *(n * factor for n in coarse), *low, limit)
+    table = np.concatenate([head, np.concatenate([K, C, phase[:, None], np.zeros((len(phase), 1), np.float32)],
+                                                 axis=1).astype(np.float32).reshape(-1)])
+    wave_buf = ctx.buffer(table.nbytes)
+    ctx.write(wave_buf, table)
+    cv = []
+    for axis in range(3):
+        buf = ctx.buffer(guide[..., axis].size * 4)
+        ctx.write(buf, np.asarray(guide[..., axis], np.float32).reshape(-1))
+        cv.append(buf)
+    u = [ctx.buffer(count * 4) for _ in range(3)]
+    w = [ctx.buffer(count * 4) for _ in range(3)]
+    groups = (count + 255) // 256
+    grid = ("wg", (min(groups, 65535), (groups + 65534) // 65535, 1))
+    params = _u(a=dims, b=coarse, c=(voxel, confine))
+    ctx.dispatch("swirl_u", {"cvx": cv[0], "cvy": cv[1], "cvz": cv[2], "waves": wave_buf,
+                             "ux": u[0], "uy": u[1], "uz": u[2]}, params, grid)
+    ctx.dispatch("swirl_omega", {"ux": u[0], "uy": u[1], "uz": u[2], "wx": w[0], "wy": w[1], "wz": w[2]}, params, grid)
+    ctx.dispatch("swirl_conf", {"wx": w[0], "wy": w[1], "wz": w[2], "ux": u[0], "uy": u[1], "uz": u[2]}, params, grid)
+    ctx.dispatch("swirl_final", {"cvx": cv[0], "cvy": cv[1], "cvz": cv[2], "waves": wave_buf,
+                                 "ux": u[0], "uy": u[1], "uz": u[2]}, params, grid)
+    out = np.stack([ctx.read(buf, count * 4).view(np.float32).reshape(tuple(int(n) for n in dims)) for buf in u], axis=-1)
+    return out.copy()
+
+
+def reconstruct_sparse(fields, coords, fine, guide=None, previous=None, step=0.0, swirl=None):
     """GPU reconstruction into packed active-tile buffers, without a dense fine allocation."""
     ctx = _Ctx()
     coarse = next(iter(fields.values())).shape
@@ -142,6 +303,12 @@ def reconstruct_sparse(fields, coords, fine, guide=None, previous=None, step=0.0
         raise Unsupported("adapter cannot hold one up-res tile")
     guide_buf = None
     tilemap_buf = None
+    swirl_buf = ctx.buffer(16)
+    if swirl is not None:
+        if count * 12 > ctx.max_binding:
+            raise Unsupported("the swirl velocity exceeds the adapter's storage buffer limit")
+        swirl_buf = ctx.buffer(count * 12)
+        ctx.write(swirl_buf, np.ascontiguousarray(swirl, np.float32).reshape(-1))
     prior_grid = None
     if guide is not None:
         guide_buf = []
@@ -176,9 +343,9 @@ def reconstruct_sparse(fields, coords, fine, guide=None, previous=None, step=0.0
             else:
                 ctx.dispatch("upres_sparse_guided",
                              {"src": src, "coords": coord_buf, "tilemap": tilemap_buf,
-                              "vx": guide_buf[0], "vy": guide_buf[1], "vz": guide_buf[2], "out": out},
+                              "vx": guide_buf[0], "vy": guide_buf[1], "vz": guide_buf[2], "sv": swirl_buf, "out": out},
                              _u(a=(*fine, len(coords)), b=(*coarse, start),
-                                c=(step, 1.0 if prior is not None else 0.0)),
+                                c=(step, 1.0 if prior is not None else 0.0, 0.0 if swirl is None else 1.0)),
                              ("wg", (workgroups, 1, 1)))
             packed[start:start + length] = ctx.read(out, length * 4).view(np.float32)
         result[name] = packed.reshape(-1, 8, 8, 8)

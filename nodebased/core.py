@@ -1485,6 +1485,8 @@ SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
 SPECS["FluidUpres3D"] = {"inputs": ["volume"], "params": {
     "upres_factor": "2", "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
     "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",
+    # Swirl (Fluids 17 B): curl noise plus vorticity confinement on the fine grid, scaled by the coarse flow's speed.
+    "swirl": 0.0, "swirl_scale": 3.0,
     "cache_memory_mb": 256, "cache_disk_mb": 2048}}
 
 # Rigid-body simulation values (nodebased/rigid3d.py). Bodies are authored independently and
@@ -2090,6 +2092,7 @@ LIMITS.update({"flip_ratio": (0.0, 1.0), "particles_per_cell": (1, 64), "liquid_
                "temporal_smoothing": (0, 8), "thin_sheet_preservation": (0, 1), "foam_speed": (0.0, 1000000.0),
                "foam_curvature": (0.0, 1000000.0), "foam_size": (0.01, 100.0)})
 LIMITS.update({"turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0),
+               "swirl": (0.0, 10.0), "swirl_scale": (0.5, 64.0),
                "grain": (1, 8), "pulse_length": (0.001, 1000000.0), "shredding": (0.0, 1000000.0),
                "cache_memory_mb": (1, 1048576), "cache_disk_mb": (0, 16777216)})
 LIMITS.update({"foam_emission": (0.0, 1.0), "spray_emission": (0.0, 1.0), "bubbles_emission": (0.0, 1.0),
@@ -3199,6 +3202,12 @@ def upgrade_document(document):
                             boundary = params.get(f"boundary_{axis}", SPECS["FluidSolver3D"]["params"][f"boundary_{axis}"])
                             params.setdefault(f"boundary_{axis}_min", boundary)
                             params.setdefault(f"boundary_{axis}_max", boundary)
+                # An up-res node saved before the swirl (Fluids 17 B) has none: off, which reproduces its old output exactly.
+                if isinstance(node, dict) and node.get("type") == "FluidUpres3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("swirl", SPECS["FluidUpres3D"]["params"]["swirl"])
+                        params.setdefault("swirl_scale", SPECS["FluidUpres3D"]["params"]["swirl_scale"])
                 # A ParticleRender3D saved before foam draws every particle at its own size.
                 if isinstance(node, dict) and node.get("type") == "ParticleRender3D":
                     params = node.get("params")
