@@ -1129,12 +1129,13 @@ class TileExecutor:
         with self._lock:
             entries = self._paint_prefix.setdefault(key, [])
             for existing in list(entries):
-                if existing[0] == chain:
+                # the same list again, or an earlier version of the last stroke (it is being drawn or dragged): replaced
+                if existing[0] == chain or (len(existing[0]) == len(chain) and existing[0][:-1] == chain[:-1]):
                     entries.remove(existing)
                     self._paint_prefix_bytes -= existing[1].nbytes
             entries.insert(0, (chain, stored))
             self._paint_prefix_bytes += stored.nbytes
-            while len(entries) > 2:
+            while len(entries) > 3:
                 self._paint_prefix_bytes -= entries.pop()[1].nbytes
             self._paint_prefix.move_to_end(key)
             while self._paint_prefix_bytes > self.paint_prefix_budget and len(self._paint_prefix) > 1:
@@ -1318,10 +1319,15 @@ class TileExecutor:
                 prefix_key = hashes = None
         if resume is not None:
             self.paint_prefix_resumed += 1
-        painted = paint.rasterise(base, items, frame, source=base, reveal=reveal,
-                                  origin=(region.x, region.y),
-                                  canvas_size=(region.full_width, region.full_height),
-                                  replace=replace, resume=resume)
+        paint_args = dict(source=base, reveal=reveal, origin=(region.x, region.y),
+                          canvas_size=(region.full_width, region.full_height), replace=replace)
+        if prefix_key is not None and resume is None and len(items) > 1:
+            # Painted from nothing: keep the picture of every stroke but the last as well, so the next picture (the last stroke
+            # moved while it is drawn, or one more stroke after it) paints only what follows that.
+            before_last = paint.rasterise(base, items[:-1], frame, **paint_args)
+            self._paint_prefix_store(prefix_key, hashes[:-1], before_last)
+            resume = (len(items) - 1, before_last)
+        painted = paint.rasterise(base, items, frame, resume=resume, **paint_args)
         if prefix_key is not None and (resume is None or resume[0] != len(items)):
             self._paint_prefix_store(prefix_key, hashes, painted)
         painted = paintknobs.premultiply(painted, params)

@@ -418,6 +418,8 @@ def build_panel(window, key):
                 act()
         b.clicked.connect(mutate); buttons.addWidget(b)
     layout.addLayout(buttons)
+    built = {"selected": None, "layer": None, "points": None}       # what the controls under the list were built for
+
     def build_detail(layout):
         """Everything under the list and its buttons: the selected shape's controls, the draw button and the tracking actions.
         It is a function of its own so that an edit that changes only what this part shows (a point gaining a key) builds it
@@ -428,6 +430,7 @@ def build_panel(window, key):
         if layer_entry is not None:
             _layer_transform_controls(window, key, layout, layer_entry, frame, float_slider)
         i=listing.selected_index()
+        built.update(selected=i, layer=layer_name, points=any(si == i for si, _ in window.viewer.roto_selected_points))
         if 0 <= i < len(shapes):
             shape=shapes[i]
             frames = keyframes(shape)
@@ -798,21 +801,46 @@ def build_panel(window, key):
     build_detail(detail_layout)
 
     def refresh(changed):
-        """Bring the panel on screen up to date for an edit that touched only the points of the shapes in `changed`: their list rows
-        (the key button reads whether a point is keyed here), and the selected shape's controls when it is one of them or the
-        point selection changed. The caller has checked that nothing else the panel shows is different."""
+        """Bring the panel on screen up to date for an edit that touched only the points of the shapes in `changed` (and maybe the
+        selection): their list rows (the key button reads whether a point is keyed here), and the selected shape's controls. The
+        caller has checked that nothing else the panel shows is different. The controls are built again only when the selection, the
+        layer or the point selection moved; when only the selected shape's points gained or lost keys, its key count and the
+        previous and next key buttons are set in place (the other 130 widgets are what they were)."""
         nonlocal shapes, frame, detail_holder, detail_layout
-        shapes = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("shapes", []))
+        fresh = window.dispatcher.document.get("node_data", {}).get(key, {}).get("shapes", [])
+        selected = listing.selected_index()
+        # the snapshot the controls read: the shapes that changed, and the selected one, are copied again; the rest are what they were
+        shapes = [copy.deepcopy(fresh[index]) if index in changed or index == selected or index >= len(shapes) else shapes[index]
+                  for index in range(len(fresh))]
         frame = int(window.dispatcher.document["time"]["current"])
         for index in changed:
             listing.refresh_item(index)
         listing.sync_current()
-        old = detail_holder
-        detail_holder = QWidget(); detail_holder.setObjectName("roto-shape-detail")
-        detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
-        layout.replaceWidget(old, detail_holder)
-        old.hide(); old.setParent(None); old.deleteLater()
-        build_detail(detail_layout)
+        layer_name = getattr(window.viewer, "roto_list_layer", None)
+        points_selected = any(si == selected for si, _ in window.viewer.roto_selected_points)
+        if (selected != built["selected"] or layer_name != built["layer"] or points_selected != built["points"]
+                or not 0 <= selected < len(shapes)):
+            old = detail_holder
+            detail_holder = QWidget(); detail_holder.setObjectName("roto-shape-detail")
+            detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
+            layout.replaceWidget(old, detail_holder)
+            old.hide(); old.setParent(None); old.deleteLater()
+            build_detail(detail_layout)
+        elif selected in changed:
+            frames = keyframes(shapes[selected])
+            current_frame = int(window.dispatcher.document["time"]["current"])
+            count_label = detail_holder.findChild(QLabel, "roto-spline-key-count")
+            if count_label is not None:
+                count_label.setText(f"Key {frames.index(current_frame)+1 if current_frame in frames else 0} / {len(frames)}")
+            for name, delta in (("roto-spline-previous-key", -1), ("roto-spline-next-key", 1)):
+                button = detail_holder.findChild(QPushButton, name)
+                if button is None:
+                    continue
+                target = (max((f for f in frames if f < current_frame), default=None) if delta < 0
+                          else min((f for f in frames if f > current_frame), default=None))
+                button.setEnabled(target is not None)
+                button.clicked.disconnect()
+                button.clicked.connect(lambda _=False, at=target: window.set_time(current=at) if at is not None else None)
     root._roto_refresh = refresh
     return root
 

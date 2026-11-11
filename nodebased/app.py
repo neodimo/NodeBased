@@ -1668,6 +1668,7 @@ class RotoViewerToolbar(QWidget):
         self.settings_scroll.setWidget(self.settings_content); outer.addWidget(self.settings_scroll)
         self.settings_widgets = {}
         self._settings_signature = None
+        self._refresh_stamp = None
         self.settings_strip.hide()
         self.adjustSize(); self.hide()
 
@@ -1918,6 +1919,10 @@ class RotoViewerToolbar(QWidget):
         if self.viewer.roto_active_group == "Blur/Sharpen/Smear": tool = paint_names.get(self.viewer.paint_tool, "Blur")
         if self.viewer.roto_active_group == "Dodge/Burn": tool = paint_names.get(self.viewer.paint_tool, "Dodge")
         tool = tool or "Select Points"
+        parent, current_tool = self.parentWidget(), tool
+        stamp = (context[0], kind, tool, self._settings_signature, tuple(self.tool_by_group.items()), parent.width(), parent.height())
+        if stamp == self._refresh_stamp:
+            return          # nothing the strip and the tool buttons show has changed: no relayout (this runs in every Viewer paint)
         self.settings_strip.setProperty("toolName", tool)
         signature = (context[0], tool)
         if signature != self._settings_signature:
@@ -1960,6 +1965,8 @@ class RotoViewerToolbar(QWidget):
                 button.setToolTip(f"{tool}" + (f" ({shortcut})" if shortcut else ""))
                 y += button.sizeHint().height() + 3
         self.adjustSize(); self.move(6, max(6, (self.parentWidget().height() - y) // 2)); self.raise_()
+        self._refresh_stamp = (context[0], kind, current_tool, self._settings_signature, tuple(self.tool_by_group.items()),
+                               parent.width(), parent.height())
 
 
 class Viewer(PanZoomView):
@@ -16065,7 +16072,8 @@ class Window(QMainWindow):
         refresh = getattr(root, "_roto_refresh", None)
         if refresh is None:
             return False
-        refresh(changed)
+        with self._panel_build_quiet():
+            refresh(changed)
         self._panel_signature_shown = current
         return True
 

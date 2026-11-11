@@ -354,13 +354,37 @@ def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer=
                              auto_alpha=bool(nuke_knobs.get("auto_alpha", 1)))
 
 
+_BOUNDS_MEMO: dict = {}      # (file identity, knobs) -> (data window, display window) of a Read whose knobs make the windows come from the decoded picture
+
+
 def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=None, **nuke_knobs):
     """Read only source window metadata for a timeline frame (no pixel decode). A Read with any of Nuke's knobs changed
     (nodebased/readknobs.py) answers from its decoded raster, since the knobs move the windows."""
     from . import readknobs
     from .media import nearest_sequence_path, read_media_bounds, resolve_source_path
     if readknobs.active(nuke_knobs):
+        # The windows come from the decoded picture (0.1 s for a 1080p frame, on the interface thread for every request), so they
+        # are kept against the file's identity and every knob that can move them.
+        import os
+        identity = None
+        try:
+            lookup = read_lookup(dict(path=path, frame_offset=frame_offset, missing=missing, **{
+                name: nuke_knobs[name] for name in ("first", "last", "before", "after", "frame_mode", "frame_expr", "origfirst",
+                                                    "origlast") if name in nuke_knobs}), frame)
+            located, _exists = resolve_source_path(path, lookup[0], lookup[1])
+            if located is not None:
+                status = os.stat(located)
+                identity = (str(located), status.st_mtime_ns, status.st_size, int(subimage), int(frame_offset), str(missing),
+                            repr(sorted((name, repr(value)) for name, value in nuke_knobs.items())))
+        except (OSError, ValueError, TypeError, KeyError):
+            identity = None
+        if identity is not None and identity in _BOUNDS_MEMO:
+            return _BOUNDS_MEMO[identity]
         full = read_image_raster(path, subimage=subimage, frame_offset=frame_offset, missing=missing, frame=frame, **nuke_knobs)
+        if identity is not None:
+            if len(_BOUNDS_MEMO) >= 128:
+                _BOUNDS_MEMO.pop(next(iter(_BOUNDS_MEMO)))
+            _BOUNDS_MEMO[identity] = (full.data, full.display)
         return full.data, full.display
     source_frame, policy, _forced = read_lookup(dict(path=path, frame_offset=frame_offset, missing=missing), frame)
     resolved, exists = resolve_source_path(path, source_frame, policy)

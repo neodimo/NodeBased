@@ -61,6 +61,20 @@ class StrokeCacheTests(unittest.TestCase):
         self.assertSame(cached, plain, with_items(items))
         self.assertGreater(cached.paint_prefix_resumed, 0, "the sixth stroke was painted over the stored five")
 
+    def test_a_stroke_that_grows_while_it_is_drawn_paints_only_itself_each_time(self):
+        cached, plain = self.pair()
+        items = six_strokes()
+        fixed = items[:5]
+        moving = items[5]
+        resumed = 0
+        for count in range(2, len(moving["points"]) + 3):
+            drawn = copy.deepcopy(moving)
+            drawn["points"] = [{"x": 4.0 + 2.5 * k, "y": 27.0 + 0.3 * k, "pressure": 1.0} for k in range(count)]
+            self.assertSame(cached, plain, with_items(fixed + [drawn]))
+            if count > 2:
+                self.assertGreater(cached.paint_prefix_resumed, resumed, "each version resumes from the five fixed strokes")
+            resumed = cached.paint_prefix_resumed
+
     def test_undoing_the_last_stroke_returns_the_picture_of_the_rest_exactly(self):
         cached, plain = self.pair()
         items = six_strokes()

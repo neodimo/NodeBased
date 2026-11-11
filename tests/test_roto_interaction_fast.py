@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QPointF, QRectF, QSettings, Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLineEdit, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget
 
 from nodebased.app import STYLE, Window
 from tests.test_roto_ui import roto_document, triangle, point_value
@@ -330,8 +330,11 @@ class FastRotoTests(unittest.TestCase):
                 point["x"] = {"value": point["x"], "curve": {"interpolation": "smooth",
                                                               "keys": [{"frame": 1, "value": point["x"]}, {"frame": 3, "value": point["x"]}]}}
         viewer = self.open(shapes)
+        viewer.roto_selected_shape_index = 2
         self.window.rebuild_properties_dock()
         panel = self.window.properties.widget()
+        detail_before = panel.findChild(QWidget, "roto-shape-detail")
+        count_before = panel.findChild(QLabel, "roto-spline-key-count").text()
         list_before = panel.findChild(QWidget, "roto-shape-list")
         builds = []
         original = self.window.build_node_panel
@@ -346,6 +349,11 @@ class FastRotoTests(unittest.TestCase):
         self.assertIs(self.window.properties.widget(), panel)
         self.assertIs(panel.findChild(QWidget, "roto-shape-list"), list_before, "the list stays")
         self.assertIsNot(panel.findChild(QWidget, "roto-shape-key-2"), key_button_before, "the shape's own row is rebuilt")
+        self.assertIs(panel.findChild(QWidget, "roto-shape-detail"), detail_before,
+                      "the selected shape's controls are not built again for a point that gained a key")
+        count_after = panel.findChild(QLabel, "roto-spline-key-count").text()
+        self.assertNotEqual(count_after, count_before, "its key count follows the new key")
+        self.assertEqual(count_after, "Key 1 / 3")
         self.assertEqual(self.window._panel_signature_shown, self.window._roto_panel_signature("r"))
 
     @staticmethod
