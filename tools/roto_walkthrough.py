@@ -14,7 +14,9 @@ import gc
 import json
 import math
 import os
+import shutil
 import sys
+import tempfile
 import time
 import traceback
 from pathlib import Path
@@ -32,7 +34,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
 
 import numpy as np
 
-from nodebased import roto as roto_model, rotoinbetween, shapes as shape_model
+from nodebased import roto as roto_model, rotoinbetween, rotomatte, shapes as shape_model
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
 
@@ -78,6 +80,7 @@ class Walk:
         self.window = None
         self.key = "r"
         self.shots = 0
+        self.temps = []
 
     # -- documents -----------------------------------------------------------------------------------------------------
     def fresh(self, kind="roto", shapes=None, items=None, last=24, current=1, plate=None, size=None):
@@ -96,6 +99,11 @@ class Walk:
                 plate(dispatcher)
                 commands = []
             commands += [{"op": "view", "id": "r"}]
+        elif plate:      # a RotoPaint over the plate `plate(dispatcher)` builds (it connects the "paint" node's image input)
+            self.key = "paint"
+            dispatcher.execute({"op": "create", "id": "paint", "type": "RotoPaint", "pos": [0, 0]})
+            plate(dispatcher)
+            commands = [{"op": "view", "id": "paint"}]
         else:
             self.key = "paint"
             commands = [{"op": "create", "id": "plate", "type": "Checker", "params": {"width": WIDTH, "height": HEIGHT, "size": 40}},
@@ -118,6 +126,16 @@ class Walk:
         self.app.processEvents()
         self.viewer.setFocus()
         return self.window
+
+    def folder(self):
+        """A scratch folder for synthetic picture files; removed when the scene ends."""
+        path = Path(tempfile.mkdtemp(prefix="nb-walk-"))
+        self.temps.append(path)
+        return path
+
+    def cleanup(self):
+        while self.temps:
+            shutil.rmtree(self.temps.pop(), ignore_errors=True)
 
     def close(self):
         if self.window is not None:
@@ -194,6 +212,17 @@ class Walk:
         QTest.mouseRelease(viewport, LEFT, mods, pos=end)
         self.settle()
 
+    def path_drag(self, points, mods=NO_MOD, substeps=3):
+        """Press at the first data point, move through the rest, release at the last (a curved drag)."""
+        viewport = self.viewer.viewport()
+        mapped = [self.vpos(*p) for p in points]
+        QTest.mousePress(viewport, LEFT, mods, pos=mapped[0])
+        for a, b in zip(mapped, mapped[1:]):
+            for i in range(1, substeps + 1):
+                QTest.mouseMove(viewport, a + (b - a) * (i / substeps), 2)
+        QTest.mouseRelease(viewport, LEFT, mods, pos=mapped[-1])
+        self.settle()
+
     def key_press(self, key, mods=NO_MOD):
         # Offscreen, a floating widget can become the active window after a click; the viewer needs the keyboard.
         self.window.activateWindow()
@@ -240,6 +269,27 @@ class Walk:
         self.settle()
         name = f"{self.result.number:02d}-{self.shots}-{label}.png"
         widget.grab().save(str(self.out_dir / name))
+        self.result.screens.append(name)
+        self.result.captions.append(caption or label.replace("-", " ").capitalize())
+
+    def shot_pair(self, label, left, right, caption=None):
+        """One screenshot made of two viewer pictures side by side, labelled off and on."""
+        from PySide6.QtGui import QColor, QFont, QImage, QPainter
+        self.shots += 1
+        gap = 12
+        out = QImage(left.width() + right.width() + gap, left.height(), QImage.Format.Format_ARGB32)
+        out.fill(QColor("#202020"))
+        painter = QPainter(out)
+        painter.drawImage(0, 0, left)
+        painter.drawImage(left.width() + gap, 0, right)
+        painter.setPen(QColor("#ffd54a"))
+        font = QFont(); font.setPointSize(14); font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(14, 28, "switch off")
+        painter.drawText(left.width() + gap + 14, 28, "switch on")
+        painter.end()
+        name = f"{self.result.number:02d}-{self.shots}-{label}.png"
+        out.save(str(self.out_dir / name))
         self.result.screens.append(name)
         self.result.captions.append(caption or label.replace("-", " ").capitalize())
 
@@ -1071,6 +1121,471 @@ def s19(w):
     w.note(f"Fill in-betweens: worst middle frame {max(middle_before):.1f} px off before, {max(middle_after):.2f} px after; keys {keyed_before} to 1 through {last}")
 
 
+# ---- Past Nuke, second tour: ripple edit, outlines with holes, GPU mattes, stick to plate, shapes from matte, reduce keys ---
+def sequence_plate(w, make_frame, frames, node_id="plate", target="r", input_name="bg"):
+    """A plate function for `Walk.fresh`: `make_frame(frame)` (an H x W x 4 float array) written as an EXR sequence, read by a Read node.
+
+    Every picture is computed from a formula, so the pack regenerates exactly; the files live in a scratch folder that is removed
+    when the scene ends."""
+    from nodebased.media import write_exr
+    folder = w.folder()
+    for frame in frames:
+        write_exr(str(folder / f"plate.{frame:04d}.exr"), np.ascontiguousarray(make_frame(frame), np.float32), bits="float")
+
+    def build(dispatcher):
+        dispatcher.execute({"op": "create", "id": node_id, "type": "Read", "params": {"path": str(folder / "plate.%04d.exr")}})
+        dispatcher.execute({"op": "connect", "id": target, "input": input_name, "source": node_id})
+    return build
+
+
+def rgba(gray=None, colour=None, coverage=None, background=(0.1, 0.1, 0.1)):
+    """An RGBA picture: `gray` (H x W) in all three channels, or `colour` painted over `background` where `coverage` is."""
+    if gray is not None:
+        return np.stack(np.broadcast_arrays(gray, gray, gray, np.ones_like(gray)), axis=-1).astype(np.float32)
+    out = np.zeros(coverage.shape + (4,), np.float32)
+    out[..., 3] = 1.0
+    out[..., :3] = np.asarray(background) * (1 - coverage[..., None]) + np.asarray(colour) * coverage[..., None]
+    return out
+
+
+def coverage_of(inside, width=WIDTH, height=HEIGHT, factor=4, x0=0, y0=0):
+    """Anti-aliased coverage (0 to 1) of the region `inside(x, y)` is true for, by `factor` x `factor` sub-samples per pixel."""
+    ys, xs = np.mgrid[0:height * factor, 0:width * factor].astype(np.float64)
+    hit = inside(x0 + (xs + 0.5) / factor, y0 + (ys + 0.5) / factor).astype(np.float64)
+    return hit.reshape(height, factor, width, factor).mean(axis=(1, 3))
+
+
+def animated(shape, keys_for):
+    """`shape` with every point's x and y keyed linearly; `keys_for(frame)` is the (dx, dy) offset added on that frame."""
+    shape = copy.deepcopy(shape)
+    frames = sorted(keys_for)
+    for point in shape["points"]:
+        for name, axis in (("x", 0), ("y", 1)):
+            value = point[name]
+            point[name] = {"value": value, "curve": {"interpolation": "linear", "keys": [
+                {"frame": f, "value": value + keys_for[f][axis]} for f in frames]}}
+    return shape
+
+
+def key_values(point, name="x"):
+    return {k["frame"]: k["value"] for k in point[name]["curve"]["keys"]}
+
+
+@scene(20, "Ripple edit: one drag moves the same point on every key in the range, and Fit to edges follows",
+       ["editing_existing_timing.html"],
+       "Nuke's ripple edit button applies a point edit to the other keys of the shape; drags on one frame move that point at every key in the range.")
+def s20(w):
+    box = animated(square("box", 120, 80, 360, 240), {1: (0, 0), 5: (40, 20), 10: (80, 40), 20: (120, 60)})
+    w.fresh("roto", shapes=[box], last=24, current=5)
+    w.viewer.roto_selected_shape_index = 0
+    w.tool("Select", "Select Points")
+    strip = w.viewer.roto_toolbar.settings_widgets
+    strip["ripple_edit"].setChecked(True)
+    strip["ripple_mode"].setCurrentIndex(strip["ripple_mode"].findData("range"))
+    w.viewer.roto_toolbar.set_setting("r", "Select Points", "ripple_from", 1.0)
+    w.viewer.roto_toolbar.set_setting("r", "Select Points", "ripple_to", 10.0)
+    w.settle()
+    w.check(w.viewer.roto_ripple_window() == (1, 10), f"ripple edit is on for frames 1 to 10 (window {w.viewer.roto_ripple_window()})")
+    before = [{n: key_values(p, n) for n in ("x", "y")} for p in w.shape_entries()[0]["points"]]
+    w.shot("ripple-on-frame-5", "Frame 5 with ripple edit on for frames 1 to 10: the red border around the viewer marks the mode.")
+    depth = w.undo_depth()
+    start = (before[0]["x"][5], before[0]["y"][5])
+    w.click(*start)
+    w.check(w.viewer.roto_selected_points == {(0, 0)}, "clicking the top-left point selects it")
+    w.drag(start, (start[0] + 25, start[1] + 15))
+    after = [{n: key_values(p, n) for n in ("x", "y")} for p in w.shape_entries()[0]["points"]]
+    offsets = {f: (after[0]["x"][f] - before[0]["x"][f], after[0]["y"][f] - before[0]["y"][f]) for f in (1, 5, 10, 20)}
+    w.check(all(abs(offsets[f][0] - offsets[5][0]) < 1e-6 and abs(offsets[f][1] - offsets[5][1]) < 1e-6 for f in (1, 10)),
+            f"the keys on frames 1 and 10 moved by the same offset as frame 5 ({offsets})")
+    w.check(abs(offsets[5][0] - 25) < 2 and abs(offsets[5][1] - 15) < 2, f"the drag moved the point by about 25 and 15 pixels ({offsets[5]})")
+    w.check(offsets[20] == (0.0, 0.0), "the key on frame 20, outside the range, did not move")
+    w.check(all(after[i] == before[i] for i in (1, 2, 3)), "the other three points did not move")
+    w.check(w.undo_depth() == depth + 1, "the whole ripple is one undo step")
+    w.shot("frame-5-after-drag", f"Frame 5 after dragging the top-left corner by {offsets[5][0]:.0f} and {offsets[5][1]:.0f} pixels.")
+    w.goto(1)
+    w.shot("frame-1-moved-too", f"Frame 1: the same corner moved by {offsets[1][0]:.0f} and {offsets[1][1]:.0f}, though it was never touched on this frame.")
+    w.goto(10)
+    w.shot("frame-10-moved-too", f"Frame 10: moved by {offsets[10][0]:.0f} and {offsets[10][1]:.0f} as well; frame 20, outside the range, stayed.")
+    w.note(f"Ripple range 1 to 10: one drag of (25, 15) at frame 5 moved the keys on frames 1, 5 and 10 by the same offset; frame 20 unchanged; one undo step")
+    # Fit to edges carries through the same range.
+    wobble = [6.0, -9.0, 11.0, -5.0, 8.0, -12.0, 4.0, 10.0, -7.0, 9.0, -10.0, 5.0, 12.0, -6.0, 7.0, -8.0]
+    rough = animated(ring_shape("rough", ring(16, SUBJECT_R * EDGE_BIAS, (SUBJECT[0] + 9, SUBJECT[1] - 7), wobble, handles=False)),
+                     {1: (0, 0), 5: (0, 0), 10: (0, 0)})
+    frame_box = (SUBJECT[0] - SUBJECT_R, SUBJECT[1] - SUBJECT_R, 2 * SUBJECT_R, 2 * SUBJECT_R)
+    w.fresh("roto", shapes=[rough], last=10, current=5, plate=disc_plate(frame_box))
+    w.viewer.roto_selected_shape_index = 0
+    w.tool("Select", "Select Points")
+    strip = w.viewer.roto_toolbar.settings_widgets
+    strip["ripple_edit"].setChecked(True)
+    w.viewer.roto_toolbar.set_setting("r", "Select Points", "fit_band", 18.0)
+    w.settle()
+    w.check(w.viewer.roto_ripple_window() == (1, 10), "ripple edit is on for all frames")
+    keys_before = [key_values(p) for p in w.shape_entries()[0]["points"]]
+    error_before = ring_error(shape_model.resolve_shapes(w.payload, 5)[0]["points"], SUBJECT, SUBJECT_R * EDGE_BIAS)
+    w.shot("fit-before", f"Frame 5, ripple on: a rough outline, {error_before:.1f} pixels off the subject's edge, keyed on frames 1, 5 and 10.")
+    undo = w.undo_depth()
+    strip["fit_to_edges"].click(); w.settle(); w.wait(lambda: False, 0.3)
+    keys_after = [key_values(p) for p in w.shape_entries()[0]["points"]]
+    fitted = [a[5] - b[5] for a, b in zip(keys_after, keys_before)]
+    w.check(max(abs(o) for o in fitted) > 0.3, "Fit to edges moved the points on frame 5")
+    w.check(all(abs((a[f] - b[f]) - o) < 1e-6 for a, b, o in zip(keys_after, keys_before, fitted) for f in (1, 10)),
+            "the keys on frames 1 and 10 moved by the offset Fit to edges found on frame 5")
+    w.check(w.undo_depth() == undo + 1, "Fit to edges with ripple is one undo step")
+    error_after = ring_error(shape_model.resolve_shapes(w.payload, 5)[0]["points"], SUBJECT, SUBJECT_R * EDGE_BIAS)
+    w.goto(10)
+    w.shot("fit-carried-to-frame-10", f"Frame 10 after Fit to edges on frame 5: the offsets reached this key too (frame 5 is now {error_after:.1f} pixels off).")
+    w.note(f"Ripple with Fit to edges: frame 5 outline error {error_before:.1f} px to {error_after:.2f} px; frames 1 and 10 keys moved by the same per-point offsets (largest {max(abs(o) for o in fitted):.1f} px)")
+
+
+SUBJECT_ORANGE, DARK_BACKGROUND = (0.9, 0.55, 0.25), (0.1, 0.1, 0.1)
+
+
+def ring_inside(centre=(170.0, 180.0), outer=95.0, inner=40.0):
+    return lambda x, y: (np.hypot(x - centre[0], y - centre[1]) <= outer) & (np.hypot(x - centre[0], y - centre[1]) >= inner)
+
+
+def letter_inside(centre=(450.0, 180.0)):
+    """A block letter in the style of a B or an 8: a rounded rectangle with two round holes."""
+    def inside(x, y):
+        dx = np.maximum(np.abs(x - centre[0]) - 35.0, 0)
+        dy = np.maximum(np.abs(y - centre[1]) - 75.0, 0)
+        body = np.hypot(dx, dy) <= 25.0
+        upper = np.hypot(x - centre[0], y - (centre[1] - 38.0)) <= 26.0
+        lower = np.hypot(x - centre[0], y - (centre[1] + 44.0)) <= 22.0
+        return body & ~upper & ~lower
+    return inside
+
+
+@scene(21, "Outline from click, with holes: one click on a ring and one on a two-hole letter",
+       ["drawing_shapes.html", "using_bezier_tools.html"],
+       "Nuke has no outline from a click: a shape is drawn point by point, and a hole is a second shape drawn and set to subtract by hand.")
+def s21(w):
+    ring_in, letter_in = ring_inside(), letter_inside()
+    coverage = coverage_of(lambda x, y: ring_in(x, y) | letter_in(x, y))
+    image = rgba(colour=SUBJECT_ORANGE, coverage=coverage)
+    w.fresh("roto", last=1, current=1, plate=sequence_plate(w, lambda frame: image, [1]))
+    w.tool("Shapes", "Bezier")
+    w.viewer.roto_toolbar.set_setting("r", "Bezier", "outline_click", True)
+    w.settle()
+    w.shot("plate", "The picture: an orange ring and a block letter with two holes, on dark grey. Nothing is drawn yet.")
+    depth = w.undo_depth()
+    w.click(170 + 68, 180)
+    shapes = w.shape_entries()
+    w.check([s["mode"] for s in shapes] == ["union", "subtract"], f"one click on the ring gives the outline and one hole that subtracts ({[s['mode'] for s in shapes]})")
+    w.check(w.undo_depth() == depth + 1, "the outline and its hole are one undo step")
+    w.shot("ring-one-click", "One click on the ring: its outer outline and the hole in the middle, which subtracts, in one step.")
+    depth = w.undo_depth()
+    w.click(450, 180 - 70)
+    shapes = w.shape_entries()
+    modes = [s["mode"] for s in shapes]
+    w.check(modes == ["union", "subtract", "union", "subtract", "subtract"], f"one click on the letter gives its outline and two holes ({modes})")
+    w.check(w.undo_depth() == depth + 1, "the letter and its two holes are one undo step")
+    w.shot("letter-one-click", "One click on the letter: the outline and both holes, each hole its own subtracting shape.")
+    resolved = shape_model.resolve_shapes(w.payload, 1)
+    matte = roto_model.rasterise(resolved, WIDTH, HEIGHT)[..., 3]
+    wrong = int(((matte >= 0.5) != (coverage >= 0.5)).sum())
+    mean = float(np.abs(matte - coverage).mean())
+    w.check(matte[180, 170] < 0.01 and matte[180 - 38, 450] < 0.01 and matte[180 + 44, 450] < 0.01, "all three holes are empty in the drawn matte")
+    w.check(matte[180, 170 + 68] > 0.99 and matte[180, 450 + 30] > 0.99, "the ring and the letter are full in the drawn matte")
+    w.check(wrong < 0.01 * float((coverage >= 0.5).sum()), f"the drawn matte agrees with the picture ({wrong} pixels of {int((coverage >= 0.5).sum())} differ)")
+    w.note(f"Outline with holes: ring 1 hole, letter 2 holes; rendered matte differs from the picture on {wrong} of {int((coverage >= 0.5).sum())} subject pixels (mean difference {mean:.4f})")
+    w.window.command({"op": "undo"}); w.settle()
+    w.check(len(w.shape_entries()) == 2, "one undo removes the letter and both holes")
+    w.window.command({"op": "redo"}); w.settle()
+
+
+def _blob(index, centre):
+    """A closed wobbly shape of 10 points around `centre`, different for each `index`."""
+    wobble = [8.0 * math.sin(2.1 * i + index) + 5.0 * math.cos(1.3 * i * index + 0.4) for i in range(10)]
+    return ring(10, 38.0 + 3.0 * (index % 4), centre, wobble)
+
+
+@scene(22, "GPU mattes switch: the same Roto drawn on the processor and on the graphics card",
+       [],
+       "Nuke draws Roto mattes on the processor only.")
+def s22(w):
+    from nodebased import rotogpu
+    shapes = []
+    for index in range(24):
+        column, row = index % 6, index // 6
+        shape = ring_shape(f"blob{index + 1}", _blob(index, (70.0 + column * 100.0, 55.0 + row * 85.0)), feather=4.0 + 2.0 * (index % 5),
+                           color=[0.3 + 0.7 * ((index * 5) % 7) / 6, 0.3 + 0.7 * ((index * 3) % 5) / 4, 0.4 + 0.6 * (index % 3) / 2, 1.0],
+                           opacity=0.6 + 0.4 * ((index + 1) % 3) / 2)
+        shapes.append(shape)
+    w.fresh("roto", shapes=shapes, last=1, current=1)
+    if rotogpu.forced():
+        raise Skip("NODEBASED_ROTO_GPU is set in the environment, which overrides the switch")
+    rotogpu.reset_counters()
+    try:
+        w.check(not w.window.preferences.roto_gpu(), "the switch starts off")
+        w.window.apply_roto_gpu()
+        off = w.window.evaluator.evaluate_raster(w.document, target="r", frame=1).to_display().copy()
+        w.check(rotogpu.counters["gpu_mattes"] == 0, "with the switch off the card draws nothing")
+        left = w.viewer.grab().toImage()
+        w.window.preferences.set_roto_gpu(True)
+        w.check(w.window.preferences.roto_gpu(), "Settings now has the switch on")
+        w.window.apply_roto_gpu()
+        w.settle()
+        on = w.window.evaluator.evaluate_raster(w.document, target="r", frame=1).to_display().copy()
+        drawn = rotogpu.counters["gpu_mattes"]
+        right = w.viewer.grab().toImage()
+        if drawn == 0:
+            w.differs(f"the card drew no matte ({rotogpu.counters['last_reason'] or rotogpu.counters['last_error'] or 'no graphics adapter'}); the processor drew it, so both pictures are identical by fallback")
+        difference = np.abs(off - on)
+        largest, mean = float(difference.max()), float(difference.mean())
+        w.check(largest < 5e-5, f"the two pictures agree to within 5e-5 ({largest:.2e})")
+        w.shot_pair("switch-off-and-on", left, right, "Left: switch off (the processor draws the 24 shapes). Right: switch on (the card draws them).")
+        w.shot("settings-on", f"The window with the switch on; the card drew {drawn} matte{'s' if drawn != 1 else ''} for this frame.")
+        w.note(f"GPU mattes: 24 feathered shapes, largest difference between processor and card {largest:.2e}, mean {mean:.1e} (an 8-bit step is 3.9e-03); the card drew {drawn} matte(s)")
+    finally:
+        w.window.preferences.set_roto_gpu(False)
+        rotogpu.set_enabled(False)
+
+
+_STICK_TEXTURE = {}
+
+
+def stick_texture():
+    """A smoothed random texture, the same every time (seed 3), large enough for the plate to slide about on."""
+    if not _STICK_TEXTURE:
+        from nodebased import opticalflow
+        rng = np.random.default_rng(3)
+        h, wd = HEIGHT + 200, WIDTH + 200
+        yy, xx = np.mgrid[:h, :wd].astype(np.float32)
+        out = np.zeros((h, wd), np.float32)
+        for scale, amp in ((2, .5), (4, 1.0), (8, 1.2), (16, .8)):
+            small = rng.random((h // scale + 2, wd // scale + 2)).astype(np.float32)
+            out += amp * opticalflow._sample(small, xx / scale, yy / scale)
+        _STICK_TEXTURE["image"] = (out - out.min()) / (out.max() - out.min())
+    return _STICK_TEXTURE["image"]
+
+
+def bend_map(frame, x, y):
+    """Where the plate pixel now at (x, y) was on frame 1: the plate slides left and up and bends in two directions."""
+    t = frame - 1
+    return x - 1.0 * t - 0.35 * t * np.sin(y / 38.0), y - 0.4 * t + 0.3 * t * np.sin(x / 45.0)
+
+
+def bending_plate(frame):
+    from nodebased import opticalflow
+    yy, xx = np.mgrid[:HEIGHT, :WIDTH].astype(np.float32)
+    bx, by = bend_map(frame, xx, yy)
+    return rgba(gray=opticalflow._sample(stick_texture(), bx + 100, by + 100))
+
+
+def bend_truth(frame, points):
+    """Where points painted on frame 1 sit on `frame` (data coordinates): the inverse of `bend_map`, by iteration."""
+    xs, ys = np.array([p[0] - 0.5 for p in points]), np.array([p[1] - 0.5 for p in points])
+    x, y = xs.copy(), ys.copy()
+    for _ in range(40):
+        bx, by = bend_map(frame, x, y)
+        x, y = x - (bx - xs), y - (by - ys)
+    return np.stack([x + 0.5, y + 0.5], axis=1)
+
+
+@scene(23, "Stick to plate: a stroke painted on frame 1 follows a bending, textured plate",
+       ["animating_strokes_shapes.html"],
+       "Nuke's RotoPaint strokes stay where they were painted; following a moving plate means tracking and linking by hand.")
+def s23(w):
+    last = 10
+    w.fresh("paint", last=last, current=1, plate=sequence_plate(w, bending_plate, range(1, last + 1), target="paint", input_name="image"))
+    w.tool("Brushes", "Brush")
+    for key, value in (("brush_size", 16.0), ("brush_hardness", 0.8), ("opacity", 1.0), ("color", [1.0, 0.1, 0.1, 1.0]),
+                       ("lifetime", "all frames")):
+        w.viewer.roto_toolbar.set_setting("paint", "Brush", key, value)
+    w.settle()
+    curve = [(140 + 360 * s, 190 + 55 * math.sin(s * 5.0)) for s in np.linspace(0, 1, 40)]
+    w.path_drag(curve)
+    strokes = [i for i, e in enumerate(w.entries()) if e.get("kind") == "stroke"]
+    w.check(len(strokes) == 1, "one stroke was painted on frame 1")
+    w.check(w.entries()[strokes[0]]["lifetime"] == {"mode": "all"}, "the stroke lives on all frames")
+    painted = [(p["x"], p["y"]) for p in number_points(w.entries()[strokes[0]], 1)]
+    w.shot("frame-1-painted", "Frame 1: a red stroke painted across the textured plate with the brush.")
+    w.goto(10); w.wait(lambda: False, 0.4)
+    w.shot("frame-10-without-stick", "Frame 10 before Stick to plate: the plate has slid and bent, and the stroke stayed where it was painted.")
+    w.goto(1)
+    w.tool("Select", "Select All")
+    w.viewer.paint_selected_item_index = strokes[0]
+    undo = w.undo_depth()
+    strip = w.viewer.roto_toolbar.settings_widgets
+    w.check("stick_to_plate" in strip, f"the Select tools strip has a Stick to plate button ({sorted(strip)[:12]})")
+    strip["stick_to_plate"].click()
+    w.check(w.wait(lambda: w.window._points_future is None, 240), "Stick to plate finishes")
+    w.settle()
+    item = w.entries()[strokes[0]]
+    w.check("stick" in item, "the stroke now carries its stick record")
+    w.check(w.undo_depth() == undo + 1, "Stick to plate is one undo step")
+    worst = {}
+    for frame in (5, 10):
+        resolved = shape_model.resolve_paint_items(w.payload, frame)[strokes[0]]
+        got = np.array([[p["x"], p["y"]] for p in resolved["points"]])
+        truth = bend_truth(frame, painted)
+        errors = np.hypot(got[:, 0] - truth[:, 0], got[:, 1] - truth[:, 1])
+        worst[frame] = (float(errors.mean()), float(errors.max()))
+        w.check(errors.mean() < 1.0 and errors.max() < 2.5, f"on frame {frame} the stroke sits on the same patch of texture (mean {errors.mean():.2f} px, largest {errors.max():.2f} px)")
+    for frame in (5, 10):
+        w.goto(frame); w.wait(lambda: False, 0.4)
+        w.shot(f"frame-{frame}-stuck", f"Frame {frame} after Stick to plate: the stroke has moved and bent with the texture (mean {worst[frame][0]:.2f} px off the true position).")
+    w.goto(1)
+    w.note(f"Stick to plate: stroke of {len(painted)} points over {last - 1} frames; mean error {worst[5][0]:.2f} px on frame 5 and {worst[10][0]:.2f} px on frame 10, largest {max(worst[5][1], worst[10][1]):.2f} px")
+
+
+def number_points(item, frame):
+    """The stroke's points resolved at `frame` as plain numbers."""
+    return shape_model.resolve_paint_items({"items": [item]}, frame)[0]["points"]
+
+
+SCREEN_GREEN, SUBJECT_COLOUR = (0.1, 0.8, 0.2), (0.9, 0.5, 0.2)
+
+
+def keyed_subject(frame):
+    """The ellipse that crosses the screen over 12 frames: where it is, and how big."""
+    cx, cy = 150.0 + 28.0 * frame, 150.0 + 6.0 * frame - 0.4 * frame ** 2
+    rx, ry = 85.0 + frame, 55.0
+    return lambda x, y: ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1.0
+
+
+def green_screen(frame):
+    return rgba(colour=SUBJECT_COLOUR, coverage=coverage_of(keyed_subject(frame)), background=SCREEN_GREEN)
+
+
+@scene(24, "Shapes from matte: a keyed subject becomes editable shapes over 12 frames",
+       ["animating_strokes_shapes.html"],
+       "Nuke has no matte-to-shape command: shapes are drawn over the keyed subject by hand and keyed frame by frame.")
+def s24(w):
+    last = 12
+
+    def build(dispatcher):
+        folder = sequence_plate(w, green_screen, range(1, last + 1), node_id="screen", target="r", input_name="bg")
+        folder(dispatcher)
+        dispatcher.execute({"op": "create", "id": "key", "type": "ChromaKeyer", "pos": [0, 0]})
+        dispatcher.execute({"op": "connect", "id": "key", "input": "image", "source": "screen"})
+        dispatcher.execute({"op": "connect", "id": "r", "input": "bg", "source": "key"})
+    w.fresh("roto", last=last, current=5, plate=build)
+    w.wait(lambda: False, 0.5)
+
+    def true_alpha(frame):
+        return w.window.evaluator.evaluate_raster(w.document, target="key", frame=frame).to_display()[..., 3]
+    w.shot("keyed-plate", "Frame 5: a green-screen plate keyed by ChromaKeyer; the subject is the only thing left. No shapes yet.")
+    depth = w.undo_depth()
+    w.check(w.viewer.shapes_from_matte(first=1, last=last, step=4), "Shapes from matte traced the keyer's alpha over frames 1 to 12")
+    w.settle()
+    w.check(w.undo_depth() == depth + 1, "the whole trace is one undo step")
+    w.window.command({"op": "undo"}); w.settle()
+    w.check(w.shape_entries() == [], "one undo removes the shape")
+    w.window.command({"op": "redo"}); w.settle()
+    shapes = w.shape_entries()
+    w.check(len(shapes) == 1 and shapes[0]["name"] == "matte1", f"one shape was made ({[s['name'] for s in shapes]})")
+    keyed = sorted({k["frame"] for p in shapes[0]["points"] for k in p["x"]["curve"]["keys"]})
+    w.check({1, 5, 9, 12} <= set(keyed), f"the shape is keyed on every fourth frame and the last ({keyed})")
+    per_frame, reach = {}, {}
+    factor = 8
+    ys8, xs8 = np.mgrid[0:HEIGHT * factor, 0:WIDTH * factor].astype(np.float64)
+    for frame in range(1, last + 1):
+        resolved = shape_model.resolve_shapes(w.payload, frame)
+        matte = roto_model.rasterise(resolved, WIDTH, HEIGHT)[..., 3]
+        fine = keyed_subject(frame)((xs8 + 0.5) / factor, (ys8 + 0.5) / factor)     # the subject's true shape at 8x
+        inside = fine.reshape(HEIGHT, factor, WIDTH, factor).mean(axis=(1, 3)) >= 0.5
+        wrong = (matte >= 0.5) != inside
+        per_frame[frame] = 100.0 * float(wrong.sum()) / float(inside.sum())
+        edge = fine & ~(np.roll(fine, 1, 0) & np.roll(fine, -1, 0) & np.roll(fine, 1, 1) & np.roll(fine, -1, 1))
+        ey, ex = np.nonzero(edge)
+        wy, wx = np.nonzero(wrong)
+        samples = np.stack([(ex + 0.5) / factor, (ey + 0.5) / factor], axis=1)
+        reach[frame] = float(max((np.sqrt(((samples - (x + 0.5, y + 0.5)) ** 2).sum(-1)).min() for x, y in zip(wx, wy)), default=0.0))
+    worst, farthest = max(per_frame.values()), max(reach.values())
+    traced = rotomatte.key_frames_for(1, last, rotomatte.DEFAULT_STEP)      # the frames the trace keyed; the fill adds more in between
+    key_reach = max(reach[f] for f in traced)
+    w.check(key_reach <= 1.0 and worst < 4.0,
+            f"the shapes follow the keyed matte (keyed frames within {key_reach:.2f} px of its edge; every frame within {farthest:.2f} px)")
+    if farthest > 1.0:
+        w.differs(f"the in-between frames are up to {farthest:.1f} px off the matte's edge ({worst:.1f}% of the subject's pixels), "
+                  f"where the tool's own tests state 1 px; the keyed frames are within {key_reach:.2f} px. The subject's path curves a little (it speeds up "
+                  "and slows down vertically); on a straight path the same trace stays within 0.4% of its pixels")
+    w.goto(5)
+    w.shot("keyed-frame-5", f"Frame 5, a keyed frame: the shape outline sits on the subject ({per_frame[5]:.2f}% of its pixels differ from the matte).")
+    w.goto(7)
+    w.shot("in-between-frame-7", f"Frame 7, between keys: the outline still follows the subject ({per_frame[7]:.2f}% differ).")
+    w.note(f"Shapes from matte: 1 shape keyed on frames {keyed}; worst frame {worst:.2f}% of subject pixels differ from the keyed matte (none farther than {farthest:.2f} px from its edge), frame 5 {per_frame[5]:.2f}%, frame 7 {per_frame[7]:.2f}%")
+
+
+@scene(25, "Reduce keys: a tracked shape keeps its path with a fraction of the keys",
+       ["editing_existing_timing.html"],
+       "Nuke keeps every key you or a track made; thinning them out is done by deleting keys by hand.")
+def s25(w):
+    from nodebased.tileexec import TileExecutor
+    if not hasattr(w.window if w.window is not None else Window, "reduce_roto_keys"):
+        raise Skip("Reduce keys is not on this branch yet (it merges separately); this scene runs once it has landed")
+    count, last = 24, 10
+    start = ring(count, TRACK_R, TRACK_CENTRE)
+    plate = StretchingPlate()
+    with patch.object(TileExecutor, "compose_region", lambda *a, **k: plate(*a, **k)):
+        def behind(dispatcher):
+            dispatcher.execute({"op": "create", "id": "plate", "type": "Checker", "params": {"width": WIDTH, "height": HEIGHT}})
+            dispatcher.execute({"op": "connect", "id": "r", "input": "bg", "source": "plate"})
+        w.fresh("roto", shapes=[ring_shape("subject", start)], last=last, current=1, plate=behind)
+        w.viewer.roto_selected_shape_index = 0
+        w.tool("Select", "Select Points")
+        w.check(w.window.track_roto_points("r"), "Track points starts from frame 1")
+        w.check(w.wait(lambda: w.window._points_future is None, 120), "the point track finishes")
+        w.settle()
+
+        def key_counts():
+            points = w.shape_entries()[0]["points"]
+            return sum(len(p[n]["curve"]["keys"]) if isinstance(p[n], dict) and p[n].get("curve") else 0
+                       for p in points for n in ("x", "y")), len(w.shape_entries()[0]["points"][0]["x"]["curve"]["keys"])
+        total_before, per_point_before = key_counts()
+        w.check(per_point_before == last, f"Track points keyed every frame ({per_point_before} keys on a point)")
+        w.goto(7); w.wait(lambda: False, 0.4)
+        before7 = shape_model.resolve_shapes(w.payload, 7)[0]["points"]
+        w.shot("tracked-frame-7", f"Frame 7 after Track points: {per_point_before} keys on every point, {total_before} in all.")
+        undo = w.undo_depth()
+        strip = w.viewer.roto_toolbar.settings_widgets
+        w.check("reduce_keys" in strip, f"the Select tools strip has a Reduce keys button ({sorted(strip)[:14]})")
+        w.viewer.roto_toolbar.set_setting("r", "Select Points", "reduce_tolerance", 0.5)
+        messages = []
+        w.window.statusBar().messageChanged.connect(messages.append)
+        strip["reduce_keys"].click(); w.settle()
+        total_after, per_point_after = key_counts()
+        w.check(w.undo_depth() == undo + 1, "Reduce keys is one undo step")
+        w.check(total_after < total_before, f"keys went from {total_before} to {total_after}")
+        after7 = shape_model.resolve_shapes(w.payload, 7)[0]["points"]
+        held = max(math.hypot(a["x"] - b["x"], a["y"] - b["y"]) for a, b in zip(before7, after7))
+        w.check(held <= 0.5 + 1e-6, f"the in-between frame 7 holds within the 0.5 px tolerance (largest move {held:.3f} px)")
+        kept = [m for m in messages if "key" in m.lower() and "kept" in m.lower()]
+        message = kept[-1] if kept else "(no kept-count message seen)"
+        w.goto(7); w.wait(lambda: False, 0.4)
+        w.shot("reduced-frame-7", f"Frame 7 after Reduce keys: {per_point_after} keys on every point, {total_after} in all, and the outline has moved at most {held:.2f} pixels.")
+        w.note(f"Reduce keys at 0.5 px: {per_point_before} keys per point to {per_point_after} ({total_before} to {total_after} in all); in-between frame 7 moved at most {held:.3f} px; status bar: {message}")
+        w.window.command({"op": "undo"}); w.settle()
+        w.check(key_counts()[0] == total_before, "one undo restores every key")
+
+
+PAST_NUKE_SUMMARY = {
+    17: "Snap to edges and Fit to edges: clicked or existing points move onto the strongest edge of the picture within a set distance.",
+    18: "Track points: every point of an outline follows its own patch of picture, so an outline can follow a subject that bends or stretches; points that lose their picture are flagged.",
+    19: "Fill in-betweens: between two keys, the frames where the plain interpolation drifts off the picture get extra keys fitted to the edge.",
+    20: "Ripple edit: a point edit on one frame moves the same point by the same offset on every key in a chosen range, and Fit to edges carries through the same way.",
+    21: "Outline from click: one click on a subject draws its outline as a Bezier shape, with every real hole cut out as a shape that subtracts, in one undo step.",
+    22: "GPU mattes: an opt-in setting that draws the Roto shapes' matte on the graphics card, with the processor as the fallback and the reference.",
+    23: "Stick to plate: a stroke painted on one frame follows the texture of the plate (it bends and slides with it) across the frame range, keyed in one undo step.",
+    24: "Shapes from matte: a keyed matte becomes editable shapes (holes subtract), keyed every few frames with their points in correspondence and the frames between fitted.",
+    25: "Reduce keys: thins out the keys a track or a fill left behind, keeping every frame within a pixel tolerance of the original path.",
+}
+
+
+def summary_lines(results):
+    """One line per past-Nuke tool: what it does, then what the scene measured."""
+    lines = []
+    for r in sorted((r for r in results if r.number >= PAST_NUKE_FIRST), key=lambda r: r.number):
+        measured = "; ".join(n.replace("|", "/") for n in r.notes if not n.startswith("Traceback") and not n.startswith("differs"))
+        verdict = {"works": "works", "differs": "differs", "broken": "broken"}[r.status]
+        label, _, text = PAST_NUKE_SUMMARY.get(r.number, r.title + ": ").partition(": ")
+        lines.append(f"- **{r.number}. {label}** ({verdict}): {text}" + (f" Measured: {measured}." if measured else
+                                                                                         (f" Not run here: {r.error}." if r.error else "")))
+    return lines
+
+
 # ---- Running ---------------------------------------------------------------------------------------------------------
 def run(out_dir, only=None):
     out_dir = Path(out_dir)
@@ -1106,6 +1621,7 @@ def run(out_dir, only=None):
                 walk.close()
             except Exception:
                 pass
+            walk.cleanup()
         results.append(result)
         print(f"{result.number:02d} {result.status:8s} {result.title} {result.error}", flush=True)
     (out_dir / "results.json").write_text(json.dumps([r.as_dict() for r in results], indent=1))
@@ -1123,6 +1639,10 @@ def write_readme(results, out_dir):
              f"**{counts['works']} work, {counts['differs']} differ, {counts['broken']} broken** out of {len(results)} scenes.", "",
              "Re-run: `QT_QPA_PLATFORM=offscreen python tools/roto_walkthrough.py --out <dir>`.", "",
              ]
+    if any(r.number >= PAST_NUKE_FIRST for r in results):
+        lines += ["## Summary of the past-Nuke tools", "",
+                  "Each of these goes beyond what Nuke's Roto does; the numbers are what the scene below measured on a picture computed "
+                  "from a formula, so they regenerate exactly.", ""] + summary_lines(results) + [""]
     header = ["| # | Workflow | Guide | What Nuke does | NodeBased | Verdict |", "|---|---|---|---|---|---|"]
 
     def row(r):
