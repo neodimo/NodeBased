@@ -33,7 +33,11 @@ class RotoWalkthroughTests(unittest.TestCase):
             self.assertEqual(len(results), len(walkthrough.SCENES))
             for result in results:
                 if result.error.startswith("skipped"):      # scene 25 waits for Reduce keys to be on the branch
-                    self.assertEqual(result.number, 25)
+                    # Scene 22 needs a graphics adapter; a CI runner without wgpu reports it skipped (11/10 Desktop conformance).
+                    if result.number == 22:
+                        self.assertTrue(result.error.startswith("skipped: no graphics adapter"), result.error)
+                    else:
+                        self.assertEqual(result.number, 25)
                     continue
                 self.assertTrue(result.screens, f"scene {result.number} saved no screenshot")
                 for name in result.screens:
