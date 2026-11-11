@@ -471,6 +471,21 @@ Still over target (realistic shot):
 
 How the benchmark was wrong, and what changed in it: the viewed node's first render was racing the first move (a view switch followed at once by a press), so the painted stroke's first moves were measured against a cold 1.3 s render of a picture the artist had not looked at yet; it now waits for the picture of the node it views, as an artist does before drawing. And its waits spun in `processEvents` without ever blocking, which held the interpreter lock and made the render thread ten times slower than it is in the application (`evaluate_ms` p95 978 ms against 320 ms with the same work); it now blocks in a Qt event loop, as the application does when idle. The before columns of the first table above were measured with the old harness; the before column here is `before-u2.json`, also the old harness, so the before numbers are pessimistic by that amount for the stroke and the picture times.
 
+### Roto interaction latency, U2 finish pass (11/11/2026)
+
+Same tool, shot and display; three repeats, quiet machine (no suite running); raw run `benchmarks/roto-interaction-1111/finish1-u2.json`. The interface thread's stall in the second after a drag's release, worst repeat, realistic shot:
+
+| Action | U2 pass | U2 finish | Target |
+|---|---|---|---|
+| drag_point | 215 to 250 ms | 53 ms | at most 50: over by 3 |
+| drag_feather | 215 to 250 ms | 62 ms | over by 12 |
+| drag_shape | 215 to 250 ms | 71 ms | over by 21 |
+| paint_stroke | - | 65 ms | over |
+
+What changed: the selected shape's controls (about 300 widgets) were built in one block of 80 ms of Python plus 185 ms of Qt show and layout (a cProfile of that event: 38 000 calls of the application event filter, 800 `knobfit` resizes). They are now built a few milliseconds at a time (`rotopanel.build_detail` is a generator that pauses between groups of controls; `build_detail_sliced` runs groups for 3 ms and hands the thread back for 2 ms), and the new controls' holder is as tall as the controls it replaces until the last group is in, so the panel's scroll bar does not come and go (its coming and going re-fitted every row of the panel to a new width, 60 to 85 ms). No stall over 50 ms now comes from the panel in the second after the release; the one that remains is the release itself: the commit (`Dispatcher.execute` 14.5 ms, the picture request 7 to 9 ms, the graph rebuild 3 ms) plus the paint of the overlay (4 to 6 ms), 49 to 71 ms run together. The timeline strip's cached and keyed frame marks (14 ms after a shape edit) are set 40 ms after the edit instead of inside it.
+
+Still over target: the release stall above (next fixes: hand the edit to the dispatcher without the second deep copy it makes for undo, take the picture request's document identity from the drag's own snapshot, skip the graph rebuild for an edit that only changes a node's payload); the controls are all in about 200 ms after the release; the knob drag (opacity knob: 161 ms median click, 167 ms p95, against 62 to 74 in the first U2 pass) was not looked at in this pass; the point drag's overlay p95 was 20.5 ms in this run and 12.8 to 13.6 ms in four other runs of the same code (run-to-run spread). The painted stroke's overlay is now 16.65 ms p95 against 16 (18.6 before), its picture 201 ms after the release.
+
 ## Lane 8 step notes
 
 ### R6-1: the realistic comp with Grade, Transform, Blur and Merge resident on the GPU (10/25, step A of 3)
