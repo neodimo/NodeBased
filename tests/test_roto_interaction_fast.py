@@ -364,6 +364,49 @@ class FastRotoTests(unittest.TestCase):
         edited[shape_index]["points"][point_index]["x"] = {"value": 1.5, "curve": {**value["curve"], "keys": sorted(keys, key=lambda k: k["frame"])}}
         return edited
 
+    def test_the_tool_strip_is_not_laid_out_again_while_nothing_it_shows_changed(self):
+        viewer = self.open([triangle()])
+        APP.processEvents()
+        toolbar = viewer.roto_toolbar
+        toolbar.refresh()
+        laid_out = []
+        original = toolbar.settings_layout.activate
+        toolbar.settings_layout.activate = lambda: laid_out.append(1) or original()
+        for _ in range(5):
+            toolbar.refresh()                  # every Viewer paint asks
+        self.assertEqual(laid_out, [], "an unchanged strip is left alone (a relayout per paint repainted the window 345 times a second)")
+        toolbar._settings_signature = None     # the settings were changed elsewhere: the strip is built again
+        toolbar.refresh()
+        self.assertGreater(len(laid_out), 0)
+        toolbar.settings_layout.activate = original
+
+    def test_a_press_and_a_release_repaint_the_overlay_without_waiting_for_a_picture(self):
+        shapes = [blob(i) for i in range(3)]
+        viewer = self.open(shapes)
+        APP.processEvents()
+        from PySide6.QtCore import QEvent, QObject
+        paints = []
+
+        class Spy(QObject):
+            def eventFilter(self, watched, event):
+                if event.type() == QEvent.Type.Paint:
+                    paints.append(1)
+                return False
+        spy = Spy()
+        viewer.viewport().installEventFilter(spy)
+        target = (shapes[1]["points"][2]["x"], shapes[1]["points"][2]["y"])
+        end = self.at(target[0] + 5, target[1] + 3)
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=self.at(*target))
+        QTest.mouseMove(viewer.viewport(), end)
+        APP.processEvents()
+        self.window.timer.stop()
+        APP.processEvents()
+        before = len(paints)
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=end)
+        APP.processEvents()
+        self.assertGreater(len(paints), before, "the release is drawn as committed at once")
+        viewer.viewport().removeEventFilter(spy)
+
     def test_the_overlay_cache_paints_what_a_cold_paint_does_and_a_drag_copies_only_its_shape(self):
         shapes = [blob(i) for i in range(6)]
         viewer = self.open(shapes)

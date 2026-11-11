@@ -5217,6 +5217,7 @@ class Viewer(PanZoomView):
             return
         if self.hit_release(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event)):
             event.accept()
+            self.viewport().update()       # the finished drag is drawn as committed now, not when the final picture arrives
             return
         was_panning = self.pan is not None
         super().mouseReleaseEvent(event)
@@ -6372,6 +6373,7 @@ class Viewer(PanZoomView):
             return
         if self.hit_press(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event)):
             event.accept()
+            self.viewport().update()       # the overlay shows what the press did now, not whenever the next picture arrives
             return
         super().mousePressEvent(event)
 

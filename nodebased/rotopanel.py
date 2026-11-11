@@ -818,15 +818,20 @@ def build_panel(window, key):
         listing.sync_current()
         layer_name = getattr(window.viewer, "roto_list_layer", None)
         points_selected = any(si == selected for si, _ in window.viewer.roto_selected_points)
-        if (selected != built["selected"] or layer_name != built["layer"] or points_selected != built["points"]
-                or not 0 <= selected < len(shapes)):
+        if selected != built["selected"] or layer_name != built["layer"] or not 0 <= selected < len(shapes):
             old = detail_holder
             detail_holder = QWidget(); detail_holder.setObjectName("roto-shape-detail")
             detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
             layout.replaceWidget(old, detail_holder)
             old.hide(); old.setParent(None); old.deleteLater()
             build_detail(detail_layout)
-        elif selected in changed:
+        else:
+            if points_selected != built["points"]:
+                built["points"] = points_selected
+                reset = detail_holder.findChild(QPushButton, "roto-reset-feather-points")
+                if reset is not None:
+                    reset.setEnabled(not shapes[selected].get("locked") and points_selected)
+        if selected in changed and selected == built["selected"] and layer_name == built["layer"]:
             frames = keyframes(shapes[selected])
             current_frame = int(window.dispatcher.document["time"]["current"])
             count_label = detail_holder.findChild(QLabel, "roto-spline-key-count")
