@@ -105,6 +105,9 @@ class TimeRowTests(unittest.TestCase):
     def test_out_before_in_is_refused_and_reverts(self):
         w = self.open_window()
         w.set_time(first=10, last=48, current=12)
+        # The move to frame 12 starts a render whose "Evaluating frame 12…" status would overwrite the refusal
+        # message under suite load; let it finish first (red in the 11/11 4 AM full suite, green alone).
+        self.assertTrue(wait_until(lambda: not w.busy and not w.preview_queue._items))
         self.type_into(w.frame_last, "3")
         after = time_state(w)
         self.assertEqual((after["first"], after["last"]), (10, 48))
