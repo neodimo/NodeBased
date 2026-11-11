@@ -1,3 +1,9 @@
+## 2026-11-11 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step U1 (Tue 11/10): Roto must feel instant: measure the real interaction latency, then fix the worst (finish 1) (integrator tick)
+
+- **What was done:** `main` `33e384fd` -> `5d6162d5` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `5d6162d5`: Ran 9845 tests in 1686.652 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-10 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step U1 (Tue 11/10): Roto must feel instant: measure the real interaction latency, then fix the worst (integrator tick)
 
 - **What was done:** `main` `c7de249a` -> `65119a91` plus this docs commit. Evidence and per-lane commit

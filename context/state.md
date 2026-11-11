@@ -1,5 +1,32 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (2:26 AM on 2026-11-11 PDT)
+
+`main` moved `33e384fd` -> `5d6162d5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `5d6162d5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1111-0156.log`, started 1:56 AM): **Ran 9845 tests in 1686.652 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step U1 (Tue 11/10): Roto must feel instant: measure the real interaction latency, then fix the worst (finish 1).** Commits:
+  - `1480367c` Roto walkthrough: run a pending deferred panel rebuild in settle(), so a step never reads a panel the rebuild is about to replace (scene 8 read a deleted shape list after the burst-rebuild change)
+  - `372f6aa6` Roto interaction latency: last finish-pass numbers and the picture handover cost
+  - `487597fc` Progressive refinement of a drag shares the drag's own snapshot instead of deep-copying the document again for each coarse-to-fine step
+  - `14bbe1c0` Roto interaction latency: finish-pass numbers (realistic and light shots), what the light shot's 500 ms was, what is left per move, and the next fixes
+  - `fc850ba6` Brush strokes: each dab computes only its own window of the stroke's region (identical coverage, tested bit for bit against the whole-region computation)
+  - `1afb1d23` Test: timeline marks hash once per document revision (the first refresh may already be memoised)
+  - `563065ea` Timeline marks: the display-cache identities and a Roto's keyed-frame labels are computed once per document revision, not on every picture a drag shows (16 ms each on the realistic shot)
+  - `5051bfe8` Roto panel signature accepts an animated colour channel (it raised KeyError), tests read the panel after the deferred rebuild
+  - `6207012c` Roto interaction: every Roto and RotoPaint panel rebuilds once after a burst (a one-shape panel cost 0.5 s on each undo and list row), the viewer overlay caches each shape's outline and draws its handle circles from a recorded picture and copies only the shape a drag moves, and a plain brush stroke is written into the running result instead of a full-frame copy
+  Diff: 11 files changed, 1575 insertions(+), 80 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:55 PM on 2026-11-10 PDT)
 
 `main` moved `c7de249a` -> `65119a91` (lane commits cherry-picked onto main in lane order) and then to this
