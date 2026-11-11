@@ -1695,7 +1695,8 @@ class RotoViewerToolbar(QWidget):
                 "Outline from click": "outline_click",
                 "Fit to edges": "fit_to_edges", "Fill band": "fill_band", "Fill threshold": "fill_threshold",
                 "Fill every Nth frame": "fill_step", "Fill from": "fill_from", "Fill to": "fill_to",
-                "Fill in-betweens": "fill_inbetweens", "Ripple edit": "ripple_edit",
+                "Fill in-betweens": "fill_inbetweens", "Reduce tolerance": "reduce_tolerance",
+                "Reduce from": "reduce_from", "Reduce to": "reduce_to", "Reduce keys": "reduce_keys", "Ripple edit": "ripple_edit",
                 "Ripple mode": "ripple_mode", "Ripple from": "ripple_from", "Ripple to": "ripple_to"}.get(
                     label, label.lower().replace(" ", "_").replace("/", "_"))
 
@@ -1830,6 +1831,8 @@ class RotoViewerToolbar(QWidget):
                 widget.clicked.connect(lambda _=False: self.viewer.fill_roto_inbetweens())
             elif setting == "stick_to_plate":
                 widget.clicked.connect(lambda _=False, k=key: self.viewer.window.stick_roto_strokes(k, "both"))
+            elif setting == "reduce_keys":
+                widget.clicked.connect(lambda _=False, k=key: self.viewer.window.reduce_roto_keys(k))
             else:
                 widget.clicked.connect(lambda _=False: self.viewer.fit_roto_to_edges())
         elif kind == "dropdown":
@@ -16486,6 +16489,64 @@ class Window(QMainWindow):
         if job.get("skipped"):
             summary += f" \u00b7 {job['skipped']} locked or transformed stroke{'s' if job['skipped'] != 1 else ''} left alone"
         self.statusBar().showMessage(summary)
+        self.viewer.viewport().update()
+        self.rebuild_properties_dock()
+        return True
+
+    # -- Reduce keys: thin out keyed shapes and strokes (lane 9 step I9, past Nuke) --------------------------------------------
+    def reduce_roto_keys(self, key, tolerance=None, first_frame=None, last_frame=None, item_indices=None, interpolation="auto"):
+        """Remove keys from the selected shapes and strokes while every frame stays within `tolerance` px: one undo step.
+
+        The error is measured on the outline as Roto draws it between the keys (nodebased/rotokeyreduce.py); the keys that stay are
+        the same frames for every point of an item. The strip's Reduce tolerance, Reduce from and Reduce to settings apply when the
+        arguments are not given (a from and to of 0 and 0 mean every frame). The status bar says how many keys were kept.
+        """
+        from . import rotokeyreduce
+        document = self.dispatcher.document
+        node = document["nodes"].get(key)
+        if node is None or node["type"] not in ("Roto", "RotoPaint"):
+            self._show_command_error(ValueError("Reduce keys needs a Roto or RotoPaint node")); return False
+        payload = document.get("node_data", {}).get(key, {})
+        slot, op = ("shapes", "set_shapes") if node["type"] == "Roto" else ("items", "set_paint_items")
+        entries = payload.get(slot, [])
+        shared = payload.get("tool_settings", {}).get("__global__", {})
+        if tolerance is None:
+            tolerance = float(shared.get("reduce_tolerance", rotokeyreduce.DEFAULT_TOLERANCE))
+        if first_frame is None and last_frame is None:
+            low, high = int(round(float(shared.get("reduce_from", 0)))), int(round(float(shared.get("reduce_to", 0))))
+            if low or high:
+                first_frame, last_frame = low, high
+        if item_indices is not None:
+            chosen = list(item_indices)
+        elif node["type"] == "Roto":
+            chosen = {si for si, _ in getattr(self.viewer, "roto_selected_points", ())}
+            index = int(getattr(self.viewer, "roto_selected_shape_index", -1))
+            if index >= 0:
+                chosen.add(index)
+            chosen = sorted(chosen)
+        else:
+            index = getattr(self.viewer, "paint_selected_item_index", None)
+            chosen = [] if index is None else [int(index)]
+        chosen = [i for i in chosen if 0 <= i < len(entries) and entries[i].get("kind", "shape") in ("shape", "stroke")]
+        if not chosen:
+            self._show_command_error(ValueError("Select a shape or a paint stroke before using Reduce keys")); return False
+        unlocked = [i for i in chosen if not entries[i].get("locked")]
+        if not unlocked:
+            self.statusBar().showMessage("Reduce keys: the selected shapes are locked", 5000)
+            return False
+        try:
+            items, summary = rotokeyreduce.reduce_items(entries, unlocked, tolerance, first_frame, last_frame, interpolation)
+        except rotokeyreduce.ReduceError as error:
+            self._show_command_error(error); return False
+        message = rotokeyreduce.describe(summary, tolerance)
+        if len(unlocked) != len(chosen):
+            message += f" \u00b7 {len(chosen) - len(unlocked)} locked left alone"
+        if not summary["reduced"]:
+            self.statusBar().showMessage(message if summary["examined"] == 0
+                                         else message + " \u00b7 nothing to remove at this tolerance", 6000)
+            return False
+        self.command({"op": op, "id": key, slot: items})
+        self.statusBar().showMessage(message)
         self.viewer.viewport().update()
         self.rebuild_properties_dock()
         return True

@@ -222,12 +222,18 @@ RIPPLE_CONTROLS = [{'label': 'Ripple edit', 'widget_kind': 'toggle', 'default': 
 OUTLINE_CONTROLS = [{'label': 'Outline from click', 'widget_kind': 'toggle', 'default': False}]
 # Stick to plate (Lane 9, step I7): carries the selected paint strokes with the picture; a command, not a stored setting.
 STICK_CONTROLS = [{'label': 'Stick to plate', 'widget_kind': 'button', 'default': None}]
+# Reduce keys (Lane 9, step I9): removes the keys a shape or stroke does not need; "Reduce from" and "Reduce to" at 0 and 0 mean every frame.
+REDUCE_CONTROLS = [{'label': 'Reduce tolerance', 'widget_kind': 'field', 'default': 0.5},
+                   {'label': 'Reduce from', 'widget_kind': 'field', 'default': 0.0},
+                   {'label': 'Reduce to', 'widget_kind': 'field', 'default': 0.0},
+                   {'label': 'Reduce keys', 'widget_kind': 'button', 'default': None}]
 GLOBAL_SETTINGS = {'autokey': True, 'snap_edges': False, 'snap_radius': 8.0, 'fit_band': 12.0, 'outline_click': False,
                    'fill_band': 8.0, 'fill_threshold': 0.75, 'fill_step': 1.0, 'fill_from': 0.0, 'fill_to': 0.0,
-                   'ripple_edit': False, 'ripple_mode': 'all', 'ripple_from': 1.0, 'ripple_to': 1.0}
+                   'ripple_edit': False, 'ripple_mode': 'all', 'ripple_from': 1.0, 'ripple_to': 1.0,
+                   'reduce_tolerance': 0.5, 'reduce_from': 0.0, 'reduce_to': 0.0}
 
 for _tool in ('Select All', 'Select Splines', 'Select Points', 'Select Feather Points'):
-    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS + INBETWEEN_CONTROLS + STICK_CONTROLS + RIPPLE_CONTROLS)
+    TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS + FIT_CONTROLS + INBETWEEN_CONTROLS + STICK_CONTROLS + REDUCE_CONTROLS + RIPPLE_CONTROLS)
 for _tool in ('Add Points', 'Bezier', 'Cusped Bezier', 'B-Spline', 'Ellipse', 'Rectangle',
               'Cusped Rectangle', 'Open Spline'):
     TOOL_CONTROLS[_tool].extend(SNAP_CONTROLS)

@@ -771,6 +771,45 @@ class ShapeListTree(QTreeWidget):
             return False
         return self.window.stick_roto_strokes(self.key, "both", item_indices=refs)
 
+    def ask_reduce_keys(self):
+        """Ask for the tolerance and an optional frame range, then reduce the keys of the selected shapes and strokes (lane 9 step I9)."""
+        refs = self.reducible_refs()
+        if not refs:
+            return False
+        shared = self.payload().get("tool_settings", {}).get("__global__", {})
+        dialog = QDialog(self); dialog.setWindowTitle("Reduce keys"); dialog.setObjectName("roto-list-reduce-dialog")
+        form = QFormLayout(dialog)
+        tolerance = QDoubleSpinBox(); tolerance.setObjectName("roto-list-reduce-tolerance")
+        tolerance.setRange(0.01, 100.0); tolerance.setDecimals(2); tolerance.setSingleStep(0.1); tolerance.setSuffix(" px")
+        tolerance.setValue(float(shared.get("reduce_tolerance", 0.5)))
+        first, last = QSpinBox(), QSpinBox()
+        for spin in (first, last):
+            spin.setRange(-100000, 100000)
+        first.setValue(int(round(float(shared.get("reduce_from", 0))))); last.setValue(int(round(float(shared.get("reduce_to", 0)))))
+        first.setObjectName("roto-list-reduce-first"); last.setObjectName("roto-list-reduce-last")
+        form.addRow("Tolerance", tolerance)
+        form.addRow("From frame (0 and 0: every frame)", first); form.addRow("To frame", last)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept); buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        low, high = first.value(), last.value()
+        return self.cmd_reduce_keys(tolerance.value(), (min(low, high), max(low, high)) if (low or high) else None)
+
+    def reducible_refs(self):
+        entries = self.entries()
+        return [ref for kind, ref in self.selected_ids()
+                if kind == "item" and 0 <= ref < len(entries) and entries[ref].get("kind", "shape") in ("shape", "stroke")]
+
+    def cmd_reduce_keys(self, tolerance=None, frame_range=None):
+        """Remove the keys the selected shapes and strokes do not need, within a tolerance in px (past Nuke, lane 9 step I9)."""
+        refs = self.reducible_refs()
+        if not refs:
+            return False
+        first, last = frame_range if frame_range else (None, None)
+        return self.window.reduce_roto_keys(self.key, tolerance, first, last, item_indices=refs)
+
     def cmd_fit_to_edges(self):
         """Fit the selected shapes to the image edges (the viewer's Fit to edges command)."""
         entries = self.entries()
@@ -881,6 +920,7 @@ class ShapeListTree(QTreeWidget):
         add(menu, "Fit to edges", self.cmd_fit_to_edges, "roto-list-fit-to-edges", has_curves)
         add(menu, "Track points", self.cmd_track_points, "roto-list-track-points", has_curves)
         add(menu, "Fill in-betweens", self.cmd_fill_inbetweens, "roto-list-fill-inbetweens", has_curves)
+        add(menu, "Reduce keys\u2026", self.ask_reduce_keys, "roto-list-reduce-keys", bool(self.reducible_refs()))
         if not self.is_roto:          # paint strokes exist only in RotoPaint (lane 9 step I7)
             has_strokes = any(kind == "item" and self.entries()[ref].get("kind") == "stroke" for kind, ref in self.selected_ids())
             add(menu, "Stick to plate", self.cmd_stick_to_plate, "roto-list-stick-to-plate", has_strokes)
