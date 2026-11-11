@@ -63,6 +63,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from nodebased import playback_trace  # noqa: E402
 
+MOVE_SCALE = 1.0                   # --short shrinks every drag (12 moves, 24 for a stroke) for the slow profiled pass
 FRAME_INTERVAL = 1 / 60.0          # display rate: a move event per 16.7 ms
 KEY_FRAMES = (1, 10, 20, 30, 40, 48)
 PLATE_PATTERN = "plate.####.png"
@@ -129,8 +130,12 @@ def write_plate(directory, width, height, frames):
     noise = rng.normal(0, 0.04, size=(height, width, 1)).astype(np.float32)
     frame = np.concatenate([np.clip(base + noise, 0, 1), np.ones((height, width, 1), np.float32)], -1).astype(np.float32)
     frame[(xx.astype(int) // 80 + yy.astype(int) // 80) % 2 == 0, :3] *= 0.85
-    for number in frames:
-        write_png(str(pathlib.Path(directory) / f"plate.{number:04d}.png"), frame)
+    import shutil
+    frames = list(frames)
+    first = pathlib.Path(directory) / f"plate.{frames[0]:04d}.png"
+    write_png(str(first), frame)            # one real write; the other frames are copies (the Read still decodes each file)
+    for number in frames[1:]:
+        shutil.copyfile(first, pathlib.Path(directory) / f"plate.{number:04d}.png")
     return str(pathlib.Path(directory) / PLATE_PATTERN)
 
 
@@ -322,10 +327,11 @@ class Driver:
                 scheduled += rate
         return records
 
-    def finish(self, records, idle=0.05):
+    def finish(self, records, idle=0.05, wait_render=True):
         """After the last event: wait for the last picture. Returns when the render worker is idle and the viewer shows it."""
         self.pump(idle)
-        self.pump_until(lambda: not self.window.busy and not len(self.window.preview_queue)
+        if wait_render:
+            self.pump_until(lambda: not self.window.busy and not len(self.window.preview_queue)
                         and not self.window.timer.isActive(), 15.0)
         self.pump(0.05)
 
@@ -422,6 +428,7 @@ class Shot:
 
 
 def drag_script(start, end, count=60):
+    count = max(3, int(count * MOVE_SCALE))
     script = [("press", start)]
     for i in range(1, count + 1):
         t = i / count
@@ -529,8 +536,9 @@ def build_actions(driver, shot, window):
         shot.view("paint")
         select_tool("Brushes", "Brush")
         steps = [("press", (W * 0.2, H * 0.2))]
-        for i in range(1, 121):
-            steps.append(("move", (W * 0.2 + 5.0 * i, H * 0.2 + 120 * math.sin(i / 14.0))))
+        moves = max(6, int(120 * MOVE_SCALE))
+        for i in range(1, moves + 1):
+            steps.append(("move", (W * 0.2 + 600.0 * i / moves, H * 0.2 + 120 * math.sin(i * 120 / moves / 14.0))))
         steps.append(("release", (W * 0.2 + 600.0, H * 0.2 + 20)))
         return steps
 
@@ -544,9 +552,12 @@ def build_actions(driver, shot, window):
         if tree is None:
             return []
         count = tree.topLevelItemCount()
-        rows = [tree.topLevelItem(i % count) for i in (2, 11, 5, 17, 8, 14)] if count else []
-        for item in rows:
-            def click(item=item):
+        rows = [i % count for i in (2, 11, 5, 17, 8, 14)] if count else []
+        for row in rows:
+            def click(row=row):
+                tree = next((t for t in window.findChildren(QTreeWidget) if t.objectName() == "roto-shape-list"), None)
+                item = tree.topLevelItem(row)
+                tree.scrollToItem(item)
                 rect = tree.visualItemRect(item)
                 center = rect.center()
                 center.setX(40)
@@ -555,8 +566,6 @@ def build_actions(driver, shot, window):
                                          (QEvent.Type.MouseButtonRelease, Qt.MouseButton.NoButton)):
                     QCoreApplication.postEvent(tree.viewport(), QMouseEvent(
                         event_type, QPointF(center), glob, Qt.MouseButton.LeftButton, held, Qt.KeyboardModifier.NoModifier))
-            tree.scrollToItem(item)
-            QApplication.instance().processEvents()
             steps.append(("widget", click))
         return steps
 
@@ -567,7 +576,9 @@ def build_actions(driver, shot, window):
         QApplication.instance().processEvents()
         from PySide6.QtWidgets import QDoubleSpinBox
         from nodebased.app import FloatSliderControl
-        spin = next((s for s in window.findChildren(QDoubleSpinBox) if s.objectName() == "roto-shape-opacity"), None)
+        # The node's own Opacity knob (it commits when the slider is released, like every generic knob). The per-shape
+        # slider in the Roto shapes panel commits only on Enter, so a drag there changes no picture.
+        spin = next((s for s in window.findChildren(QDoubleSpinBox) if s.objectName() == "opacity-field"), None)
         if spin is None:
             return []
         control = spin.parentWidget()
@@ -647,16 +658,29 @@ def run_action(app, window, recorder, driver, shot, name, builder, profile, repe
             else:
                 scripted.append((kind, payload))
         if profiler:
+            # Python 3.12's cProfile is process-wide, so the render worker would be in the profile. The profiled pass
+            # therefore never starts a render: what is left is the GUI thread's own work (the part this tool is about).
+            window.timer.stop()
+            window.timer.start = lambda *a, **k: None               # request_preview arms this timer to start the worker
+            window.thumbnail_timer.stop()
+            window.thumbnail_timer.start = lambda *a, **k: None
             profiler.enable()
         records = driver.run(scripted)
-        driver.finish(records)
+        driver.finish(records, wait_render=profiler is None)
         if profiler:
             profiler.disable()
+            del window.timer.start
+            del window.thumbnail_timer.start
+            window.preview_queue.cancel()
         result = analyse(recorder, records, name)
         result["undo_steps_added"] = len(window.dispatcher.undo_stack) - undo_before
         results.append(result)
         if profiler:
             profile_text = top_functions(profiler)
+            dump = os.environ.get("NODEBASED_PROFILE_DIR")         # the whole profile, for print_callers afterwards
+            if dump:
+                os.makedirs(dump, exist_ok=True)
+                profiler.dump_stats(os.path.join(dump, f"{name}.prof"))
     merged = merge(results)
     if profile_text:
         merged["profile_top"] = profile_text
@@ -726,10 +750,23 @@ def main():
     parser.add_argument("--actions", nargs="+", default=ACTION_ORDER)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--profile", action="store_true", help="also run each action once under cProfile (separate pass)")
+    parser.add_argument("--table", nargs="+", type=pathlib.Path, help="print a markdown table of result files (label=path) and exit")
+    parser.add_argument("--short", action="store_true", help="a fifth of the moves per drag (for the profiled pass of a slow build)")
+    parser.add_argument("--profile-only", action="store_true", help="only the cProfile pass (its timings are inflated; the tops are the point)")
     parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path("roto-interaction.json"))
     parser.add_argument("--label", default="")
     parser.add_argument("--size", default="1080p", choices=["1080p", "tiny"])
     args = parser.parse_args()
+    if args.table:
+        runs = []
+        for item in args.table:
+            label, _, path = str(item).partition("=")
+            runs.append((label, json.loads(pathlib.Path(path).read_text())))
+        print(markdown_table(runs))
+        return 0
+    global MOVE_SCALE
+    if args.short:
+        MOVE_SCALE = 0.2
     if args.self_check:
         args.size, args.repeats = "tiny", 1
         args.actions = ["tool_switch_keys", "drag_point", "paint_stroke"]
@@ -746,7 +783,8 @@ def main():
            "python": platform.python_version(), "label": args.label, "size": args.size, "cases": {}}
     from nodebased.app import Viewer
     recorder = Recorder(Viewer)
-    with tempfile.TemporaryDirectory(prefix="roto-interaction-") as scratch:
+    base = os.environ.get("NODEBASED_BENCH_SCRATCH")       # the plate frames are large: keep them off /tmp, which is RAM here
+    with tempfile.TemporaryDirectory(prefix="roto-interaction-", dir=base) as scratch:
         for case in args.cases:
             QSettings("NodeBased", "NodeBased").clear() if args.self_check else None
             document = build_document(case, scratch, width, height, last_frame)
@@ -776,6 +814,9 @@ def main():
                     continue
                 print(f"[{case}] {name}", flush=True)
                 try:
+                    if args.profile_only:
+                        case_out["actions"][name] = run_action(app, window, recorder, driver, shot, name, builders[name], True, 1)
+                        continue
                     case_out["actions"][name] = run_action(app, window, recorder, driver, shot, name, builders[name], False, args.repeats)
                     if args.profile:
                         profiled = run_action(app, window, recorder, driver, shot, name, builders[name], True, 1)
@@ -792,6 +833,30 @@ def main():
     args.output.write_text(json.dumps(out, indent=1))
     print_table(out)
     return 0
+
+
+def markdown_table(runs, case="realistic"):
+    """`runs` is [(label, result json)]: one row per action, the overlay, click and picture numbers of each run side by side."""
+    names = []
+    for _, data in runs:
+        for name in data["cases"].get(case, {}).get("actions", {}):
+            if name not in names:
+                names.append(name)
+    head = "| Action | " + " | ".join(f"{label}: move overlay, click overlay, picture age (ms median / p95)" for label, _ in runs) + " |"
+    lines = [head, "|---|" + "---|" * len(runs)]
+    for name in names:
+        cells = []
+        for _, data in runs:
+            row = data["cases"].get(case, {}).get("actions", {}).get(name)
+            if not row or "error" in row or "skipped" in row:
+                cells.append("n/a")
+                continue
+            def pair(key):
+                stat = row[key]
+                return f"{stat['median']:g} / {stat['p95']:g}" if stat["n"] else "-"
+            cells.append(f"{pair('move_overlay_ms')}; {pair('click_overlay_ms')}; {pair('picture_age_ms')}")
+        lines.append(f"| {name} | " + " | ".join(cells) + " |")
+    return "\n".join(lines)
 
 
 def print_table(out):

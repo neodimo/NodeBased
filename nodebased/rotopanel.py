@@ -346,7 +346,7 @@ def build_panel(window, key):
     def select(row):
         window.viewer.roto_selected_shape_index = row
         window.viewer.viewport().update()
-        window.rebuild_properties_dock()
+        window.refresh_panel_soon(window.rebuild_properties_dock)
     def row_extras(row_layout, index, label):
         """The key button of the Name cell: it keys every point and control of the shape at the current frame."""
         animated, keyed_here = key_state(shapes[index])

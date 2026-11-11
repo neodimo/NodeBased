@@ -1972,6 +1972,9 @@ class Viewer(PanZoomView):
         self._overlay_view = None      # set while render_overlay paints for the direct picture
         self._overlay_images = [None, None]
         self._reveal_onion_cache_key = None
+        self._roto_resolved_cache = None
+        self._drag_preview_fn = None
+        self._drag_preview_last = 0.0
         self._reveal_onion_cache_image = None
         self._hit_zoom = None          # logical pixels per scene unit while the direct picture drives the hit tests
         self._keys_from_direct = False  # true while a key the direct picture received is being handled
@@ -2058,6 +2061,9 @@ class Viewer(PanZoomView):
         self._initial_fit_pending = True
         self._image_rect = QRectF()
         super().__init__(QGraphicsScene())
+        self._drag_preview_timer = QTimer(self)
+        self._drag_preview_timer.setSingleShot(True)
+        self._drag_preview_timer.timeout.connect(self._flush_drag_preview)
         # The surround of the picture is pure black in every theme, as in Nuke's viewer, so the
         # image's own black letterbox and the surround read as one.
         self.setBackgroundBrush(QColor(VIEWER_SURROUND))
@@ -2863,7 +2869,7 @@ class Viewer(PanZoomView):
         context = self._paint_context()
         if drag is None or context is None or context[0] != drag["key"]: return False
         key, _, payload = context
-        items = copy.deepcopy(payload.get("items", []))
+        items = list(payload.get("items", []))      # the commit copies what it stores; only the new stroke is built here
         frame = int(self.window.dispatcher.document["time"]["current"])
         lifetime = ({"mode": "single", "first": frame} if self.dustbust_preset or self.paint_lifetime == "single"
                     else {"mode": "all"} if self.paint_lifetime == "all"
@@ -3695,10 +3701,10 @@ class Viewer(PanZoomView):
         if ripple:
             shapes = self._ripple_roto_shapes(key, node, shapes)
         if node["type"] == "RotoPaint":
-            items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
+            items = list(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))   # the dispatcher copies what it stores
             shape_items = [i for i, item in enumerate(items) if item.get("kind") == "shape"]
             for i, item_i in enumerate(shape_items):
-                if i < len(shapes): items[item_i].update(shapes[i])
+                if i < len(shapes): items[item_i] = {**items[item_i], **shapes[i]}
             self.window.command({"op": "set_paint_items", "id": key, "items": items})
         else:
             self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
@@ -4232,10 +4238,20 @@ class Viewer(PanZoomView):
         return updated
 
     def _roto_resolved(self, context):
-        key, _, payload, _ = context
-        document = self.window.dispatcher.document
+        """The shapes resolved at the playhead. A paint, a hit test and a drag step each ask for it several times between two
+        document edits, so the result is kept until the document revision, the frame, the node or the tier changes. The list
+        is shared: a caller that moves a point works on a copy (`paint_overlays` does)."""
+        key, _, payload, tier = context
+        dispatcher = self.window.dispatcher
+        document = dispatcher.document
         frame = int(document["time"]["current"])
-        return shape_model.resolve_roto_shapes(payload, frame, document, context[3])
+        stamp = (id(dispatcher), dispatcher.revision, key, frame, tier)
+        cached = self._roto_resolved_cache
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        resolved = shape_model.resolve_roto_shapes(payload, frame, document, tier)
+        self._roto_resolved_cache = (stamp, resolved)
+        return resolved
 
     def _reveal_onion_image(self, context):
         """Display the selected Reveal source as a cached, view-transformed viewer overlay."""
@@ -4381,6 +4397,28 @@ class Viewer(PanZoomView):
             self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
 
+    @staticmethod
+    def _roto_drag_shapes(drag):
+        """Indices of the shapes a drag can change, or None when that is not known (every shape is then copied)."""
+        if drag.get("kind") in ("group_move", "box"):
+            touched = {si for si, _ in drag.get("selected", ())}
+            if drag.get("alt_shape") is not None:
+                touched.add(drag["alt_shape"])
+            return touched
+        if "point" in drag:
+            return {drag["point"][0]}
+        return None
+
+    @staticmethod
+    def _shapes_for_edit(payload, indices):
+        """The payload's shapes as a list a drag may edit: the shapes at `indices` are copies, the others are the document's own
+        objects (a commit copies them into the document and a preview only reads them), so a twenty-shape Roto costs one copy,
+        not twenty."""
+        shapes = payload.get("shapes", [])
+        if indices is None:
+            return copy.deepcopy(shapes)
+        return [copy.deepcopy(shape) if index in indices else shape for index, shape in enumerate(shapes)]
+
     def _commit_roto_drag(self):
         drag = self.roto_drag
         if drag is None:
@@ -4390,8 +4428,9 @@ class Viewer(PanZoomView):
             self.roto_drag = None
             return False
         key, node, payload, tier = context
+        touched = self._roto_drag_shapes(drag)
         if drag.get("kind") == "group_move":
-            shapes = copy.deepcopy(payload.get("shapes", []))
+            shapes = self._shapes_for_edit(payload, touched)
             x0, y0 = drag["start_data"]
             x1, y1 = self._roto_data_point(drag["scene"], context[1], tier)
             dx, dy = x1 - x0, y1 - y0
@@ -4410,7 +4449,7 @@ class Viewer(PanZoomView):
                         old = transform.get(field, shape_model.TRANSFORM_DEFAULTS[field])
                         transform[field] = self._roto_scalar_at_frame(old, frame, value, animated)
                     self.roto_drag = None
-                    self.window.command({"op": "set_shapes", "id": key, "shapes": copy.deepcopy(payload.get("shapes", [])),
+                    self.window.command({"op": "set_shapes", "id": key, "shapes": payload.get("shapes", []),
                                          "layers": layers})
                     self.viewport().update()
                     return True
@@ -4427,7 +4466,7 @@ class Viewer(PanZoomView):
             self._commit_roto_shapes(key, node, shapes, ripple=True)
             return True
         if drag.get("kind") == "box":
-            shapes = copy.deepcopy(payload.get("shapes", []))
+            shapes = self._shapes_for_edit(payload, touched)
             frame = int(self.window.dispatcher.document["time"]["current"])
             pivot, sx, sy, angle, dx, dy = self._roto_box_result(
                 drag, drag["scene"], bool(drag.get("shift")))
@@ -4523,7 +4562,7 @@ class Viewer(PanZoomView):
             self.viewport().update()
             return True
         shape_index, point_index = drag["point"]
-        shapes = copy.deepcopy(payload.get("shapes", []))
+        shapes = self._shapes_for_edit(payload, touched)
         if shape_index >= len(shapes) or point_index >= len(shapes[shape_index]["points"]):
             self.roto_drag = None
             return False
@@ -4601,8 +4640,78 @@ class Viewer(PanZoomView):
         self._commit_roto_shapes(key, node, shapes, ripple=True)
         return True
 
+    DRAG_PREVIEW_INTERVAL = 0.04            # at most 25 picture requests a second while a handle or brush is held
+
+    def _schedule_drag_preview(self, preview):
+        """Ask for a drag's picture at most every DRAG_PREVIEW_INTERVAL: the first move at once, the moves that follow within
+        the interval collapse into one request for the newest position, made when the interval is up. The overlay never waits
+        for this: it repaints from the pointer on every move."""
+        now = time.monotonic()
+        wait = self._drag_preview_last + self.DRAG_PREVIEW_INTERVAL - now
+        if wait <= 0 and not self._drag_preview_timer.isActive():
+            self._drag_preview_last = now
+            preview()
+            return
+        self._drag_preview_fn = preview
+        if not self._drag_preview_timer.isActive():
+            self._drag_preview_timer.start(max(1, int(wait * 1000)))
+
+    def _flush_drag_preview(self):
+        preview, self._drag_preview_fn = self._drag_preview_fn, None
+        if preview is not None:
+            self._drag_preview_last = time.monotonic()
+            preview()
+
+    def _cancel_drag_preview(self):
+        """A release or a cancel: the final picture comes from the commit, so a request still waiting is dropped."""
+        self._drag_preview_fn = None
+        self._drag_preview_timer.stop()
+
+    PAYLOAD_PREVIEW_OPS = {"set_shapes": "shapes", "set_paint_items": "items"}
+
     def _preview_document_drag(self, drag_attribute, commit):
-        """Apply a drag to an isolated document snapshot for preview without an undo edit."""
+        """Apply a drag to a snapshot of the document for preview, without an undo edit and without running the edit on a copy of
+        the whole document: `commit` runs with the window's command call captured, and when everything it asked for was a
+        shape or stroke list for one node, the snapshot is the live document with only that node's list replaced (every
+        other node's data is shared, never copied; the render worker only reads it). Any other command goes the exact route."""
+        drag = getattr(self, drag_attribute)
+        if drag is None:
+            return False
+        window = self.window
+        captured = []
+        real_command = window.command
+        try:
+            window.command = lambda command, render=True: captured.append(window.scoped_command(command))
+            commit()
+        finally:
+            window.command = real_command
+            setattr(self, drag_attribute, drag)
+        document = window.dispatcher.document
+        nodes = document.get("nodes", {})
+        if not captured:
+            return False                    # the edit changed nothing (a locked shape): there is no picture to refresh
+        if all(c.get("op") in self.PAYLOAD_PREVIEW_OPS and c.get("id") in nodes for c in captured):
+            snapshot = {name: (value if name == "node_data" else copy.deepcopy(value)) for name, value in document.items()}
+            node_data = snapshot["node_data"] = dict(document.get("node_data", {}))
+            for command in captured:
+                slot = self.PAYLOAD_PREVIEW_OPS[command["op"]]
+                key = command["id"]
+                existing = node_data.get(key, {})
+                layers = command.get("layers")
+                if layers is None:
+                    layers = existing.get("layers")
+                payload = {slot: command[slot]}
+                if layers:
+                    payload["layers"] = layers
+                if existing.get("tool_settings"):
+                    payload["tool_settings"] = existing["tool_settings"]
+                node_data[key] = payload
+            window.request_preview(progressive=True, document_override=snapshot, document_owned=True)
+            return True
+        return self._preview_document_drag_exact(drag_attribute, commit, captured)
+
+    def _preview_document_drag_exact(self, drag_attribute, commit, captured_before=()):
+        """The exact route: run the drag's commit on a Dispatcher over a copy of the whole document."""
         drag = getattr(self, drag_attribute)
         if drag is None:
             return False
@@ -4856,6 +4965,7 @@ class Viewer(PanZoomView):
 
     def hit_release(self, scene_pos, button, modifiers, pressure=1.0):
         """A release at a scene point. True when it ended or finished a drag."""
+        self._cancel_drag_preview()
         if button == Qt.MouseButton.LeftButton:
             graph = getattr(self.window, "graph", None)
             key = graph.selected_id() if graph is not None else None
@@ -5530,6 +5640,7 @@ class Viewer(PanZoomView):
                                  (select_settings.get("hide_transform_handles_on_move", False) and moving))
             resolved = self._roto_resolved(context)
             if self.roto_drag is not None:
+                resolved = [{**shape, "points": [dict(point) for point in shape["points"]]} for shape in resolved]   # the drag moves points below
                 # Keep the wireframe responsive while the document remains unchanged.  The
                 # payload is only replaced on release, so a cancelled drag cannot leave a partial
                 # command behind.
@@ -5545,13 +5656,19 @@ class Viewer(PanZoomView):
                         for (si, pi), point in zip(drag["selected"], transformed):
                             if si < len(resolved) and pi < len(resolved[si]["points"]):
                                 resolved[si]["points"][pi].update(point)
-                else:
+                elif "point" in self.roto_drag:       # a marquee has no point: it is the rectangle drawn below
                     shape_index, point_index = self.roto_drag["point"]
                     if (self.roto_drag.get("kind") != "tension" and shape_index < len(resolved)
                             and point_index < len(resolved[shape_index]["points"])):
                         x, y = self._roto_data_point(self.roto_drag["scene"], context[1], tier)
                         resolved[shape_index]["points"][point_index]["x"] = x
                         resolved[shape_index]["points"][point_index]["y"] = y
+            if self.roto_drag is not None and self.roto_drag.get("kind") == "marquee" and self.roto_drag.get("moved"):
+                painter.save()
+                marquee_pen = QPen(QColor("#f4ce63"), 1); marquee_pen.setCosmetic(True); marquee_pen.setStyle(Qt.PenStyle.DashLine)
+                painter.setPen(marquee_pen); painter.setBrush(QColor(244, 206, 99, 28))
+                painter.drawRect(QRectF(self.roto_drag["start"], self.roto_drag["scene"]).normalized())
+                painter.restore()
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             for shape_index, shape in enumerate(resolved):
@@ -6048,7 +6165,7 @@ class Viewer(PanZoomView):
                 self.roto_selected_shape_index = hit[0]
                 if modifiers & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.ControlModifier): self.roto_selected_points.add(hit)
                 else: self.roto_selected_points = {hit}
-                self.window.rebuild_properties_dock()
+                self.window.refresh_panel_soon(self.window.rebuild_properties_dock)
                 self.roto_key = context[0]
                 self.roto_drag = {"point": hit, "kind": "feather_point" if modifiers & Qt.KeyboardModifier.ControlModifier else "point",
                                   "scene": scene_pos, "start": scene_pos,
@@ -6240,21 +6357,21 @@ class Viewer(PanZoomView):
             self.roto_drag["alt"] = bool(self.roto_drag.get("alt") or self._roto_no_snap_modifiers(modifiers))
             self.viewport().update()
             if self.roto_drag["moved"] and self.roto_drag.get("kind") != "marquee":
-                self._preview_roto_drag()
+                self._schedule_drag_preview(self._preview_roto_drag)
             return True
         if self.tracker_drag is not None:
             self.tracker_drag["scene"] = scene_pos
             self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
             self.viewport().update()
             if self.tracker_drag["moved"]:
-                self._preview_tracker_drag()
+                self._schedule_drag_preview(self._preview_tracker_drag)
             return True
         if self.planar_drag is not None:
             self.planar_drag["scene"] = scene_pos
             self.planar_drag["moved"] = (scene_pos - self.planar_drag["start"]).manhattanLength() > 2
             self.viewport().update()
             if self.planar_drag["moved"]:
-                self._preview_planar_drag()
+                self._schedule_drag_preview(self._preview_planar_drag)
             return True
         if self.flare_drag is not None:
             self.flare_drag["scene"] = scene_pos
@@ -6277,7 +6394,7 @@ class Viewer(PanZoomView):
             return True
         if self.paint_drag is not None:
             self._paint_sample(scene_pos, pressure)
-            self._preview_paint_drag()
+            self._schedule_drag_preview(self._preview_paint_drag)
             return True
         return False
 
@@ -10471,6 +10588,10 @@ class Window(QMainWindow):
         self_ref = weakref.ref(self)
         islandadapter.set_playback_probe(lambda: bool(getattr(self_ref(), "playing", False)))     # Automatic never measures the cards mid-playback
         self.apply_gpu_nodes()
+        self._panel_rebuild = None
+        self._panel_rebuild_timer = QTimer(self)
+        self._panel_rebuild_timer.setSingleShot(True)
+        self._panel_rebuild_timer.timeout.connect(self._run_panel_rebuild)
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(35)
@@ -11312,7 +11433,7 @@ class Window(QMainWindow):
         if key and ((document.get("animation") or {}).get("curves", {}).get(key)
                     or (document.get("expressions") or {}).get(key)
                     or contains_curve(payload.get("shapes", []))):
-            self.inspect(key)
+            self.refresh_panel_soon(lambda: self.inspect(self.graph.selected_id()))
 
     def refresh_timeline_marks(self):
         """Push the cached-frame and keyed-frame sets onto the strip.
@@ -12564,7 +12685,7 @@ class Window(QMainWindow):
                 if cmd.get("op") == "time":
                     # Key buttons and resolved values are playhead-dependent. Refresh through the
                     # same shared panel path used for document edits so every node stays in sync.
-                    self.inspect(self.graph.selected_id())
+                    self.refresh_panel_soon(lambda: self.inspect(self.graph.selected_id()))
                 if render:
                     self.request_preview(progressive=not bool(cmd.get("transient", False)))
             else:
@@ -12915,7 +13036,7 @@ class Window(QMainWindow):
             if moves is None or not self._graph_shows(moves):
                 self.graph.rebuild()
             if moves is None:
-                self.inspect(key)
+                self.refresh_panel_soon(lambda: self.inspect(self.graph.selected_id()))
             else:
                 # The panel on screen and the cached ones do not show positions, so they stay valid.
                 self._panel_cache_stamp_seen = self._panel_cache_stamp()
@@ -15769,10 +15890,44 @@ class Window(QMainWindow):
             self.inspect(self.graph.selected_id(), reuse=True)
             self.refresh_timeline_marks()
 
+    HEAVY_PANEL_ITEMS = 8           # a Roto or RotoPaint with this many shapes or strokes builds a panel in about a second
+    PANEL_REBUILD_DELAY_MS = 150
+
+    def _panel_is_heavy(self, key):
+        """True when the selected node's panel is slow enough to build that rebuilding it inside a click or a drag would stall
+        the interface (a Roto of twenty shapes: a second). Decided from the payload's size, never from a clock."""
+        document = self.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] not in ("Roto", "RotoPaint"):
+            return False
+        payload = document.get("node_data", {}).get(key, {})
+        return len(payload.get("shapes") or payload.get("items") or ()) >= self.HEAVY_PANEL_ITEMS
+
+    def refresh_panel_soon(self, rebuild):
+        """Run `rebuild` (a call that rebuilds the Properties panel for the current selection) now, or, for a heavy panel, once
+        the interface has been quiet for PANEL_REBUILD_DELAY_MS: a burst of clicks, frame steps or undo steps rebuilds it
+        once, after the last one, and the overlay and the picture never wait for it."""
+        if not self._panel_is_heavy(self.graph.selected_id() if getattr(self, "graph", None) is not None else None):
+            self._cancel_panel_rebuild()
+            rebuild()
+            return
+        self._panel_rebuild = rebuild
+        self._panel_rebuild_timer.start(self.PANEL_REBUILD_DELAY_MS)
+
+    def _cancel_panel_rebuild(self):
+        self._panel_rebuild = None
+        self._panel_rebuild_timer.stop()
+
+    def _run_panel_rebuild(self):
+        rebuild, self._panel_rebuild = self._panel_rebuild, None
+        if rebuild is not None:
+            rebuild()
+
     def inspect(self, key, reuse=False):
         """Show the panel for `key`; a plain call builds it fresh, a selection change (`reuse`) may put back
         the panel built for that node earlier if nothing has changed since."""
         self._inspect_pending = False
+        self._cancel_panel_rebuild()
         if hasattr(self, "viewport"):
             self.viewport.refresh_sim_stats()
         if not self.pinned_panels:
@@ -15930,6 +16085,7 @@ class Window(QMainWindow):
             self.rebuild_properties_dock()
 
     def rebuild_properties_dock(self):
+        self._cancel_panel_rebuild()
         from .artifacts import ArtifactStore
         live_ids = set()
         for graph_node in self.dispatcher.document.get("nodes", {}).values():
@@ -18092,7 +18248,14 @@ class Window(QMainWindow):
             return False
         return self.command({"op": "batch", "commands": ops})
 
+    _FILTERED_EVENTS = frozenset((QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.Wheel,
+                                  QEvent.Type.MouseButtonDblClick, QEvent.Type.KeyPress, QEvent.Type.KeyRelease))
+
     def eventFilter(self, watched, event):
+        # Installed on the whole application, so it sees every event of every widget (a rebuilt Roto panel posts hundreds of
+        # thousands). Only the kinds below are acted on; for the rest the answer costs one set lookup.
+        if event.type() not in self._FILTERED_EVENTS:
+            return False
         if (event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange) and hasattr(self, "state_word")
                 and watched is self.statusBar()):
             self._place_state_word()
@@ -18439,15 +18602,18 @@ class Window(QMainWindow):
         return False
 
     def request_preview(self, *_, playhead_only=False, tier_override=None, progressive=False,
-                        progressive_target=None, document_override=None):
+                        progressive_target=None, document_override=None, document_owned=False):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
         self.generation += 1
         self._compact_stop.set()
         self.rendered_identity = self.render_identity()
-        snapshot = copy.deepcopy(self.dispatcher.document if document_override is None
-                                 else document_override)
+        if document_override is not None and document_owned:
+            snapshot = document_override        # the caller built it for this request: its own copy, or shared read-only data
+        else:
+            snapshot = copy.deepcopy(self.dispatcher.document if document_override is None
+                                     else document_override)
         bake = getattr(self, "_fluid_edit_bake", None)
         if bake is not None:
             current_identity = self._fluid_bake_identity(self.dispatcher.document)
