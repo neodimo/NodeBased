@@ -418,376 +418,402 @@ def build_panel(window, key):
                 act()
         b.clicked.connect(mutate); buttons.addWidget(b)
     layout.addLayout(buttons)
-    layer_name = getattr(window.viewer, "roto_list_layer", None)
-    layer_entry = next((l for l in window.dispatcher.document.get("node_data", {}).get(key, {}).get("layers", [])
-                        if l["name"] == layer_name), None) if layer_name else None
-    if layer_entry is not None:
-        _layer_transform_controls(window, key, layout, layer_entry, frame, float_slider)
-    i=listing.selected_index()
-    if 0 <= i < len(shapes):
-        shape=shapes[i]
-        frames = keyframes(shape)
-        current_frame = int(window.dispatcher.document["time"]["current"])
-        count = QLabel(f"Key {frames.index(current_frame)+1 if current_frame in frames else 0} / {len(frames)}")
-        count.setObjectName("roto-spline-key-count")
-        key_controls = QHBoxLayout(); key_controls.addWidget(count)
-        for title, delta in (("Previous key", -1), ("Next key", 1)):
-            button = QPushButton(title); button.setObjectName("roto-spline-previous-key" if delta < 0 else "roto-spline-next-key")
-            target = (max((f for f in frames if f < current_frame), default=None) if delta < 0
-                      else min((f for f in frames if f > current_frame), default=None))
-            button.setEnabled(target is not None)
-            button.clicked.connect(lambda _=False, at=target: window.set_time(current=at) if at is not None else None)
-            key_controls.addWidget(button)
-        set_key = QPushButton("Set spline key"); set_key.setObjectName("roto-spline-set-key")
-        set_key.clicked.connect(lambda _=False, idx=i: edit_spline_keys(idx))
-        delete_key = QPushButton("Delete spline key"); delete_key.setObjectName("roto-spline-delete-key")
-        delete_key.clicked.connect(lambda _=False, idx=i: edit_spline_keys(idx, True))
-        key_controls.addWidget(set_key); key_controls.addWidget(delete_key); layout.addLayout(key_controls)
-        point_controls = QHBoxLayout()
-        for title, delete in (("Set selected point keys", False), ("Delete selected point keys", True)):
-            button = QPushButton(title); button.setObjectName("roto-point-delete-keys" if delete else "roto-point-set-keys")
-            button.clicked.connect(lambda _=False, idx=i, d=delete: edit_selected_point_keys(idx, d))
-            point_controls.addWidget(button)
-        layout.addLayout(point_controls)
-        scope_controls = QHBoxLayout()
-        scope = QComboBox(); scope.setObjectName("roto-key-scope")
-        for label, value in (("All", "all"), ("Spline", "spline"), ("Transform", "transform"), ("Attributes", "attributes")):
-            scope.addItem(label, value)
-        scope_controls.addWidget(scope)
-        for title, delete, name in (("Set item key", False, "roto-item-set-key"),
-                                    ("Delete item key", True, "roto-item-delete-key")):
-            button = QPushButton(title); button.setObjectName(name)
-            button.clicked.connect(lambda _=False, idx=i, d=delete, box=scope: edit_key_scope(idx, box.currentData(), d))
-            scope_controls.addWidget(button)
-        layout.addLayout(scope_controls)
-        def edit(field,value):
-            entries=current()
-            if i < len(entries):
-                old=entries[i].get(field)
-                if field == "color":
-                    old = old or [1.0,1.0,1.0,1.0]
-                    entries[i][field]=[value_at_frame(channel, replacement, "opacity")
-                                       for channel,replacement in zip(old,value)]
-                elif field == "feather_model":
-                    entries[i][field] = value
-                elif field == "motion_blur_samples":
-                    entries[i][field] = value_at_frame(old, int(value), field) if isinstance(old, dict) and old.get("curve") else int(value)
-                else:
-                    entries[i][field]=value_at_frame(old,value,field)
-                save(entries,i)
-        name=QLineEdit(shape["name"]); name.setObjectName("roto-shape-name")
-        name.editingFinished.connect(lambda: edit("name",name.text())); layout.addWidget(name)
-        follow=QComboBox(); follow.setObjectName(f"roto-shape-track-link-{i}")
-        follow.addItem("No Tracker link", None)
-        trackers=window.dispatcher.document["nodes"]
-        for tracker_id, tracker_node in trackers.items():
-            if tracker_node["type"] == "PlanarTracker":
-                follow.addItem(f"{tracker_node['name']} · plane", {"tracker_id": tracker_id, "track_name": "corner1"})
-                continue
-            if tracker_node["type"] not in ("Tracker", "Stabilize"): continue
-            for track in window.dispatcher.document.get("node_data", {}).get(tracker_id, {}).get("tracks", []):
-                follow.addItem(f"{tracker_node['name']} · {track['name']}",
-                               {"tracker_id": tracker_id, "track_name": track["name"]})
-        link=shape.get("track_link")
-        follow.setCurrentIndex(next((j for j in range(follow.count()) if follow.itemData(j)==link),0))
-        def set_follow(index):
-            entries=current()
-            if i < len(entries):
-                if follow.itemData(index) is None: entries[i].pop("track_link",None)
-                else: entries[i]["track_link"]=follow.itemData(index)
-                save(entries,i)
-        follow.currentIndexChanged.connect(set_follow); layout.addWidget(QLabel("Transform follows")); layout.addWidget(follow)
-        follow_mode=QComboBox(); follow_mode.setObjectName(f"roto-shape-track-follow-{i}")
-        follow_mode.addItem("Translate only", "translate"); follow_mode.addItem("Full Tracker solve", "full")
-        follow_mode.addItem("Planar", "planar")
-        follow_mode.setCurrentIndex(follow_mode.findData(shape.get("track_follow", "translate")))
-        follow_mode.currentIndexChanged.connect(lambda index, idx=i, box=follow_mode: row_edit(idx, "track_follow", box.itemData(index)))
-        layout.addWidget(follow_mode)
-        for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
-            cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
-        source = QComboBox(); source.setObjectName("roto-shape-source")
-        for label, value in (("Colour", "color"), ("Foreground", "foreground"), ("Background", "background")):
-            source.addItem(label, value)
-        source.setCurrentIndex(max(0, source.findData(shape.get("source", "color"))))
-        source.currentIndexChanged.connect(lambda index, box=source: edit("source", box.itemData(index)))
-        layout.addWidget(QLabel("Shape source")); layout.addWidget(source)
-        # Nuke's Clone tab controls belong to this shape and only affect picture sources.
-        clone_box = QWidget(); clone_layout = QVBoxLayout(clone_box)
-        clone_layout.setContentsMargins(8, 2, 2, 2)
-        clone_box.setObjectName(f"roto-shape-clone-{i}")
-        clone_layout.addWidget(QLabel("Clone"))
-        def clone_edit(field, value):
-            entries = current()
-            if i < len(entries):
-                entries[i][field] = value
-                save(entries, i)
-        def clone_vec(field, part, value):
-            entries = current()
-            if i < len(entries):
-                vector = list(entries[i].get(field, [0.0, 0.0])); vector[part] = value
-                entries[i][field] = vector
-                save(entries, i)
-        for part, label in enumerate(("Translate X", "Translate Y")):
-            spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-source-transform-translate-{part}")
-            spin.setRange(-65536, 65536); spin.setValue(float(shape.get("source_transform_translate", [0, 0])[part]))
-            spin.setKeyboardTracking(False); spin.editingFinished.connect(
-                lambda p=part, w=spin: clone_vec("source_transform_translate", p, float(w.value())))
-            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
-        for field, label, default in (("source_transform_rotate", "Rotate", 0.0),
-                                      ("source_transform_scale", "Scale", 1.0),
-                                      ("source_transform_skewX", "Skew X", 0.0),
-                                      ("source_transform_skewY", "Skew Y", 0.0)):
-            spin = QDoubleSpinBox(); spin.setObjectName("roto-shape-" + field)
-            spin.setRange(-1000, 1000); spin.setValue(float(shape.get(field, default))); spin.setKeyboardTracking(False)
-            spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
-            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
-        for field, label, values, default in (("source_transform_skew_order", "Skew order", ("XY", "YX"), "XY"),
-                                               ("source_filter", "Filter", ("impulse", "cubic", "keys", "simon", "rifman", "mitchell", "parzen", "notch"), "cubic"),
-                                               ("source_time_offset_type", "Time offset type", ("relative", "absolute"), "relative")):
-            combo = QComboBox(); combo.setObjectName("roto-shape-" + field)
-            for value in values: combo.addItem(value.capitalize(), value)
-            combo.setCurrentIndex(max(0, combo.findData(shape.get(field, default))))
-            combo.currentIndexChanged.connect(lambda idx, f=field, w=combo: clone_edit(f, w.itemData(idx)))
-            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(combo)
-        center = shape.get("source_transform_center", [0, 0])
-        for part, label in enumerate(("Center X", "Center Y")):
-            spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-source-transform-center-{part}")
-            spin.setRange(-65536, 65536); spin.setValue(float(center[part])); spin.setKeyboardTracking(False)
-            spin.editingFinished.connect(lambda p=part, w=spin: clone_vec("source_transform_center", p, float(w.value())))
-            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
-        for field, label, default in (("source_translate_round", "Round translation", False),
-                                      ("source_black_outside", "Black outside source", False)):
-            check = QCheckBox(label); check.setObjectName("roto-shape-" + field)
-            check.setChecked(bool(shape.get(field, default))); check.toggled.connect(lambda v, f=field: clone_edit(f, bool(v)))
-            clone_layout.addWidget(check)
-        for field, label in (("source_time_offset", "Source time offset"),):
-            spin = QDoubleSpinBox(); spin.setObjectName("roto-shape-" + field)
-            spin.setRange(-100000, 100000); spin.setValue(float(shape.get(field, 0))); spin.setKeyboardTracking(False)
-            spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
-            clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
-        layout.addWidget(clone_box)
-        clone_box.setEnabled(shape.get("source", "color") != "color")
-        source.currentIndexChanged.connect(lambda index, box=clone_box, control=source:
-                                           box.setEnabled(control.itemData(index) != "color"))
-        for field, label, lo, hi, step in (("stroke_width", "Stroke width", 0, 4096, 0.5),
-                                          ("feather", "Feather", -500, 500, 0.5),
-                                          ("opacity", "Opacity", 0, 1, 0.05)):
-            shown = shape_model.resolve_scalar(
-                shape.get(field, 1 if field == "stroke_width" else 0 if field == "feather" else 1), frame, field)
-            control = float_slider(shown, lo, hi, step, "roto-shape-" + field)
-            spin = control.spin; spin.setKeyboardTracking(False)
-            spin.editingFinished.connect(lambda f=field, w=spin: edit(f, float(w.value())))
-            spin.setToolTip(f"Set the shape {label.lower()}")
-            layout.addWidget(QLabel(label))
-            row = QHBoxLayout()
-            row.addWidget(control, 1)
-            field_value = shape.get(field)
-            field_curve = field_value.get("curve") if isinstance(field_value, dict) else None
-            key_button = window.make_key_button(
-                key, f"shape-{i}-{field}", control, curve_override=field_curve,
-                on_toggle=lambda f=field: key_field(i, f),
-                object_name="roto-shape-key-" + field)
-            key_button.setAccessibleName(f"{label} key")
-            row.addWidget(key_button)
-            layout.addLayout(row)
-        transform = shape.get("transform", {})
-        for field, label, lo, hi, step in (
-                ("translate_x", "Translate X", -65536, 65536, 1),
-                ("translate_y", "Translate Y", -65536, 65536, 1),
-                ("rotate", "Rotate", -360000, 360000, 1),
-                ("scale_x", "Scale X", -1000, 1000, .01),
-                ("scale_y", "Scale Y", -1000, 1000, .01),
-                ("center_x", "Center X", -65536, 65536, 1),
-                ("center_y", "Center Y", -65536, 65536, 1),
-                ("skew_x", "Skew X", -89, 89, 1),
-                ("skew_y", "Skew Y", -89, 89, 1)):
-            default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][field]
-            control = float_slider(shape_model.resolve_scalar(transform.get(field, default), frame, field), lo, hi,
-                                   step, f"roto-shape-transform-{field}-{i}")
-            spin = control.spin; spin.setKeyboardTracking(False)
-            spin.editingFinished.connect(lambda f=field, w=spin: edit_transform(i, f, float(w.value())))
-            row = QHBoxLayout(); row.addWidget(control, 1)
-            raw = transform.get(field)
-            curve = raw.get("curve") if isinstance(raw, dict) else None
-            button = window.make_key_button(key, f"shape-{i}-transform-{field}", control,
-                curve_override=curve, on_toggle=lambda f=field: key_field(i, "transform." + f),
-                object_name=f"roto-shape-key-transform-{field}-{i}")
-            button.setAccessibleName(f"{label} key"); row.addWidget(button)
-            layout.addWidget(QLabel(label)); layout.addLayout(row)
-        def plain(field, value):
-            """Set a setting that is a plain value on the shape (a flag, a choice, a whole number), not an animatable scalar."""
-            entries = current()
-            if i < len(entries):
-                entries[i][field] = value
-                save(entries, i)
-        def plain_transform(field, value):
-            entries = current()
-            if i < len(entries):
-                entries[i].setdefault("transform", {})[field] = value
-                save(entries, i)
-        def plain_check(field, label, default):
-            box = QCheckBox(label); box.setObjectName("roto-shape-" + field); box.setChecked(bool(shape.get(field, default)))
-            box.toggled.connect(lambda v, f=field: plain(f, bool(v))); layout.addWidget(box)
-        def plain_combo(field, label, values, default, setter=None):
-            combo = QComboBox(); combo.setObjectName("roto-shape-" + field)
-            for val in values: combo.addItem(val.replace("_", " ").capitalize(), val)
-            source = shape.get("transform", {}) if setter is plain_transform else shape
-            combo.setCurrentIndex(max(0, combo.findData(source.get(field, default))))
-            combo.currentIndexChanged.connect(lambda idx, f=field, c=combo: (setter or plain)(f, c.itemData(idx)))
-            layout.addWidget(QLabel(label)); layout.addWidget(combo)
-        def plain_spin(field, label, lo, hi, step, default, whole=False):
-            raw = shape.get(field, default)
-            shown = shape_model.resolve_scalar(raw, frame, field) if isinstance(raw, dict) else raw
-            if whole:
-                spin = QSpinBox(); spin.setRange(int(lo), int(hi)); spin.setValue(int(round(shown)))
-            else:
-                from .app import FloatSliderControl
-                spin = FloatSliderControl((lo, hi), (lo, hi), float(shown))
-                spin.motion = window.motion; spin.slider.motion = window.motion
-                spin.spin.setSingleStep(step); spin.spin.setKeyboardTracking(False)
-            editor = spin if whole else spin.spin
-            editor.setObjectName("roto-shape-" + field); editor.setKeyboardTracking(False)
-            editor.editingFinished.connect(lambda f=field, w=editor: edit(f, int(w.value()) if whole else float(w.value())))
-            layout.addWidget(QLabel(label))
-            row = QHBoxLayout(); row.addWidget(spin, 1)
-            if field in ("motion_blur_samples", "motion_blur_shutter", "motion_blur_offset"):
-                curve = raw.get("curve") if isinstance(raw, dict) else None
-                def toggle_motion_key(f=field):
-                    entries = current()
-                    if i >= len(entries): return
-                    old = entries[i].get(f, default)
-                    if isinstance(old, dict) and old.get("curve") and any(k["frame"] == frame for k in old["curve"]["keys"]):
-                        entries[i][f] = delete_scalar_key(old, frame)
+    def build_detail(layout):
+        """Everything under the list and its buttons: the selected shape's controls, the draw button and the tracking actions.
+        It is a function of its own so that an edit that changes only what this part shows (a point gaining a key) builds it
+        again alone, inside the panel on screen, instead of rebuilding the list and every knob."""
+        layer_name = getattr(window.viewer, "roto_list_layer", None)
+        layer_entry = next((l for l in window.dispatcher.document.get("node_data", {}).get(key, {}).get("layers", [])
+                            if l["name"] == layer_name), None) if layer_name else None
+        if layer_entry is not None:
+            _layer_transform_controls(window, key, layout, layer_entry, frame, float_slider)
+        i=listing.selected_index()
+        if 0 <= i < len(shapes):
+            shape=shapes[i]
+            frames = keyframes(shape)
+            current_frame = int(window.dispatcher.document["time"]["current"])
+            count = QLabel(f"Key {frames.index(current_frame)+1 if current_frame in frames else 0} / {len(frames)}")
+            count.setObjectName("roto-spline-key-count")
+            key_controls = QHBoxLayout(); key_controls.addWidget(count)
+            for title, delta in (("Previous key", -1), ("Next key", 1)):
+                button = QPushButton(title); button.setObjectName("roto-spline-previous-key" if delta < 0 else "roto-spline-next-key")
+                target = (max((f for f in frames if f < current_frame), default=None) if delta < 0
+                          else min((f for f in frames if f > current_frame), default=None))
+                button.setEnabled(target is not None)
+                button.clicked.connect(lambda _=False, at=target: window.set_time(current=at) if at is not None else None)
+                key_controls.addWidget(button)
+            set_key = QPushButton("Set spline key"); set_key.setObjectName("roto-spline-set-key")
+            set_key.clicked.connect(lambda _=False, idx=i: edit_spline_keys(idx))
+            delete_key = QPushButton("Delete spline key"); delete_key.setObjectName("roto-spline-delete-key")
+            delete_key.clicked.connect(lambda _=False, idx=i: edit_spline_keys(idx, True))
+            key_controls.addWidget(set_key); key_controls.addWidget(delete_key); layout.addLayout(key_controls)
+            point_controls = QHBoxLayout()
+            for title, delete in (("Set selected point keys", False), ("Delete selected point keys", True)):
+                button = QPushButton(title); button.setObjectName("roto-point-delete-keys" if delete else "roto-point-set-keys")
+                button.clicked.connect(lambda _=False, idx=i, d=delete: edit_selected_point_keys(idx, d))
+                point_controls.addWidget(button)
+            layout.addLayout(point_controls)
+            scope_controls = QHBoxLayout()
+            scope = QComboBox(); scope.setObjectName("roto-key-scope")
+            for label, value in (("All", "all"), ("Spline", "spline"), ("Transform", "transform"), ("Attributes", "attributes")):
+                scope.addItem(label, value)
+            scope_controls.addWidget(scope)
+            for title, delete, name in (("Set item key", False, "roto-item-set-key"),
+                                        ("Delete item key", True, "roto-item-delete-key")):
+                button = QPushButton(title); button.setObjectName(name)
+                button.clicked.connect(lambda _=False, idx=i, d=delete, box=scope: edit_key_scope(idx, box.currentData(), d))
+                scope_controls.addWidget(button)
+            layout.addLayout(scope_controls)
+            def edit(field,value):
+                entries=current()
+                if i < len(entries):
+                    old=entries[i].get(field)
+                    if field == "color":
+                        old = old or [1.0,1.0,1.0,1.0]
+                        entries[i][field]=[value_at_frame(channel, replacement, "opacity")
+                                           for channel,replacement in zip(old,value)]
+                    elif field == "feather_model":
+                        entries[i][field] = value
+                    elif field == "motion_blur_samples":
+                        entries[i][field] = value_at_frame(old, int(value), field) if isinstance(old, dict) and old.get("curve") else int(value)
                     else:
-                        entries[i][f] = set_scalar_key(old, f, frame)
-                    save(entries, i); window.rebuild_properties_dock()
-                button = window.make_key_button(key, f"shape-{i}-{field}", spin, curve_override=curve,
-                    on_toggle=toggle_motion_key, object_name="roto-shape-key-" + field)
-                button.setAccessibleName(f"{label} key")
-                row.addWidget(button)
-            layout.addLayout(row)
-        plain_combo("skew_order", "Skew order", ("XY", "YX"), "XY", plain_transform)
-        plain_check("feather_on", "Feather on", True)
-        plain_spin("falloff_power", "Feather falloff", 0.0, 16.0, 0.1, 1.0)
-        plain_spin("motion_blur_samples", "Motion blur samples", 1, 64, 1, 1, whole=True)
-        plain_spin("motion_blur_shutter", "Motion blur shutter", 0.0, 8.0, 0.05, 0.5)
-        plain_combo("motion_blur_offset_type", "Motion blur shutter offset", shape_model.OFFSET_TYPES, "start")
-        plain_spin("motion_blur_offset", "Motion blur custom offset", -8.0, 8.0, 0.05, 0.0)
-        life = shape.get("lifetime") or {"type": "all"}
-        def set_life(part, value):
-            live_entries = current()
-            if i >= len(live_entries): return
-            now = dict(live_entries[i].get("lifetime") or {"type": "all"})
-            now[part] = value
-            if now["type"] == "range" and now.get("end", now.get("start", 1)) < now.get("start", 1):
-                now["end"] = now["start"]
-            if now["type"] == "all":
-                now = {"type": "all"}
-            plain("lifetime", now)
-        life_type = QComboBox(); life_type.setObjectName("roto-shape-lifetime-type")
-        for val in shape_model.LIFETIME_TYPES: life_type.addItem(val.replace("_", " ").capitalize(), val)
-        life_type.setCurrentIndex(max(0, life_type.findData(life.get("type", "all"))))
-        life_from_label = QLabel("From"); life_from_label.setObjectName("roto-shape-lifetime-from-label")
-        life_to_label = QLabel("To"); life_to_label.setObjectName("roto-shape-lifetime-to-label")
-        def update_lifetime_type(idx):
-            kind = life_type.itemData(idx)
-            set_life("type", kind)
+                        entries[i][field]=value_at_frame(old,value,field)
+                    save(entries,i)
+            name=QLineEdit(shape["name"]); name.setObjectName("roto-shape-name")
+            name.editingFinished.connect(lambda: edit("name",name.text())); layout.addWidget(name)
+            follow=QComboBox(); follow.setObjectName(f"roto-shape-track-link-{i}")
+            follow.addItem("No Tracker link", None)
+            trackers=window.dispatcher.document["nodes"]
+            for tracker_id, tracker_node in trackers.items():
+                if tracker_node["type"] == "PlanarTracker":
+                    follow.addItem(f"{tracker_node['name']} · plane", {"tracker_id": tracker_id, "track_name": "corner1"})
+                    continue
+                if tracker_node["type"] not in ("Tracker", "Stabilize"): continue
+                for track in window.dispatcher.document.get("node_data", {}).get(tracker_id, {}).get("tracks", []):
+                    follow.addItem(f"{tracker_node['name']} · {track['name']}",
+                                   {"tracker_id": tracker_id, "track_name": track["name"]})
+            link=shape.get("track_link")
+            follow.setCurrentIndex(next((j for j in range(follow.count()) if follow.itemData(j)==link),0))
+            def set_follow(index):
+                entries=current()
+                if i < len(entries):
+                    if follow.itemData(index) is None: entries[i].pop("track_link",None)
+                    else: entries[i]["track_link"]=follow.itemData(index)
+                    save(entries,i)
+            follow.currentIndexChanged.connect(set_follow); layout.addWidget(QLabel("Transform follows")); layout.addWidget(follow)
+            follow_mode=QComboBox(); follow_mode.setObjectName(f"roto-shape-track-follow-{i}")
+            follow_mode.addItem("Translate only", "translate"); follow_mode.addItem("Full Tracker solve", "full")
+            follow_mode.addItem("Planar", "planar")
+            follow_mode.setCurrentIndex(follow_mode.findData(shape.get("track_follow", "translate")))
+            follow_mode.currentIndexChanged.connect(lambda index, idx=i, box=follow_mode: row_edit(idx, "track_follow", box.itemData(index)))
+            layout.addWidget(follow_mode)
+            for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
+                cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
+            source = QComboBox(); source.setObjectName("roto-shape-source")
+            for label, value in (("Colour", "color"), ("Foreground", "foreground"), ("Background", "background")):
+                source.addItem(label, value)
+            source.setCurrentIndex(max(0, source.findData(shape.get("source", "color"))))
+            source.currentIndexChanged.connect(lambda index, box=source: edit("source", box.itemData(index)))
+            layout.addWidget(QLabel("Shape source")); layout.addWidget(source)
+            # Nuke's Clone tab controls belong to this shape and only affect picture sources.
+            clone_box = QWidget(); clone_layout = QVBoxLayout(clone_box)
+            clone_layout.setContentsMargins(8, 2, 2, 2)
+            clone_box.setObjectName(f"roto-shape-clone-{i}")
+            clone_layout.addWidget(QLabel("Clone"))
+            def clone_edit(field, value):
+                entries = current()
+                if i < len(entries):
+                    entries[i][field] = value
+                    save(entries, i)
+            def clone_vec(field, part, value):
+                entries = current()
+                if i < len(entries):
+                    vector = list(entries[i].get(field, [0.0, 0.0])); vector[part] = value
+                    entries[i][field] = vector
+                    save(entries, i)
+            for part, label in enumerate(("Translate X", "Translate Y")):
+                spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-source-transform-translate-{part}")
+                spin.setRange(-65536, 65536); spin.setValue(float(shape.get("source_transform_translate", [0, 0])[part]))
+                spin.setKeyboardTracking(False); spin.editingFinished.connect(
+                    lambda p=part, w=spin: clone_vec("source_transform_translate", p, float(w.value())))
+                clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+            for field, label, default in (("source_transform_rotate", "Rotate", 0.0),
+                                          ("source_transform_scale", "Scale", 1.0),
+                                          ("source_transform_skewX", "Skew X", 0.0),
+                                          ("source_transform_skewY", "Skew Y", 0.0)):
+                spin = QDoubleSpinBox(); spin.setObjectName("roto-shape-" + field)
+                spin.setRange(-1000, 1000); spin.setValue(float(shape.get(field, default))); spin.setKeyboardTracking(False)
+                spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
+                clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+            for field, label, values, default in (("source_transform_skew_order", "Skew order", ("XY", "YX"), "XY"),
+                                                   ("source_filter", "Filter", ("impulse", "cubic", "keys", "simon", "rifman", "mitchell", "parzen", "notch"), "cubic"),
+                                                   ("source_time_offset_type", "Time offset type", ("relative", "absolute"), "relative")):
+                combo = QComboBox(); combo.setObjectName("roto-shape-" + field)
+                for value in values: combo.addItem(value.capitalize(), value)
+                combo.setCurrentIndex(max(0, combo.findData(shape.get(field, default))))
+                combo.currentIndexChanged.connect(lambda idx, f=field, w=combo: clone_edit(f, w.itemData(idx)))
+                clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(combo)
+            center = shape.get("source_transform_center", [0, 0])
+            for part, label in enumerate(("Center X", "Center Y")):
+                spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-source-transform-center-{part}")
+                spin.setRange(-65536, 65536); spin.setValue(float(center[part])); spin.setKeyboardTracking(False)
+                spin.editingFinished.connect(lambda p=part, w=spin: clone_vec("source_transform_center", p, float(w.value())))
+                clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+            for field, label, default in (("source_translate_round", "Round translation", False),
+                                          ("source_black_outside", "Black outside source", False)):
+                check = QCheckBox(label); check.setObjectName("roto-shape-" + field)
+                check.setChecked(bool(shape.get(field, default))); check.toggled.connect(lambda v, f=field: clone_edit(f, bool(v)))
+                clone_layout.addWidget(check)
+            for field, label in (("source_time_offset", "Source time offset"),):
+                spin = QDoubleSpinBox(); spin.setObjectName("roto-shape-" + field)
+                spin.setRange(-100000, 100000); spin.setValue(float(shape.get(field, 0))); spin.setKeyboardTracking(False)
+                spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
+                clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+            layout.addWidget(clone_box)
+            clone_box.setEnabled(shape.get("source", "color") != "color")
+            source.currentIndexChanged.connect(lambda index, box=clone_box, control=source:
+                                               box.setEnabled(control.itemData(index) != "color"))
+            for field, label, lo, hi, step in (("stroke_width", "Stroke width", 0, 4096, 0.5),
+                                              ("feather", "Feather", -500, 500, 0.5),
+                                              ("opacity", "Opacity", 0, 1, 0.05)):
+                shown = shape_model.resolve_scalar(
+                    shape.get(field, 1 if field == "stroke_width" else 0 if field == "feather" else 1), frame, field)
+                control = float_slider(shown, lo, hi, step, "roto-shape-" + field)
+                spin = control.spin; spin.setKeyboardTracking(False)
+                spin.editingFinished.connect(lambda f=field, w=spin: edit(f, float(w.value())))
+                spin.setToolTip(f"Set the shape {label.lower()}")
+                layout.addWidget(QLabel(label))
+                row = QHBoxLayout()
+                row.addWidget(control, 1)
+                field_value = shape.get(field)
+                field_curve = field_value.get("curve") if isinstance(field_value, dict) else None
+                key_button = window.make_key_button(
+                    key, f"shape-{i}-{field}", control, curve_override=field_curve,
+                    on_toggle=lambda f=field: key_field(i, f),
+                    object_name="roto-shape-key-" + field)
+                key_button.setAccessibleName(f"{label} key")
+                row.addWidget(key_button)
+                layout.addLayout(row)
+            transform = shape.get("transform", {})
+            for field, label, lo, hi, step in (
+                    ("translate_x", "Translate X", -65536, 65536, 1),
+                    ("translate_y", "Translate Y", -65536, 65536, 1),
+                    ("rotate", "Rotate", -360000, 360000, 1),
+                    ("scale_x", "Scale X", -1000, 1000, .01),
+                    ("scale_y", "Scale Y", -1000, 1000, .01),
+                    ("center_x", "Center X", -65536, 65536, 1),
+                    ("center_y", "Center Y", -65536, 65536, 1),
+                    ("skew_x", "Skew X", -89, 89, 1),
+                    ("skew_y", "Skew Y", -89, 89, 1)):
+                default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][field]
+                control = float_slider(shape_model.resolve_scalar(transform.get(field, default), frame, field), lo, hi,
+                                       step, f"roto-shape-transform-{field}-{i}")
+                spin = control.spin; spin.setKeyboardTracking(False)
+                spin.editingFinished.connect(lambda f=field, w=spin: edit_transform(i, f, float(w.value())))
+                row = QHBoxLayout(); row.addWidget(control, 1)
+                raw = transform.get(field)
+                curve = raw.get("curve") if isinstance(raw, dict) else None
+                button = window.make_key_button(key, f"shape-{i}-transform-{field}", control,
+                    curve_override=curve, on_toggle=lambda f=field: key_field(i, "transform." + f),
+                    object_name=f"roto-shape-key-transform-{field}-{i}")
+                button.setAccessibleName(f"{label} key"); row.addWidget(button)
+                layout.addWidget(QLabel(label)); layout.addLayout(row)
+            def plain(field, value):
+                """Set a setting that is a plain value on the shape (a flag, a choice, a whole number), not an animatable scalar."""
+                entries = current()
+                if i < len(entries):
+                    entries[i][field] = value
+                    save(entries, i)
+            def plain_transform(field, value):
+                entries = current()
+                if i < len(entries):
+                    entries[i].setdefault("transform", {})[field] = value
+                    save(entries, i)
+            def plain_check(field, label, default):
+                box = QCheckBox(label); box.setObjectName("roto-shape-" + field); box.setChecked(bool(shape.get(field, default)))
+                box.toggled.connect(lambda v, f=field: plain(f, bool(v))); layout.addWidget(box)
+            def plain_combo(field, label, values, default, setter=None):
+                combo = QComboBox(); combo.setObjectName("roto-shape-" + field)
+                for val in values: combo.addItem(val.replace("_", " ").capitalize(), val)
+                source = shape.get("transform", {}) if setter is plain_transform else shape
+                combo.setCurrentIndex(max(0, combo.findData(source.get(field, default))))
+                combo.currentIndexChanged.connect(lambda idx, f=field, c=combo: (setter or plain)(f, c.itemData(idx)))
+                layout.addWidget(QLabel(label)); layout.addWidget(combo)
+            def plain_spin(field, label, lo, hi, step, default, whole=False):
+                raw = shape.get(field, default)
+                shown = shape_model.resolve_scalar(raw, frame, field) if isinstance(raw, dict) else raw
+                if whole:
+                    spin = QSpinBox(); spin.setRange(int(lo), int(hi)); spin.setValue(int(round(shown)))
+                else:
+                    from .app import FloatSliderControl
+                    spin = FloatSliderControl((lo, hi), (lo, hi), float(shown))
+                    spin.motion = window.motion; spin.slider.motion = window.motion
+                    spin.spin.setSingleStep(step); spin.spin.setKeyboardTracking(False)
+                editor = spin if whole else spin.spin
+                editor.setObjectName("roto-shape-" + field); editor.setKeyboardTracking(False)
+                editor.editingFinished.connect(lambda f=field, w=editor: edit(f, int(w.value()) if whole else float(w.value())))
+                layout.addWidget(QLabel(label))
+                row = QHBoxLayout(); row.addWidget(spin, 1)
+                if field in ("motion_blur_samples", "motion_blur_shutter", "motion_blur_offset"):
+                    curve = raw.get("curve") if isinstance(raw, dict) else None
+                    def toggle_motion_key(f=field):
+                        entries = current()
+                        if i >= len(entries): return
+                        old = entries[i].get(f, default)
+                        if isinstance(old, dict) and old.get("curve") and any(k["frame"] == frame for k in old["curve"]["keys"]):
+                            entries[i][f] = delete_scalar_key(old, frame)
+                        else:
+                            entries[i][f] = set_scalar_key(old, f, frame)
+                        save(entries, i); window.rebuild_properties_dock()
+                    button = window.make_key_button(key, f"shape-{i}-{field}", spin, curve_override=curve,
+                        on_toggle=toggle_motion_key, object_name="roto-shape-key-" + field)
+                    button.setAccessibleName(f"{label} key")
+                    row.addWidget(button)
+                layout.addLayout(row)
+            plain_combo("skew_order", "Skew order", ("XY", "YX"), "XY", plain_transform)
+            plain_check("feather_on", "Feather on", True)
+            plain_spin("falloff_power", "Feather falloff", 0.0, 16.0, 0.1, 1.0)
+            plain_spin("motion_blur_samples", "Motion blur samples", 1, 64, 1, 1, whole=True)
+            plain_spin("motion_blur_shutter", "Motion blur shutter", 0.0, 8.0, 0.05, 0.5)
+            plain_combo("motion_blur_offset_type", "Motion blur shutter offset", shape_model.OFFSET_TYPES, "start")
+            plain_spin("motion_blur_offset", "Motion blur custom offset", -8.0, 8.0, 0.05, 0.0)
+            life = shape.get("lifetime") or {"type": "all"}
+            def set_life(part, value):
+                live_entries = current()
+                if i >= len(live_entries): return
+                now = dict(live_entries[i].get("lifetime") or {"type": "all"})
+                now[part] = value
+                if now["type"] == "range" and now.get("end", now.get("start", 1)) < now.get("start", 1):
+                    now["end"] = now["start"]
+                if now["type"] == "all":
+                    now = {"type": "all"}
+                plain("lifetime", now)
+            life_type = QComboBox(); life_type.setObjectName("roto-shape-lifetime-type")
+            for val in shape_model.LIFETIME_TYPES: life_type.addItem(val.replace("_", " ").capitalize(), val)
+            life_type.setCurrentIndex(max(0, life_type.findData(life.get("type", "all"))))
+            life_from_label = QLabel("From"); life_from_label.setObjectName("roto-shape-lifetime-from-label")
+            life_to_label = QLabel("To"); life_to_label.setObjectName("roto-shape-lifetime-to-label")
+            def update_lifetime_type(idx):
+                kind = life_type.itemData(idx)
+                set_life("type", kind)
+                from_visible = kind in ("single", "to_end", "range")
+                to_visible = kind in ("start_to", "range")
+                life_from_label.setVisible(from_visible); spin_from.setVisible(from_visible)
+                life_to_label.setVisible(to_visible); spin_to.setVisible(to_visible)
+            life_type.currentIndexChanged.connect(update_lifetime_type)
+            layout.addWidget(QLabel("Lifetime")); layout.addWidget(life_type)
+            spin_from = QSpinBox(); spin_from.setRange(-100000, 100000); spin_from.setObjectName("roto-shape-lifetime-start")
+            spin_from.setValue(int(life.get("start", 1))); spin_from.setKeyboardTracking(False)
+            spin_from.editingFinished.connect(lambda w=spin_from: set_life("start", int(w.value())))
+            spin_to = QSpinBox(); spin_to.setRange(-100000, 100000); spin_to.setObjectName("roto-shape-lifetime-end")
+            spin_to.setValue(int(life.get("end", 1))); spin_to.setKeyboardTracking(False)
+            spin_to.editingFinished.connect(lambda w=spin_to: set_life("end", int(w.value())))
+            for label, widget in ((life_from_label, spin_from), (life_to_label, spin_to)):
+                layout.addWidget(label); layout.addWidget(widget)
+            kind = life.get("type", "all")
             from_visible = kind in ("single", "to_end", "range")
             to_visible = kind in ("start_to", "range")
             life_from_label.setVisible(from_visible); spin_from.setVisible(from_visible)
             life_to_label.setVisible(to_visible); spin_to.setVisible(to_visible)
-        life_type.currentIndexChanged.connect(update_lifetime_type)
-        layout.addWidget(QLabel("Lifetime")); layout.addWidget(life_type)
-        spin_from = QSpinBox(); spin_from.setRange(-100000, 100000); spin_from.setObjectName("roto-shape-lifetime-start")
-        spin_from.setValue(int(life.get("start", 1))); spin_from.setKeyboardTracking(False)
-        spin_from.editingFinished.connect(lambda w=spin_from: set_life("start", int(w.value())))
-        spin_to = QSpinBox(); spin_to.setRange(-100000, 100000); spin_to.setObjectName("roto-shape-lifetime-end")
-        spin_to.setValue(int(life.get("end", 1))); spin_to.setKeyboardTracking(False)
-        spin_to.editingFinished.connect(lambda w=spin_to: set_life("end", int(w.value())))
-        for label, widget in ((life_from_label, spin_from), (life_to_label, spin_to)):
-            layout.addWidget(label); layout.addWidget(widget)
-        kind = life.get("type", "all")
-        from_visible = kind in ("single", "to_end", "range")
-        to_visible = kind in ("start_to", "range")
-        life_from_label.setVisible(from_visible); spin_from.setVisible(from_visible)
-        life_to_label.setVisible(to_visible); spin_to.setVisible(to_visible)
-        if shape.get("closed", True) is False:
-            plain_combo("cap_start", "Start cap", shape_model.END_CAPS, "rounded")
-            plain_combo("cap_end", "End cap", shape_model.END_CAPS, "rounded")
-        matrix_edit = QLineEdit(", ".join(f"{v:g}" for v in shape["extra_matrix"]) if shape.get("extra_matrix") else "")
-        matrix_edit.setObjectName("roto-shape-extra_matrix"); matrix_edit.setPlaceholderText("16 numbers, row by row; empty for none")
-        def set_matrix():
-            text = matrix_edit.text().strip()
-            try:
-                values = [float(part) for part in text.replace(",", " ").split()] if text else None
-            except ValueError:
-                return
-            if values is None or len(values) == 16:
+            if shape.get("closed", True) is False:
+                plain_combo("cap_start", "Start cap", shape_model.END_CAPS, "rounded")
+                plain_combo("cap_end", "End cap", shape_model.END_CAPS, "rounded")
+            matrix_edit = QLineEdit(", ".join(f"{v:g}" for v in shape["extra_matrix"]) if shape.get("extra_matrix") else "")
+            matrix_edit.setObjectName("roto-shape-extra_matrix"); matrix_edit.setPlaceholderText("16 numbers, row by row; empty for none")
+            def set_matrix():
+                text = matrix_edit.text().strip()
+                try:
+                    values = [float(part) for part in text.replace(",", " ").split()] if text else None
+                except ValueError:
+                    return
+                if values is None or len(values) == 16:
+                    entries = current()
+                    if i < len(entries):
+                        if values is None: entries[i].pop("extra_matrix", None)
+                        else: entries[i]["extra_matrix"] = values
+                        save(entries, i)
+            matrix_edit.editingFinished.connect(set_matrix)
+            layout.addWidget(QLabel("Extra matrix")); layout.addWidget(matrix_edit)
+            for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",shape_model.BLEND_MODES)):
+                combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
+                for val in values: combo.addItem(val.title(),val)
+                combo.setCurrentIndex(combo.findData(shape.get(field,"linear" if field=="feather_falloff" else "over")))
+                combo.currentIndexChanged.connect(lambda idx,f=field,c=combo:edit(f,c.itemData(idx))); layout.addWidget(QLabel(field.replace("_"," ").title())); layout.addWidget(combo)
+            if shape.get("feather_model", "box") == "box":
+                switch = QPushButton("Switch to edge feather")
+                switch.setObjectName("roto-shape-edge-feather")
+                switch.setToolTip("Use the outward Nuke-style feather for this shape")
+                switch.clicked.connect(lambda: edit("feather_model", "edge"))
+                layout.addWidget(switch)
+            reset_feather = QPushButton("Reset feather on selected points")
+            reset_feather.setObjectName("roto-reset-feather-points")
+            reset_feather.setEnabled(not shape.get("locked") and any(si == i for si, _ in window.viewer.roto_selected_points))
+            def reset_selected_feather():
                 entries = current()
-                if i < len(entries):
-                    if values is None: entries[i].pop("extra_matrix", None)
-                    else: entries[i]["extra_matrix"] = values
-                    save(entries, i)
-        matrix_edit.editingFinished.connect(set_matrix)
-        layout.addWidget(QLabel("Extra matrix")); layout.addWidget(matrix_edit)
-        for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",shape_model.BLEND_MODES)):
-            combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
-            for val in values: combo.addItem(val.title(),val)
-            combo.setCurrentIndex(combo.findData(shape.get(field,"linear" if field=="feather_falloff" else "over")))
-            combo.currentIndexChanged.connect(lambda idx,f=field,c=combo:edit(f,c.itemData(idx))); layout.addWidget(QLabel(field.replace("_"," ").title())); layout.addWidget(combo)
-        if shape.get("feather_model", "box") == "box":
-            switch = QPushButton("Switch to edge feather")
-            switch.setObjectName("roto-shape-edge-feather")
-            switch.setToolTip("Use the outward Nuke-style feather for this shape")
-            switch.clicked.connect(lambda: edit("feather_model", "edge"))
-            layout.addWidget(switch)
-        reset_feather = QPushButton("Reset feather on selected points")
-        reset_feather.setObjectName("roto-reset-feather-points")
-        reset_feather.setEnabled(not shape.get("locked") and any(si == i for si, _ in window.viewer.roto_selected_points))
-        def reset_selected_feather():
-            entries = current()
-            if i >= len(entries) or entries[i].get("locked"):
-                return
-            for si, pi in window.viewer.roto_selected_points:
-                if si != i or pi >= len(entries[i]["points"]):
-                    continue
-                point = entries[i]["points"][pi]
-                for field in shape_model.FEATHER_POINT_FIELDS:
-                    point[field] = value_at_frame(point.get(field, 0.0), 0.0, field)
-            save(entries, i)
-        reset_feather.clicked.connect(reset_selected_feather)
-        layout.addWidget(reset_feather)
-        color_row = QHBoxLayout()
-        color=QPushButton("Choose colour…"); color.setObjectName("roto-shape-color")
-        color.setToolTip("Choose the shape colour")
-        swatch = QLabel(); swatch.setObjectName("roto-shape-color-swatch")
-        swatch.setFixedSize(18, 18)
-        swatch.setToolTip("Current shape colour")
-        def resolved_color(value):
-            return [shape_model.resolve_scalar(channel, frame, "opacity") for channel in value]
-        def paint_swatch(value):
-            rgba = resolved_color(value or [1, 1, 1, 1])
-            qcolor = QColor.fromRgbF(*rgba)
-            swatch.setStyleSheet(f"background-color: {qcolor.name(QColor.NameFormat.HexArgb)}; border: 1px solid #666")
-            swatch.setProperty("rgba", rgba)
-        paint_swatch(shape.get("color", [1, 1, 1, 1]))
-        def choose():
-            # The linear float picker (DiMo 10/18): the shape's floats go in and come back unclamped.
-            rgba=resolved_color(shape.get("color",[1,1,1,1]))
-            window.open_color_picker([float(v) for v in rgba], "Roto colour", lambda picked: edit("color", [min(max(float(v), 0.0), 1.0) for v in picked]))   # a shape colour is 0-1
-        color.clicked.connect(choose); color_row.addWidget(color); color_row.addWidget(swatch)
-        color_curve = shape.get("color", [])
-        animated_color, keyed_color = key_state(color_curve)
-        color_proxy = {"interpolation": "smooth",
-                       "keys": [{"frame": frame}] if keyed_color else ([{"frame": -1}] if animated_color else [])}
-        color_key=window.make_key_button(key, "shape-color", color, curve_override=color_proxy,
-                                         on_toggle=lambda: key_field(i,"color"),
-                                         object_name="roto-shape-key-color")
-        color_key.setAccessibleName("Colour key")
-        color_key.setToolTip("Set colour keys at the current frame")
-        color_row.addWidget(color_key); layout.addLayout(color_row)
-    draw=QPushButton("Draw shape…"); draw.setObjectName("roto-draw-shape"); draw.clicked.connect(lambda:window.begin_roto_draw(key)); layout.addWidget(draw)
-    add_tracking_actions(layout, window, key)
+                if i >= len(entries) or entries[i].get("locked"):
+                    return
+                for si, pi in window.viewer.roto_selected_points:
+                    if si != i or pi >= len(entries[i]["points"]):
+                        continue
+                    point = entries[i]["points"][pi]
+                    for field in shape_model.FEATHER_POINT_FIELDS:
+                        point[field] = value_at_frame(point.get(field, 0.0), 0.0, field)
+                save(entries, i)
+            reset_feather.clicked.connect(reset_selected_feather)
+            layout.addWidget(reset_feather)
+            color_row = QHBoxLayout()
+            color=QPushButton("Choose colour…"); color.setObjectName("roto-shape-color")
+            color.setToolTip("Choose the shape colour")
+            swatch = QLabel(); swatch.setObjectName("roto-shape-color-swatch")
+            swatch.setFixedSize(18, 18)
+            swatch.setToolTip("Current shape colour")
+            def resolved_color(value):
+                return [shape_model.resolve_scalar(channel, frame, "opacity") for channel in value]
+            def paint_swatch(value):
+                rgba = resolved_color(value or [1, 1, 1, 1])
+                qcolor = QColor.fromRgbF(*rgba)
+                swatch.setStyleSheet(f"background-color: {qcolor.name(QColor.NameFormat.HexArgb)}; border: 1px solid #666")
+                swatch.setProperty("rgba", rgba)
+            paint_swatch(shape.get("color", [1, 1, 1, 1]))
+            def choose():
+                # The linear float picker (DiMo 10/18): the shape's floats go in and come back unclamped.
+                rgba=resolved_color(shape.get("color",[1,1,1,1]))
+                window.open_color_picker([float(v) for v in rgba], "Roto colour", lambda picked: edit("color", [min(max(float(v), 0.0), 1.0) for v in picked]))   # a shape colour is 0-1
+            color.clicked.connect(choose); color_row.addWidget(color); color_row.addWidget(swatch)
+            color_curve = shape.get("color", [])
+            animated_color, keyed_color = key_state(color_curve)
+            color_proxy = {"interpolation": "smooth",
+                           "keys": [{"frame": frame}] if keyed_color else ([{"frame": -1}] if animated_color else [])}
+            color_key=window.make_key_button(key, "shape-color", color, curve_override=color_proxy,
+                                             on_toggle=lambda: key_field(i,"color"),
+                                             object_name="roto-shape-key-color")
+            color_key.setAccessibleName("Colour key")
+            color_key.setToolTip("Set colour keys at the current frame")
+            color_row.addWidget(color_key); layout.addLayout(color_row)
+        draw=QPushButton("Draw shape…"); draw.setObjectName("roto-draw-shape"); draw.clicked.connect(lambda:window.begin_roto_draw(key)); layout.addWidget(draw)
+        add_tracking_actions(layout, window, key)
+    detail_holder = QWidget(); detail_holder.setObjectName("roto-shape-detail")
+    detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(detail_holder)
+    build_detail(detail_layout)
+
+    def refresh(changed):
+        """Bring the panel on screen up to date for an edit that touched only the points of the shapes in `changed`: their list rows
+        (the key button reads whether a point is keyed here), and the selected shape's controls when it is one of them or the
+        point selection changed. The caller has checked that nothing else the panel shows is different."""
+        nonlocal shapes, frame, detail_holder, detail_layout
+        shapes = copy.deepcopy(window.dispatcher.document.get("node_data", {}).get(key, {}).get("shapes", []))
+        frame = int(window.dispatcher.document["time"]["current"])
+        for index in changed:
+            listing.refresh_item(index)
+        listing.sync_current()
+        old = detail_holder
+        detail_holder = QWidget(); detail_holder.setObjectName("roto-shape-detail")
+        detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
+        layout.replaceWidget(old, detail_holder)
+        old.hide(); old.setParent(None); old.deleteLater()
+        build_detail(detail_layout)
+    root._roto_refresh = refresh
     return root
 
 

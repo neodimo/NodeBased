@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QPointF, QRectF, QSettings, Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLineEdit, QWidget
 
 from nodebased.app import STYLE, Window
 from tests.test_roto_ui import roto_document, triangle, point_value
@@ -98,7 +98,9 @@ class FastRotoTests(unittest.TestCase):
         QTest.mouseMove(viewer.viewport(), end)
         self.window.timer.stop()
         request, _cancel = self.window.preview_queue.take()
-        self.assertEqual(request.tier, 8)
+        self.assertEqual(request.tier, viewer.DRAG_PREVIEW_TIER)      # one proxy tier for the whole drag, never refined while held
+        self.assertTrue(request.uncached, "a drag's picture skips the display cache")
+        self.assertIsNone(self.window._progressive_document)         # nothing is queued to refine the picture while the hand is down
         live = self.window.dispatcher.document["node_data"]["r"]["shapes"]
         previewed = request.document["node_data"]["r"]["shapes"]
         for index, shape in enumerate(previewed):
@@ -315,7 +317,44 @@ class FastRotoTests(unittest.TestCase):
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=self.at(*target))
         self.window._panel_rebuild_timer.stop()
         self.window._run_panel_rebuild()
-        self.assertEqual(builds, ["r"])
+        # the selection moved to another shape and nothing else changed: the panel on screen is brought up to date in place
+        # (the selected shape's controls are built again, the list and the knobs stay), so no whole panel is built
+        self.assertEqual(builds, [])
+        name = self.window.properties.widget().findChild(QLineEdit, "roto-shape-name")
+        self.assertEqual(name.text(), "blob5")
+
+    def test_a_drag_that_keys_a_point_updates_the_panel_in_place(self):
+        shapes = [blob(i) for i in range(6)]
+        for shape in shapes:
+            for point in shape["points"]:
+                point["x"] = {"value": point["x"], "curve": {"interpolation": "smooth",
+                                                              "keys": [{"frame": 1, "value": point["x"]}, {"frame": 3, "value": point["x"]}]}}
+        viewer = self.open(shapes)
+        self.window.rebuild_properties_dock()
+        panel = self.window.properties.widget()
+        list_before = panel.findChild(QWidget, "roto-shape-list")
+        builds = []
+        original = self.window.build_node_panel
+        self.window.build_node_panel = lambda key: builds.append(key) or original(key)
+        self.window._panel_rebuild_timer.stop()
+        key_button_before = panel.findChild(QWidget, "roto-shape-key-2")
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": self._keyed_point(shapes, 2, 3)})
+        self.assertTrue(self.window._panel_rebuild_timer.isActive())
+        self.window._panel_rebuild_timer.stop()
+        self.window._run_panel_rebuild()
+        self.assertEqual(builds, [], "the panel is updated in place, not built again")
+        self.assertIs(self.window.properties.widget(), panel)
+        self.assertIs(panel.findChild(QWidget, "roto-shape-list"), list_before, "the list stays")
+        self.assertIsNot(panel.findChild(QWidget, "roto-shape-key-2"), key_button_before, "the shape's own row is rebuilt")
+        self.assertEqual(self.window._panel_signature_shown, self.window._roto_panel_signature("r"))
+
+    @staticmethod
+    def _keyed_point(shapes, shape_index, point_index):
+        edited = copy.deepcopy(shapes)
+        value = edited[shape_index]["points"][point_index]["x"]
+        keys = value["curve"]["keys"] + [{"frame": 2, "value": 1.5}]
+        edited[shape_index]["points"][point_index]["x"] = {"value": 1.5, "curve": {**value["curve"], "keys": sorted(keys, key=lambda k: k["frame"])}}
+        return edited
 
     def test_the_overlay_cache_paints_what_a_cold_paint_does_and_a_drag_copies_only_its_shape(self):
         shapes = [blob(i) for i in range(6)]
@@ -396,6 +435,70 @@ class FastRotoTests(unittest.TestCase):
             expected = paint.apply_stroke(expected, item, 1, source=plate)   # the copying route
         np.testing.assert_array_equal(painted, expected)
         self.assertFalse(np.array_equal(painted, plate))
+
+
+class PaintPanelInPlaceTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_roto_paint_ui import document as paint_document
+        QSettings("NodeBased", "NodeBased").clear()
+        self.window = Window(paint_document())
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.graph.items_by_id["paint"].setSelected(True)
+        APP.processEvents()
+        self.window.timer.stop()
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def stroke(self, name, y):
+        from tests.test_roto_paint import stroke
+        return stroke(points=[{"x": 10.0, "y": y, "pressure": 1.0}, {"x": 40.0, "y": y + 2, "pressure": 1.0}], name=name)
+
+    def test_a_finished_stroke_adds_its_row_to_the_list_without_building_the_panel(self):
+        from nodebased import rotolist
+        window = self.window
+        window.command({"op": "set_paint_items", "id": "paint", "items": [self.stroke("stroke1", 10.0)]})
+        window._panel_rebuild_timer.stop()
+        window._run_panel_rebuild()
+        window.flush_inspect()
+        panel = window.properties.widget()
+        listing = panel.findChild(rotolist.ShapeListTree, "rotopaint-layer-list")
+        self.assertEqual(listing.count(), 1)
+        builds = []
+        original = window.build_node_panel
+        window.build_node_panel = lambda key: builds.append(key) or original(key)
+        items = window.dispatcher.document["node_data"]["paint"]["items"]
+        window.command({"op": "set_paint_items", "id": "paint", "items": items + [self.stroke("stroke2", 30.0)]})
+        self.assertTrue(window._panel_rebuild_timer.isActive())
+        window._panel_rebuild_timer.stop()
+        window._run_panel_rebuild()
+        self.assertEqual(builds, [], "the panel is not built again for a new stroke")
+        self.assertIs(window.properties.widget(), panel)
+        self.assertEqual(listing.count(), 2)
+        top = listing.invisibleRootItem().child(0)
+        self.assertEqual(listing.parse_id(top.data(0, Qt.ItemDataRole.UserRole)), ("item", 1), "the newest stroke is on top")
+        self.assertIsNotNone(listing.itemWidget(top, 0))
+        # the list a fresh build makes is the same list
+        fresh = rotolist.ShapeListTree(window, "paint", False, lambda row: None)
+        self.assertEqual([listing.parse_id(listing.invisibleRootItem().child(i).data(0, Qt.ItemDataRole.UserRole)) for i in range(2)],
+                         [fresh.parse_id(fresh.invisibleRootItem().child(i).data(0, Qt.ItemDataRole.UserRole)) for i in range(2)])
+
+    def test_removing_a_stroke_builds_the_panel(self):
+        window = self.window
+        window.command({"op": "set_paint_items", "id": "paint", "items": [self.stroke("stroke1", 10.0), self.stroke("stroke2", 30.0)]})
+        window._panel_rebuild_timer.stop()
+        window._run_panel_rebuild()
+        window.flush_inspect()
+        builds = []
+        original = window.build_node_panel
+        window.build_node_panel = lambda key: builds.append(key) or original(key)
+        window.command({"op": "set_paint_items", "id": "paint", "items": [self.stroke("stroke1", 10.0)]})
+        window._panel_rebuild_timer.stop()
+        window._run_panel_rebuild()
+        self.assertEqual(builds, ["paint"])
 
 
 if __name__ == "__main__":

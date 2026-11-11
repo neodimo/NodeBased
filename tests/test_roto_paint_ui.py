@@ -81,7 +81,7 @@ class RotoPaintViewerTests(unittest.TestCase):
         QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=start)
         QTest.mouseMove(viewer.viewport(), end, 20)
         request, _cancel = self.window.preview_queue.take()
-        self.assertEqual(request.tier, 8)
+        self.assertEqual(request.tier, self.window.viewer.DRAG_PREVIEW_TIER)      # one proxy tier for a held drag
         self.assertEqual(len(request.document["node_data"]["paint"]["items"]), 1)
         self.assertNotIn("paint", self.window.dispatcher.document["node_data"])
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=end)

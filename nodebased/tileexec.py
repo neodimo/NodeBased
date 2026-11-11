@@ -435,6 +435,15 @@ class TileExecutor:
         self._source_cache: OrderedDict[tuple, np.ndarray] = OrderedDict()
         # The unbaked, flattened document `compose_region` stashes for `_temporal_tile`; see there.
         self._unbaked_document = None
+        # What a RotoPaint tile looked like after its strokes: (node, tile, frame, tier, what the inputs are) -> the last two
+        # (the hash of every stroke in order, the painted tile). A tile whose strokes begin with a stored list (a new stroke was
+        # drawn, or the last one undone) paints only the strokes that follow it. Bounded by bytes, oldest out first.
+        self._paint_prefix: OrderedDict[tuple, list] = OrderedDict()
+        self._paint_prefix_bytes = 0
+        self._paint_hash_cache: dict = {}
+        self.paint_prefix_budget = 256 * 1024 * 1024
+        self.paint_prefix_enabled = True
+        self.paint_prefix_resumed = 0           # tiles that resumed from a stored state (tests and the benchmark read it)
         self._source_layer_cache: dict[tuple, dict] = {}
         self._source_layer_presence_cache: dict[str, bool] = {}
         # Counters updated each compose; tests assert on these.
@@ -691,6 +700,7 @@ class TileExecutor:
         self._roto_shapes_cache = {}
         self._roto_geometry_cache = {}
         self._paint_items_cache = {}
+        self._paint_hash_cache = {}
         paint_nodes = set(_all_ancestors(resolved, target))
         node_digests = _compute_node_digests(
             resolved, tier, frame,
@@ -1072,10 +1082,64 @@ class TileExecutor:
         for them. The pixels are kept for `_temporal_tile` to slice, and the Evaluator's cache
         makes the next compose of an unchanged node cheap.
         """
+        document = self._unbaked_document
+        payload = tiers.scale_node_data("RotoPaint", document.get("node_data", {}).get(node_id), tier)
+        if not any(self._paint_item_reads_other_frames(item) for item in (payload or {}).get("items", [])):
+            # Nothing outside the node's own strokes and inputs decides the picture: the tile digest already holds the inputs, so a
+            # hash of the resolved strokes is all this needs (no stroke of a plate-sized picture painted just to be hashed: 0.5 s).
+            try:
+                params = tiers.scale_params("RotoPaint", document["nodes"][node_id]["params"], tier)
+                resolved = shapes.resolve_paint_items(payload, frame, params)
+                return "strokes:" + hashlib.sha256(json.dumps(
+                    resolved, sort_keys=True, allow_nan=False, separators=(",", ":")).encode()).hexdigest()
+            except (TypeError, ValueError):
+                pass
         _, digest = self.evaluator.evaluate_raster(
-            self._unbaked_document, node_id, frame=frame, tier=tier, typed=True,
+            document, node_id, frame=frame, tier=tier, typed=True,
             return_digest=True, digest_only=True)
         return digest
+
+    @staticmethod
+    def _paint_item_reads_other_frames(item):
+        """A stroke whose picture comes from another frame or another node's data: a clone or reveal source at its own frame, a
+        tracker link, a stick-to-plate solve. Its strokes cannot be told from the document alone, so they are never cached."""
+        if item.get("kind") != "stroke":
+            return False
+        return (item.get("tool") in ("clone", "reveal") or item.get("follow_track") is not None
+                or bool(paintknobs.sticks(item)))
+
+    def _paint_prefix_lookup(self, key, hashes):
+        """The stored state whose strokes are the first ones of `hashes`: (count, painted tile) or None."""
+        with self._lock:
+            entries = self._paint_prefix.get(key)
+            if not entries:
+                return None
+            best = None
+            for chain, painted in entries:
+                count = len(chain)
+                if count <= len(hashes) and tuple(hashes[:count]) == chain and (best is None or count > best[0]):
+                    best = (count, painted)
+            if best is not None:
+                self._paint_prefix.move_to_end(key)
+            return best
+
+    def _paint_prefix_store(self, key, hashes, painted):
+        chain = tuple(hashes)
+        stored = painted.copy()
+        with self._lock:
+            entries = self._paint_prefix.setdefault(key, [])
+            for existing in list(entries):
+                if existing[0] == chain:
+                    entries.remove(existing)
+                    self._paint_prefix_bytes -= existing[1].nbytes
+            entries.insert(0, (chain, stored))
+            self._paint_prefix_bytes += stored.nbytes
+            while len(entries) > 2:
+                self._paint_prefix_bytes -= entries.pop()[1].nbytes
+            self._paint_prefix.move_to_end(key)
+            while self._paint_prefix_bytes > self.paint_prefix_budget and len(self._paint_prefix) > 1:
+                _, dropped = self._paint_prefix.popitem(last=False)
+                self._paint_prefix_bytes -= sum(entry[1].nbytes for entry in dropped)
 
     def _solve_roto(self, node_id, frame, tier):
         """Hash resolved geometry for tile identity without rendering a full matte."""
@@ -1233,10 +1297,33 @@ class TileExecutor:
                     self._unbaked_document, reveal_id, frame=source_frame, tier=tier, typed=True)
                 item["_reveal_source"] = source.fit(region)
 
+        replace = _drawbehaviour.paint_replaces(params)
+        resume, prefix_key, hashes = None, None, None
+        if self.paint_prefix_enabled and items and image_id is not None and image_id in node_digests:
+            # The strokes already painted over this same tile and inputs are not painted again: a new stroke paints itself over
+            # the stored picture of the rest (an edited stroke repaints from itself on; the strokes before it are kept).
+            try:
+                if item_key not in self._paint_hash_cache:      # once per compose, not once per tile
+                    self._paint_hash_cache[item_key] = (
+                        None if any(self._paint_item_reads_other_frames(item) for item in stored) else
+                        [hashlib.sha1(json.dumps(item, sort_keys=True, default=repr).encode()).hexdigest() for item in items])
+                hashes = self._paint_hash_cache[item_key]
+                if hashes is None:
+                    raise ValueError("strokes that read other frames are not cached")
+                prefix_key = (node_id, int(frame), int(tier), region.x, region.y, region.width, region.height,
+                              region.full_width, region.full_height, bool(replace),
+                              node_digests[image_id], node_digests.get(node["inputs"].get("input2")))
+                resume = self._paint_prefix_lookup(prefix_key, hashes)
+            except (TypeError, ValueError):
+                prefix_key = hashes = None
+        if resume is not None:
+            self.paint_prefix_resumed += 1
         painted = paint.rasterise(base, items, frame, source=base, reveal=reveal,
                                   origin=(region.x, region.y),
                                   canvas_size=(region.full_width, region.full_height),
-                                  replace=_drawbehaviour.paint_replaces(params))
+                                  replace=replace, resume=resume)
+        if prefix_key is not None and (resume is None or resume[0] != len(items)):
+            self._paint_prefix_store(prefix_key, hashes, painted)
         painted = paintknobs.premultiply(painted, params)
         return Evaluator._apply_mask_mix(base, painted, mask=mask, mix=params.get("mix", 1.0))
 

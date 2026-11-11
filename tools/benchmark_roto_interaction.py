@@ -187,6 +187,10 @@ class Recorder:
         self.paints = []            # (begin, end)
         self.shown = []             # (time shown, generation)
         self.requests = []          # (time, generation)
+        self.panels = []            # (begin, end) of every panel rebuild that ran
+        self.spans = []             # (name, begin, end) of the functions --spans wraps
+        self.heartbeat = None
+        self.span_installed = False
         self.generation_of = {}     # generation -> index of the scheduled event whose handler asked for it
         self.current_event = None
         self._install()
@@ -254,6 +258,158 @@ def summary(values):
         return {"n": 0, "median": None, "p95": None, "max": None}
     return {"n": len(values), "median": round(statistics.median(values), 2), "p95": round(percentile(values, 0.95), 2),
             "max": round(max(values), 2)}
+
+
+class GuiSampler:
+    """Poor man's py-spy: a thread that samples the GUI thread's Python stack every millisecond (wall time, so a call that is
+    blocked inside Qt counts). `top()` returns the innermost frames and the frames anywhere on the stack by share of samples."""
+
+    def __init__(self, interval=0.001):
+        import threading
+        self.interval = interval
+        self.main_id = threading.get_ident()
+        self.samples = []
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self):
+        import threading
+        self.samples = []
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        while not self._stop.is_set():
+            frame = sys._current_frames().get(self.main_id)
+            if frame is not None:
+                stack = []
+                while frame is not None and len(stack) < 40:
+                    code = frame.f_code
+                    stack.append(f"{os.path.basename(code.co_filename)}:{code.co_firstlineno}({code.co_name})")
+                    frame = frame.f_back
+                self.samples.append((time.monotonic(), stack))
+            time.sleep(self.interval)
+
+    def stop(self):
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+
+    def top(self, count=14, begin=0.0, end=float('inf')):
+        idle = ("processEvents", "pump", "pump_until", "run", "finish", "run_action", "main", "<module>")
+        window = [stack for stamp, stack in self.samples if begin <= stamp <= end]
+        busy = [s for s in window if s and not any(s[0].endswith(f"({name})") for name in ("pump", "pump_until"))
+                and "processEvents" not in s[0]]
+        total = max(1, len(window))
+        inner, cumulative = {}, {}
+        for stack in busy:
+            inner[stack[0]] = inner.get(stack[0], 0) + 1
+            for name in set(stack):
+                if name.split(":")[0] != "benchmark_roto_interaction.py":
+                    cumulative[name] = cumulative.get(name, 0) + 1
+        def rows(table):
+            ordered = sorted(table.items(), key=lambda kv: -kv[1])[:count]
+            return [{"where": name, "ms": round(n * self.interval * 1000), "share": round(n / total, 3)} for name, n in ordered]
+        return {"samples": len(window), "busy_samples": len(busy), "innermost": rows(inner), "cumulative": rows(cumulative)}
+
+
+class GilWatch:
+    """Finds who holds the interpreter lock while the GUI thread waits. A thread sleeps 0.5 ms in a loop; when it wakes more than
+    4 ms late it was waiting for the lock, and the stacks of every other thread at that instant name the code that just let go
+    of it (the render worker's frame is the call that held it). Lateness above 4 ms is counted per innermost render-side frame."""
+
+    def __init__(self):
+        import threading
+        self.main_id = threading.get_ident()
+        self.late = []                        # (lateness ms, [innermost frames of the other threads])
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self):
+        import threading
+        self.late = []
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        import threading
+        mine = threading.get_ident()
+        while not self._stop.is_set():
+            before = time.monotonic()
+            time.sleep(0.0005)
+            lateness = (time.monotonic() - before - 0.0005) * 1000
+            if lateness > 4.0:
+                frames = []
+                for ident, frame in sys._current_frames().items():
+                    if ident in (mine, self.main_id):
+                        continue
+                    stack = []
+                    while frame is not None and len(stack) < 6:
+                        code = frame.f_code
+                        stack.append(f"{os.path.basename(code.co_filename)}:{frame.f_lineno}({code.co_name})")
+                        frame = frame.f_back
+                    frames.append(stack)
+                self.late.append((lateness, frames))
+
+    def stop(self):
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+
+    def top(self, count=12):
+        counts, total = {}, {}
+        for lateness, frames in self.late:
+            for stack in frames:
+                if not stack or stack[0].startswith("threading.py") or stack[0].startswith("thread.py"):
+                    continue
+                counts[stack[0]] = counts.get(stack[0], 0) + 1
+                total[stack[0]] = total.get(stack[0], 0.0) + lateness
+        rows = sorted(counts, key=lambda k: -total[k])[:count]
+        return {"late_wakeups": len(self.late), "worst_ms": round(max((l for l, _ in self.late), default=0.0), 1),
+                "by_innermost_frame": [{"where": k, "count": counts[k], "late_ms": round(total[k], 1)} for k in rows]}
+
+
+class Heartbeat:
+    """A GUI-thread timer every 4 ms: the longest gap between two beats inside a window is the longest the GUI thread was
+    unreachable (a long handler, or a render thread holding the interpreter lock)."""
+    PERIOD_MS = 4
+
+    def __init__(self):
+        from PySide6.QtCore import QTimer
+        self.beats = []
+        self.timer = QTimer()
+        self.timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.timer.setInterval(self.PERIOD_MS)
+        self.cpu = []
+        self.timer.timeout.connect(self._beat)
+        self.timer.start()
+
+    def _beat(self):
+        self.beats.append(time.monotonic())
+        self.cpu.append(time.thread_time())
+
+    def gap_cpu(self, begin, end, over=10.0):
+        """For each gap over `over` ms: (gap ms, GUI thread CPU ms inside it). CPU far below the gap means the thread was
+        waiting (the interpreter lock, a driver, the X server); CPU near the gap means it was working."""
+        rows = []
+        pairs = [(b, c) for b, c in zip(self.beats, self.cpu) if begin <= b <= end]
+        for (b0, c0), (b1, c1) in zip(pairs, pairs[1:]):
+            if (b1 - b0) * 1000 - self.PERIOD_MS > over:
+                rows.append(((b1 - b0) * 1000, (c1 - c0) * 1000))
+        return rows
+
+    def longest_gap(self, begin, end):
+        """Longest stall (ms beyond one period) between `begin` and `end`: beats before and after count, so a stall that
+        straddles an edge of the window is clipped to the window."""
+        inside = [begin] + [b for b in self.beats if begin <= b <= end] + [end]
+        gaps = [(b - a) * 1000 - self.PERIOD_MS for a, b in zip(inside, inside[1:])]
+        return max(0.0, max(gaps))
+
+    def stalls(self, begin, end, over=50.0):
+        inside = [begin] + [b for b in self.beats if begin <= b <= end] + [end]
+        return sum(1 for a, b in zip(inside, inside[1:]) if (b - a) * 1000 - self.PERIOD_MS > over)
 
 
 # ----------------------------------------------------------------------------------------------- the driver
@@ -386,7 +542,17 @@ def analyse(recorder, records, label):
     final = None
     if records and shown:
         final = (shown[-1][0] - records[-1]["scheduled"]) * 1000
-    return {"label": label,
+    marks = {}
+    for stamp, _thread, text in trace:
+        name, _, generation = text.partition("#")
+        if generation:
+            marks.setdefault(int(generation), {}).setdefault(name, stamp)
+    def between(first, second):
+        return [(m[second] - m[first]) * 1000 for m in marks.values() if first in m and second in m]
+    stages = {"worker_wait_ms": summary(between("request", "start")), "evaluate_ms": summary(between("eval_begin", "eval_end")),
+              "convert_ms": summary(between("convert_begin", "convert_end")), "emit_to_ready_ms": summary(between("emit", "ready_begin")),
+              "ready_to_shown_ms": summary(between("ready_begin", "shown"))}
+    return {"label": label, "render_stages": stages,
             "events_posted": len(records), "moves_posted": len(moves), "moves_handled": handled_moves,
             "moves_coalesced": len(moves) - handled_moves,
             "move_handler_ms": summary(handler_moves), "move_overlay_ms": summary(overlay_moves),
@@ -646,7 +812,7 @@ def build_actions(driver, shot, window):
     return actions
 
 
-def run_action(app, window, recorder, driver, shot, name, builder, profile, repeats):
+def run_action(app, window, recorder, driver, shot, name, builder, profile, repeats, sample=False):
     """Runs one action `repeats` times with a reset between runs, returns the merged result (and the profile when asked)."""
     from PySide6.QtGui import QKeySequence
     results = []
@@ -658,6 +824,8 @@ def run_action(app, window, recorder, driver, shot, name, builder, profile, repe
             return {"label": name, "skipped": "the control was not found"}
         recorder.handlers.clear()
         recorder.paints.clear()
+        recorder.panels.clear()
+        recorder.spans.clear()
         playback_trace.disable(); playback_trace.enable()
         recorder.generation_of.clear()
         driver.events.clear()
@@ -673,6 +841,10 @@ def run_action(app, window, recorder, driver, shot, name, builder, profile, repe
                 scripted.append(("widget", lambda: window.command({"op": "redo"})))
             else:
                 scripted.append((kind, payload))
+        no_render = bool(os.environ.get("NODEBASED_BENCH_NO_RENDER"))
+        if no_render and not profiler:
+            window.timer.stop()
+            window.timer.start = lambda *a, **k: None             # diagnostic: the overlay with no render thread competing
         if profiler:
             # Python 3.12's cProfile is process-wide, so the render worker would be in the profile. The profiled pass
             # therefore never starts a render: what is left is the GUI thread's own work (the part this tool is about).
@@ -681,8 +853,24 @@ def run_action(app, window, recorder, driver, shot, name, builder, profile, repe
             window.thumbnail_timer.stop()
             window.thumbnail_timer.start = lambda *a, **k: None
             profiler.enable()
+        sampler = GuiSampler() if sample else None
+        gil = GilWatch() if os.environ.get("NODEBASED_BENCH_GIL") else None
+        if sampler:
+            sampler.start()
+        if gil:
+            gil.start()
         records = driver.run(scripted)
+        release = records[-1]["posted"] if records and records[-1]["kind"] in ("release", "widget") else None
         driver.finish(records, wait_render=profiler is None)
+        if release is not None and profiler is None:
+            driver.pump_until(lambda: time.monotonic() > release + 1.1, 3.0)       # the second after the release is on the record
+        if sampler:
+            sampler.stop()
+        if gil:
+            gil.stop()
+        if no_render and not profiler:
+            del window.timer.start
+            window.preview_queue.cancel()
         if profiler:
             profiler.disable()
             del window.timer.start
@@ -690,6 +878,28 @@ def run_action(app, window, recorder, driver, shot, name, builder, profile, repe
             window.preview_queue.cancel()
         result = analyse(recorder, records, name)
         result["undo_steps_added"] = len(window.dispatcher.undo_stack) - undo_before
+        if release is not None and profiler is None and recorder.heartbeat is not None:
+            after = [(b, e) for b, e in recorder.panels if b >= release]
+            result["panel_update_ms"] = round(max([(e - b) * 1000 for b, e in after], default=0.0), 1)
+            result["panel_done_after_release_ms"] = round(max([(e - release) * 1000 for _, e in after], default=0.0), 1)
+            result["post_release_stall_ms"] = round(recorder.heartbeat.longest_gap(release, release + 1.0), 1)
+            result["post_release_stalls_over_50"] = recorder.heartbeat.stalls(release, release + 1.0)
+            first_move = records[0]["posted"]
+            result["drag_stall_ms"] = round(recorder.heartbeat.longest_gap(first_move, release), 1)
+            gaps = recorder.heartbeat.gap_cpu(first_move, release)
+            result["drag_gap_cpu"] = {"gaps": len(gaps), "gap_ms_total": round(sum(g for g, _ in gaps), 1),
+                                      "gui_cpu_ms_in_gaps": round(sum(c for _, c in gaps), 1)}
+            result["drag_gui_busy_gaps_over_10"] = recorder.heartbeat.stalls(first_move, release, over=10.0)
+        if gil:
+            result["gil_watch"] = gil.top()
+        if recorder.span_installed and records:
+            cut = release if release is not None else float("inf")
+            result["spans"] = {"drag": span_summary(recorder, records[0]["posted"], cut),
+                               "after_release": span_summary(recorder, cut, float("inf"))}
+        if sampler:
+            first = records[0]["posted"] if records else 0.0
+            cut = release if release is not None else float("inf")
+            result["sample_top"] = {"drag": sampler.top(30, first, cut), "after_release": sampler.top(30, cut)}
         results.append(result)
         if profiler:
             profile_text = top_functions(profiler)
@@ -734,6 +944,11 @@ def merge(results):
                            "p95": round(max(r["p95"] for r in rows), 2), "max": round(max(r["max"] for r in rows), 2)}
     for key in ("moves_handled", "moves_coalesced", "renders_requested", "renders_started", "pictures_shown", "renders_dropped"):
         merged[key] = round(statistics.median(r[key] for r in results), 1)
+    for key in ("panel_update_ms", "panel_done_after_release_ms", "post_release_stall_ms", "post_release_stalls_over_50",
+                "drag_stall_ms", "drag_gui_busy_gaps_over_10"):
+        values = [r[key] for r in results if key in r]
+        if values:
+            merged[key] = max(values)               # the worst repeat: three repeats are too few for a p95 of their own
     merged["repeats"] = len(results)
     return merged
 
@@ -753,6 +968,44 @@ def top_functions(profiler, count=14):
     return [{"cum_ms": round(c * 1000, 1), "self_ms": round(t * 1000, 1), "calls": n, "where": w} for c, t, n, w in rows[:count]]
 
 
+SPAN_TARGETS = ("Window.preview_ready", "Window._show_image", "Window.request_preview", "Window._flush_drag_preview",
+                "Viewer._flush_drag_preview", "Viewer.paintEvent", "Viewer.drawForeground", "Viewer.paint_overlays",
+                "Viewer._preview_roto_drag", "Viewer._preview_document_drag", "Window.refresh_timeline_marks",
+                "Window.update_status_summary", "Window._offer_direct", "Window._frame_viewer_to", "Window._adapt_playback_proxy",
+                "Window.update_corner_readout", "Window.refresh_output_preview", "Window.start_preview")
+
+
+def install_spans(recorder, window_class, viewer_class, names=SPAN_TARGETS):
+    """Wrap each named method so every call is stamped (GUI thread and render thread alike; the name says which class)."""
+    classes = {"Window": window_class, "Viewer": viewer_class}
+    for name in names:
+        class_name, _, attribute = name.partition(".")
+        owner = classes[class_name]
+        original = getattr(owner, attribute, None)
+        if original is None:
+            continue
+
+        def wrapped(*args, _original=original, _name=name, **kwargs):
+            begin = time.monotonic()
+            try:
+                return _original(*args, **kwargs)
+            finally:
+                recorder.spans.append((_name, begin, time.monotonic()))
+        setattr(owner, attribute, wrapped)
+
+
+def span_summary(recorder, begin, end):
+    rows = {}
+    for name, b, e in recorder.spans:
+        if begin <= b <= end:
+            rows.setdefault(name, []).append((e - b) * 1000)
+    out = []
+    for name, durations in rows.items():
+        out.append({"where": name, "calls": len(durations), "total_ms": round(sum(durations), 1),
+                    "median_ms": round(statistics.median(durations), 2), "max_ms": round(max(durations), 2)})
+    return sorted(out, key=lambda r: -r["total_ms"])
+
+
 # --------------------------------------------------------------------------------------------------- main
 
 ACTION_ORDER = ["tool_switch_keys", "tool_switch_toolbar", "draw_bezier", "click_select", "marquee", "drag_point",
@@ -766,6 +1019,8 @@ def main():
     parser.add_argument("--actions", nargs="+", default=ACTION_ORDER)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--profile", action="store_true", help="also run each action once under cProfile (separate pass)")
+    parser.add_argument("--spans", action="store_true", help="time every call of the viewer/window methods in SPAN_TARGETS (a separate pass, real timings)")
+    parser.add_argument("--sample", action="store_true", help="also run each action once with a 1 ms wall-clock sampler on the GUI thread (separate pass, real timings)")
     parser.add_argument("--table", nargs="+", type=pathlib.Path, help="print a markdown table of result files (label=path) and exit")
     parser.add_argument("--short", action="store_true", help="a fifth of the moves per drag (for the profiled pass of a slow build)")
     parser.add_argument("--profile-only", action="store_true", help="only the cProfile pass (its timings are inflated; the tops are the point)")
@@ -801,6 +1056,17 @@ def main():
            "python": platform.python_version(), "label": args.label, "size": args.size, "cases": {}}
     from nodebased.app import Viewer
     recorder = Recorder(Viewer)
+    original_rebuild = Window._run_panel_rebuild
+
+    def timed_rebuild(window_self, _original=original_rebuild):
+        begin = time.monotonic()
+        ran = window_self._panel_rebuild is not None and not window_self.viewer.gesture_active()
+        try:
+            return _original(window_self)
+        finally:
+            if ran:
+                recorder.panels.append((begin, time.monotonic()))
+    Window._run_panel_rebuild = timed_rebuild
     base = os.environ.get("NODEBASED_BENCH_SCRATCH")       # the plate frames are large: keep them off /tmp, which is RAM here
     with tempfile.TemporaryDirectory(prefix="roto-interaction-", dir=base) as scratch:
         for case in args.cases:
@@ -819,6 +1085,8 @@ def main():
             app.processEvents()
             window.viewer.setFocus()
             recorder.attach(window)
+            if recorder.heartbeat is None:
+                recorder.heartbeat = Heartbeat()
             driver = Driver(app, window, recorder)
             recorder.driver = driver
             recorder.handlers.clear(); recorder.paints.clear()
@@ -836,6 +1104,15 @@ def main():
                         case_out["actions"][name] = run_action(app, window, recorder, driver, shot, name, builders[name], True, 1)
                         continue
                     case_out["actions"][name] = run_action(app, window, recorder, driver, shot, name, builders[name], False, args.repeats)
+                    if args.spans:
+                        if not recorder.span_installed:
+                            install_spans(recorder, Window, Viewer)
+                            recorder.span_installed = True
+                        spanned = run_action(app, window, recorder, driver, shot, name, builders[name], False, 1)
+                        case_out["actions"][name]["spans"] = spanned.get("spans")
+                    if args.sample:
+                        sampled = run_action(app, window, recorder, driver, shot, name, builders[name], False, 1, sample=True)
+                        case_out["actions"][name]["sample_top"] = sampled.get("sample_top")
                     if args.profile:
                         profiled = run_action(app, window, recorder, driver, shot, name, builders[name], True, 1)
                         case_out["actions"][name]["profile_top"] = profiled.get("profile_top", [])
@@ -889,7 +1166,10 @@ def print_table(out):
                 s = row[key]
                 return f"{s['median']}/{s['p95']}" if s["n"] else "-"
             print(f"{case:10} {name:20} {pair('move_overlay_ms'):>18} {pair('click_overlay_ms'):>19} {pair('picture_age_ms'):>17} "
-                  f"{row['renders_requested']}/{row['renders_dropped']}/{row['moves_coalesced']:>3} {row.get('undo_steps_added', ''):>5}")
+                  f"{row['renders_requested']}/{row['renders_dropped']}/{row['moves_coalesced']:>3} {row.get('undo_steps_added', ''):>5}"
+                  + (f"   drag: worst GUI gap {row['drag_stall_ms']} ms, {row['drag_gui_busy_gaps_over_10']} gaps over 10 ms" if "drag_stall_ms" in row else "")
+                  + (f"   after release: panel {row['panel_update_ms']} ms (done {row['panel_done_after_release_ms']} ms), "
+                     f"worst GUI stall {row['post_release_stall_ms']} ms" if "post_release_stall_ms" in row else ""))
 
 
 if __name__ == "__main__":

@@ -278,10 +278,18 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
 
 
 def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
-              canvas_size=None, replace=False):
-    out = np.zeros_like(image) if replace else image.copy()
+              canvas_size=None, replace=False, resume=None):
+    """Paint `items` in order over `image`. `resume` is `(count, painted)`: `painted` is what the first `count` items made of this
+    same `image` (the caller's cache), so only `items[count:]` are painted, over a copy of it. Each item is a pure function of the
+    running picture and the item, so the result is the bit-for-bit result of painting them all."""
+    if resume is None:
+        out = np.zeros_like(image) if replace else image.copy()
+        first = 0
+    else:
+        first, painted = resume
+        out = painted.copy()
     plate = image
-    for item in items:
+    for item in items[first:]:
         delta = item.get("_track_delta", (0.0, 0.0))
         if delta != (0.0, 0.0) and list(delta) != [0.0, 0.0]:
             item = dict(item, points=[dict(p, x=p["x"] + delta[0], y=p["y"] + delta[1])

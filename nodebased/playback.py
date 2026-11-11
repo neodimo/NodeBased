@@ -44,6 +44,9 @@ class FrameRequest:
     playing: bool = False
     # A drag may show the last completed proxy request while newer snapshots are queued.
     live_preview: bool = False
+    # A held drag's picture is one nobody asks for again: it skips the display cache (no key to hash from the whole document, no
+    # entry to store and round later) and the memo of the last conversion.
+    uncached: bool = False
 
 
 class PlaybackQueue:
@@ -57,7 +60,7 @@ class PlaybackQueue:
         self._running: set[threading.Event] = set()
 
     def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None,
-                playing=False, cancel_active=True, live_preview=False):
+                playing=False, cancel_active=True, live_preview=False, uncached=False):
         """Install one display request plus bounded read-ahead, replacing what was queued.
 
         ``cancel_active=False`` leaves an already-running evaluation alone. The transport uses
@@ -76,7 +79,7 @@ class PlaybackQueue:
             self._cancel_running()
         self._items.clear()
         self._items.append(
-            FrameRequest(generation, int(frame), True, document, tier, viewport, playing, live_preview))
+            FrameRequest(generation, int(frame), True, document, tier, viewport, playing, live_preview, uncached))
         seen = {int(frame)}
         for future in future_frames:
             future = int(future)

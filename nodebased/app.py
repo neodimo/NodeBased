@@ -4210,9 +4210,13 @@ class Viewer(PanZoomView):
 
     def _roto_scalar_at_frame(self, value, frame, replacement, auto_key=False):
         """Change a point coordinate while retaining its v8 animated scalar envelope."""
-        context = self._roto_context()
-        if context is not None:
-            auto_key = self.roto_toolbar._tool_settings(context[0], "Select Points").get("autokey", False)
+        held = self._autokey_held
+        if held is not None:
+            auto_key = held             # a drag's commit asks for the setting once, not once for each of a shape's 72 coordinates
+        else:
+            context = self._roto_context()
+            if context is not None:
+                auto_key = self.roto_toolbar._tool_settings(context[0], "Select Points").get("autokey", False)
         if isinstance(value, dict) and value.get("curve"):
             updated = copy.deepcopy(value)
             keys = updated["curve"]["keys"]
@@ -4420,7 +4424,18 @@ class Viewer(PanZoomView):
             return copy.deepcopy(shapes)
         return [copy.deepcopy(shape) if index in indices else shape for index, shape in enumerate(shapes)]
 
+    _autokey_held = None
+
     def _commit_roto_drag(self):
+        context = self._roto_context()
+        if context is not None:
+            self._autokey_held = bool(self.roto_toolbar._tool_settings(context[0], "Select Points").get("autokey", False))
+        try:
+            return self._commit_roto_drag_now()
+        finally:
+            self._autokey_held = None
+
+    def _commit_roto_drag_now(self):
         drag = self.roto_drag
         if drag is None:
             return False
@@ -4641,6 +4656,7 @@ class Viewer(PanZoomView):
         self._commit_roto_shapes(key, node, shapes, ripple=True)
         return True
 
+    DRAG_PREVIEW_TIER = int(os.environ.get("NODEBASED_DRAG_TIER", "4"))      # the proxy tier of a held drag's pictures (1/4 size)
     DRAG_PREVIEW_INTERVAL = 0.04            # at most 25 picture requests a second while a handle or brush is held
 
     def _schedule_drag_preview(self, preview):
@@ -4707,7 +4723,8 @@ class Viewer(PanZoomView):
                 if existing.get("tool_settings"):
                     payload["tool_settings"] = existing["tool_settings"]
                 node_data[key] = payload
-            window.request_preview(progressive=True, document_override=snapshot, document_owned=True)
+            window.request_preview(progressive=True, document_override=snapshot, document_owned=True,
+                                   drag_tier=self.DRAG_PREVIEW_TIER)
             return True
         return self._preview_document_drag_exact(drag_attribute, commit, captured)
 
@@ -4730,7 +4747,7 @@ class Viewer(PanZoomView):
             self.window.dispatcher = real_dispatcher
             self.window.command = real_command
             setattr(self, drag_attribute, drag)
-        self.window.request_preview(progressive=True, document_override=preview_document)
+        self.window.request_preview(progressive=True, document_override=preview_document, drag_tier=self.DRAG_PREVIEW_TIER)
         return True
 
     def _preview_roto_drag(self):
@@ -10645,6 +10662,8 @@ class Window(QMainWindow):
         self._panel_rebuild = None
         self._render_identity_keys = None
         self._panel_signature_shown = None
+        self._panel_node_shown = None
+        self._panel_paint_selected_shown = None
         self._panel_rebuild_timer = QTimer(self)
         self._panel_rebuild_timer.setSingleShot(True)
         self._panel_rebuild_timer.timeout.connect(self._run_panel_rebuild)
@@ -15983,9 +16002,72 @@ class Window(QMainWindow):
         return (key, selected, any(si == selected for si, _ in viewer.roto_selected_points),
                 rotopanel.panel_signature(document.get("node_data", {}).get(key), int(document["time"]["current"])))
 
+    def _paint_panel_append_in_place(self, shown, current):
+        """A stroke was drawn and nothing else the RotoPaint panel shows changed: its row goes in at the top of the list and the
+        rest of the panel (the brush and tool knobs, the other rows) stays. Any other change returns False and the panel is built."""
+        if self.viewer.paint_selected_item_index is not None or self._panel_paint_selected_shown is not None:
+            return False
+        before, after = shown[3], current[3]
+        if set(before) != set(after) or any(before[name] != after[name] for name in before if name != "items"):
+            return False
+        old, new = before.get("items", []), after.get("items", [])
+        if len(new) <= len(old) or new[:len(old)] != old:
+            return False
+        panel = self.properties.widget()
+        listing = panel.findChild(rotolist.ShapeListTree, "rotopaint-layer-list") if panel is not None else None
+        if listing is None or not listing.add_new_rows():
+            return False
+        self._panel_signature_shown = current
+        return True
+
     def _note_panel_shown(self, key):
         """Remember what the heavy panel just built shows, so an edit that changes none of it does not build it again."""
-        self._panel_signature_shown = self._roto_panel_signature(key) if self._panel_is_heavy(key) else None
+        heavy = self._panel_is_heavy(key)
+        self._panel_signature_shown = self._roto_panel_signature(key) if heavy else None
+        node = self.dispatcher.document["nodes"].get(key) if heavy else None
+        self._panel_node_shown = copy.deepcopy(node) if node is not None else None
+        self._panel_paint_selected_shown = getattr(self.viewer, "paint_selected_item_index", None) if heavy else None
+
+    def _roto_panel_refresh_in_place(self):
+        """Bring the Roto panel on screen up to date without building it again, when the edit changed only the points of some
+        shapes (a drag that keyed a point) and the selection: the rows of those shapes and the selected shape's controls are built
+        again (about 30 ms), the other 400 widgets stay. Anything else the panel shows being different (a shape added, a name, a
+        layer, a tool setting, the node's own knobs, the frame) returns False and the caller rebuilds the panel."""
+        key = self.graph.selected_id() if getattr(self, "graph", None) is not None else None
+        shown = self._panel_signature_shown
+        if (key is None or shown is None or self.pinned_panels or self._panel_node_shown is None):
+            return False
+        document = self.dispatcher.document
+        node = document["nodes"].get(key)
+        if node is None or node["type"] not in ("Roto", "RotoPaint") or node != self._panel_node_shown:
+            return False
+        current = self._roto_panel_signature(key)
+        if current[0] != shown[0]:
+            return False
+        if node["type"] == "RotoPaint":
+            return self._paint_panel_append_in_place(shown, current)
+        before, after = shown[3], current[3]
+        if set(before) != set(after) or any(before[name] != after[name] for name in before if name != "shapes"):
+            return False
+        old_shapes, new_shapes = before.get("shapes", []), after.get("shapes", [])
+        if len(old_shapes) != len(new_shapes):
+            return False
+        changed = []
+        for index, (old, new) in enumerate(zip(old_shapes, new_shapes)):
+            if old == new:
+                continue
+            if ({name: value for name, value in old.items() if name != "points"}
+                    != {name: value for name, value in new.items() if name != "points"}):
+                return False
+            changed.append(index)
+        panel = self.properties.widget()
+        root = panel.findChild(QWidget, "roto-shapes-panel") if panel is not None else None
+        refresh = getattr(root, "_roto_refresh", None)
+        if refresh is None:
+            return False
+        refresh(changed)
+        self._panel_signature_shown = current
+        return True
 
     def refresh_panel_soon(self, rebuild):
         """Run `rebuild` (a call that rebuilds the Properties panel for the current selection) now, or, for a heavy panel, once
@@ -16012,6 +16094,8 @@ class Window(QMainWindow):
             return
         rebuild, self._panel_rebuild = self._panel_rebuild, None
         if rebuild is not None:
+            if self._roto_panel_refresh_in_place():
+                return
             rebuild()
 
     def inspect(self, key, reuse=False):
@@ -16038,7 +16122,31 @@ class Window(QMainWindow):
         return (self.dispatcher.revision, document["time"]["current"], self.theme_name,
                 tuple(getattr(self, "graph_path", ())))
 
+    @contextlib.contextmanager
+    def _panel_build_quiet(self):
+        """While a panel is built and swapped in, take this window's application-wide event filter off: a Roto panel of twenty shapes
+        posts about 135,000 events (polish, child added, layout) and each one went through a Python callback (0.3 to 0.4 s of the
+        build). Nothing it acts on (wheel, keys, the status bar's resize) arrives during a synchronous build; the status bar is
+        placed once afterwards."""
+        app = QApplication.instance()
+        if getattr(self, "_panel_quiet", False) or app is None:
+            yield
+            return
+        self._panel_quiet = True
+        app.removeEventFilter(self)
+        try:
+            yield
+        finally:
+            app.installEventFilter(self)
+            self._panel_quiet = False
+            if hasattr(self, "state_word"):
+                self._place_state_word()
+
     def _show_cached_panel(self, key, reuse):
+        with self._panel_build_quiet():
+            self._show_cached_panel_now(key, reuse)
+
+    def _show_cached_panel_now(self, key, reuse):
         """Show the Properties panel for `key`, reusing the widgets built the last time this node was
         selected when nothing in the document, the playhead or the theme has changed since."""
         stamp = self._panel_cache_stamp()
@@ -16177,6 +16285,10 @@ class Window(QMainWindow):
             self.rebuild_properties_dock()
 
     def rebuild_properties_dock(self):
+        with self._panel_build_quiet():
+            self._rebuild_properties_dock_now()
+
+    def _rebuild_properties_dock_now(self):
         self._cancel_panel_rebuild()
         from .artifacts import ArtifactStore
         live_ids = set()
@@ -18695,7 +18807,7 @@ class Window(QMainWindow):
         return False
 
     def request_preview(self, *_, playhead_only=False, tier_override=None, progressive=False,
-                        progressive_target=None, document_override=None, document_owned=False):
+                        progressive_target=None, document_override=None, document_owned=False, drag_tier=None):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
@@ -18725,7 +18837,15 @@ class Window(QMainWindow):
             # lower proxy renders and let the ordinary display-cache path show it directly.
             progressive = False
             progressive_target = None
-        if progressive and not self.playing:
+        if drag_tier is not None and progressive and not self.playing:
+            # A held drag: one proxy tier for every picture, never refined while the hand is down (the refinements doubled the
+            # render thread's work, and every render competes with the GUI thread for the interpreter lock). The release's own
+            # request brings the selected tier.
+            tier = max(int(drag_tier), int(self.proxy.currentData()))
+            self._progressive_target = tier
+            self._progressive_document = None
+            self._progressive_document_owned = False
+        elif progressive and not self.playing:
             self._progressive_target = int(self.proxy.currentData())
             # A drag preview refines the dragged picture, not the document the drag has not yet changed.
             self._progressive_document = document_override
@@ -18810,7 +18930,8 @@ class Window(QMainWindow):
                                    tier=tier, viewport=viewport,
                                    playing=self.playing,
                                    cancel_active=cancel_active,
-                                   live_preview=live_preview)
+                                   live_preview=live_preview,
+                                   uncached=bool(drag_tier is not None and live_preview))
         if (progressive or progressive_target is not None) and not self.playing:
             self._progressive_generation = self.generation
         # Full-frame evaluation and tiled playback can both consume immutable warmed Read
@@ -18941,16 +19062,16 @@ class Window(QMainWindow):
                 region_key = (None if render_region is None else
                               (render_region.x, render_region.y,
                                render_region.width, render_region.height))
-                display_key = DisplayCache.key(request.document, target, request.frame,
-                                               request.tier)
+                display_key = (None if request.uncached else
+                               DisplayCache.key(request.document, target, request.frame, request.tier))
                 # The display cache is consulted before anything is composed. It holds the
                 # scene-linear frame, so a hit only needs the display-time conversion: checking it
                 # only after composing would still re-assemble every tile just to throw the result
                 # away.
-                static = display_key[1] == STATIC_FRAME
-                cached = self.display_cache.get(display_key, region_key, copy=False)
+                static = display_key is not None and display_key[1] == STATIC_FRAME
+                cached = None if display_key is None else self.display_cache.get(display_key, region_key, copy=False)
                 crop = None
-                if cached is None and tiled and render_region != bounds:
+                if cached is None and display_key is not None and tiled and render_region != bounds:
                     # Read-ahead caches whole frames; a zoomed-in view asks for its visible crop.
                     # A whole frame contains every crop of itself, so serve the crop from it.
                     cached = self.display_cache.get(
@@ -19047,9 +19168,10 @@ class Window(QMainWindow):
                 # it again hands out the stored array; any other frame is stored lazily, and
                 # rounded to half-float later by compact_display_cache.
                 _trace_mark("put_begin")
-                self.display_cache.put(display_key, frame, region_key,
-                                       is_data=static or _is_data_target(request.document, target),
-                                       lazy=True)
+                if display_key is not None:
+                    self.display_cache.put(display_key, frame, region_key,
+                                           is_data=static or _is_data_target(request.document, target),
+                                           lazy=True)
                 _trace_mark("cache_put")
                 direct = request.display and self._direct_linear_for(request, view, frame, channel)
                 if request.display and not direct and self._pipelines(request):

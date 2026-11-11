@@ -295,6 +295,62 @@ class ShapeListTree(QTreeWidget):
         elif layer and ("layer", layer) in self.tree_items:
             self.setCurrentItem(self.tree_items[("layer", layer)])
 
+    def refresh_item(self, index):
+        """Build one row's cells again from the document (a point gained a key: the Name cell's key button shows it) and leave
+        every other row, and the tree itself, as it is."""
+        row = self.tree_items.get(("item", index))
+        entries = self.payload().get(self.slot, [])
+        if row is None or not 0 <= index < len(entries):
+            return
+        self._building = True
+        try:
+            for column in range(self.columnCount()):
+                widget = self.itemWidget(row, column)
+                self.removeItemWidget(row, column)
+                if widget is not None:
+                    widget.hide(); widget.setParent(None); widget.deleteLater()     # gone from the panel now, not at the next event loop
+            self._item_cells(row, index, copy.deepcopy(entries[index]), self.frame())
+        finally:
+            self._building = False
+
+    def add_new_rows(self):
+        """Put rows for items drawn since the list was built (a stroke just finished) at the top of the list, where the front-most item
+        goes, without building the other rows again. False, with nothing changed, when the new items are not plain top-level
+        items appended after the old ones (a layer is involved, or the order moved): the caller builds the list instead."""
+        entries = self.payload().get(self.slot, [])
+        known = sorted(ref for kind, ref in self.tree_items if kind == "item")
+        if known != list(range(len(known))) or len(entries) <= len(known):
+            return False
+        new = range(len(known), len(entries))
+        if any(entries[index].get("layer") for index in new):
+            return False
+        frame, root = self.frame(), self.invisibleRootItem()
+        self._building = True
+        try:
+            for index in new:                       # each newer item is further to the front: it goes above the one before
+                row = QTreeWidgetItem()
+                root.insertChild(0, row)
+                row.setData(0, Qt.ItemDataRole.UserRole, self._id_text(("item", index)))
+                self.tree_items[("item", index)] = row
+                self._item_cells(row, index, copy.deepcopy(entries[index]), frame)
+        finally:
+            self._building = False
+        return True
+
+    def sync_current(self):
+        """Make the tree's current row the viewer's selected item without running the selection routine (the panel is being
+        brought up to date by the caller, which builds the selected shape's controls itself)."""
+        selected = self.selected_index()
+        row = self.tree_items.get(("item", selected))
+        layer = getattr(self.window.viewer, "roto_list_layer", None)
+        if row is None or layer or self.currentItem() is row:
+            return
+        self._building = True
+        try:
+            self.setCurrentItem(row)
+        finally:
+            self._building = False
+
     def _check(self, row, column, name, tip, value, setter, enabled=True):
         box = QCheckBox(); box.setObjectName(name); box.setToolTip(tip); box.setAccessibleName(tip)
         box.setChecked(bool(value)); box.setEnabled(enabled)

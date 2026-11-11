@@ -107,7 +107,7 @@ class RotoOverlayTests(unittest.TestCase):
         self.assertTrue(viewer._preview_roto_drag())
         self.window.timer.stop()
         request, _cancel = self.window.preview_queue.take()
-        self.assertEqual(request.tier, 8)
+        self.assertEqual(request.tier, self.window.viewer.DRAG_PREVIEW_TIER)      # one proxy tier for a held drag
         preview_point = request.document["node_data"]["r"]["shapes"][0]["points"][0]
         self.assertEqual((point_value(preview_point["x"]), point_value(preview_point["y"])), (25.0, 30.0))
         stored_point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
