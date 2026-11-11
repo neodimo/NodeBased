@@ -9,14 +9,14 @@ from PySide6.QtWidgets import QComboBox, QLabel, QLineEdit, QListWidget, QPushBu
 import tests.isolation
 from tests.test_roto_ui import APP, triangle
 from tests.waiting import wait_until
-from nodebased.app import Window
+from nodebased.app import Viewer, Window
 from nodebased.core import Dispatcher, empty_document
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 class TrackerPointListTests(unittest.TestCase):
-    def test_tracker_point_drag_queues_tier8_snapshot_without_mutating_document(self):
+    def test_tracker_point_drag_queues_a_drag_tier_snapshot_without_mutating_document(self):
         QSettings("NodeBased", "NodeBased").clear()
         dispatcher = Dispatcher(empty_document())
         dispatcher.execute({"op": "create", "id": "plate", "type": "Checker"})
@@ -40,7 +40,7 @@ class TrackerPointListTests(unittest.TestCase):
         self.assertTrue(viewer._preview_tracker_drag())
         window.timer.stop()
         request, _cancel = window.preview_queue.take()
-        self.assertEqual(request.tier, 8)
+        self.assertEqual(request.tier, Viewer.DRAG_PREVIEW_TIER)   # a held drag renders one fixed proxy tier
         preview = request.document["node_data"]["t"]["tracks"][0]
         self.assertAlmostEqual(preview["x"], 30.0)
         self.assertAlmostEqual(preview["y"], 40.0)
@@ -49,7 +49,7 @@ class TrackerPointListTests(unittest.TestCase):
         self.assertEqual(len(window.dispatcher.undo_stack), before)
         self.assertIs(viewer.tracker_drag, drag)
 
-    def test_planar_corner_drag_queues_a_tier8_snapshot_without_mutating_the_document(self):
+    def test_planar_corner_drag_queues_a_drag_tier_snapshot_without_mutating_the_document(self):
         QSettings("NodeBased", "NodeBased").clear()
         dispatcher = Dispatcher(empty_document())
         dispatcher.execute({"op": "create", "id": "plate", "type": "Checker"})
@@ -74,7 +74,7 @@ class TrackerPointListTests(unittest.TestCase):
         self.assertTrue(viewer._preview_planar_drag())
         window.timer.stop()
         request, _cancel = window.preview_queue.take()
-        self.assertEqual(request.tier, 8)
+        self.assertEqual(request.tier, Viewer.DRAG_PREVIEW_TIER)   # a held drag renders one fixed proxy tier
         preview = request.document["node_data"]["plane"]["tracks"][0]
         self.assertAlmostEqual(preview["x"], 30.0)
         self.assertAlmostEqual(preview["y"], 40.0)
