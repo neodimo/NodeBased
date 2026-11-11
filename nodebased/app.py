@@ -4690,6 +4690,7 @@ class Viewer(PanZoomView):
         """A release or a cancel: the final picture comes from the commit, so a request still waiting is dropped."""
         self._drag_preview_fn = None
         self._drag_preview_timer.stop()
+        self._drag_snapshot_rest = None
 
     PAYLOAD_PREVIEW_OPS = {"set_shapes": "shapes", "set_paint_items": "items"}
 
@@ -4715,7 +4716,15 @@ class Viewer(PanZoomView):
         if not captured:
             return False                    # the edit changed nothing (a locked shape): there is no picture to refresh
         if all(c.get("op") in self.PAYLOAD_PREVIEW_OPS and c.get("id") in nodes for c in captured):
-            snapshot = {name: (value if name == "node_data" else copy.deepcopy(value)) for name, value in document.items()}
+            # Everything but the node data is copied once per drag, not once per move: a drag changes nothing else, and the render
+            # worker only reads a drag's snapshot (its refinements already share one). The copy is dropped when the drag ends.
+            stamp = (id(document), self.window.dispatcher.revision, document.get("time", {}).get("current"),
+                     tuple(sorted(document)))
+            rest = getattr(self, "_drag_snapshot_rest", None)
+            if rest is None or rest[0] != stamp:
+                rest = self._drag_snapshot_rest = (stamp, {name: copy.deepcopy(value) for name, value in document.items()
+                                                           if name != "node_data"})
+            snapshot = dict(rest[1])
             node_data = snapshot["node_data"] = dict(document.get("node_data", {}))
             for command in captured:
                 slot = self.PAYLOAD_PREVIEW_OPS[command["op"]]

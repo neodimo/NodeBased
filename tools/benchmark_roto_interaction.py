@@ -916,6 +916,8 @@ def run_action(app, window, recorder, driver, shot, name, builder, profile, repe
             first = records[0]["posted"] if records else 0.0
             cut = release if release is not None else float("inf")
             result["sample_top"] = {"drag": sampler.top(30, first, cut), "after_release": sampler.top(30, cut)}
+            if recorder.heartbeat is not None and release is not None:
+                result["stall_stacks"] = stall_stacks(sampler, recorder.heartbeat, release, release + 1.0)
         results.append(result)
         if profiler:
             profile_text = top_functions(profiler)
@@ -989,6 +991,27 @@ SPAN_TARGETS = ("Window.preview_ready", "Window._show_image", "Window.request_pr
                 "Viewer._preview_roto_drag", "Viewer._preview_document_drag", "Window.refresh_timeline_marks",
                 "Window.update_status_summary", "Window._offer_direct", "Window._frame_viewer_to", "Window._adapt_playback_proxy",
                 "Window.update_corner_readout", "Window.refresh_output_preview", "Window.start_preview")
+
+
+def stall_stacks(sampler, heartbeat, begin, end, over=50.0, count=8):
+    """For each GUI stall over `over` ms between `begin` and `end`: when it began, how long it lasted, and the frames (outside this
+    tool) most of its samples were in, so a stall is named by the code that held the thread."""
+    inside = [begin] + [b for b in heartbeat.beats if begin <= b <= end] + [end]
+    rows = []
+    for a, b in zip(inside, inside[1:]):
+        length = (b - a) * 1000 - heartbeat.PERIOD_MS
+        if length <= over:
+            continue
+        window = [stack for stamp, stack in sampler.samples if a <= stamp <= b]
+        table = {}
+        for stack in window:
+            for name in set(stack):
+                if name.split(":")[0] != "benchmark_roto_interaction.py" and "processEvents" not in name and "exec" not in name:
+                    table[name] = table.get(name, 0) + 1
+        top = sorted(table.items(), key=lambda kv: -kv[1])[:count]
+        rows.append({"begins_after_release_ms": round((a - begin) * 1000, 1), "length_ms": round(length, 1),
+                     "samples": len(window), "frames": [{"where": n, "samples": c} for n, c in top]})
+    return rows
 
 
 def install_spans(recorder, window_class, viewer_class, names=SPAN_TARGETS):
@@ -1129,6 +1152,7 @@ def main():
                     if args.sample:
                         sampled = run_action(app, window, recorder, driver, shot, name, builders[name], False, 1, sample=True)
                         case_out["actions"][name]["sample_top"] = sampled.get("sample_top")
+                        case_out["actions"][name]["stall_stacks"] = sampled.get("stall_stacks")
                     if args.profile:
                         profiled = run_action(app, window, recorder, driver, shot, name, builders[name], True, 1)
                         case_out["actions"][name]["profile_top"] = profiled.get("profile_top", [])
