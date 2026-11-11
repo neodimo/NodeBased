@@ -1,5 +1,25 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (5:06 AM on 2026-11-11 PDT)
+
+`main` moved `b5673f8e` -> `d5c8cbf8` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d5c8cbf8` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1111-0436.log`, started 4:36 AM): **Ran 9846 tests in 1670.125 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback: undo the 25 ms the Roto matte process added on the Radeon, keep what it won.** Commits:
+  - `425a6b0d` Time row test: wait for the frame-12 render before typing, so its status message cannot overwrite the refusal under suite load
+  - `9611e43a` Avoid Roto matte process on GPU playback
+  Diff: 7 files changed, 98 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (2:26 AM on 2026-11-11 PDT)
 
 `main` moved `33e384fd` -> `5d6162d5` (lane commits cherry-picked onto main in lane order) and then to this
