@@ -1,0 +1,813 @@
+#!/usr/bin/env python3
+"""Roto interaction latency: what an artist feels when clicking and dragging in the Viewer.
+
+Opens the real main window on the real display (DISPLAY=:0, QT_QPA_PLATFORM=xcb) with a shot the tool builds itself, then
+posts real Qt mouse and key events to the viewer widget through the event loop (QCoreApplication.postEvent, never by calling
+a handler) and times each one:
+
+    handler    the viewer's mouse or key handler, from entry to return
+    overlay    the event's scheduled time to the end of the Viewer paintEvent that follows it (points, tangents, outline,
+               brush cursor are drawn in that paint). A handler that blocks delays the next post, and the delay counts here,
+               because the scheduled time is when the hand moved.
+    image      for each picture the viewer shows during a drag: the age of the edit it shows, from the edit's scheduled time
+               to the end of the paint that shows the picture. After the release, the time from the release to the
+               full-resolution picture.
+
+Per action: median and p95 of each, the renders started and dropped, the events posted and handled (the difference was
+coalesced by Qt), and with --profile the top functions by cumulative time on the GUI thread (cProfile, a separate pass).
+
+    DISPLAY=:0 QT_QPA_PLATFORM=xcb python tools/benchmark_roto_interaction.py --output roto-interaction.json
+    python tools/benchmark_roto_interaction.py --self-check        # offscreen, tiny shot, proves the tool runs (no numbers kept)
+    python tools/benchmark_roto_interaction.py --profile --cases light --actions drag_point
+
+Run it on a quiet machine: `pgrep -af "integ-auto|unittest"` must find nothing. The shot is `--case realistic` (1080p textured
+plate through Read, a Roto of 20 closed Bezier shapes of 12 points keyed on 6 of 48 frames and feathered, a RotoPaint of 30
+strokes, a Merge and a Grade) or `--case light` (one Roto on a constant). The Roto overlay is only editable while the Roto
+node itself is the viewed node, so the Roto actions view it, and the RotoPaint actions view the RotoPaint.
+"""
+from __future__ import annotations
+
+import argparse
+import cProfile
+import io
+import json
+import math
+import os
+import pathlib
+import platform
+import pstats
+import statistics
+import sys
+import tempfile
+import time
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+
+def _early_platform():
+    """The Qt platform is chosen before PySide6 loads: xcb on the real display, offscreen only for --self-check."""
+    if "--self-check" in sys.argv:
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    else:
+        os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+        os.environ.setdefault("DISPLAY", ":0")
+
+
+_early_platform()
+
+import numpy as np  # noqa: E402
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, Qt  # noqa: E402
+from PySide6.QtGui import QKeyEvent, QMouseEvent  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from nodebased import playback_trace  # noqa: E402
+
+FRAME_INTERVAL = 1 / 60.0          # display rate: a move event per 16.7 ms
+KEY_FRAMES = (1, 10, 20, 30, 40, 48)
+PLATE_PATTERN = "plate.####.png"
+
+
+# --------------------------------------------------------------------------------------------- the shot
+
+def _scalar(value, deltas=None):
+    """A static number, or one keyed on KEY_FRAMES at value + delta."""
+    if deltas is None:
+        return value
+    return {"value": value, "curve": {"interpolation": "smooth",
+                                       "keys": [{"frame": f, "value": value + d} for f, d in zip(KEY_FRAMES, deltas)]}}
+
+
+def make_shape(index, cx, cy, radius, count=12, keyed=True, feather=8.0):
+    """A closed Bezier blob of `count` points around (cx, cy); every coordinate keyed on KEY_FRAMES when `keyed`."""
+    rng = np.random.default_rng(1000 + index)
+    points = []
+    for i in range(count):
+        a = 2 * math.pi * i / count
+        r = radius * (1.0 + 0.18 * math.sin(3 * a + index))
+        x, y = cx + r * math.cos(a), cy + r * math.sin(a)
+        handle = 2 * math.pi * r / count / 3.0
+        hx, hy = -handle * math.sin(a), handle * math.cos(a)
+        wobble = rng.uniform(-30, 30, size=(2, len(KEY_FRAMES))) if keyed else None
+        points.append({"x": _scalar(x, list(wobble[0]) if keyed else None), "y": _scalar(y, list(wobble[1]) if keyed else None),
+                       "in_x": -hx, "in_y": -hy, "out_x": hx, "out_y": hy,
+                       "feather_x": 0.0, "feather_y": 0.0})
+    return {"name": f"shape{index + 1}", "mode": "union", "opacity": 0.9, "feather": feather, "closed": True,
+            "feather_model": "edge", "points": points, "locked": False}
+
+
+def shape_grid(count, width, height, keyed=True):
+    columns = 5 if count > 4 else count
+    rows = math.ceil(count / columns)
+    cell_w, cell_h = width / columns, height / rows
+    radius = min(cell_w, cell_h) * 0.32
+    return [make_shape(i, (i % columns + 0.5) * cell_w, (i // columns + 0.5) * cell_h, radius, keyed=keyed)
+            for i in range(count)]
+
+
+def make_strokes(count, width, height):
+    rng = np.random.default_rng(77)
+    strokes = []
+    for i in range(count):
+        x0, y0 = rng.uniform(0.1 * width, 0.9 * width), rng.uniform(0.1 * height, 0.9 * height)
+        points = [{"x": float(x0 + 18 * k + rng.uniform(-6, 6)), "y": float(y0 + 9 * k + rng.uniform(-6, 6)),
+                   "pressure": float(rng.uniform(0.4, 1.0))} for k in range(40)]
+        strokes.append({"kind": "stroke", "name": f"stroke{i + 1}", "points": points,
+                        "brush": {"size": 22.0, "hardness": 0.2, "opacity": 1.0, "spacing": 0.05, "strength": 0.2},
+                        "tool": "paint", "lifetime": {"mode": "all"}, "color": [0.9, 0.3, 0.1, 1.0],
+                        "source_offset": [0.0, 0.0], "source_frame": "relative", "opacity": 1.0,
+                        "blend": "over", "visible": True, "follow_track": None, "patch_blend": 0.0})
+    return strokes
+
+
+def write_plate(directory, width, height, frames):
+    """A textured plate sequence the Read node loads: low-frequency colour, fine noise, a few hard edges."""
+    from nodebased.imaging import write_png
+    rng = np.random.default_rng(5)
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    base = np.stack([0.5 + 0.4 * np.sin(xx / 97.0), 0.5 + 0.4 * np.cos(yy / 71.0), 0.5 + 0.3 * np.sin((xx + yy) / 150.0)], -1)
+    noise = rng.normal(0, 0.04, size=(height, width, 1)).astype(np.float32)
+    frame = np.concatenate([np.clip(base + noise, 0, 1), np.ones((height, width, 1), np.float32)], -1).astype(np.float32)
+    frame[(xx.astype(int) // 80 + yy.astype(int) // 80) % 2 == 0, :3] *= 0.85
+    for number in frames:
+        write_png(str(pathlib.Path(directory) / f"plate.{number:04d}.png"), frame)
+    return str(pathlib.Path(directory) / PLATE_PATTERN)
+
+
+def build_document(case, scratch, width, height, last_frame):
+    from nodebased.core import Dispatcher, empty_document
+    dispatcher = Dispatcher(empty_document())
+    commands = []
+    if case == "light":
+        commands += [{"op": "create", "id": "plate", "type": "Constant", "params": {"width": width, "height": height}},
+                     {"op": "create", "id": "roto", "type": "Roto", "params": {"width": width, "height": height}}]
+        shapes, strokes = [], []
+        commands += [{"op": "create", "id": "paint", "type": "RotoPaint"},
+                     {"op": "connect", "id": "paint", "input": "image", "source": "plate"}]
+    else:
+        path = write_plate(scratch, width, height, range(1, last_frame + 1)) if last_frame > 1 else None
+        commands += [{"op": "create", "id": "plate", "type": "Read", "params": {"path": path}},
+                     {"op": "create", "id": "roto", "type": "Roto", "params": {"width": width, "height": height}},
+                     {"op": "create", "id": "paint", "type": "RotoPaint"},
+                     {"op": "connect", "id": "paint", "input": "image", "source": "plate"},
+                     {"op": "create", "id": "merge", "type": "Merge"},
+                     {"op": "connect", "id": "merge", "input": "A", "source": "roto"},
+                     {"op": "connect", "id": "merge", "input": "B", "source": "paint"},
+                     {"op": "create", "id": "grade", "type": "Grade", "params": {"multiply": 1.1}},
+                     {"op": "connect", "id": "grade", "input": "image", "source": "merge"}]
+    commands += [{"op": "view", "id": "roto"}]
+    dispatcher.execute({"op": "batch", "commands": commands})
+    if case == "light":
+        dispatcher.execute({"op": "set_shapes", "id": "roto", "shapes": [make_shape(0, width / 2, height / 2, height * 0.3, keyed=False)]})
+    else:
+        dispatcher.execute({"op": "set_shapes", "id": "roto", "shapes": shape_grid(20, width, height)})
+        dispatcher.execute({"op": "set_paint_items", "id": "paint", "items": make_strokes(30, width, height)})
+    document = dispatcher.document
+    document["time"].update(first=1, last=last_frame, current=1)
+    return document
+
+
+# ------------------------------------------------------------------------------------------ instrumentation
+
+class Recorder:
+    """Stamps from the GUI thread (handler entry/exit, paint end) and the render worker (trace marks), all time.monotonic()."""
+
+    def __init__(self, viewer_class):
+        """Installed before any Window exists: PySide6 caches a virtual override at the first call, so a hook added to a
+        class after its first paint is never called."""
+        self.window = None
+        self.viewer = None
+        self.viewer_class = viewer_class
+        self.handlers = []          # (begin, end, kind)
+        self.paints = []            # (begin, end)
+        self.shown = []             # (time shown, generation)
+        self.requests = []          # (time, generation)
+        self.generation_of = {}     # generation -> index of the scheduled event whose handler asked for it
+        self.current_event = None
+        self._install()
+
+    def attach(self, window):
+        self.window = window
+        self.viewer = window.viewer
+
+    def _install(self):
+        viewer_class = self.viewer_class
+        self._originals = {}
+        recorder = self
+
+        def wrap(name):
+            original = getattr(viewer_class, name)
+            self._originals[name] = original
+
+            def wrapped(widget, event, _original=original, _name=name):
+                begin = time.monotonic()
+                before = recorder.window.generation if recorder.window is not None else 0
+                try:
+                    return _original(widget, event)
+                finally:
+                    end = time.monotonic()
+                    recorder.handlers.append((begin, end, _name))
+                    if recorder.window is not None and recorder.window.generation != before and recorder.current_event is not None:
+                        for generation in range(before + 1, recorder.window.generation + 1):
+                            recorder.generation_of[generation] = recorder.current_event
+            setattr(viewer_class, name, wrapped)
+        for name in ("mousePressEvent", "mouseMoveEvent", "mouseReleaseEvent", "keyPressEvent"):
+            wrap(name)
+        original_paint = viewer_class.paintEvent
+        self._originals["paintEvent"] = original_paint
+
+        def paint(widget, event, _original=original_paint):
+            begin = time.monotonic()
+            try:
+                return _original(widget, event)
+            finally:
+                recorder.paints.append((begin, time.monotonic()))
+        viewer_class.paintEvent = paint
+        playback_trace.enable()
+
+    def remove(self):
+        for name, original in self._originals.items():
+            setattr(self.viewer_class, name, original)
+        playback_trace.disable()
+
+    def trace_events(self):
+        events = playback_trace._events or []
+        return list(events)
+
+
+def percentile(values, q):
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * q
+    low, high = math.floor(position), math.ceil(position)
+    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+
+def summary(values):
+    if not values:
+        return {"n": 0, "median": None, "p95": None, "max": None}
+    return {"n": len(values), "median": round(statistics.median(values), 2), "p95": round(percentile(values, 0.95), 2),
+            "max": round(max(values), 2)}
+
+
+# ----------------------------------------------------------------------------------------------- the driver
+
+class Driver:
+    def __init__(self, app, window, recorder):
+        self.app, self.window, self.recorder = app, window, recorder
+        self.viewer = window.viewer
+        self.events = []            # one dict per scheduled event
+
+    def pump(self, seconds):
+        deadline = time.monotonic() + seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            self.app.processEvents(QEvent_all(), max(1, int(remaining * 1000)))
+
+    def pump_until(self, predicate, timeout):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            self.app.processEvents(QEvent_all(), 5)
+            if predicate():
+                return True
+        return False
+
+    def viewport_point(self, x, y):
+        return self.viewer.mapFromScene(QPointF(x, y))
+
+    def post_mouse(self, kind, scene_xy, buttons=Qt.MouseButton.LeftButton, modifiers=Qt.KeyboardModifier.NoModifier):
+        point = self.viewport_point(*scene_xy)
+        local = QPointF(point)
+        glob = QPointF(self.viewer.viewport().mapToGlobal(point))
+        types = {"press": QEvent.Type.MouseButtonPress, "move": QEvent.Type.MouseMove,
+                 "release": QEvent.Type.MouseButtonRelease}
+        button = Qt.MouseButton.NoButton if kind == "move" else Qt.MouseButton.LeftButton
+        held = buttons if kind != "release" else Qt.MouseButton.NoButton
+        event = QMouseEvent(types[kind], local, glob, button, held, modifiers)
+        QCoreApplication.postEvent(self.viewer.viewport(), event)
+
+    def post_key(self, key, text=""):
+        for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+            QCoreApplication.postEvent(self.viewer, QKeyEvent(kind, key, Qt.KeyboardModifier.NoModifier, text))
+
+    def run(self, script, rate=FRAME_INTERVAL, settle=0.0):
+        """`script` is a list of (kind, payload). Each step is scheduled `rate` after the previous one (discrete steps
+        wait for their own paint first, as a person does before the next click). Returns the per-event records."""
+        records = []
+        start = time.monotonic() + 0.05
+        scheduled = start
+        for number, (kind, payload) in enumerate(script):
+            while time.monotonic() < scheduled:
+                self.app.processEvents(QEvent_all(), 1)
+            record = {"kind": kind, "scheduled": scheduled, "posted": time.monotonic(), "number": number,
+                      "handlers_before": len(self.recorder.handlers), "paints_before": len(self.recorder.paints)}
+            self.recorder.current_event = len(self.events)
+            self.events.append(record)
+            records.append(record)
+            if kind == "key":
+                self.post_key(*payload)
+            elif kind == "widget":
+                payload()          # a callable that posts its own real events (a toolbar click)
+            else:
+                self.post_mouse(kind, payload)
+            if kind in ("press", "release", "key", "widget"):
+                # a click: let the handler and its paint happen before the next step
+                self.pump_until(lambda: len(self.recorder.paints) > record["paints_before"]
+                                and len(self.recorder.handlers) > record["handlers_before"], 1.0)
+                scheduled = max(scheduled + rate, time.monotonic() + (settle or 0.02))
+            else:
+                scheduled += rate
+        return records
+
+    def finish(self, records, idle=0.05):
+        """After the last event: wait for the last picture. Returns when the render worker is idle and the viewer shows it."""
+        self.pump(idle)
+        self.pump_until(lambda: not self.window.busy and not len(self.window.preview_queue)
+                        and not self.window.timer.isActive(), 15.0)
+        self.pump(0.05)
+
+
+def QEvent_all():
+    from PySide6.QtCore import QEventLoop
+    return QEventLoop.ProcessEventsFlag.AllEvents
+
+
+def analyse(recorder, records, label):
+    """Turn the stamps for `records` into the numbers of one action."""
+    handlers = recorder.handlers
+    paints = recorder.paints
+    moves = [r for r in records if r["kind"] == "move"]
+    discrete = [r for r in records if r["kind"] != "move"]
+    overlay_moves, handler_moves, overlay_discrete, handler_discrete = [], [], [], []
+    handled_moves = 0
+    for record in records:
+        index = record["handlers_before"]
+        later = [h for h in handlers[index:] if h[0] >= record["posted"] - 1e-6]
+        begin_after = record["posted"]
+        record_handlers = [h for h in later if h[2] in {"move": ("mouseMoveEvent",), "press": ("mousePressEvent",),
+                                                         "release": ("mouseReleaseEvent",),
+                                                         "key": ("keyPressEvent",), "widget": ("mousePressEvent", "mouseReleaseEvent")}.get(record["kind"], ())]
+        handler = record_handlers[0] if record_handlers else None
+        record["handler_ms"] = (handler[1] - handler[0]) * 1000 if handler else None
+        if record["kind"] == "move" and handler:
+            handled_moves += 1
+        done = None
+        after = handler[1] if handler else record["posted"]
+        for begin, end in paints:
+            if begin >= after - 1e-4 and end >= record["posted"]:
+                done = end
+                break
+        record["overlay_ms"] = (done - record["scheduled"]) * 1000 if done else None
+        record["lateness_ms"] = (record["posted"] - record["scheduled"]) * 1000
+        target = (moves, handler_moves, overlay_moves) if record["kind"] == "move" else (discrete, handler_discrete, overlay_discrete)
+        if record["handler_ms"] is not None:
+            target[1].append(record["handler_ms"])
+        if record["overlay_ms"] is not None:
+            target[2].append(record["overlay_ms"])
+    trace = recorder.trace_events()
+    started = sum(1 for _, _, text in trace if text.startswith("start#"))
+    requests = [(t, int(text.split("#")[1])) for t, _, text in trace if text.startswith("request#")]
+    shown = [(t, int(text.split("#")[1])) for t, _, text in trace if text.startswith("shown#")]
+    ages, last_shown = [], None
+    for stamp, generation in shown:
+        event = recorder.generation_of.get(generation)
+        if event is not None and event < len(recorder.driver.events):
+            ages.append((stamp - recorder.driver.events[event]["scheduled"]) * 1000)
+        last_shown = stamp
+    final = None
+    if records and shown:
+        final = (shown[-1][0] - records[-1]["scheduled"]) * 1000
+    return {"label": label,
+            "events_posted": len(records), "moves_posted": len(moves), "moves_handled": handled_moves,
+            "moves_coalesced": len(moves) - handled_moves,
+            "move_handler_ms": summary(handler_moves), "move_overlay_ms": summary(overlay_moves),
+            "move_late_ms": summary([r["lateness_ms"] for r in moves]),
+            "click_handler_ms": summary(handler_discrete), "click_overlay_ms": summary(overlay_discrete),
+            "renders_requested": len(requests), "renders_started": started, "pictures_shown": len(shown),
+            "renders_dropped": max(0, len(requests) - len(shown)),
+            "picture_age_ms": summary(ages), "last_picture_after_last_event_ms": round(final, 1) if final is not None else None}
+
+
+# ---------------------------------------------------------------------------------------------- the actions
+
+class Shot:
+    """Knows the shot's geometry so each action can aim at real handles."""
+
+    def __init__(self, window, width, height):
+        self.window, self.width, self.height = window, width, height
+
+    @property
+    def document(self):
+        return self.window.dispatcher.document
+
+    def shapes(self, key="roto"):
+        from nodebased import shapes as shape_model
+        frame = int(self.document["time"]["current"])
+        payload = self.document["node_data"].get(key, {})
+        return shape_model.resolve_shapes({"shapes": payload.get("shapes", [])}, frame)
+
+    def point(self, shape, index):
+        shapes = self.shapes()
+        resolved = shapes[shape % len(shapes)]["points"][index % len(shapes[shape % len(shapes)]["points"])]
+        return float(resolved["x"]), float(resolved["y"])
+
+    def view(self, key):
+        self.window.command({"op": "view", "id": key})
+        self.window.graph.scene().clearSelection()
+        self.window.graph.items_by_id[key].setSelected(True)
+        QApplication.instance().processEvents()
+
+
+def drag_script(start, end, count=60):
+    script = [("press", start)]
+    for i in range(1, count + 1):
+        t = i / count
+        script.append(("move", (start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t)))
+    script.append(("release", end))
+    return script
+
+
+def circle_script(center, radius, count):
+    return [("move", (center[0] + radius * math.cos(2 * math.pi * i / count),
+                      center[1] + radius * math.sin(2 * math.pi * i / count))) for i in range(count)]
+
+
+def build_actions(driver, shot, window):
+    """name -> (prepare, script). `prepare` runs before measuring (not timed) and returns the script's steps."""
+    viewer = window.viewer
+    W, H = shot.width, shot.height
+    toolbar = viewer.roto_toolbar
+
+    def select_tool(group, tool=None):
+        viewer.select_roto_tool(group, tool or {"Select": "Select Points", "Shapes": "Bezier"}.get(group, group))
+        QApplication.instance().processEvents()
+
+    actions = {}
+
+    def tool_switch_keys():
+        shot.view("roto")
+        return [("key", (Qt.Key.Key_V, "v")), ("key", (Qt.Key.Key_V, "v")), ("key", (Qt.Key.Key_Q, "q")),
+                ("key", (Qt.Key.Key_V, "v")), ("key", (Qt.Key.Key_Q, "q"))]
+
+    def tool_switch_toolbar():
+        shot.view("roto")
+        steps = []
+        for group in ("Shapes", "Select", "Shapes", "Select"):
+            button = toolbar.buttons[group]
+
+            def click(button=button):
+                center = button.rect().center()
+                glob = QPointF(button.mapToGlobal(center))
+                for kind, event_type in (("press", QEvent.Type.MouseButtonPress), ("release", QEvent.Type.MouseButtonRelease)):
+                    QCoreApplication.postEvent(button, QMouseEvent(
+                        event_type, QPointF(center), glob, Qt.MouseButton.LeftButton,
+                        Qt.MouseButton.LeftButton if kind == "press" else Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier))
+            steps.append(("widget", click))
+        return steps
+
+    def draw_bezier():
+        shot.view("roto")
+        select_tool("Shapes", "Bezier")
+        cx, cy, r = W * 0.5, H * 0.5, H * 0.12     # inside the empty middle
+        steps = []
+        for i in range(12):
+            a = 2 * math.pi * i / 12
+            steps.append(("press", (cx + r * math.cos(a), cy + r * math.sin(a))))
+            steps.append(("release", (cx + r * math.cos(a), cy + r * math.sin(a))))
+        steps.append(("press", (cx + r, cy)))           # the first point again closes the shape
+        steps.append(("release", (cx + r, cy)))
+        return steps
+
+    def click_select():
+        shot.view("roto")
+        select_tool("Select", "Select All")
+        steps = []
+        for si in (3, 8, 12, 17, 5, 14):
+            p = shot.point(si, 0)
+            steps += [("press", p), ("release", p)]
+        return steps
+
+    def marquee():
+        shot.view("roto")
+        select_tool("Select", "Select Points")
+        return drag_script((W * 0.02, H * 0.02), (W * 0.62, H * 0.6), 60)
+
+    def drag_point():
+        shot.view("roto")
+        select_tool("Select", "Select Points")
+        start = shot.point(7, 2)
+        return drag_script(start, (start[0] + 90, start[1] + 60), 60)
+
+    def drag_feather():
+        shot.view("roto")
+        select_tool("Select", "Select Feather Points")
+        from nodebased import shapes as shape_model
+        resolved = shot.shapes()[6 % len(shot.shapes())]
+        handles = shape_model.feather_handle_points(resolved["points"], resolved["feather"])
+        start = (float(handles[3]["x"]), float(handles[3]["y"]))
+        return drag_script(start, (start[0] + 40, start[1] + 25), 60)
+
+    def drag_shape():
+        shot.view("roto")
+        select_tool("Select", "Select All")
+        shape = 9 % len(shot.shapes())
+        center_points = [shot.point(shape, i) for i in range(12)]
+        cx = sum(p[0] for p in center_points) / 12
+        cy = sum(p[1] for p in center_points) / 12
+        viewer.roto_selected_shape_index = shape
+        viewer.roto_selected_points = {(shape, i) for i in range(12)}
+        viewer.viewport().update()
+        QApplication.instance().processEvents()
+        spread = max(abs(p[0] - cx) for p in center_points)
+        start = (cx + spread * 0.45, cy + spread * 0.15)       # inside the box, off its pivot: a move, not a pivot drag
+        return drag_script(start, (start[0] + 120, start[1] + 70), 60)
+
+    def paint_stroke():
+        shot.view("paint")
+        select_tool("Brushes", "Brush")
+        steps = [("press", (W * 0.2, H * 0.2))]
+        for i in range(1, 121):
+            steps.append(("move", (W * 0.2 + 5.0 * i, H * 0.2 + 120 * math.sin(i / 14.0))))
+        steps.append(("release", (W * 0.2 + 600.0, H * 0.2 + 20)))
+        return steps
+
+    def shape_list_row():
+        shot.view("roto")
+        steps = []
+        window.rebuild_properties_dock()
+        QApplication.instance().processEvents()
+        from PySide6.QtWidgets import QTreeWidget
+        tree = next((t for t in window.findChildren(QTreeWidget) if t.objectName() == "roto-shape-list"), None)
+        if tree is None:
+            return []
+        count = tree.topLevelItemCount()
+        rows = [tree.topLevelItem(i % count) for i in (2, 11, 5, 17, 8, 14)] if count else []
+        for item in rows:
+            def click(item=item):
+                rect = tree.visualItemRect(item)
+                center = rect.center()
+                center.setX(40)
+                glob = QPointF(tree.viewport().mapToGlobal(center))
+                for event_type, held in ((QEvent.Type.MouseButtonPress, Qt.MouseButton.LeftButton),
+                                         (QEvent.Type.MouseButtonRelease, Qt.MouseButton.NoButton)):
+                    QCoreApplication.postEvent(tree.viewport(), QMouseEvent(
+                        event_type, QPointF(center), glob, Qt.MouseButton.LeftButton, held, Qt.KeyboardModifier.NoModifier))
+            tree.scrollToItem(item)
+            QApplication.instance().processEvents()
+            steps.append(("widget", click))
+        return steps
+
+    def knob_opacity():
+        shot.view("roto")
+        viewer.roto_selected_shape_index = min(4, len(shot.shapes()) - 1)
+        window.rebuild_properties_dock()
+        QApplication.instance().processEvents()
+        from PySide6.QtWidgets import QDoubleSpinBox
+        from nodebased.app import FloatSliderControl
+        spin = next((s for s in window.findChildren(QDoubleSpinBox) if s.objectName() == "roto-shape-opacity"), None)
+        if spin is None:
+            return []
+        control = spin.parentWidget()
+        while control is not None and not isinstance(control, FloatSliderControl):
+            control = control.parentWidget()
+        widget = control.slider if control is not None else spin
+        rect = widget.rect()
+        y = rect.center().y()
+        span = rect.width() - 16
+
+        def post(kind, fraction):
+            x = rect.left() + 8 + span * fraction
+            glob = QPointF(widget.mapToGlobal(QPoint(int(x), y)))
+            types = {"press": QEvent.Type.MouseButtonPress, "move": QEvent.Type.MouseMove, "release": QEvent.Type.MouseButtonRelease}
+            QCoreApplication.postEvent(widget, QMouseEvent(types[kind], QPointF(x, y), glob,
+                                       Qt.MouseButton.NoButton if kind == "move" else Qt.MouseButton.LeftButton,
+                                       Qt.MouseButton.NoButton if kind == "release" else Qt.MouseButton.LeftButton,
+                                       Qt.KeyboardModifier.NoModifier))
+        steps = [("widget", lambda: post("press", 0.9))]
+        for i in range(1, 41):
+            steps.append(("widget_move", lambda f=0.9 - 0.7 * i / 40: post("move", f)))
+        steps.append(("widget", lambda: post("release", 0.2)))
+        return steps
+
+    def step_frame_keyed():
+        shot.view("roto")
+        steps = []
+        for _ in range(8):
+            steps.append(("widget", lambda: window.step_frame(1) if hasattr(window, "step_frame") else window.command(
+                {"op": "time", "current": int(window.dispatcher.document["time"]["current"]) + 1})))
+        return steps
+
+    def undo_redo():
+        shot.view("roto")
+        select_tool("Select", "Select Points")
+        steps = []
+        for i in range(3):
+            start = shot.point(2 + i, 1)
+            steps += drag_script(start, (start[0] + 30, start[1] + 20), 3)
+        driver.run(steps, settle=0.3)
+        driver.finish([])
+        return [("key_undo", None)] * 3 + [("key_redo", None)] * 3
+
+    actions.update({
+        "tool_switch_keys": tool_switch_keys, "tool_switch_toolbar": tool_switch_toolbar, "draw_bezier": draw_bezier,
+        "click_select": click_select, "marquee": marquee, "drag_point": drag_point, "drag_feather": drag_feather,
+        "drag_shape": drag_shape, "paint_stroke": paint_stroke, "shape_list_row": shape_list_row,
+        "knob_opacity": knob_opacity, "step_frame_keyed": step_frame_keyed, "undo_redo": undo_redo})
+    return actions
+
+
+def run_action(app, window, recorder, driver, shot, name, builder, profile, repeats):
+    """Runs one action `repeats` times with a reset between runs, returns the merged result (and the profile when asked)."""
+    from PySide6.QtGui import QKeySequence
+    results = []
+    profile_text = None
+    for attempt in range(repeats):
+        reset(window, shot)
+        script = builder()
+        if not script:
+            return {"label": name, "skipped": "the control was not found"}
+        recorder.handlers.clear()
+        recorder.paints.clear()
+        playback_trace.disable(); playback_trace.enable()
+        recorder.generation_of.clear()
+        driver.events.clear()
+        profiler = cProfile.Profile() if profile else None
+        undo_before = len(window.dispatcher.undo_stack)
+        scripted = []
+        for kind, payload in script:
+            if kind == "widget_move":
+                scripted.append(("widget", payload))
+            elif kind == "key_undo":
+                scripted.append(("widget", lambda: window.command({"op": "undo"})))
+            elif kind == "key_redo":
+                scripted.append(("widget", lambda: window.command({"op": "redo"})))
+            else:
+                scripted.append((kind, payload))
+        if profiler:
+            profiler.enable()
+        records = driver.run(scripted)
+        driver.finish(records)
+        if profiler:
+            profiler.disable()
+        result = analyse(recorder, records, name)
+        result["undo_steps_added"] = len(window.dispatcher.undo_stack) - undo_before
+        results.append(result)
+        if profiler:
+            profile_text = top_functions(profiler)
+    merged = merge(results)
+    if profile_text:
+        merged["profile_top"] = profile_text
+    return merged
+
+
+def reset(window, shot):
+    viewer = window.viewer
+    viewer.roto_drag = None
+    viewer.roto_drawing = False
+    viewer.roto_draw_points = []
+    viewer.roto_selected_points = set()
+    viewer.roto_selected_shape_index = -1
+    viewer.roto_active_group = None
+    viewer.paint_drag = None
+    window.command({"op": "time", "current": 1}) if int(window.dispatcher.document["time"]["current"]) != 1 else None
+    QApplication.instance().processEvents()
+    deadline = time.monotonic() + 15
+    while (window.busy or len(window.preview_queue) or window.timer.isActive()) and time.monotonic() < deadline:
+        QApplication.instance().processEvents()
+        time.sleep(0.005)
+    time.sleep(0.2)
+    QApplication.instance().processEvents()
+
+
+def merge(results):
+    """Several repeats of one action: pool the first-level numbers by taking the median of the medians and the worst p95."""
+    if len(results) == 1:
+        return results[0]
+    merged = dict(results[0])
+    for key in ("move_handler_ms", "move_overlay_ms", "move_late_ms", "click_handler_ms", "click_overlay_ms", "picture_age_ms"):
+        rows = [r[key] for r in results if r[key]["n"]]
+        if rows:
+            merged[key] = {"n": sum(r["n"] for r in rows), "median": round(statistics.median(r["median"] for r in rows), 2),
+                           "p95": round(max(r["p95"] for r in rows), 2), "max": round(max(r["max"] for r in rows), 2)}
+    for key in ("moves_handled", "moves_coalesced", "renders_requested", "renders_started", "pictures_shown", "renders_dropped"):
+        merged[key] = round(statistics.median(r[key] for r in results), 1)
+    merged["repeats"] = len(results)
+    return merged
+
+
+def top_functions(profiler, count=14):
+    stream = io.StringIO()
+    stats = pstats.Stats(profiler, stream=stream)
+    stats.sort_stats("cumulative")
+    rows = []
+    skip = ("processEvents", "driver", "benchmark_roto_interaction", "<built-in method builtins.exec>", "pump", "run", "finish")
+    for (filename, line, function), (cc, nc, tt, ct, callers) in stats.stats.items():
+        base = os.path.basename(filename)
+        if base == "benchmark_roto_interaction.py" or function in ("processEvents", "pump_until", "<module>"):
+            continue
+        rows.append((ct, tt, nc, f"{base}:{line}({function})"))
+    rows.sort(reverse=True)
+    return [{"cum_ms": round(c * 1000, 1), "self_ms": round(t * 1000, 1), "calls": n, "where": w} for c, t, n, w in rows[:count]]
+
+
+# --------------------------------------------------------------------------------------------------- main
+
+ACTION_ORDER = ["tool_switch_keys", "tool_switch_toolbar", "draw_bezier", "click_select", "marquee", "drag_point",
+                "drag_feather", "drag_shape", "paint_stroke", "shape_list_row", "knob_opacity", "step_frame_keyed", "undo_redo"]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--self-check", action="store_true", help="offscreen, tiny shot, two actions; proves the tool runs")
+    parser.add_argument("--cases", nargs="+", default=["realistic", "light"], choices=["realistic", "light"])
+    parser.add_argument("--actions", nargs="+", default=ACTION_ORDER)
+    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--profile", action="store_true", help="also run each action once under cProfile (separate pass)")
+    parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path("roto-interaction.json"))
+    parser.add_argument("--label", default="")
+    parser.add_argument("--size", default="1080p", choices=["1080p", "tiny"])
+    args = parser.parse_args()
+    if args.self_check:
+        args.size, args.repeats = "tiny", 1
+        args.actions = ["tool_switch_keys", "drag_point", "paint_stroke"]
+        args.cases = ["light"]
+    width, height = (1920, 1080) if args.size == "1080p" else (200, 120)
+    last_frame = 48 if args.size == "1080p" else 3
+
+    app = QApplication.instance() or QApplication([])
+    app.setStyle("Fusion")
+    from nodebased.app import STYLE, Window
+    from PySide6.QtCore import QSettings
+    app.setStyleSheet(STYLE)
+    out = {"tool": "benchmark_roto_interaction", "platform": os.environ.get("QT_QPA_PLATFORM"), "display": os.environ.get("DISPLAY"),
+           "python": platform.python_version(), "label": args.label, "size": args.size, "cases": {}}
+    from nodebased.app import Viewer
+    recorder = Recorder(Viewer)
+    with tempfile.TemporaryDirectory(prefix="roto-interaction-") as scratch:
+        for case in args.cases:
+            QSettings("NodeBased", "NodeBased").clear() if args.self_check else None
+            document = build_document(case, scratch, width, height, last_frame)
+            window = Window(document)
+            window.resize(1700, 1000) if not args.self_check else None
+            window.show()
+            deadline = time.monotonic() + 60
+            while window.frame is None and time.monotonic() < deadline:
+                app.processEvents()
+                time.sleep(0.01)
+            window.graph.items_by_id["roto"].setSelected(True)
+            app.processEvents()
+            window.viewer.fit()
+            app.processEvents()
+            window.viewer.setFocus()
+            recorder.attach(window)
+            driver = Driver(app, window, recorder)
+            recorder.driver = driver
+            recorder.handlers.clear(); recorder.paints.clear()
+            shot = Shot(window, width, height)
+            shot.view("roto")
+            builders = build_actions(driver, shot, window)
+            case_out = {"actions": {}, "proxy_tier": int(window.proxy.currentData())}
+            # warm every cache once so the numbers are steady state
+            for name in args.actions:
+                if name not in builders:
+                    continue
+                print(f"[{case}] {name}", flush=True)
+                try:
+                    case_out["actions"][name] = run_action(app, window, recorder, driver, shot, name, builders[name], False, args.repeats)
+                    if args.profile:
+                        profiled = run_action(app, window, recorder, driver, shot, name, builders[name], True, 1)
+                        case_out["actions"][name]["profile_top"] = profiled.get("profile_top", [])
+                except Exception as error:      # one broken action must not lose the rest
+                    import traceback
+                    traceback.print_exc()
+                    case_out["actions"][name] = {"label": name, "error": f"{type(error).__name__}: {error}"}
+            out["cases"][case] = case_out
+            window.saved_document = window.dispatcher.document
+            window.close()
+            app.processEvents()
+    recorder.remove()
+    args.output.write_text(json.dumps(out, indent=1))
+    print_table(out)
+    return 0
+
+
+def print_table(out):
+    print(f"\n{'case':10} {'action':20} {'move ovl med/p95':>18} {'click ovl med/p95':>19} {'img age med/p95':>17} "
+          f"{'req/drop/coal':>14} {'undo':>5}")
+    for case, data in out["cases"].items():
+        for name, row in data["actions"].items():
+            if "error" in row or "skipped" in row:
+                print(f"{case:10} {name:20} {row.get('error') or row.get('skipped')}")
+                continue
+            def pair(key):
+                s = row[key]
+                return f"{s['median']}/{s['p95']}" if s["n"] else "-"
+            print(f"{case:10} {name:20} {pair('move_overlay_ms'):>18} {pair('click_overlay_ms'):>19} {pair('picture_age_ms'):>17} "
+                  f"{row['renders_requested']}/{row['renders_dropped']}/{row['moves_coalesced']:>3} {row.get('undo_steps_added', ''):>5}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
