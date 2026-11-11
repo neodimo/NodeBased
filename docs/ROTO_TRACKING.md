@@ -1022,6 +1022,55 @@ Measured (tests/test_roto_matte_shapes_i8.py, 4 x 4 supersampled mattes; the tes
 Trace time on one frame: 0.07 s for two soft-edged regions on a 1920 x 1080 matte, 0.37 s for 12 frames of a 320 x 280 matte including the fill
 (measured while other lanes were running). One undo step removes every shape the command added.
 
+## Reduce keys (past Nuke)
+
+Track points, Fill in-betweens and Stick to plate key every frame. That is accurate and heavy to edit by hand: moving one point means fixing a
+key on every frame. Nuke has no key reduction for Roto. Here **Reduce keys** removes the keys a shape or stroke does not need while every
+frame stays within a tolerance. It is **off unless run**: nothing changes until the command is used, and one undo step puts every key back.
+
+* **Where.** Select shapes or strokes (a Roto node's shapes, or a RotoPaint node's shapes and strokes) and use **Reduce keys\u2026** in the right-click menu
+  of the shape list (it asks for the tolerance and an optional frame range), or the **Reduce keys** button in the strip of the Select tools, which
+  reads **Reduce tolerance** (default 0.5 px) and **Reduce from** and **Reduce to** (0 and 0 mean every frame) from the strip. Locked shapes are left
+  alone. The status bar says how many keys were kept out of how many ("Reduce keys: kept 2 of 40 keys on 1 shape (every frame within 0.5 px; largest
+  difference 0.00 px)"). A shape, or a stroke that has no keys, is untouched and adds no undo step.
+* **What a key is.** A key here is a keyed frame of the whole item. Keys are removed at the same frames for all of an item's points, tangents, feather
+  offsets and tension (and a stroke's stuck scale and turn), so the shape stays editable as a whole: a frame is kept when any of its curves needs it.
+* **What is measured.** The tolerance applies to the picture on screen. For every frame between the first and last key the module compares the original
+  outline with the reduced one at the same places along it: eight samples on every span of the Bezier or B-spline (tangents and tension included), and
+  every feather handle, after the shape's own transform. A shape drawn four times larger needs more keys than the same wobble drawn small. A stroke is
+  measured at its points, and the stuck scale and turn are measured in px as the brush radius and the clone offset they produce. The interpolation
+  between keys is the one Roto draws with (smooth, linear or constant curves, with endpoint hold), so the error is what the artist sees.
+* **What stays.** The first and last key, and the keys the motion needs: a search puts back the key at the frame with the worst error until every frame
+  is inside the tolerance, so a stop, a direction change or an eased start stays and straight stretches lose their keys. With a frame range, keys
+  outside it stay and only the keys inside it may go.
+* **Interpolation.** A smooth key stands still at each end, so a straight run keyed smooth needs more keys than one keyed linear. The default
+  (`auto`) tries each shape's keys as stored and as linear, and writes the way that needs fewer keys, still within the tolerance (the keys of a
+  constant, step-and-hold curve are always kept as constant). `keep` leaves every curve's interpolation as it was.
+
+**Measured** (`tests/test_roto_key_reduce_i9.py`; the outline error checked on every frame independently of the module, through the Roto resolver):
+
+| Keyed every frame | Tolerance | Keys before | Keys after | Largest difference |
+| --- | --- | --- | --- | --- |
+| Straight motion, 40 frames | 0.5 px | 40 | 2 | 0.00 px |
+| Smooth ease in and out, 40 frames | 0.5 px | 40 | 2 | 0.00 px |
+| Cosine ease in and out (smooth keys draw a different curve), 40 frames | 0.5 px | 40 | 14 | 0.38 px |
+| Stop and go (15 frames moving, 10 still, then moving) | 0.5 px | 40 | 4 (the stop stays) | 0.00 px |
+| Wavy motion, 40 frames | 2 / 0.5 / 0.1 px | 40 | 15 / 30 / 39 | within each tolerance |
+| Track points, translating disc on the I2 plate, 24 frames | 0.5 px | 25 | 11 (20 with `keep`) | 0.43 px |
+| Track points, translating disc | 0.25 px | 25 | 16 | 0.21 px |
+| Track points, translating disc | 1 px | 25 | 2 | 0.61 px |
+| Track points, stretching disc on the I2 plate, 10 frames | 0.5 px | 11 | 2 (8 with `keep`) | 0.22 px |
+| Stick to plate stroke sliding in a straight line, 30 frames | 0.5 px | 30 | 2 | 0.00 px |
+
+The tracked translation keeps 11 keys at 0.5 px because the tracked points wander a few tenths of a pixel around the straight path, and that wander is
+data at that tolerance; at 1 px it fits inside the tolerance and a straight line serves. The tests hold every frame to the tolerance asked for. **Timing**, quiet machine: a 24-point shape
+keyed on 200 frames reduces in about 0.05 s (printed by a scratch run, not asserted by a test).
+
+**Limits.** The error is measured on the item's own keys and transform; the Roto layer transforms, tracker links (`track_link`) and motion blur are not part of
+the measurement. A frame range cannot make a key outside it go, so a tolerance may not be reachable when a kept key outside the range holds the error: the
+status bar then names the shape. The reduced curves are written with the interpolation named above; no curve gets a key it had no value for (a curve that was
+not keyed on a kept frame gets a key holding the value it had there).
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.
