@@ -1,3 +1,9 @@
+## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) Lane 2 step RW5 (Tue 11/10): a second tour of the past-Nuke Roto tools, for DiMo (integrator tick)
+
+- **What was done:** `main` `4014b013` -> `76296b5c` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `76296b5c`: Ran 9774 tests in 1933.247 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-10 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step I9 (Tue 11/10): thin out keys after tracking (past Nuke) (integrator tick)
 
 - **What was done:** `main` `ae23230b` -> `84169837` plus this docs commit. Evidence and per-lane commit
