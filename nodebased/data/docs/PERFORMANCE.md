@@ -1313,6 +1313,25 @@ Native half sends 41,590,055 bytes/frame versus 74,767,655 and reduces mean uplo
 
 Rerun: start a private X server, then under `flock -w 1800 /tmp/nb-gpu.lock` run `python tools/benchmark_gpu2d.py playback --inputs "$NB_RUN/plates" --display :N --backend gpu2d --force-adapter integrated --island-adapter integrated --label radeon --frame-range 48 --passes 3 --budget-mb 512 --no-sampler --stages --out-dir "$NB_RUN/native"`, repeating with `NODEBASED_GPU2D_HALF_UPLOAD=0`, default adapter for RTX, and `--cpus 0-3 --env QT_SCALE_FACTOR=2` for the stand-in.
 
+### GPU playback: keep Roto matte work in the source-pool thread for the GPU island (11/11)
+
+The Roto process change made the GPU island wait for every 1080p float matte to
+cross the process boundary.  The stage timeline shows node evaluation rising
+from 33.194 ms at `6079e0ae` to 63.620 ms at `f26b2ecc`; the other measured
+stages did not explain the 30.426 ms rise.  GPU-island read-ahead now uses the
+existing source-pool thread, which shares the evaluator cache.  CPU playback
+keeps the process.
+
+Three quiet Radeon passes, 1080p, uncached first lap, 512 MiB GPU budget and
+no sampler: GPU-process baseline 14.560 fps / 69.923 ms p95 becomes 23.972,
+24.060, 22.869 fps / 45.501, 45.564, 47.534 ms p95.  CPU-process historical
+before/after rows were 8.07–8.18 / 127.33–131.06 and 8.09–8.26 / 127.76–129.57
+fps / p95 ms; its process path therefore remains in place.  The GPU result is
+back around 46 ms and 24 fps, yet it remains above the 41.670 ms gate.  Raw
+timelines are deliberate local scratch at
+`scratch/nb-lanes/run/bench-L8-matte-process-1111/`; the table is in
+`benchmarks/2d-playback/radeon-1108-breakdown.md`.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)

@@ -195,6 +195,16 @@ class RotoAhead:
     def active(self) -> bool:
         return self.frames > 0 and self.pool is not None and self.pool.active
 
+    def matte_pool_for_read_ahead(self):
+        """The CPU playback path may offload a Roto matte; a GPU island must not.
+
+        A 1080p float matte has to be serialized into, then copied back out of, the
+        process.  That made the GPU island wait behind the one-process queue instead
+        of overlapping its next frame with the source-pool thread.  The thread path
+        already shares the evaluator cache and keeps the matte ready for the island.
+        """
+        return None if self.evaluator.gpu2d is not None else self.matte_pool
+
     def cancel(self):
         """End the epoch: queued read-ahead is dropped now, running read-ahead stops before it stores."""
         with self._lock:
@@ -218,6 +228,7 @@ class RotoAhead:
             return 0
         tier = int(tier)
         sizes = self.evaluator._source_sizes
+        matte_pool = self.matte_pool_for_read_ahead()
         queued = 0
         with self._lock:
             epoch = self._epoch
@@ -241,8 +252,8 @@ class RotoAhead:
                     if name in self._tasks:
                         continue
 
-                    def run(key=key, frame=int(frame), cancel=epoch):
-                        return self.evaluator.read_ahead_node(flat, key, frame, tier, cancel, self.matte_pool)
+                    def run(key=key, frame=int(frame), cancel=epoch, matte_pool=matte_pool):
+                        return self.evaluator.read_ahead_node(flat, key, frame, tier, cancel, matte_pool)
                     task = self.pool.submit_ahead(run, size, key)
                     if task is None:
                         return queued

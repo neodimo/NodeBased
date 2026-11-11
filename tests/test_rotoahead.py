@@ -549,8 +549,21 @@ class IslandReadAheadTests(unittest.TestCase):
                 self.assertTrue(np.array_equal(a.pixels, b.pixels), frame)
             self.assertTrue(wait_for(lambda: all(t._done.is_set() for t in list(scheduler._tasks.values()))))
             self.assertGreater(ahead.hits, 0)
+            self.assertEqual(scheduler.matte_pool.runs, 0,
+                             "GPU-island read-ahead keeps its matte on the source-pool thread")
         finally:
             scheduler.cancel()
+            pool.shutdown(wait=True, timeout=2)
+
+    def test_the_gpu_backend_selects_the_thread_matte_path(self):
+        evaluator = Evaluator()
+        evaluator.gpu2d = object()
+        pool = SourcePool(max_workers=1, budget_bytes=1 << 20)
+        scheduler = RotoAhead(evaluator, pool, frames=1, byte_cap=1 << 20)
+        try:
+            self.assertIsNone(scheduler.matte_pool_for_read_ahead())
+        finally:
+            scheduler.shutdown()
             pool.shutdown(wait=True, timeout=2)
 
 

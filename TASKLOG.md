@@ -2244,3 +2244,10 @@
 - **Next owner + concrete artifact:** Gonzo should use `bench-L8-quiet-1216/*.timeline.json` and `L8-roto-profile-quiet.json` to select a larger Roto/Read overlap change; preserve the quiet-machine check for every timing claim.
 - **Failure mode:** Benchmarks taken during the integration suite inflated p95 to 136–151 ms; they are invalid for performance comparison.
 
+## 2026-11-11 — Lane 8: undo Roto matte-process GPU playback regression
+
+- **What was done:** GPU-island Roto read-ahead now uses the existing source-pool thread; CPU playback retains the process. The process commit raised GPU node evaluation from 33.194 to 63.620 ms because the 1080p float matte crossed its single-process boundary. GPU pixels are identical.
+- **Artifacts:** committed benchmark notes in `benchmarks/2d-playback/radeon-1108-breakdown.md` and `docs/PERFORMANCE.md`; raw timelines are deliberate local scratch at `scratch/nb-lanes/run/bench-L8-matte-process-1111/`.
+- **State:** done. Quiet Radeon GPU passes measured 23.972, 24.060, 22.869 fps and 45.501, 45.564, 47.534 ms p95; the 41.670 ms gate remains unverified as passed.
+- **Next owner + concrete artifact:** Gonzo integrates this lane commit and uses `benchmarks/2d-playback/radeon-1108-breakdown.md` for the next bounded bottleneck.
+
