@@ -1,5 +1,27 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (11:55 PM on 2026-11-10 PDT)
+
+`main` moved `c7de249a` -> `65119a91` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `65119a91` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-2318.log`, started 11:18 PM): **Ran 9839 tests in 1711.785 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step U1 (Tue 11/10): Roto must feel instant: measure the real interaction latency, then fix the worst.** Commits:
+  - `8cd50f38` Roto interaction latency: before and after numbers on the real display (realistic and light shots), the top GUI-thread costs still left, and the next fixes
+  - `dd229454` Roto interaction: heavy panels are not rebuilt when an edit changes nothing they show, never rebuilt inside a held drag; render identity keys kept per revision; drag pictures skip the canvas and cache lookups; benchmark finds a real move spot in the transform box
+  - `08852823` Roto interaction: drag pictures built without copying the document and asked for at most 25 times a second, shapes resolved once per edit, the heavy Roto panel rebuilt once after a burst, a cheap application event filter, and the marquee drawn instead of raising in paint
+  - `72f3d3e4` Roto interaction latency benchmark: real Qt events on the real display, per-action handler, overlay and picture timings, cProfile tops
+  Diff: 10 files changed, 4645 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:05 PM on 2026-11-10 PDT)
 
 `main` moved `30b81fc1` -> `104cf390` (lane commits cherry-picked onto main in lane order) and then to this
