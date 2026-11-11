@@ -184,6 +184,14 @@ class Walk:
         self.app.processEvents()
         self.wait(lambda: not self.window.dispatcher.document is None, 0.05)
         self.app.processEvents()
+        # A heavy Roto panel is rebuilt once the interface has been quiet (refresh_panel_soon); a walkthrough step
+        # reads the panel straight after an edit, so run that pending rebuild now rather than letting it replace
+        # (and delete) a panel the step has just fetched.
+        timer = getattr(self.window, "_panel_rebuild_timer", None) if self.window is not None else None
+        if timer is not None and timer.isActive():
+            timer.stop()
+            self.window._run_panel_rebuild()
+            self.app.processEvents()
 
     # -- coordinates ---------------------------------------------------------------------------------------------------
     def vpos(self, x, y):
