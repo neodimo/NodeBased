@@ -6303,6 +6303,12 @@ class Viewer(PanZoomView):
             return
         super().mousePressEvent(event)
 
+    def gesture_active(self):
+        """A handle, brush, marquee or shape being drawn is held: the interface should not stall until it is released."""
+        return any(drag is not None for drag in (self.roto_drag, self.paint_drag, self.tracker_drag, self.planar_drag,
+                                                 self.roto_outline_drag, self.paint_size_drag, self.paint_clone_offset_drag)
+                   ) or bool(self.roto_drawing)
+
     def hit_move(self, scene_pos, modifiers, pressure=1.0):
         """A move to a scene point while a handle is held. True when a drag took it."""
         if self.paint_size_drag is not None:
@@ -10589,6 +10595,8 @@ class Window(QMainWindow):
         islandadapter.set_playback_probe(lambda: bool(getattr(self_ref(), "playing", False)))     # Automatic never measures the cards mid-playback
         self.apply_gpu_nodes()
         self._panel_rebuild = None
+        self._render_identity_keys = None
+        self._panel_signature_shown = None
         self._panel_rebuild_timer = QTimer(self)
         self._panel_rebuild_timer.setSingleShot(True)
         self._panel_rebuild_timer.timeout.connect(self._run_panel_rebuild)
@@ -13332,9 +13340,15 @@ class Window(QMainWindow):
         target = document.get("view")
         _, b_target = compare_model.active_b(document)
         frame, view = document["time"]["current"], self.effective_view(document)
-        return (thumbnail_key(document, target, frame, view) if target else None,
-                json.dumps(document["settings"], sort_keys=True),
-                thumbnail_key(document, b_target, frame, view) if b_target else None)
+        # The thumbnail keys serialise the whole upstream graph (twenty keyed shapes: tens of milliseconds), and a drag asks for
+        # the identity before every picture while the document stays as it is: keep them until the revision, the frame, the
+        # targets or the view change.
+        stamp = (id(self.dispatcher), self.dispatcher.revision, target, b_target, frame, view)
+        cached = self._render_identity_keys
+        if cached is None or cached[0] != stamp:
+            cached = self._render_identity_keys = (stamp, (thumbnail_key(document, target, frame, view) if target else None,
+                                                           thumbnail_key(document, b_target, frame, view) if b_target else None))
+        return (cached[1][0], json.dumps(document["settings"], sort_keys=True), cached[1][1])
 
     def sync_project_settings(self):
         view = self.dispatcher.document["settings"]["color"]["view"]
@@ -15903,13 +15917,29 @@ class Window(QMainWindow):
         payload = document.get("node_data", {}).get(key, {})
         return len(payload.get("shapes") or payload.get("items") or ()) >= self.HEAVY_PANEL_ITEMS
 
+    def _roto_panel_signature(self, key):
+        from . import rotopanel
+        document = self.dispatcher.document
+        viewer = self.viewer
+        selected = viewer.roto_selected_shape_index
+        return (key, selected, any(si == selected for si, _ in viewer.roto_selected_points),
+                rotopanel.panel_signature(document.get("node_data", {}).get(key), int(document["time"]["current"])))
+
+    def _note_panel_shown(self, key):
+        """Remember what the heavy panel just built shows, so an edit that changes none of it does not build it again."""
+        self._panel_signature_shown = self._roto_panel_signature(key) if self._panel_is_heavy(key) else None
+
     def refresh_panel_soon(self, rebuild):
         """Run `rebuild` (a call that rebuilds the Properties panel for the current selection) now, or, for a heavy panel, once
         the interface has been quiet for PANEL_REBUILD_DELAY_MS: a burst of clicks, frame steps or undo steps rebuilds it
         once, after the last one, and the overlay and the picture never wait for it."""
-        if not self._panel_is_heavy(self.graph.selected_id() if getattr(self, "graph", None) is not None else None):
+        key = self.graph.selected_id() if getattr(self, "graph", None) is not None else None
+        if not self._panel_is_heavy(key):
             self._cancel_panel_rebuild()
             rebuild()
+            return
+        if self._roto_panel_signature(key) == self._panel_signature_shown:
+            self._cancel_panel_rebuild()        # the panel on screen already shows everything this edit changed
             return
         self._panel_rebuild = rebuild
         self._panel_rebuild_timer.start(self.PANEL_REBUILD_DELAY_MS)
@@ -15919,6 +15949,9 @@ class Window(QMainWindow):
         self._panel_rebuild_timer.stop()
 
     def _run_panel_rebuild(self):
+        if self._panel_rebuild is not None and self.viewer.gesture_active():
+            self._panel_rebuild_timer.start(self.PANEL_REBUILD_DELAY_MS)       # never inside a drag: it waits for the release
+            return
         rebuild, self._panel_rebuild = self._panel_rebuild, None
         if rebuild is not None:
             rebuild()
@@ -15964,6 +15997,7 @@ class Window(QMainWindow):
         else:
             self.set_properties_widget(self.build_node_panel(key))
             root = self.properties.widget()
+        self._note_panel_shown(key)
         if key is not None and root is not None:
             self._panel_cache[key] = root
             while len(self._panel_cache) > self.PANEL_CACHE_SIZE:
@@ -16096,6 +16130,7 @@ class Window(QMainWindow):
         if not self.pinned_panels:
             selected = self.graph.selected_id()
             self.set_properties_widget(self.build_node_panel(selected))
+            self._note_panel_shown(selected)
             return
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -18626,8 +18661,8 @@ class Window(QMainWindow):
             snapshot = playing_document(snapshot)
         frame = snapshot["time"]["current"]
         selected_tier = int(self.proxy.currentData())
-        if progressive and not self.playing and self._selected_tier_is_cached(
-                snapshot, snapshot.get("view"), frame, selected_tier):
+        if (progressive and not self.playing and not document_owned       # a drag's own picture is never one already cached
+                and self._selected_tier_is_cached(snapshot, snapshot.get("view"), frame, selected_tier)):
             # A cached selected-tier picture is already the best possible first look. Skip the
             # lower proxy renders and let the ordinary display-cache path show it directly.
             progressive = False
@@ -18674,7 +18709,14 @@ class Window(QMainWindow):
         target = snapshot.get("view")
         current_extent = self.viewer.scene().itemsBoundingRect()
         same_canvas = False
-        if target and not current_extent.isEmpty():
+        if target and not current_extent.isEmpty() and document_owned:
+            # A drag moves shapes or strokes: it cannot change the canvas, and asking for the canvas resolves every animated value
+            # in the document (tens of milliseconds for twenty keyed shapes, more for thirty strokes) before each picture.
+            try:
+                same_canvas = bool(self.tile_executor.supports_tiled(snapshot, target))
+            except Exception:
+                same_canvas = False
+        elif target and not current_extent.isEmpty():
             try:
                 if self.tile_executor.supports_tiled(snapshot, target):
                     bounds = self.tile_executor.canvas_region(snapshot, target, frame=frame, tier=tier)

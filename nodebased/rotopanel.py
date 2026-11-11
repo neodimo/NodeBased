@@ -9,6 +9,44 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, Q
                                QColorDialog, QLabel, QToolButton, QSpinBox, QGroupBox)
 
 
+def panel_signature(payload, frame):
+    """What the Roto and RotoPaint panels show of a node's payload, as a value two payloads share when the panel would be built
+    the same from either. A point's coordinates and tangents never appear in the panel, only whether each is animated and where
+    its keys are, so dragging a keyed point, undoing that drag or stepping to a frame with no key leaves the signature as it was
+    and the panel is not built again. Every other value is part of it (a shape's opacity at this frame, its name, its mode, the
+    layers, the tool settings)."""
+    def scalar(value, field):
+        if isinstance(value, dict) and value.get("curve"):
+            frames = tuple(item["frame"] for item in value["curve"]["keys"])
+            return ("curve", value["curve"].get("interpolation"), frames, frame in frames)
+        return None
+    def other(value, field=None):
+        if isinstance(value, dict):
+            if value.get("curve"):
+                frames = tuple(item["frame"] for item in value["curve"]["keys"])
+                return ("curve", shape_model.resolve_scalar(value, frame, field), frames, frame in frames)
+            return {name: other(inner, name) for name, inner in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [other(inner, field) for inner in value]
+        return value
+    def entry(item):
+        out = {}
+        for name, value in item.items():
+            if name == "points":
+                out[name] = [{field: (scalar(v, field) if isinstance(v, (int, float, dict)) else v) for field, v in point.items()}
+                             for point in value]
+            else:
+                out[name] = other(value, name)
+        return out
+    result = {}
+    for name, value in (payload or {}).items():
+        if name in ("shapes", "items"):
+            result[name] = [entry(item) for item in value]
+        else:
+            result[name] = other(value, name)
+    return result
+
+
 def build_paint_timing_controls(window, key, index):
     """Selected RotoPaint spline keys and key-scope controls for shape items."""
     items = window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", [])

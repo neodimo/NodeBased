@@ -528,8 +528,24 @@ def build_actions(driver, shot, window):
         viewer.roto_selected_points = {(shape, i) for i in range(12)}
         viewer.viewport().update()
         QApplication.instance().processEvents()
-        spread = max(abs(p[0] - cx) for p in center_points)
-        start = (cx + spread * 0.45, cy + spread * 0.15)       # inside the box, off its pivot: a move, not a pivot drag
+        # A place inside the transform box where a press is a move: not on its pivot, a handle, a point or any outline.
+        context = viewer._roto_context()
+        resolved = viewer._roto_resolved(context)
+        geometry = viewer._roto_box_geometry(resolved, context[3])
+        bounds, pivot = geometry[1], geometry[3]
+        start = None
+        for fx in (0.3, 0.5, 0.7, 0.2, 0.8, 0.4, 0.6):
+            for fy in (0.5, 0.3, 0.7, 0.4, 0.6, 0.2, 0.8):
+                candidate = QPointF(bounds.left() + bounds.width() * fx, bounds.top() + bounds.height() * fy)
+                action, _ = viewer._roto_box_action(candidate, bounds, abs(viewer.view_zoom()), pivot)
+                if (action == "move" and viewer._roto_hit_spline(candidate, resolved, context[3]) is None
+                        and viewer._roto_hit_point(candidate, resolved, context[3]) is None):
+                    start = (candidate.x(), candidate.y())
+                    break
+            if start:
+                break
+        if start is None:
+            return []
         return drag_script(start, (start[0] + 120, start[1] + 70), 60)
 
     def paint_stroke():

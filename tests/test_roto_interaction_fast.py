@@ -189,6 +189,77 @@ class FastRotoTests(unittest.TestCase):
         self.window._run_panel_rebuild()
         self.assertEqual(builds, ["r"])
 
+    def test_the_panel_signature_ignores_point_coordinates_and_follows_what_the_panel_shows(self):
+        from nodebased import rotopanel
+        shapes = [blob(0), blob(1)]
+        base = rotopanel.panel_signature({"shapes": shapes}, 1)
+        moved = copy.deepcopy(shapes)
+        moved[0]["points"][3]["x"] += 7.5
+        moved[0]["points"][3]["out_y"] = 2.0
+        self.assertEqual(rotopanel.panel_signature({"shapes": moved}, 1), base)         # coordinates are not shown
+        renamed = copy.deepcopy(shapes)
+        renamed[1]["name"] = "other"
+        self.assertNotEqual(rotopanel.panel_signature({"shapes": renamed}, 1), base)
+        faded = copy.deepcopy(shapes)
+        faded[0]["opacity"] = 0.5
+        self.assertNotEqual(rotopanel.panel_signature({"shapes": faded}, 1), base)
+        keyed = copy.deepcopy(shapes)
+        keyed[0]["points"][0]["x"] = {"value": 20.0, "curve": {"interpolation": "linear", "keys": [{"frame": 1, "value": 20.0}, {"frame": 5, "value": 30.0}]}}
+        with_key = rotopanel.panel_signature({"shapes": keyed}, 1)
+        self.assertNotEqual(with_key, base)                                              # a point became animated: the key buttons show it
+        self.assertEqual(rotopanel.panel_signature({"shapes": keyed}, 2), rotopanel.panel_signature({"shapes": keyed}, 3))   # no key on 2 or 3
+        self.assertNotEqual(rotopanel.panel_signature({"shapes": keyed}, 5), rotopanel.panel_signature({"shapes": keyed}, 3))   # a key on 5
+        moved_key = copy.deepcopy(keyed)
+        moved_key[0]["points"][0]["x"]["curve"]["keys"][1]["value"] = 44.0
+        self.assertEqual(rotopanel.panel_signature({"shapes": moved_key}, 2), rotopanel.panel_signature({"shapes": keyed}, 2))
+        faded_curve = copy.deepcopy(shapes)
+        faded_curve[0]["opacity"] = {"value": 1.0, "curve": {"interpolation": "linear", "keys": [{"frame": 1, "value": 1.0}, {"frame": 9, "value": 0.0}]}}
+        self.assertNotEqual(rotopanel.panel_signature({"shapes": faded_curve}, 2), rotopanel.panel_signature({"shapes": faded_curve}, 3))
+
+    def test_a_heavy_panel_is_not_built_again_when_an_edit_changes_nothing_it_shows(self):
+        shapes = [blob(i) for i in range(self.window_items())]
+        self.open(shapes)
+        self.window.rebuild_properties_dock()                       # records what the panel shows
+        builds = []
+        original = self.window.build_node_panel
+        self.window.build_node_panel = lambda key: builds.append(key) or original(key)
+        moved = copy.deepcopy(shapes)
+        moved[2]["points"][4]["x"] += 3.0
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": moved})
+        self.assertFalse(self.window._panel_rebuild_timer.isActive())
+        self.window.command({"op": "undo"})
+        self.assertFalse(self.window._panel_rebuild_timer.isActive())
+        self.assertEqual(builds, [])
+        renamed = copy.deepcopy(shapes)
+        renamed[2]["name"] = "renamed"
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": renamed})
+        self.assertTrue(self.window._panel_rebuild_timer.isActive())     # the list shows names: it will be built, once the interface is quiet
+        self.window._panel_rebuild_timer.stop()
+        self.window._run_panel_rebuild()
+        self.assertEqual(builds, ["r"])
+
+    def window_items(self):
+        return Window.HEAVY_PANEL_ITEMS
+
+    def test_the_panel_rebuild_waits_for_a_held_handle(self):
+        shapes = [blob(i) for i in range(self.window_items())]
+        viewer = self.open(shapes)
+        self.window.rebuild_properties_dock()
+        builds = []
+        original = self.window.build_node_panel
+        self.window.build_node_panel = lambda key: builds.append(key) or original(key)
+        target = (shapes[5]["points"][1]["x"], shapes[5]["points"][1]["y"])
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=self.at(*target))     # selects another shape: a rebuild is wanted
+        self.assertTrue(self.window._panel_rebuild_timer.isActive())
+        self.window._panel_rebuild_timer.stop()
+        self.window._run_panel_rebuild()                             # the timer fires mid-drag
+        self.assertEqual(builds, [])
+        self.assertTrue(self.window._panel_rebuild_timer.isActive())  # and waits
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=self.at(*target))
+        self.window._panel_rebuild_timer.stop()
+        self.window._run_panel_rebuild()
+        self.assertEqual(builds, ["r"])
+
 
 if __name__ == "__main__":
     unittest.main()
