@@ -1,5 +1,26 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (6:15 PM on 2026-11-10 PDT)
+
+`main` moved `ae23230b` -> `84169837` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `84169837` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-1740.log`, started 5:40 PM): **Ran 9773 tests in 1578.312 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step I9 (Tue 11/10): thin out keys after tracking (past Nuke).** Commits:
+  - `21380158` Tests: the shape list menu now ends with Reduce keys
+  - `ff6237e0` Docs: Reduce keys (past Nuke) with measured key counts
+  - `7e9c3179` Reduce keys: thin out keyed shapes and strokes within a pixel tolerance measured on the rendered outline; shape list menu, Select strip button and settings; one undo step; tests
+  Diff: 8 files changed, 1189 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (5:35 PM on 2026-11-10 PDT)
 
 `main` moved `15750080` -> `1324e000` (lane commits cherry-picked onto main in lane order) and then to this
