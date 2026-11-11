@@ -11399,3 +11399,6 @@ The playback fixture profiler identifies box feathering as the active cost after
 
 With no integrator suite or unittest process active, three interleaved Radeon default-viewer passes on `main` measured 46.720, 46.071 and 46.055 ms p95; the identical merged lane worktree measured 46.632, 49.662 and 47.061 ms. This confirms the prior 136–151 ms result was contaminated by the full suite and does not establish a playback gain from the already-merged in-place feather clamp. The fixture's current direct profile still places coverage plus box feather on the active path. The 41.670 ms gate remains open; raw comparison evidence is deliberate scratch at `scratch/nb-lanes/run/bench-L8-quiet-1216/`.
 
+
+## 0.54.0 published (11/11 4:43 AM)
+v0.54.0 is published with four assets (Linux AppImage, Windows portable zip and setup, SHA256SUMS): https://github.com/neodimo/NodeBased/releases/tag/v0.54.0. Tag conformance and both package jobs passed; the final Windows package job ran the full suite (~3 h). Announcement posted in Releases #nodebased with the DiMo ping. Same morning: the GPU playback regression (Radeon 46 -> 72 ms, caused by f26b2ecc moving Roto read-ahead mattes into a process) was bisected and fixed (f454a56d, merged 63e45581): 45.5-47.5 ms p95, 23-24 fps. Next Lane 8 step: the last ~5 ms to the 41.67 ms gate.
