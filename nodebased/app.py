@@ -1975,7 +1975,7 @@ class Viewer(PanZoomView):
         self._roto_resolved_cache = None
         self._roto_overlay_cache = (None, {})            # per-shape outline path and handle circles of the last paint
         self._drag_preview_fn = None
-        self._drag_preview_last = 0.0
+        self._drag_preview_last = float("-inf")   # not 0.0: time.monotonic() counts from boot, so a machine up for less than an interval would hold the first drag picture
         self._reveal_onion_cache_image = None
         self._hit_zoom = None          # logical pixels per scene unit while the direct picture drives the hit tests
         self._keys_from_direct = False  # true while a key the direct picture received is being handled

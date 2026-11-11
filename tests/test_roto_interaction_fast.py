@@ -110,6 +110,22 @@ class FastRotoTests(unittest.TestCase):
         self.assertEqual(previewed, committed)
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
 
+    def test_the_first_drag_move_requests_a_picture_on_a_machine_just_booted(self):
+        # time.monotonic() counts from boot: on a CI runner up for a few minutes it is below the test's 3600 s interval,
+        # and a "last request" of 0.0 held the first picture (Linux conformance, 11/11).
+        from unittest import mock
+        from nodebased import app as app_module
+        viewer = self.open([triangle()])
+        requests = []
+        original = self.window.request_preview
+        self.window.request_preview = lambda *a, **k: requests.append(k.get("document_override")) or original(*a, **k)
+        viewer.DRAG_PREVIEW_INTERVAL = 3600.0
+        with mock.patch.object(app_module.time, "monotonic", return_value=120.0):
+            QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=self.at(10, 10))
+            QTest.mouseMove(viewer.viewport(), self.at(16, 14))
+        self.assertEqual(len(requests), 1)
+        viewer._drag_preview_timer.stop()
+
     def test_moves_inside_the_preview_interval_make_one_request(self):
         viewer = self.open([triangle()])
         requests = []
