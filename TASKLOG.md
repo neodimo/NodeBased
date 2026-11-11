@@ -1,3 +1,9 @@
+## 2026-11-10 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step I7 (Tue 11/10): paint strokes that stick to the plate (past Nuke) (integrator tick)
+
+- **What was done:** `main` `5cd874ad` -> `6a6e2807` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `6a6e2807`: Ran 9707 tests in 1612.486 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-10 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) Lane 2 step I6 (Tue 11/10): ripple through the past-Nuke tools, and outlines with holes, Lane 6 (Fluids, Claude Sonnet 5.5) Fluids 17 step B (Tue 11/10): swirling motion inside the up-res node, so the smoke curls (integrator tick)
 
 - **What was done:** `main` `cdb31926` -> `4b285cfa` plus this docs commit. Evidence and per-lane commit
