@@ -1,5 +1,26 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (7:55 PM on 2026-11-10 PDT)
+
+`main` moved `983908ae` -> `94f590c5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `94f590c5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-1915.log`, started 7:15 PM): **Ran 9812 tests in 1988.823 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step I10 (Tue 11/10): the left-outs from today's Roto tools.** Commits:
+  - `43bb2230` Docs: Lane 9 I10 (islands, sharp B-Spline tips, pockets, strokes with a transform, shear), real ellipsis and en dash in place of escapes
+  - `c83aaeff` Stick to plate: strokes with their own transform stick (inverse of each frame's transform, centre solved exactly), and the picture's shear reaches the clone offset; tests
+  - `9d0425a9` Outline from click: sharp B-Spline corners (triple control points), islands inside holes added back as shapes, status bar names pockets that touch the subject's edge; tests
+  Diff: 10 files changed, 992 insertions(+), 64 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (7:05 PM on 2026-11-10 PDT)
 
 `main` moved `4014b013` -> `76296b5c` (lane commits cherry-picked onto main in lane order) and then to this
