@@ -1,5 +1,32 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:15 PM on 2026-11-11 PDT)
+
+`main` moved `be89ddf0` -> `67e36437` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `67e36437` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1111-1447.log`, started 2:47 PM): **Ran 9864 tests in 1666.766 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step U2 (Wed 11/11): Roto must feel instant: overlay under 16 ms, panel lazy, painted strokes cached.** Commits:
+  - `55f0f3b3` tests: tracker and planar drag previews render the fixed held-drag tier (Viewer.DRAG_PREVIEW_TIER, 4 since Roto U2), not tier 8; red stacked suite 11/11 2:09 PM
+  - `8f98b269` docs: PERFORMANCE.md: Roto interaction U2 pass (before/after per action, what is still over target); benchmark keeps the median repeat's picture time; final measurements
+  - `e725b722` Roto interaction U2: a drag's preview copies everything but the node data once per drag instead of once per move (shape drag overlay 18 to 15 ms p95); benchmark names each post-release stall by the code that held the GUI thread
+  - `af3bda82` Roto interaction U2: a build-up brush stroke computes each dab only in its own window (bit-identical; a finished 120-move stroke's picture 2.1 s to 58 ms), tests; benchmark waits for the viewed node's picture before drawing and blocks in the event loop instead of spinning
+  - `21fd307d` benchmarks: Roto interaction U2 before, mid and after measurements
+  - `40f80917` Roto panel: a newly drawn shape is added to the list in place and its controls are built in a following event; the viewer asks for an overlay repaint after every press and release; tests
+  - `0eb3e049` Roto panel: a drag's point selection and keys update the selected shape's controls in place; the viewer repaints its overlay at once after a handled press or release; tests
+  - `96fee1e8` Roto interaction U2: the Roto tool strip no longer relays itself out in every Viewer paint (a 345-a-second repaint loop after a selection), the Roto panel updates only the selected shape's key count after a keyed point, painted strokes keep the picture before the last stroke so a stroke being drawn paints only itself, a Read's window lookup is remembered, and the drag commit asks the autokey setting once
+  - `4c355bf3` Roto interaction U2: a held drag renders one proxy tier uncached and never refines it (render thread work halved), the Roto panel is brought up to date in place after a drag, a selection or a new stroke instead of rebuilt, the application event filter is off while a panel is built, a RotoPaint digest no longer paints the whole frame, and each RotoPaint tile keeps its painted strokes so a new stroke paints only itself; benchmark gains GUI-stall, panel, span and render-stage measures
+  Diff: 23 files changed, 10214 insertions(+), 427 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (5:56 AM on 2026-11-11 PDT)
 
 `main` moved `63e45581` -> `1cb2a972` (lane commits cherry-picked onto main in lane order) and then to this
