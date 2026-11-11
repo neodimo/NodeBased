@@ -420,18 +420,26 @@ class Driver:
         self.viewer = window.viewer
         self.events = []            # one dict per scheduled event
 
+    def block(self, milliseconds):
+        """Run the Qt event loop for `milliseconds`, blocking in it as the application does when idle. (A processEvents spin
+        never blocks, so it holds the interpreter lock and slows the render thread by ten times: a number the artist never sees.)"""
+        from PySide6.QtCore import QEventLoop, QTimer
+        loop = QEventLoop()
+        QTimer.singleShot(max(1, int(milliseconds)), loop.quit)
+        loop.exec()
+
     def pump(self, seconds):
         deadline = time.monotonic() + seconds
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            self.app.processEvents(QEvent_all(), max(1, int(remaining * 1000)))
+            self.block(min(remaining * 1000, 4))
 
     def pump_until(self, predicate, timeout):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            self.app.processEvents(QEvent_all(), 5)
+            self.block(2)
             if predicate():
                 return True
         return False
@@ -462,7 +470,7 @@ class Driver:
         scheduled = start
         for number, (kind, payload) in enumerate(script):
             while time.monotonic() < scheduled:
-                self.app.processEvents(QEvent_all(), 1)
+                self.block(min(max((scheduled - time.monotonic()) * 1000, 1), 2))
             record = {"kind": kind, "scheduled": scheduled, "posted": time.monotonic(), "number": number,
                       "handlers_before": len(self.recorder.handlers), "paints_before": len(self.recorder.paints)}
             self.recorder.current_event = len(self.events)
@@ -590,6 +598,14 @@ class Shot:
         self.window.command({"op": "view", "id": key})
         self.window.graph.scene().clearSelection()
         self.window.graph.items_by_id[key].setSelected(True)
+        QApplication.instance().processEvents()
+        # An artist looks at the picture of a node before drawing on it: wait for its full-resolution picture, so the first
+        # move is not measured against the render of a view the artist has not seen yet.
+        deadline = time.monotonic() + 20
+        while (self.window.busy or len(self.window.preview_queue) or self.window.timer.isActive()) and time.monotonic() < deadline:
+            QApplication.instance().processEvents()
+            time.sleep(0.005)
+        time.sleep(0.2)
         QApplication.instance().processEvents()
 
 

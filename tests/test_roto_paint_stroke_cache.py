@@ -148,5 +148,59 @@ class RotoPaintDigestTests(unittest.TestCase):
         self.assertNotEqual(first, executor._solve_paint("paint", 1, 1))
 
 
+def _full_tile_coverage(width, height, points, size, spacing, hardness, origin, dynamic, buildup, pressure_size, pressure_opacity):
+    """The build-up coverage computed the plain way: every dab over the whole tile (what the windowed version must equal)."""
+    import math
+    ox, oy = origin
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    coverage = np.zeros((height, width), np.float32)
+    for a, b in zip(points, points[1:] or points):
+        length = math.hypot(b["x"] - a["x"], b["y"] - a["y"])
+        count = max(1, int(math.ceil(length / max(spacing * size, 0.25))))
+        for i in range(count + 1):
+            t = i / count
+            x, y = a["x"] + t * (b["x"] - a["x"]), a["y"] + t * (b["y"] - a["y"])
+            pressure = a["pressure"] + t * (b["pressure"] - a["pressure"])
+            radius = max(0.25, size * (pressure if pressure_size else 1.0) * 0.5)
+            dab_hardness = hardness * pressure if dynamic else hardness
+            d = np.sqrt((xx + ox + 0.5 - x) ** 2 + (yy + oy + 0.5 - y) ** 2)
+            ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
+            if dab_hardness < 1.0:
+                ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+            dab = np.clip(ramp * (pressure if pressure_opacity else 1.0) * buildup, 0.0, 1.0)
+            coverage = 1.0 - (1.0 - coverage) * (1.0 - dab)
+    return coverage
+
+
+class BuildupCoverageTests(unittest.TestCase):
+    def test_a_build_up_stroke_computed_dab_by_dab_in_windows_equals_the_whole_tile_computed_for_every_dab(self):
+        from nodebased import paint
+        rng = np.random.default_rng(11)
+        for trial in range(12):
+            width, height = int(rng.integers(30, 90)), int(rng.integers(30, 90))
+            points = [{"x": float(rng.uniform(-8, width + 8)), "y": float(rng.uniform(-8, height + 8)),
+                       "pressure": float(rng.uniform(0.2, 1.0))} for _ in range(int(rng.integers(1, 6)))]
+            size, hardness = float(rng.uniform(3, 30)), float(rng.choice([0.0, 0.3, 1.0]))
+            origin = (int(rng.integers(0, 40)), int(rng.integers(0, 40)))
+            for dynamic in (False, True):
+                for buildup in (0.25, 1.0):
+                    for pressure_size, pressure_opacity in ((True, True), (False, True), (True, False)):
+                        got = paint._distance_grid(width, height, points, size, 0.1, hardness, origin, dynamic, buildup,
+                                                   pressure_size, pressure_opacity)
+                        want = _full_tile_coverage(width, height, points, size, 0.1, hardness, origin, dynamic, buildup,
+                                                   pressure_size, pressure_opacity)
+                        self.assertEqual(got.tobytes(), want.tobytes())
+
+    def test_a_build_up_stroke_in_a_tiled_picture_equals_the_uncached_picture(self):
+        cached, plain = TileExecutor(evaluator=Evaluator(), tile_edge=EDGE), TileExecutor(evaluator=Evaluator(), tile_edge=EDGE)
+        plain.paint_prefix_enabled = False
+        items = six_strokes()
+        for item in items:
+            item["buildup"] = True
+        for count in (3, 6):
+            document = with_items(items[:count])
+            self.assertEqual(compose(cached, document).tobytes(), compose(plain, document).tobytes())
+
+
 if __name__ == "__main__":
     unittest.main()

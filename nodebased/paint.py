@@ -50,30 +50,27 @@ def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0
             pressure = p0 + t*(p1-p0)
             radius = max(0.25, size * (pressure if pressure_size else 1.0) * 0.5)
             dab_hardness = hardness * pressure if dynamic_hardness else hardness
-            if buildup_opacity is None:
-                # A dab is zero beyond radius + 0.5, and a zero dab leaves the running maximum alone: only its own window is
-                # computed (a stroke's bounds are hundreds of pixels wide, a dab twenty), with the same per-pixel arithmetic.
-                reach = radius + 2.0
-                wx0, wx1 = max(0, int(math.floor(x - reach - ox))), min(width, int(math.ceil(x + reach - ox)) + 1)
-                wy0, wy1 = max(0, int(math.floor(y - reach - oy))), min(height, int(math.ceil(y + reach - oy)) + 1)
-                if wx1 <= wx0 or wy1 <= wy0:
-                    continue
-                d = np.sqrt((xx[wy0:wy1, wx0:wx1] + ox + 0.5 - x)**2 + (yy[wy0:wy1, wx0:wx1] + oy + 0.5 - y)**2)
-                ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
-                if dab_hardness < 1.0:
-                    ramp = ramp * ramp * (3.0 - 2.0 * ramp)
-                window = coverage[wy0:wy1, wx0:wx1]
-                np.maximum(window, ramp * (pressure if pressure_opacity else 1.0), out=window)
+            # A dab is zero beyond radius + 0.5, and a zero dab leaves the running maximum alone: only its own window is
+            # computed (a stroke's bounds are hundreds of pixels wide, a dab twenty), with the same per-pixel arithmetic.
+            reach = radius + 2.0
+            wx0, wx1 = max(0, int(math.floor(x - reach - ox))), min(width, int(math.ceil(x + reach - ox)) + 1)
+            wy0, wy1 = max(0, int(math.floor(y - reach - oy))), min(height, int(math.ceil(y + reach - oy)) + 1)
+            if wx1 <= wx0 or wy1 <= wy0:
                 continue
-            d = np.sqrt((xx + ox + 0.5 - x)**2 + (yy + oy + 0.5 - y)**2)
+            d = np.sqrt((xx[wy0:wy1, wx0:wx1] + ox + 0.5 - x)**2 + (yy[wy0:wy1, wx0:wx1] + oy + 0.5 - y)**2)
             ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
             if dab_hardness < 1.0:
                 ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+            window = coverage[wy0:wy1, wx0:wx1]
             if buildup_opacity is None:
-                coverage = np.maximum(coverage, ramp * (pressure if pressure_opacity else 1.0))
+                np.maximum(window, ramp * (pressure if pressure_opacity else 1.0), out=window)
             else:
+                # Build-up: 1 - (1 - a)(1 - dab). Outside the window the dab is exactly zero and this leaves a coverage this formula
+                # produced bit for bit unchanged (1 - (1 - a) is a fixed point of float32 arithmetic on those values), so the
+                # rest of the tile is not touched: the same bits as computing the whole tile for every dab, in a twentieth of it.
                 dab = np.clip(ramp * (pressure if pressure_opacity else 1.0) * buildup_opacity, 0.0, 1.0)
-                coverage = 1.0 - (1.0 - coverage) * (1.0 - dab)
+                window[...] = 1.0 - (1.0 - window) * (1.0 - dab)
+            continue
     return coverage
 
 
