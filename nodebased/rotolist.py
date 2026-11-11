@@ -857,6 +857,11 @@ class ShapeListTree(QTreeWidget):
         area = QSpinBox(); area.setRange(1, 100000000); area.setValue(rotooutline.MATTE_MIN_AREA)
         area.setSuffix(" px"); area.setObjectName("roto-list-matte-min-area")
         step = QSpinBox(); step.setRange(1, 1000); step.setValue(rotomatte.DEFAULT_STEP); step.setObjectName("roto-list-matte-step")
+        tolerance = QDoubleSpinBox(); tolerance.setRange(0.0, 50.0); tolerance.setSingleStep(0.25); tolerance.setDecimals(2)
+        tolerance.setValue(rotomatte.DEFAULT_TOLERANCE); tolerance.setSuffix(" px"); tolerance.setSpecialValueText("Off")
+        tolerance.setObjectName("roto-list-matte-tolerance")
+        tolerance.setToolTip("Frames between the keys are measured against the matte. One whose outline is farther than this from "
+                             "the matte's edge is keyed from the matte too, and its neighbours are fitted again. Off keys only every Nth frame.")
         first, last = QSpinBox(), QSpinBox()
         for spin in (first, last):
             spin.setRange(-100000, 100000)
@@ -864,13 +869,14 @@ class ShapeListTree(QTreeWidget):
         first.setValue(int(time.get("first", time["current"]))); last.setValue(int(time.get("last", time["current"])))
         first.setObjectName("roto-list-matte-first"); last.setObjectName("roto-list-matte-last")
         form.addRow("Source input", source); form.addRow("Channel", channel); form.addRow("Threshold", threshold)
-        form.addRow("Minimum area", area); form.addRow("Key every Nth frame", step)
+        form.addRow("Minimum area", area); form.addRow("Key every Nth frame", step); form.addRow("Edge tolerance", tolerance)
         form.addRow("First frame", first); form.addRow("Last frame", last)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept); buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
         dialog.settings = lambda: {"source": source.currentData(), "channel": channel.currentData(),
                                    "threshold": threshold.value(), "min_area": area.value(), "step": step.value(),
+                                   "tolerance": tolerance.value(),
                                    "first": min(first.value(), last.value()), "last": max(first.value(), last.value())}
         return dialog
 

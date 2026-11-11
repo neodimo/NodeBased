@@ -27,6 +27,9 @@ MATCH_MIN_IOU = 0.1              # overlap, as a share of the union, that makes 
 CORNER_WINDOW = 0.08             # a corner is moved to a corner this close (share of the perimeter) on the next key
 FILL_BAND = 8.0                  # px an in-between point may move toward the matte edge
 FILL_THRESHOLD = 0.75            # px a point must move before the fill keys it (the fit has a half-pixel grid tie)
+DEFAULT_TOLERANCE = 1.0          # px an in-between frame's outline may sit from the matte's edge before the frame is keyed from the matte
+MAX_ROUNDS = 12                  # key-and-refit passes; every pass keys the worst frame of each gap that is over tolerance
+CACHE_BYTES = 256 * 1024 * 1024  # mattes held while measuring
 NAME_PREFIX = "matte"
 
 
@@ -78,6 +81,7 @@ class Sequence:
     key_frames: list
     start: int
     end: int
+    added_keys: list = field(default_factory=list)   # frames keyed from the matte because the in-betweens were over tolerance
 
     def summary(self):
         names = ", ".join(str(e) for e in self.events)
@@ -254,16 +258,18 @@ def _fit_fixed(xy, positions, dense, corners):
 
 # -- the sequence ----------------------------------------------------------------------------
 
-def key_frames_for(start, end, step=DEFAULT_STEP):
-    """Every `step`-th frame from `start`, and `end` itself."""
+def key_frames_for(start, end, step=DEFAULT_STEP, extra=()):
+    """Every `step`-th frame from `start`, and `end` itself, plus any `extra` frames inside the range."""
     step = max(1, int(step))
     frames = list(range(int(start), int(end) + 1, step))
     if frames[-1] != int(end):
         frames.append(int(end))
+    if extra:
+        frames = sorted(set(frames) | {int(f) for f in extra if int(start) <= int(f) <= int(end)})
     return frames
 
 
-def _traced(matte_for, frame, threshold, min_area, min_points, max_points):
+def _trace_frame(matte_for, frame, threshold, min_area, min_points, max_points):
     try:
         return rotooutline.matte_outlines(matte_for(frame), threshold, min_area, min_points, max_points)
     except rotooutline.OutlineError:
@@ -272,14 +278,24 @@ def _traced(matte_for, frame, threshold, min_area, min_points, max_points):
 
 def trace_sequence(matte_for, start, end, step=DEFAULT_STEP, threshold=rotooutline.MATTE_LEVEL,
                    min_area=rotooutline.MATTE_MIN_AREA, min_points=rotooutline.MIN_POINTS,
-                   max_points=rotooutline.MAX_POINTS, taken_names=()):
+                   max_points=rotooutline.MAX_POINTS, taken_names=(), extra_keys=(), cache=None):
     """Trace the matte on every `step`-th frame of `start` to `end` and follow each region (see the module docstring).
+
+    `extra_keys` are frames traced as well (keyed from the matte between the regular keys); `cache` is a dict that keeps
+    each traced frame so that tracing again with more keys does not trace a frame twice.
 
     Raises `OutlineError` when the first frame has no region."""
     start, end = int(start), int(end)
     if end < start:
         raise ValueError("the range ends before it starts")
-    keys = key_frames_for(start, end, step)
+    keys = key_frames_for(start, end, step, extra_keys)
+    cache = {} if cache is None else cache
+
+    def _traced(matte_for, frame, threshold, min_area, min_points, max_points):
+        if frame not in cache:
+            cache[frame] = _trace_frame(matte_for, frame, threshold, min_area, min_points, max_points)
+        return cache[frame]
+
     names = set(taken_names)
     tracks, alive, events = [], [], []
 
@@ -305,7 +321,6 @@ def trace_sequence(matte_for, start, end, step=DEFAULT_STEP, threshold=rotooutli
         raise rotooutline.OutlineError("the matte has no region above the threshold and minimum area on the first frame")
     for shape in first:
         begin(shape, start)
-    cache = {start: first}
 
     def advance(frame_a, frame_b, shapes_b):
         """Match the tracks alive at frame_a to `shapes_b`; returns the events (without frames' refinement) and applies the keys."""
@@ -486,14 +501,151 @@ def fill_between_keys(shapes, matte_for, band=FILL_BAND, threshold=FILL_THRESHOL
     return added
 
 
+# -- adaptive keys ---------------------------------------------------------------------------------------
+
+def _big_enough(inside, start, minimum, seen):
+    """Whether the region of `inside` holding pixel `start` has at least `minimum` pixels (flood fill that stops there)."""
+    from collections import deque
+    height, width = inside.shape
+    area, pending, own = 0, deque([start]), {start}
+    while pending:
+        y, x = pending.popleft()
+        area += 1
+        if area >= minimum:
+            seen.update(own)
+            return True
+        for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+            if 0 <= ny < height and 0 <= nx < width and inside[ny, nx] and (ny, nx) not in own:
+                own.add((ny, nx))
+                pending.append((ny, nx))
+    return False
+
+
+def _window_sum(image, radius, axis):
+    """Sum of `image` over the 2 * radius + 1 pixels centred on each pixel along `axis` (zeros beyond the picture)."""
+    pad = [(0, 0), (0, 0)]
+    pad[axis] = (radius + 1, radius)
+    total = np.cumsum(np.pad(image.astype(np.float64), pad), axis=axis)
+    length = image.shape[axis]
+    upper = np.take(total, range(2 * radius + 1, 2 * radius + 1 + length), axis=axis)
+    lower = np.take(total, range(0, length), axis=axis)
+    return upper - lower
+
+
+def outline_error(drawn, matte, level=rotooutline.MATTE_LEVEL, reach=4.0, min_area=1):
+    """How far the drawn shapes' edge sits from the matte's edge, in pixels, to a fraction of a pixel.
+
+    `drawn` is the alpha the shapes draw and `matte` the matte, both float H x W. Where they disagree the difference in
+    coverage, summed across the edge along the rows (h) and along the columns (v), is how far the edge has moved in x and in y;
+    the distance perpendicular to the edge is h * v / sqrt(h^2 + v^2). The result is the worst such distance, capped
+    by `reach`. Mattes other than at the 50 % level are compared as the hard region above `level`. Matte regions under
+    `min_area` pixels are not traced and are left out."""
+    drawn = np.asarray(drawn, dtype=np.float64)
+    inside = matte >= level
+    flat = (matte if abs(level - 0.5) < 1e-6 else inside).astype(np.float64)
+    difference = drawn - flat
+    ys, xs = np.nonzero((np.abs(difference) > 0.02) | ((drawn >= 0.5) != inside))
+    if not len(ys):
+        return 0.0
+    if min_area > 1:
+        keep, seen, small = [], set(), set()
+        for y, x in zip(ys.tolist(), xs.tolist()):
+            if not inside[y, x] or (y, x) in seen:
+                keep.append(True)
+            elif (y, x) in small:
+                keep.append(False)
+            else:
+                big = _big_enough(inside, (y, x), min_area, seen)
+                keep.append(big)
+                if not big:
+                    small.add((y, x))
+        mask = np.array(keep, dtype=bool)
+        ys, xs = ys[mask], xs[mask]
+        if not len(ys):
+            return 0.0
+    radius = int(math.ceil(reach))
+    height, width = inside.shape
+    y0, y1 = max(int(ys.min()) - radius, 0), min(int(ys.max()) + radius + 1, height)
+    x0, x1 = max(int(xs.min()) - radius, 0), min(int(xs.max()) + radius + 1, width)
+    crop = difference[y0:y1, x0:x1]
+    h = np.abs(_window_sum(crop, radius, 1))[ys - y0, xs - x0]
+    v = np.abs(_window_sum(crop, radius, 0))[ys - y0, xs - x0]
+    root = np.sqrt(h * h + v * v)
+    perpendicular = np.divide(h * v, root, out=np.zeros_like(root), where=root > 1e-9)
+    return float(min(perpendicular.max(), reach))
+
+
+class _Mattes:
+    """Mattes of the frames asked for, kept (oldest dropped first) within a memory budget."""
+
+    def __init__(self, matte_for, budget=CACHE_BYTES):
+        self.matte_for, self.budget, self.held = matte_for, budget, {}
+
+    def __call__(self, frame):
+        frame = int(frame)
+        if frame not in self.held:
+            image = np.asarray(self.matte_for(frame), dtype=np.float32)
+            while self.held and sum(v.nbytes for v in self.held.values()) + image.nbytes > self.budget:
+                del self.held[next(iter(self.held))]
+            self.held[frame] = image
+        return self.held[frame]
+
+
+def frame_error(shapes, matte, frame, level=rotooutline.MATTE_LEVEL, min_area=1, reach=4.0):
+    """`outline_error` of the stored `shapes` at `frame` against `matte` (a float H x W picture)."""
+    from . import roto
+    height, width = matte.shape[:2]
+    drawn = roto.rasterise(shape_model.resolve_shapes({"shapes": shapes}, frame), width, height)[..., 3]
+    return outline_error(drawn, matte, level, reach, min_area)
+
+
+def _frames_to_key(keyed, errors, tolerance):
+    """One frame to key in each gap between neighbouring keyed frames that holds a frame over `tolerance`: of the frames
+    over it, the one nearest the middle of the gap, so that every key halves the gap it lands in (a path that curves
+    leaves an error that falls with the square of the gap)."""
+    chosen = []
+    for a, b in zip(keyed, keyed[1:]):
+        over = [f for f in range(a + 1, b) if errors.get(f, 0.0) > tolerance]
+        if over:
+            middle = (a + b) / 2.0
+            chosen.append(min(over, key=lambda f: (abs(f - middle), f)))
+    return chosen
+
+
 def shapes_from_matte(matte_for, start, end, step=DEFAULT_STEP, threshold=rotooutline.MATTE_LEVEL,
                       min_area=rotooutline.MATTE_MIN_AREA, fill=True, taken_names=(), template=None,
-                      min_points=rotooutline.MIN_POINTS, max_points=rotooutline.MAX_POINTS):
+                      min_points=rotooutline.MIN_POINTS, max_points=rotooutline.MAX_POINTS, tolerance=DEFAULT_TOLERANCE):
     """The whole job: ``(shapes, sequence)``. `shapes` are stored Roto shapes keyed every `step`-th frame of `start` to
     `end` and filled in between (unless `fill` is off); `sequence.events` names the regions that split, merged, appeared
-    or vanished."""
-    sequence = trace_sequence(matte_for, start, end, step, threshold, min_area, min_points, max_points, taken_names)
+    or vanished.
+
+    With `fill` on and a `tolerance` above 0, every in-between frame is then measured against its own matte
+    (`frame_error`). A frame whose outline sits farther than `tolerance` px from the matte's edge is keyed from the matte,
+    with the same point correspondence, and the frames around it are fitted again; this repeats until every frame is within
+    tolerance or keyed. `sequence.added_keys` lists the frames keyed that way."""
+    cache = {}
+    sequence = trace_sequence(matte_for, start, end, step, threshold, min_area, min_points, max_points, taken_names, cache=cache)
     shapes = stored_shapes(sequence, template)
-    if fill and len(sequence.key_frames) > 1:
-        fill_between_keys(shapes, matte_for)
+    if not (fill and len(sequence.key_frames) > 1):
+        return shapes, sequence
+    mattes = _Mattes(matte_for)
+    fill_between_keys(shapes, mattes, level=threshold)
+    if not tolerance or tolerance <= 0:
+        return shapes, sequence
+    reach = max(float(tolerance), 1.0) + 3.0
+    extra = set()
+    for _ in range(MAX_ROUNDS):
+        keyed = list(sequence.key_frames)
+        errors = {f: frame_error(shapes, mattes(f), f, threshold, min_area, reach)
+                  for f in range(int(start), int(end) + 1) if f not in set(keyed)}
+        worst = _frames_to_key(keyed, errors, tolerance)
+        if not worst:
+            break
+        extra.update(worst)
+        sequence = trace_sequence(matte_for, start, end, step, threshold, min_area, min_points, max_points, taken_names,
+                                  extra_keys=extra, cache=cache)
+        shapes = stored_shapes(sequence, template)
+        fill_between_keys(shapes, mattes, level=threshold)
+    regular = set(key_frames_for(start, end, step))
+    sequence.added_keys = sorted(f for f in sequence.key_frames if f not in regular and f in extra)
     return shapes, sequence

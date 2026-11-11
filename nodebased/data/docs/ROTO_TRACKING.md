@@ -1026,8 +1026,8 @@ planar fallback then reports it. The clone offset keeps the scale, turn and shea
 A keyer, a generated matte or a painted alpha often gets a matte 90 % of the way, and the last 10 % is roto. Nuke cannot turn a matte into
 shapes. In the shape list menu of a Roto node, **Shapes from matte** reads a matte from the Roto's Background or Mask input, traces it, and
 adds ordinary editable shapes. The dialog asks for the source input, the channel (alpha, red, green, blue or luminance), the threshold
-(default 50 %), the minimum area (default 64 px), key every Nth frame (default 4) and the first and last frame (default the timeline
-range). Nothing in a document changes unless the command is run: it adds no node parameter and no schema field, and a saved shot
+(default 50 %), the minimum area (default 64 px), key every Nth frame (default 4), the edge tolerance (default 1 px, Off turns the adaptive
+keys below off) and the first and last frame (default the timeline range). Nothing in a document changes unless the command is run: it adds no node parameter and no schema field, and a saved shot
 renders bit-identical.
 
 **One frame (`rotooutline.matte_outlines`).** Each 4-connected region of at least the minimum area at or above the threshold becomes a
@@ -1060,6 +1060,16 @@ threshold 0.75 px). The fit snaps to the strongest gradient, which on a hard mat
 fitted keys only when they bring the outline closer to the matte's level contour than the interpolation was (measured by the softened matte
 along the outline). The fill can therefore only improve a frame.
 
+**Adaptive keys.** Keying every Nth frame assumes the subject moves evenly between keys. A subject that speeds up and slows down leaves the
+in-betweens a few pixels off the matte however well they are fitted. After the fill, every frame that is not a key is measured against its own
+matte: the alpha the shapes draw is compared with the matte, and the difference in coverage summed across the edge (along rows and along columns)
+gives how far the edge has moved, to a fraction of a pixel (matte regions under the minimum area are left out). A frame farther than the **edge
+tolerance** (default 1 px) from the matte's edge is keyed from the matte too, with the same point correspondence as the other keys, and the shape is
+fitted again around it. Each pass keys one frame in every gap that holds a frame over tolerance, the one nearest the gap's middle so that the key halves the gap (the error of a curving path falls with the square of the gap); passes repeat (at most 12) until every frame is within
+tolerance or keyed. The status bar says how many keys were added ("plus 3 keys where the in-betweens strayed over 1 px from the matte"). A
+tolerance of 0.25 px adds more keys than 1 px and a straight path adds none. The whole command is still one undo step. Off (tolerance 0) keeps
+only every Nth frame and the frames an event needs. The measure is not run when the in-betweens fill is off.
+
 Measured (tests/test_roto_matte_shapes_i8.py, 4 x 4 supersampled mattes; the tests print the figures; no timing is asserted):
 
 | Case | Result |
@@ -1069,6 +1079,7 @@ Measured (tests/test_roto_matte_shapes_i8.py, 4 x 4 supersampled mattes; the tes
 | two discs; island in a hole | two shapes; union, subtract, union |
 | soft edges, ramps of 6, 10 and 16 px | feather 2, 4 and 7; rendered edge width within 20 % of the matte's; largest alpha difference 0.14, 0.10 and 0.08 |
 | moving ellipse, 12 frames, key every 4th | worst disagreeing pixel 0.94 px from the true edge on keyed and in-between frames; point 0 stays within 15 degrees round the shape |
+| curved path (speeds up and slows down), 12 frames, key every 4th, 640 x 360 | every Nth frame only: worst disagreeing pixel 4.60 px from the true edge; with adaptive keys (frames 3, 7 and 10 keyed from the matte) 0.57 px on every frame; 0.25 px adds 8 keys; a straight path adds none |
 | accelerating disc, keys 1 and 5 | interpolation alone misses by 13.2 px; with the fill 0.92 px |
 | two discs that part (frame 7) | one split event on frame 7; shapes live 1 to 12 and 7 to 12; every frame within 1 px |
 | a region that vanishes and one that appears | vanished on frame 7, appeared on frame 9; lifetimes 1 to 6, 1 to 12 and 9 to 12 |

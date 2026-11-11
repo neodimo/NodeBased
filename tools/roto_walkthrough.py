@@ -1469,6 +1469,7 @@ def s24(w):
     w.shot("keyed-plate", "Frame 5: a green-screen plate keyed by ChromaKeyer; the subject is the only thing left. No shapes yet.")
     depth = w.undo_depth()
     w.check(w.viewer.shapes_from_matte(first=1, last=last, step=4), "Shapes from matte traced the keyer's alpha over frames 1 to 12")
+    message = w.window.statusBar().currentMessage()
     w.settle()
     w.check(w.undo_depth() == depth + 1, "the whole trace is one undo step")
     w.window.command({"op": "undo"}); w.settle()
@@ -1477,7 +1478,7 @@ def s24(w):
     shapes = w.shape_entries()
     w.check(len(shapes) == 1 and shapes[0]["name"] == "matte1", f"one shape was made ({[s['name'] for s in shapes]})")
     keyed = sorted({k["frame"] for p in shapes[0]["points"] for k in p["x"]["curve"]["keys"]})
-    w.check({1, 5, 9, 12} <= set(keyed), f"the shape is keyed on every fourth frame and the last ({keyed})")
+    w.check({1, 5, 9, 12} <= set(keyed), f"the shape is keyed on every fourth frame and the last, and on the frames that needed it ({keyed})")
     per_frame, reach = {}, {}
     factor = 8
     ys8, xs8 = np.mgrid[0:HEIGHT * factor, 0:WIDTH * factor].astype(np.float64)
@@ -1494,19 +1495,21 @@ def s24(w):
         samples = np.stack([(ex + 0.5) / factor, (ey + 0.5) / factor], axis=1)
         reach[frame] = float(max((np.sqrt(((samples - (x + 0.5, y + 0.5)) ** 2).sum(-1)).min() for x, y in zip(wx, wy)), default=0.0))
     worst, farthest = max(per_frame.values()), max(reach.values())
-    traced = rotomatte.key_frames_for(1, last, rotomatte.DEFAULT_STEP)      # the frames the trace keyed; the fill adds more in between
-    key_reach = max(reach[f] for f in traced)
-    w.check(key_reach <= 1.0 and worst < 4.0,
-            f"the shapes follow the keyed matte (keyed frames within {key_reach:.2f} px of its edge; every frame within {farthest:.2f} px)")
+    sequence = w.viewer.last_matte_sequence
+    added = sequence.added_keys
+    w.check(farthest <= 1.0 and worst < 4.0,
+            f"the shapes follow the keyed matte on every frame (within {farthest:.2f} px of its edge; {worst:.2f}% of the subject's pixels differ)")
+    w.check(bool(added) and f"plus {len(added)} key" in message,
+            f"the in-betweens that strayed over 1 px were keyed from the matte (frames {added}) and the status bar says so")
     if farthest > 1.0:
         w.differs(f"the in-between frames are up to {farthest:.1f} px off the matte's edge ({worst:.1f}% of the subject's pixels), "
-                  f"where the tool's own tests state 1 px; the keyed frames are within {key_reach:.2f} px. The subject's path curves a little (it speeds up "
-                  "and slows down vertically); on a straight path the same trace stays within 0.4% of its pixels")
+                  "where the tool's own tests state 1 px")
     w.goto(5)
     w.shot("keyed-frame-5", f"Frame 5, a keyed frame: the shape outline sits on the subject ({per_frame[5]:.2f}% of its pixels differ from the matte).")
     w.goto(7)
     w.shot("in-between-frame-7", f"Frame 7, between keys: the outline still follows the subject ({per_frame[7]:.2f}% differ).")
-    w.note(f"Shapes from matte: 1 shape keyed on frames {keyed}; worst frame {worst:.2f}% of subject pixels differ from the keyed matte (none farther than {farthest:.2f} px from its edge), frame 5 {per_frame[5]:.2f}%, frame 7 {per_frame[7]:.2f}%")
+    w.note(f"Shapes from matte: 1 shape keyed on frames {keyed} (every 4th frame, plus {len(added)} added where the in-betweens strayed over 1 px from the matte: {added}); "
+           f"worst frame {worst:.2f}% of subject pixels differ from the keyed matte (none farther than {farthest:.2f} px from its edge), frame 5 {per_frame[5]:.2f}%, frame 7 {per_frame[7]:.2f}%")
 
 
 @scene(25, "Reduce keys: a tracked shape keeps its path with a fraction of the keys",

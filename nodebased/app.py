@@ -4135,15 +4135,18 @@ class Viewer(PanZoomView):
         return False
 
     def shapes_from_matte(self, source="bg", channel="alpha", threshold=rotooutline.MATTE_LEVEL,
-                          min_area=rotooutline.MATTE_MIN_AREA, step=rotomatte.DEFAULT_STEP, first=None, last=None):
+                          min_area=rotooutline.MATTE_MIN_AREA, step=rotomatte.DEFAULT_STEP, first=None, last=None,
+                          tolerance=rotomatte.DEFAULT_TOLERANCE):
         """Trace the matte on a Roto input into editable shapes (Shapes from matte): one undo step.
 
         `source` is the Roto input to read ('bg' or 'mask') and `channel` one of alpha, red, green, blue, luminance.
         Each region above `min_area` pixels at `threshold` becomes a closed Bezier shape and each hole a shape that subtracts.
         Over `first` to `last` (the timeline range when omitted) the shapes are keyed on every `step`-th frame, with point
-        correspondence kept, and the frames between are filled with the in-betweens fit. Regions that split, merge,
-        appear or vanish start or end a shape (its lifetime) and are named in the status bar. Returns True when shapes
-        were added; nothing changes unless this is run.
+        correspondence kept, and the frames between are filled with the in-betweens fit. Each in-between frame is then
+        measured against its own matte; one whose outline is farther than `tolerance` px from the matte's edge is keyed
+        from the matte too and its neighbours are fitted again, until every frame is within tolerance (0 turns this off).
+        Regions that split, merge, appear or vanish start or end a shape (its lifetime) and are named in the status bar.
+        Returns True when shapes were added; nothing changes unless this is run.
         """
         context = self._roto_context()
         if context is None:
@@ -4173,7 +4176,7 @@ class Viewer(PanZoomView):
         try:
             shapes, sequence = rotomatte.shapes_from_matte(
                 matte_for, first, last, step, threshold, min_area,
-                taken_names={shape.get("name") for shape in existing})
+                taken_names={shape.get("name") for shape in existing}, tolerance=tolerance)
         except rotooutline.OutlineError as error:
             bar.showMessage(f"Shapes from matte: {error}", 6000)
             return False
@@ -4190,8 +4193,11 @@ class Viewer(PanZoomView):
         holes = sum(1 for shape in shapes if shape["mode"] == "subtract")
         note = f" and {holes} hole{'s' if holes != 1 else ''}" if holes else ""
         events = "; ".join(str(event) for event in sequence.events)
+        added = len(sequence.added_keys)
+        extra = (f", plus {added} key{'s' if added != 1 else ''} where the in-betweens strayed over {tolerance:g} px from the matte"
+                 if added else "")
         bar.showMessage(f"Shapes from matte: {len(shapes) - holes} shape{'s' if len(shapes) - holes != 1 else ''}{note} over frames "
-                        f"{first} to {last}, keyed every {max(1, int(step))} frames" + (f" · {events}" if events else ""), 12000)
+                        f"{first} to {last}, keyed every {max(1, int(step))} frames{extra}" + (f" · {events}" if events else ""), 12000)
         self.last_matte_sequence = sequence
         return True
 
