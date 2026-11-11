@@ -253,11 +253,14 @@ class EvaluatorTests(unittest.TestCase):
         entered = threading.Event()
 
         def slow(*args, **kwargs):
-            entered.set()
+            # The cancel is armed by the first decode, not by a wall-clock timer started beforehand: on a slow CI
+            # runner (Windows, 11/10) a 20 ms timer fired before any decode began, so nothing had entered.
+            if not entered.is_set():
+                entered.set()
+                threading.Timer(0.02, cancel.set).start()
             time.sleep(0.05)
             return real(*args, **kwargs)
         with mock.patch.object(imaging, "read_image_raster", slow):
-            threading.Timer(0.02, cancel.set).start()
             with self.assertRaises(Cancelled):
                 for frame in range(1, FRAMES + 1):         # fresh frames, so each walk decodes
                     pooled.evaluate_raster(self.doc, "colorcorrect", cancel=cancel, frame=frame)

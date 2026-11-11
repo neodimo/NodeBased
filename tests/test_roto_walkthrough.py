@@ -78,7 +78,9 @@ class RotoWalkthroughTests(unittest.TestCase):
             results = {r.number: r for r in walkthrough.run(folder, only={20, 21, 22, 23, 24, 25})}
             walkthrough.write_readme(list(results.values()), folder)
             self.assertEqual(sorted(results), [20, 21, 22, 23, 24, 25])
-            for number in (20, 21, 22, 23):
+            # Scene 22 needs a graphics adapter; a CI runner without wgpu reports it skipped (11/10 Desktop conformance).
+            gpu_scene = not results[22].error.startswith("skipped: no graphics adapter")
+            for number in (20, 21, 22, 23) if gpu_scene else (20, 21, 23):
                 self.assertEqual((number, results[number].status, results[number].error), (number, "works", ""))
             self.assertNotEqual(results[24].status, "broken", results[24].error)        # works, or differs with the measured drift
             self.assertTrue(any("worst frame" in note for note in results[24].notes), results[24].notes)
@@ -89,7 +91,8 @@ class RotoWalkthroughTests(unittest.TestCase):
                 self.assertIn("not on this branch yet", results[25].error)
             self.assertTrue(any("same offset" in note for note in results[20].notes))
             self.assertTrue(any("3 holes" in note or "2 holes" in note for note in results[21].notes))
-            self.assertTrue(any("largest difference between processor and card" in note for note in results[22].notes))
+            if gpu_scene:
+                self.assertTrue(any("largest difference between processor and card" in note for note in results[22].notes))
             self.assertTrue(any("mean error" in note for note in results[23].notes))
             for number, result in results.items():
                 if result.error.startswith("skipped"):

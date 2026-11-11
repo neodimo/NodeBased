@@ -1305,6 +1305,10 @@ def _blob(index, centre):
        "Nuke draws Roto mattes on the processor only.")
 def s22(w):
     from nodebased import rotogpu
+    try:
+        import wgpu  # noqa: F401
+    except ImportError:
+        raise Skip("no graphics adapter here (wgpu is not installed); the processor draws the matte")
     shapes = []
     for index in range(24):
         column, row = index % 6, index // 6
@@ -1329,6 +1333,9 @@ def s22(w):
         on = w.window.evaluator.evaluate_raster(w.document, target="r", frame=1).to_display().copy()
         drawn = rotogpu.counters["gpu_mattes"]
         right = w.viewer.grab().toImage()
+        why = str(rotogpu.counters["last_error"] or rotogpu.counters["last_reason"] or "")
+        if drawn == 0 and ("wgpu" in why or "adapter" in why.lower()):
+            raise Skip(f"no graphics adapter here ({why}); the processor drew the matte")
         if drawn == 0:
             w.differs(f"the card drew no matte ({rotogpu.counters['last_reason'] or rotogpu.counters['last_error'] or 'no graphics adapter'}); the processor drew it, so both pictures are identical by fallback")
         difference = np.abs(off - on)
