@@ -50,6 +50,21 @@ def _distance_grid(width, height, points, size, spacing, hardness=1.0, origin=(0
             pressure = p0 + t*(p1-p0)
             radius = max(0.25, size * (pressure if pressure_size else 1.0) * 0.5)
             dab_hardness = hardness * pressure if dynamic_hardness else hardness
+            if buildup_opacity is None:
+                # A dab is zero beyond radius + 0.5, and a zero dab leaves the running maximum alone: only its own window is
+                # computed (a stroke's bounds are hundreds of pixels wide, a dab twenty), with the same per-pixel arithmetic.
+                reach = radius + 2.0
+                wx0, wx1 = max(0, int(math.floor(x - reach - ox))), min(width, int(math.ceil(x + reach - ox)) + 1)
+                wy0, wy1 = max(0, int(math.floor(y - reach - oy))), min(height, int(math.ceil(y + reach - oy)) + 1)
+                if wx1 <= wx0 or wy1 <= wy0:
+                    continue
+                d = np.sqrt((xx[wy0:wy1, wx0:wx1] + ox + 0.5 - x)**2 + (yy[wy0:wy1, wx0:wx1] + oy + 0.5 - y)**2)
+                ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
+                if dab_hardness < 1.0:
+                    ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+                window = coverage[wy0:wy1, wx0:wx1]
+                np.maximum(window, ramp * (pressure if pressure_opacity else 1.0), out=window)
+                continue
             d = np.sqrt((xx + ox + 0.5 - x)**2 + (yy + oy + 0.5 - y)**2)
             ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
             if dab_hardness < 1.0:

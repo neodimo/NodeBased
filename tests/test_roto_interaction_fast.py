@@ -316,6 +316,43 @@ class FastRotoTests(unittest.TestCase):
         viewer.roto_selected_points = set()
         self.assertNotEqual(grab(), cold)               # the selected points show without a rebuilt cache
 
+    def test_stroke_coverage_by_dab_window_equals_the_whole_region_computation(self):
+        import numpy as np
+        from nodebased import paint
+
+        def reference(width, height, points, size, spacing, hardness=1.0, origin=(0, 0), dynamic_hardness=False,
+                      pressure_size=True, pressure_opacity=True):
+            ox, oy = map(int, origin)
+            yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+            hardness = min(1.0, max(0.0, float(hardness)))
+            coverage = np.zeros((height, width), np.float32)
+            for a, b in zip(points, points[1:] or points):
+                x0, y0, p0 = a["x"], a["y"], a["pressure"]
+                x1, y1, p1 = b["x"], b["y"], b["pressure"]
+                length = math.hypot(x1 - x0, y1 - y0)
+                count = max(1, int(math.ceil(length / max(spacing * size, 0.25))))
+                for i in range(count + 1):
+                    t = i / count
+                    x, y = x0 + t * (x1 - x0), y0 + t * (y1 - y0)
+                    pressure = p0 + t * (p1 - p0)
+                    radius = max(0.25, size * (pressure if pressure_size else 1.0) * 0.5)
+                    dab_hardness = hardness * pressure if dynamic_hardness else hardness
+                    d = np.sqrt((xx + ox + 0.5 - x) ** 2 + (yy + oy + 0.5 - y) ** 2)
+                    ramp = np.clip((radius + 0.5 - d) / ((1.0 - dab_hardness) * radius + 1.0), 0, 1)
+                    if dab_hardness < 1.0:
+                        ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+                    coverage = np.maximum(coverage, ramp * (pressure if pressure_opacity else 1.0))
+            return coverage
+
+        rng = np.random.default_rng(11)
+        for case in range(12):
+            points = [{"x": float(rng.uniform(-10, 70)), "y": float(rng.uniform(-10, 50)), "pressure": float(rng.uniform(0.2, 1.0))}
+                      for _ in range(int(rng.integers(1, 6)))]
+            kwargs = dict(size=float(rng.uniform(2, 18)), spacing=float(rng.choice([0.05, 0.2, 0.5])),
+                          hardness=float(rng.choice([0.0, 0.3, 1.0])), origin=(int(rng.integers(-5, 6)), int(rng.integers(-5, 6))),
+                          dynamic_hardness=bool(case % 2), pressure_size=bool(case % 3), pressure_opacity=bool(case % 4))
+            np.testing.assert_array_equal(paint._distance_grid(64, 48, points, **kwargs), reference(64, 48, points, **kwargs))
+
     def test_a_stroke_written_in_place_matches_the_copying_route_and_leaves_the_plate_alone(self):
         import numpy as np
         from nodebased import paint
