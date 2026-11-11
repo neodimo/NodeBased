@@ -1,5 +1,25 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:05 PM on 2026-11-10 PDT)
+
+`main` moved `30b81fc1` -> `104cf390` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `104cf390` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1110-2028.log`, started 8:28 PM): **Ran 9828 tests in 1832.805 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), Lane 2 step I11 (Tue 11/10): Shapes from matte keys where the matte needs it.** Commits:
+  - `ef479a16` CI: walkthrough GPU-matte scene skips without a graphics adapter; source-pool cancel test arms its cancel at the first decode, not on a timer
+  - `3613d2d9` Shapes from matte: key the in-between frames that stray from the matte (adaptive keys, edge tolerance field), tests, docs and walkthrough scene 24
+  Diff: 9 files changed, 454 insertions(+), 34 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (7:55 PM on 2026-11-10 PDT)
 
 `main` moved `983908ae` -> `94f590c5` (lane commits cherry-picked onto main in lane order) and then to this
