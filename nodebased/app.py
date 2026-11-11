@@ -5215,9 +5215,10 @@ class Viewer(PanZoomView):
         if self.pan is not None:
             PanZoomView.mouseReleaseEvent(self, event)
             return
-        if self.hit_release(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event)):
+        handled = self.hit_release(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event))
+        self.viewport().update()           # the finished drag is drawn as committed now, not when the final picture arrives
+        if handled:
             event.accept()
-            self.viewport().update()       # the finished drag is drawn as committed now, not when the final picture arrives
             return
         was_panning = self.pan is not None
         super().mouseReleaseEvent(event)
@@ -6371,9 +6372,10 @@ class Viewer(PanZoomView):
             # A pan never places a tracker, a roto point or a roto drag.
             PanZoomView.mousePressEvent(self, event)
             return
-        if self.hit_press(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event)):
+        handled = self.hit_press(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event))
+        self.viewport().update()           # the overlay shows what the press did now, not whenever the next picture arrives
+        if handled:
             event.accept()
-            self.viewport().update()       # the overlay shows what the press did now, not whenever the next picture arrives
             return
         super().mousePressEvent(event)
 
@@ -16059,8 +16061,9 @@ class Window(QMainWindow):
         if set(before) != set(after) or any(before[name] != after[name] for name in before if name != "shapes"):
             return False
         old_shapes, new_shapes = before.get("shapes", []), after.get("shapes", [])
-        if len(old_shapes) != len(new_shapes):
-            return False
+        appended = len(new_shapes) - len(old_shapes)
+        if appended < 0 or (appended and new_shapes[:len(old_shapes)] != old_shapes):
+            return False                    # a shape removed or moved, or an added one with edits to the others: build the panel
         changed = []
         for index, (old, new) in enumerate(zip(old_shapes, new_shapes)):
             if old == new:
@@ -16075,7 +16078,8 @@ class Window(QMainWindow):
         if refresh is None:
             return False
         with self._panel_build_quiet():
-            refresh(changed)
+            if refresh(changed, appended) is False:
+                return False
         self._panel_signature_shown = current
         return True
 

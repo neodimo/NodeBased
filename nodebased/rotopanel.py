@@ -2,7 +2,7 @@
 import copy
 from . import shapes as shape_model
 from . import rotolist
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
                                QPushButton, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit,
@@ -800,7 +800,7 @@ def build_panel(window, key):
     layout.addWidget(detail_holder)
     build_detail(detail_layout)
 
-    def refresh(changed):
+    def refresh(changed, appended=0):
         """Bring the panel on screen up to date for an edit that touched only the points of the shapes in `changed` (and maybe the
         selection): their list rows (the key button reads whether a point is keyed here), and the selected shape's controls. The
         caller has checked that nothing else the panel shows is different. The controls are built again only when the selection, the
@@ -813,6 +813,8 @@ def build_panel(window, key):
         shapes = [copy.deepcopy(fresh[index]) if index in changed or index == selected or index >= len(shapes) else shapes[index]
                   for index in range(len(fresh))]
         frame = int(window.dispatcher.document["time"]["current"])
+        if appended and not listing.add_new_rows():
+            return False                    # the new shapes are not plain rows at the top of the list: the caller builds the panel
         for index in changed:
             listing.refresh_item(index)
         listing.sync_current()
@@ -824,7 +826,10 @@ def build_panel(window, key):
             detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
             layout.replaceWidget(old, detail_holder)
             old.hide(); old.setParent(None); old.deleteLater()
-            build_detail(detail_layout)
+            # built in the next event, so the rows above and the controls here are two short blocks of the interface thread,
+            # not one; a panel replaced before then takes the timer with it
+            QTimer.singleShot(0, detail_holder, lambda holder=detail_holder, lay=detail_layout:
+                              build_detail(lay) if holder is detail_holder else None)
         else:
             if points_selected != built["points"]:
                 built["points"] = points_selected

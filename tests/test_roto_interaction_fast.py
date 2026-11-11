@@ -194,7 +194,9 @@ class FastRotoTests(unittest.TestCase):
         self.assertTrue(self.window._panel_rebuild_timer.isActive())
         self.window._panel_rebuild_timer.stop()
         self.window._run_panel_rebuild()
-        self.assertEqual(builds, ["r"])
+        self.assertEqual(builds, [], "a shape added to the panel on screen is put in its list, the panel is not built again")
+        APP.processEvents()
+        self.assertEqual(self.window.properties.widget().findChild(QWidget, "roto-shape-list").count(), 2)
         self.close()
         self.open([blob(i) for i in range(self.window_items())])
         builds = []
@@ -318,7 +320,8 @@ class FastRotoTests(unittest.TestCase):
         self.window._panel_rebuild_timer.stop()
         self.window._run_panel_rebuild()
         # the selection moved to another shape and nothing else changed: the panel on screen is brought up to date in place
-        # (the selected shape's controls are built again, the list and the knobs stay), so no whole panel is built
+        # (the selected shape's controls are built again, in the next event; the list and the knobs stay), so no whole panel is built
+        APP.processEvents()
         self.assertEqual(builds, [])
         name = self.window.properties.widget().findChild(QLineEdit, "roto-shape-name")
         self.assertEqual(name.text(), "blob5")
@@ -406,6 +409,33 @@ class FastRotoTests(unittest.TestCase):
         APP.processEvents()
         self.assertGreater(len(paints), before, "the release is drawn as committed at once")
         viewer.viewport().removeEventFilter(spy)
+
+    def test_a_drawn_shape_adds_its_row_in_place_and_selects_it(self):
+        from nodebased import rotolist
+        shapes = [blob(i) for i in range(5)]
+        viewer = self.open(shapes)
+        self.window.rebuild_properties_dock()
+        panel = self.window.properties.widget()
+        listing = panel.findChild(rotolist.ShapeListTree, "roto-shape-list")
+        builds = []
+        original = self.window.build_node_panel
+        self.window.build_node_panel = lambda key: builds.append(key) or original(key)
+        self.window._panel_rebuild_timer.stop()
+        viewer.roto_selected_shape_index = 5
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": shapes + [blob(5)]})
+        self.window._panel_rebuild_timer.stop()
+        self.window._run_panel_rebuild()
+        APP.processEvents()
+        self.assertEqual(builds, [], "the panel is not built again for a new shape")
+        self.assertIs(self.window.properties.widget(), panel)
+        self.assertEqual(listing.count(), 6)
+        top = listing.invisibleRootItem().child(0)
+        self.assertEqual(listing.parse_id(top.data(0, Qt.ItemDataRole.UserRole)), ("item", 5), "the newest shape is on top")
+        self.assertEqual(panel.findChild(QLineEdit, "roto-shape-name").text(), "blob5", "the new shape's controls are shown")
+        # the list is what a fresh build would make: same items in the same order
+        fresh = rotolist.ShapeListTree(self.window, "r", True, lambda row: None)
+        ids = lambda tree: [tree.parse_id(tree.invisibleRootItem().child(i).data(0, Qt.ItemDataRole.UserRole)) for i in range(tree.invisibleRootItem().childCount())]
+        self.assertEqual(ids(listing), ids(fresh))
 
     def test_the_overlay_cache_paints_what_a_cold_paint_does_and_a_drag_copies_only_its_shape(self):
         shapes = [blob(i) for i in range(6)]
