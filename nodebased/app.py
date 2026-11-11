@@ -49,7 +49,7 @@ from . import graphlook
 from . import gpu3d
 from . import roto
 from . import rotogpu
-from . import rotoedges, rotoinbetween, rotooutline, rotoripple
+from . import rotoedges, rotoinbetween, rotomatte, rotooutline, rotoripple
 from . import paintknobs
 from . import rotolist
 from . import gpupicture
@@ -4124,6 +4124,67 @@ class Viewer(PanZoomView):
         else:
             bar.showMessage("Fill in-betweens: added 0 keys (the interpolation already fits)", 5000)
         return False
+
+    def shapes_from_matte(self, source="bg", channel="alpha", threshold=rotooutline.MATTE_LEVEL,
+                          min_area=rotooutline.MATTE_MIN_AREA, step=rotomatte.DEFAULT_STEP, first=None, last=None):
+        """Trace the matte on a Roto input into editable shapes (Shapes from matte): one undo step.
+
+        `source` is the Roto input to read ('bg' or 'mask') and `channel` one of alpha, red, green, blue, luminance.
+        Each region above `min_area` pixels at `threshold` becomes a closed Bezier shape and each hole a shape that subtracts.
+        Over `first` to `last` (the timeline range when omitted) the shapes are keyed on every `step`-th frame, with point
+        correspondence kept, and the frames between are filled with the in-betweens fit. Regions that split, merge,
+        appear or vanish start or end a shape (its lifetime) and are named in the status bar. Returns True when shapes
+        were added; nothing changes unless this is run.
+        """
+        context = self._roto_context()
+        if context is None:
+            return False
+        key, node, payload, tier = context
+        bar = self.window.statusBar()
+        if node["type"] != "Roto":
+            bar.showMessage("Shapes from matte works on a Roto node", 5000)
+            return False
+        label = {"bg": "Background", "mask": "Mask"}.get(source, source)
+        source_key = node["inputs"].get(source)
+        if source_key is None:
+            bar.showMessage(f"Shapes from matte: connect the matte to the Roto's {label} input", 5000)
+            return False
+        document = self.window.dispatcher.document
+        time = document["time"]
+        first = int(time.get("first", time["current"])) if first is None else int(first)
+        last = int(time.get("last", time["current"])) if last is None else int(last)
+        first, last = min(first, last), max(first, last)
+        existing = copy.deepcopy(payload.get("shapes", []))
+
+        def matte_for(frame):
+            raster = self.window.evaluator.evaluate_raster(document, target=source_key, frame=int(frame))
+            return rotooutline.matte_channel(raster.to_display(), channel)
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            shapes, sequence = rotomatte.shapes_from_matte(
+                matte_for, first, last, step, threshold, min_area,
+                taken_names={shape.get("name") for shape in existing})
+        except rotooutline.OutlineError as error:
+            bar.showMessage(f"Shapes from matte: {error}", 6000)
+            return False
+        except Exception as error:
+            bar.showMessage(f"Shapes from matte could not read the {label} input ({error})", 6000)
+            return False
+        finally:
+            QApplication.restoreOverrideCursor()
+        self._commit_roto_shapes(key, node, existing + shapes)
+        self.roto_selected_shape_index = len(existing)
+        self.roto_selected_points = set()
+        self.window.rebuild_properties_dock()
+        self.viewport().update()
+        holes = sum(1 for shape in shapes if shape["mode"] == "subtract")
+        note = f" and {holes} hole{'s' if holes != 1 else ''}" if holes else ""
+        events = "; ".join(str(event) for event in sequence.events)
+        bar.showMessage(f"Shapes from matte: {len(shapes) - holes} shape{'s' if len(shapes) - holes != 1 else ''}{note} over frames "
+                        f"{first} to {last}, keyed every {max(1, int(step))} frames" + (f" · {events}" if events else ""), 12000)
+        self.last_matte_sequence = sequence
+        return True
 
     def _roto_scalar_at_frame(self, value, frame, replacement, auto_key=False):
         """Change a point coordinate while retaining its v8 animated scalar envelope."""

@@ -333,8 +333,16 @@ def trace_contour(mask):
     field = np.pad(mask.astype(np.float32), 1)
     kernel, _ = rotoedges._gaussian_kernel(0.8)
     field = rotoedges._convolve_axis(rotoedges._convolve_axis(field, kernel, 0), kernel, 1)
-    inside = field >= 0.5
-    h, w = field.shape
+    loops = _level_loops(field, 0.5)
+    if not loops:
+        raise OutlineError("no boundary found")
+    return max(loops, key=len)
+
+
+def _level_loops(field, level):
+    """Every closed `level` contour of the (already padded, so closed) float `field`, as (n, 2) arrays of (x, y) in
+    data coordinates of the unpadded field (pixel (i, j) covers [j, j+1))."""
+    inside = field >= level
     tl, tr = inside[:-1, :-1], inside[:-1, 1:]
     bl, br = inside[1:, :-1], inside[1:, 1:]
     code = tl.astype(int) * 8 + tr * 4 + br * 2 + bl
@@ -343,10 +351,10 @@ def trace_contour(mask):
     def crossing(kind, i, j):
         if kind == 0:   # horizontal edge from (i, j) to (i, j+1)
             a, b = field[i, j], field[i, j + 1]
-            t = (0.5 - a) / (b - a)
+            t = (level - a) / (b - a)
             return (j + t, float(i))
         a, b = field[i, j], field[i + 1, j]
-        t = (0.5 - a) / (b - a)
+        t = (level - a) / (b - a)
         return (float(j), i + t)
 
     links = {}
@@ -358,7 +366,7 @@ def trace_contour(mask):
         if inside[i + 1, j] != inside[i + 1, j + 1]: edges.append((0, i + 1, j))  # bottom
         if inside[i, j] != inside[i + 1, j]: edges.append((1, i, j))          # left
         if len(edges) == 4:
-            centre = field[i:i + 2, j:j + 2].mean() >= 0.5
+            centre = field[i:i + 2, j:j + 2].mean() >= level
             top, right, bottom, left = edges
             pairs = [(top, left), (bottom, right)] if centre == bool(inside[i, j]) else [(top, right), (bottom, left)]
         else:
@@ -380,12 +388,8 @@ def trace_contour(mask):
                 break
             previous, current = current, nxt
         loops.append(loop)
-    if not loops:
-        raise OutlineError("no boundary found")
-    best = max(loops, key=len)
-    points = np.array([crossing(*edge) for edge in best], dtype=np.float64)
     # pad of 1 and pixel centres at +0.5: data x = index - 1 + 0.5
-    return points - 0.5
+    return [np.array([crossing(*edge) for edge in loop], dtype=np.float64) - 0.5 for loop in loops]
 
 
 def _resample_polygon(points, spacing, maximum=400):
@@ -769,3 +773,239 @@ def bspline_controls(points, samples_per_span=2):
         matrix[i, (i + 1) % n] += 1.0
     controls = np.linalg.solve(matrix / 6.0, samples)
     return [{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0} for x, y in controls]
+
+
+# -- Shapes from a matte -------------------------------------------------------------------------
+# A keyer, a generated matte or a painted alpha is a picture, not an editable shape. `matte_outlines` traces it: one
+# closed Bezier outline per connected region above a minimum area, one subtracting outline per hole, all on the
+# threshold level of the matte (50 % by default) at sub-pixel accuracy, so the rendered shapes follow the matte edge.
+
+MATTE_LEVEL = 0.5
+MATTE_MIN_AREA = 64            # smallest region, in pixels (specks below it are left out; holes below it stay filled)
+MATTE_CHANNELS = ("alpha", "red", "green", "blue", "luminance")
+EDGE_LOW, EDGE_HIGH = 0.1, 0.9  # the 10 % to 90 % rise that the edge width is measured on
+MATTE_DENSE_POINTS = 1200      # the evenly spaced polygon each outline is fitted to has at most this many points
+
+
+def matte_channel(image, channel="alpha"):
+    """One channel of a picture (H x W x 4 or H x W x 3 float) as a float matte: alpha, red, green, blue or luminance."""
+    image = np.asarray(image, dtype=np.float32)
+    if image.ndim == 2:
+        return image
+    if channel == "alpha":
+        return image[..., 3] if image.shape[2] > 3 else np.ones(image.shape[:2], np.float32)
+    if channel == "luminance":
+        return (0.2126 * image[..., 0] + 0.7152 * image[..., 1] + 0.0722 * image[..., 2]).astype(np.float32)
+    index = {"red": 0, "green": 1, "blue": 2}.get(channel)
+    if index is None:
+        raise OutlineError(f"unknown matte channel '{channel}'")
+    return image[..., index]
+
+
+def label_regions(mask):
+    """4-connected labels of a boolean mask: ``(labels, count)``, labels 1..count and 0 for background.
+
+    Union-find over the horizontal runs of each row, so a full-frame mask costs a few thousand steps rather than one
+    per pixel."""
+    mask = np.asarray(mask, dtype=bool)
+    height, width = mask.shape
+    padded = np.zeros((height, width + 2), dtype=np.int8)
+    padded[:, 1:-1] = mask
+    change = np.diff(padded, axis=1)
+    parent, rows = [], []
+    for row in range(height):
+        starts = np.nonzero(change[row] == 1)[0]
+        ends = np.nonzero(change[row] == -1)[0]        # exclusive
+        rows.append((starts, ends, len(parent)))
+        parent.extend(range(len(parent), len(parent) + len(starts)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for row in range(1, height):
+        s0, e0, base0 = rows[row - 1]
+        s1, e1, base1 = rows[row]
+        i = j = 0
+        while i < len(s0) and j < len(s1):
+            if s0[i] < e1[j] and s1[j] < e0[i]:
+                a, b = find(base0 + i), find(base1 + j)
+                if a != b:
+                    parent[max(a, b)] = min(a, b)
+            if e0[i] < e1[j]:
+                i += 1
+            else:
+                j += 1
+    roots, labels = {}, np.zeros((height, width), dtype=np.int32)
+    for row in range(height):
+        starts, ends, base = rows[row]
+        for k in range(len(starts)):
+            root = find(base + k)
+            labels[row, starts[k]:ends[k]] = roots.setdefault(root, len(roots) + 1)
+    return labels, len(roots)
+
+
+def polygon_area(points):
+    """Signed area of a closed polygon (positive for the winding the matte tracer returns)."""
+    x, y = points[:, 0], points[:, 1]
+    return 0.5 * float((x * np.roll(y, -1) - np.roll(x, -1) * y).sum())
+
+
+def polygon_mask(polygon, x0, y0, width, height):
+    """Boolean coverage of a closed polygon (pixel centre rule, even-odd) on a `width` x `height` grid whose first pixel
+    is (x0, y0)."""
+    polygon = np.asarray(polygon, dtype=np.float64)
+    a, b = polygon, np.roll(polygon, -1, axis=0)
+    counts = np.zeros((height, width + 1), dtype=np.int32)
+    for (xa, ya), (xb, yb) in zip(a, b):
+        if ya == yb:
+            continue
+        lo, hi = (ya, yb) if ya < yb else (yb, ya)
+        first = max(int(math.ceil(lo - 0.5 - y0)), 0)
+        last = min(int(math.ceil(hi - 0.5 - y0)) - 1, height - 1)
+        if last < first:
+            continue
+        rows = np.arange(first, last + 1)
+        t = ((rows + y0 + 0.5) - ya) / (yb - ya)
+        columns = np.clip(np.ceil(xa + t * (xb - xa) - 0.5 - x0).astype(int), 0, width)
+        np.add.at(counts, (rows, columns), 1)
+    return (np.cumsum(counts, axis=1)[:, :width] % 2) == 1
+
+
+def _contains(polygon, point):
+    """Even-odd point in polygon."""
+    x, y = point
+    a, b = polygon, np.roll(polygon, -1, axis=0)
+    crossing = (a[:, 1] > y) != (b[:, 1] > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        at = a[:, 0] + (y - a[:, 1]) / (b[:, 1] - a[:, 1]) * (b[:, 0] - a[:, 0])
+    return bool((crossing & (x < at)).sum() % 2)
+
+
+def fit_outline(polygon, min_points=MIN_POINTS, max_points=MAX_POINTS, tolerance=0.4):
+    """A closed Bezier outline (point dicts) of a dense closed polygon, 'min_points' to 'max_points' points.
+
+    Returns ``(points, dense)``: `dense` is the evenly spaced polygon that was fitted (what a later key frame is matched to)."""
+    perimeter = float(np.hypot(*(np.roll(polygon, -1, axis=0) - polygon).T).sum())
+    dense, perimeter = _resample_polygon(polygon, max(1.0, perimeter / MATTE_DENSE_POINTS), maximum=MATTE_DENSE_POINTS)
+    corners = find_corners(dense, perimeter)
+    tolerance = max(tolerance, 0.0004 * perimeter)
+    result = None
+    for _ in range(14):
+        result = _straighten(fit_bezier(dense, perimeter, tolerance, corners))
+        if len(result) <= max_points:
+            break
+        tolerance *= 1.3
+    return _subdivide(result, min_points), dense
+
+
+class MatteShape:
+    """One traced outline: ``points`` (Bezier point dicts), ``mode`` ('union' or 'subtract'), ``polygon`` (the dense
+    outline), ``area`` in pixels, ``depth`` (how many other outlines contain it), ``feather`` (px, the region's measured
+    edge width) and ``region`` (index of the connected region it belongs to)."""
+
+    def __init__(self, points, polygon, area, depth, feather, region):
+        self.points, self.polygon, self.area = points, polygon, area
+        self.depth, self.feather, self.region = depth, feather, region
+        self.mode = "union" if depth % 2 == 0 else "subtract"
+
+    def __repr__(self):
+        return f"MatteShape({self.mode}, {len(self.points)} points, area {self.area:.0f}, feather {self.feather:.1f})"
+
+
+def _edge_width(field, region, perimeter):
+    """The 10 % to 90 % width of the matte's edge around a region, in px: area of the rising band over the contour length."""
+    band = (field > EDGE_LOW) & (field < EDGE_HIGH) & region
+    return float(band.sum()) / max(perimeter, 1.0)
+
+
+def _is_hard(field, level):
+    """True for a matte whose edge is (almost) binary: the pixels next to a level crossing hold 0 or 1."""
+    inside = field >= level
+    edge = inside ^ np.pad(inside, 1)[2:, 1:-1] | inside ^ np.pad(inside, 1)[1:-1, 2:]
+    if not edge.any():
+        return True
+    values = field[edge]
+    return float(((values < 0.02) | (values > 0.98)).mean()) > 0.8
+
+
+def matte_outlines(matte, threshold=MATTE_LEVEL, min_area=MATTE_MIN_AREA, min_points=MIN_POINTS, max_points=MAX_POINTS):
+    """Editable shapes of a matte: ``[MatteShape, ...]``, outer outlines first, then holes (the holes subtract).
+
+    `matte` is an H x W float array (see `matte_channel`). Each connected region of at least `min_area` pixels at or above
+    `threshold` becomes a closed Bezier outline on the `threshold` level (sub-pixel; 50 % by default); each hole of at least
+    `min_area` pixels inside it becomes another outline that subtracts, and smaller holes stay filled. Outlines have
+    `min_points` to `max_points` points. `feather` on every shape of a region is its measured edge width (the 10 % to 90 %
+    rise, as the width of a box feather that rises the same way) and is 0 for a hard matte. Raises `OutlineError` when no
+    region is large enough.
+    """
+    matte = np.asarray(matte, dtype=np.float32)
+    if matte.ndim != 2:
+        raise OutlineError("the matte must be a single channel")
+    height, width = matte.shape
+    labels, count = label_regions(matte >= threshold)
+    areas = np.bincount(labels.ravel(), minlength=count + 1)
+    loops_of = []                   # (region index, polygon, feather)
+    region_index = 0
+    for label in range(1, count + 1):
+        if areas[label] < min_area:
+            continue
+        ys, xs = np.nonzero(labels == label)
+        mine = labels == label
+        others = (labels > 0) & ~mine
+        feather_px, grown = 0.0, 3
+        for _ in range(2):
+            x0, x1 = max(int(xs.min()) - grown - 2, 0), min(int(xs.max()) + grown + 3, width)
+            y0, y1 = max(int(ys.min()) - grown - 2, 0), min(int(ys.max()) + grown + 3, height)
+            region = _dilate(mine[y0:y1, x0:x1], grown)
+            field = np.where(region & ~others[y0:y1, x0:x1], matte[y0:y1, x0:x1], 0.0).astype(np.float32)
+            padded = np.pad(field, 1)
+            hard = _is_hard(field, threshold)
+            if hard:
+                kernel, _ = rotoedges._gaussian_kernel(0.8)
+                padded = rotoedges._convolve_axis(rotoedges._convolve_axis(padded, kernel, 0), kernel, 1)
+            loops = _level_loops(padded, threshold)
+            perimeter = sum(float(np.hypot(*(np.roll(l, -1, axis=0) - l).T).sum()) for l in loops if len(l) >= 3)
+            feather_px = 0.0 if hard else _edge_width(field, region, perimeter)
+            needed = int(math.ceil(feather_px / (EDGE_HIGH - EDGE_LOW) / 2.0)) + 3
+            if needed <= grown or grown >= 40:
+                break
+            grown = min(needed, 40)
+        polygons = []
+        for loop in loops:
+            if len(loop) < 3:
+                continue
+            area = polygon_area(loop)
+            if abs(area) >= min_area:
+                polygons.append((abs(area), loop + [x0, y0]))
+        if not polygons:
+            continue
+        polygons.sort(key=lambda item: -item[0])
+        edge_width = feather_px / (EDGE_HIGH - EDGE_LOW)         # full 0 to 100 % rise of a linear edge
+        for area, loop in polygons:
+            loops_of.append((region_index, area, loop, edge_width))
+        region_index += 1
+    if not loops_of:
+        raise OutlineError("the matte has no region above the threshold and minimum area")
+    found = []
+    for region, area, loop, edge_width in loops_of:
+        if polygon_area(loop) < 0:
+            loop = loop[::-1]
+        found.append((region, area, loop, edge_width))
+    shapes = []
+    for k, (region, area, loop, edge_width) in enumerate(found):
+        probe = loop[0]
+        depth = sum(1 for j, (_, _, other, _) in enumerate(found) if j != k and _contains(other, probe))
+        points, dense = fit_outline(loop, min_points, max_points)
+        shapes.append(MatteShape(points, dense, area, depth, box_feather(edge_width), region))
+    shapes.sort(key=lambda s: (s.depth, -s.area))
+    return shapes
+
+
+def box_feather(edge_width):
+    """The Roto box-feather value that gives an edge that rises over `edge_width` px (0 to 100 %): the filter's window
+    is ``2 * feather + 1`` wide. Edges under about 2 px stay hard (0)."""
+    radius = int(round((edge_width - 1.0) / 2.0))
+    return float(radius) if radius >= 1 else 0.0

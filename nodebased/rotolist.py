@@ -17,7 +17,7 @@ import copy
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-                               QHeaderView, QLineEdit, QMenu, QPushButton, QSpinBox, QTreeWidget, QTreeWidgetItem, QWidget)
+                               QDoubleSpinBox, QHeaderView, QLineEdit, QMenu, QPushButton, QSpinBox, QTreeWidget, QTreeWidgetItem, QWidget)
 
 from . import paintknobs, shapes as shape_model
 
@@ -799,6 +799,48 @@ class ShapeListTree(QTreeWidget):
             indices = [order.index(ref) for ref in shape_refs if ref in order]
         return self.window.viewer.fill_roto_inbetweens(indices)
 
+    def cmd_shapes_from_matte(self, **settings):
+        """Trace a matte on a Roto input into shapes (the viewer's Shapes from matte command)."""
+        return self.window.viewer.shapes_from_matte(**settings)
+
+    def matte_dialog(self):
+        """The Shapes from matte dialog (not yet shown): source input, channel, threshold, minimum area, every Nth frame, range."""
+        from . import rotomatte, rotooutline
+        dialog = QDialog(self); dialog.setWindowTitle("Shapes from matte"); dialog.setObjectName("roto-list-matte-dialog")
+        form = QFormLayout(dialog)
+        source = QComboBox(); source.setObjectName("roto-list-matte-source")
+        source.addItem("Background", "bg"); source.addItem("Mask", "mask")
+        channel = QComboBox(); channel.setObjectName("roto-list-matte-channel")
+        for name in rotooutline.MATTE_CHANNELS:
+            channel.addItem(name.capitalize(), name)
+        threshold = QDoubleSpinBox(); threshold.setRange(0.01, 0.99); threshold.setSingleStep(0.05); threshold.setDecimals(2)
+        threshold.setValue(rotooutline.MATTE_LEVEL); threshold.setObjectName("roto-list-matte-threshold")
+        area = QSpinBox(); area.setRange(1, 100000000); area.setValue(rotooutline.MATTE_MIN_AREA)
+        area.setSuffix(" px"); area.setObjectName("roto-list-matte-min-area")
+        step = QSpinBox(); step.setRange(1, 1000); step.setValue(rotomatte.DEFAULT_STEP); step.setObjectName("roto-list-matte-step")
+        first, last = QSpinBox(), QSpinBox()
+        for spin in (first, last):
+            spin.setRange(-100000, 100000)
+        time = self.window.dispatcher.document["time"]
+        first.setValue(int(time.get("first", time["current"]))); last.setValue(int(time.get("last", time["current"])))
+        first.setObjectName("roto-list-matte-first"); last.setObjectName("roto-list-matte-last")
+        form.addRow("Source input", source); form.addRow("Channel", channel); form.addRow("Threshold", threshold)
+        form.addRow("Minimum area", area); form.addRow("Key every Nth frame", step)
+        form.addRow("First frame", first); form.addRow("Last frame", last)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept); buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        dialog.settings = lambda: {"source": source.currentData(), "channel": channel.currentData(),
+                                   "threshold": threshold.value(), "min_area": area.value(), "step": step.value(),
+                                   "first": min(first.value(), last.value()), "last": max(first.value(), last.value())}
+        return dialog
+
+    def ask_shapes_from_matte(self):
+        dialog = self.matte_dialog()
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return self.cmd_shapes_from_matte(**dialog.settings())
+        return False
+
     def ask_lifetime(self):
         dialog = QDialog(self); dialog.setWindowTitle("Set lifetime / frame range")
         form = QFormLayout(dialog)
@@ -842,6 +884,7 @@ class ShapeListTree(QTreeWidget):
         if not self.is_roto:          # paint strokes exist only in RotoPaint (lane 9 step I7)
             has_strokes = any(kind == "item" and self.entries()[ref].get("kind") == "stroke" for kind, ref in self.selected_ids())
             add(menu, "Stick to plate", self.cmd_stick_to_plate, "roto-list-stick-to-plate", has_strokes)
+        add(menu, "Shapes from matte", self.ask_shapes_from_matte, "roto-list-shapes-from-matte", self.is_roto)
         return menu
 
     def _show_menu(self, position):

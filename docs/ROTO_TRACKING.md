@@ -967,6 +967,61 @@ that are not in the plate at all, has nothing to follow. A plate with no texture
 planar fallback then reports it. The stroke's own transform (Roto transform knobs) is not combined with it. The clone offset keeps the stretch
 and turn of the picture, not shear.
 
+### Lane 2 I8: shapes from a matte (past Nuke)
+
+A keyer, a generated matte or a painted alpha often gets a matte 90 % of the way, and the last 10 % is roto. Nuke cannot turn a matte into
+shapes. In the shape list menu of a Roto node, **Shapes from matte** reads a matte from the Roto's Background or Mask input, traces it, and
+adds ordinary editable shapes. The dialog asks for the source input, the channel (alpha, red, green, blue or luminance), the threshold
+(default 50 %), the minimum area (default 64 px), key every Nth frame (default 4) and the first and last frame (default the timeline
+range). Nothing in a document changes unless the command is run: it adds no node parameter and no schema field, and a saved shot
+renders bit-identical.
+
+**One frame (`rotooutline.matte_outlines`).** Each 4-connected region of at least the minimum area at or above the threshold becomes a
+closed Bezier shape; each hole of at least the minimum area inside it becomes another shape set to **subtract**, and a smaller hole stays
+filled. An island inside a hole is a shape that adds again, so nesting depth decides the mode (even adds, odd subtracts) and the shapes are
+ordered by depth. The outline lies on the threshold level of the matte at sub-pixel accuracy (marching squares on the float matte; a
+binary matte is smoothed by 0.8 px first), then goes through the contour resampling, corner finding and Bezier fitting that Outline from
+click uses, with 8 to 40 points per outline. There is no edge refinement pass: the contour is already on the matte's own level.
+
+**Feather.** The edge width of a region is measured as the area of its 10 % to 90 % band divided by the length of its outline, and
+divided by 0.8 to give the full rise. The shape gets a **box feather** whose window (2 x feather + 1 px) rises over that width, so the
+rendered edge rises like the matte's and the 50 % level stays on the outline. A matte whose edge is under about 2 px wide gets feather 0
+(hard edge). Box feather values are whole pixels, so the rendered edge width is within one pixel of the matte's.
+
+**A frame range (`rotomatte`).** The matte is traced on every Nth frame and the last frame. Each outline is matched to the previous key's
+outline by overlap (the pair must be each other's best overlap and share at least 10 % of their union). The matched outline is resampled
+from its matched start point: the previous points are laid on the new outline at the same shares of the way round, starting where they fit
+best after the shift of the centres, and each corner moves to a nearby corner of the new outline, with the points between following
+proportionally. The handles are then fitted to the new outline, so point k is on the same side of the shape on every key. Points are
+keyed with linear curves, and the shape's lifetime is the range of frames it exists on.
+
+A region that splits, merges, appears or vanishes starts or ends a shape. When a gap between two keys holds such an event, or the matte
+moves further than its own width so nothing overlaps, that gap is traced frame by frame so the event lands on its real frame, and the
+extra frames become keys. Each event is named in the status bar, for example "matte2 split off matte1 at frame 7". A merge ends the shape
+with the smaller overlap ("matte2 merged into matte1"). Fast motion over a thin region and regions that cross each other are matched by
+overlap alone, so they may swap.
+
+**In-betweens.** The frames between keys are interpolated and then filled with the in-betweens fit against each frame's own matte (band 8 px,
+threshold 0.75 px). The fit snaps to the strongest gradient, which on a hard matte can tie between two pixel rows, so a frame keeps the
+fitted keys only when they bring the outline closer to the matte's level contour than the interpolation was (measured by the softened matte
+along the outline). The fill can therefore only improve a frame.
+
+Measured (tests/test_roto_matte_shapes_i8.py, 4 x 4 supersampled mattes; the tests print the figures; no timing is asserted):
+
+| Case | Result |
+| --- | --- |
+| disc, radius 70 | one shape, 8 points, rendered edge within 0.09 px of the true edge |
+| ring | outline and one subtracting hole, radii 80.0 and 35.0 within 0.4 px, ring full and hole empty |
+| two discs; island in a hole | two shapes; union, subtract, union |
+| soft edges, ramps of 6, 10 and 16 px | feather 2, 4 and 7; rendered edge width within 20 % of the matte's; largest alpha difference 0.14, 0.10 and 0.08 |
+| moving ellipse, 12 frames, key every 4th | worst disagreeing pixel 0.94 px from the true edge on keyed and in-between frames; point 0 stays within 15 degrees round the shape |
+| accelerating disc, keys 1 and 5 | interpolation alone misses by 13.2 px; with the fill 0.92 px |
+| two discs that part (frame 7) | one split event on frame 7; shapes live 1 to 12 and 7 to 12; every frame within 1 px |
+| a region that vanishes and one that appears | vanished on frame 7, appeared on frame 9; lifetimes 1 to 6, 1 to 12 and 9 to 12 |
+
+Trace time on one frame: 0.07 s for two soft-edged regions on a 1920 x 1080 matte, 0.37 s for 12 frames of a 320 x 280 matte including the fill
+(measured while other lanes were running). One undo step removes every shape the command added.
+
 ## Lane 8 step notes
 
 **2026-10-20, Lane 8 step T2 finish 1 (partial).** The merged interaction and PlanarTracker worker changes remain as described above. Real-display QA on the 1920 × 1080 comp used the RTX 3080 Ti and llvmpipe. On the RTX, first picture after a Roto move arrived 1.142 s from the first move, after release; full-tier settle took 3.888 s. An uncached scrub presented tier 8 at 0.595 s, tier 4 at 0.978 s and tier 1 at 4.914 s. At the 24 fps target, measured presentation was 0.125 fps at tier 1, 2.624 fps at tier 4 and 12.84 fps with automatic adaptation; the tier readout stepped through 1, 2 and 4 and finished at 1/4. The RTX run held the exclusive card lock. On llvmpipe, with Lane 4's integrated-adapter progression benchmark running concurrently, first picture after a Roto move arrived 1.414 s from the first move, after release; full-tier settle took 4.416 s. The uncached scrub first picture arrived at 0.808 s and settled at 9.446 s. Playback measured 0.125 fps at tier 1, 1.618 fps at tier 4 and 0.125 fps in automatic mode (tier readout 1 and 2 during the sample). The llvmpipe rates are contention-affected. Both adapters miss the 0.3-second first-picture target; the RTX automatic mode also misses the set 24 fps rate. The first provisional playback pass counted preview generations; its rates are excluded. The cube-face pick remains a bad pick because it is flat and featureless; the checker-floor failures at grids 8, 16 and 24 still point to a separate robustness limitation. The under-0.3-second first-picture and set-rate playback gates remain unmet.
