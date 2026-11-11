@@ -238,8 +238,8 @@ def sticks(item):
 
 
 def validate_stick(stick, where):
-    if not isinstance(stick, dict) or set(stick) - {"scale", "rotation"}:
-        raise ValueError(f"{where}.stick defines scale and rotation")
+    if not isinstance(stick, dict) or set(stick) - {"scale", "rotation", "shear"}:
+        raise ValueError(f"{where}.stick defines scale, rotation and shear")
     for field, value in stick.items():
         if _number(value):
             continue
@@ -261,11 +261,13 @@ def resolve_stuck(item, frame):
     stick = item.get("stick") or {}
     scale = shapes.resolve_scalar(stick["scale"], frame) if "scale" in stick else 1.0
     rotation = shapes.resolve_scalar(stick["rotation"], frame) if "rotation" in stick else 0.0
+    shear = shapes.resolve_scalar(stick["shear"], frame, "stick_shear") if "shear" in stick else 0.0
     out.pop("stick", None)
     if scale != 1.0:
         out["brush"] = {**item["brush"], "size": min(4096.0, max(0.1, float(item["brush"]["size"]) * scale))}
-    if (scale != 1.0 or rotation != 0.0) and item.get("source_offset"):
+    if (scale != 1.0 or rotation != 0.0 or shear != 0.0) and item.get("source_offset"):
         dx, dy = (float(v) for v in item["source_offset"])
+        dx, dy = dx + shear * dy, dy + shear * dx                    # the shear of the picture (symmetric, first order)
         cosine, sine = math.cos(rotation) * scale, math.sin(rotation) * scale
         out["source_offset"] = [cosine * dx - sine * dy, sine * dx + cosine * dy]
     return out

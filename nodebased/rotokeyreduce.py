@@ -116,12 +116,12 @@ def _channels(item, frames):
             channels.append(_Channel(("point", index, name), curve, _series(value, frames, name),
                                      curve["interpolation"] if curve else ""))
     if _is_stroke(item):
-        for name, neutral in (("scale", 1.0), ("rotation", 0.0)):
+        for name, neutral in (("scale", 1.0), ("rotation", 0.0), ("shear", 0.0)):
             stick = item.get("stick") or {}
             if name in stick:
                 value = stick[name]
                 curve = _curve(value)
-                limit = "warp_scale" if name == "scale" else "warp_rotation"
+                limit = {"rotation": "warp_rotation", "shear": "stick_shear"}.get(name, "warp_scale")
                 channels.append(_Channel(("stick", name, ""), curve, _series(value, frames, limit),
                                          curve["interpolation"] if curve else ""))
     return channels
@@ -222,8 +222,10 @@ def _outline(item, fields, extras, frames, affine):
             points = np.einsum("fij,fpj->fpi", mats, points) + offs[:, None, :]
         scale = extras.get("scale", np.ones(len(frames)))
         rotation = extras.get("rotation", np.zeros(len(frames)))
+        shear = extras.get("shear", np.zeros(len(frames)))
         radius = 0.5 * float(item["brush"]["size"])
-        dx, dy = (float(v) for v in (item.get("source_offset") or (0.0, 0.0)))
+        dx0, dy0 = (float(v) for v in (item.get("source_offset") or (0.0, 0.0)))
+        dx, dy = dx0 + shear * dy0, dy0 + shear * dx0
         cosine, sine = np.cos(rotation) * scale, np.sin(rotation) * scale
         clone = np.stack([cosine * dx - sine * dy, sine * dx + cosine * dy], axis=-1)[:, None, :]
         brush = np.stack([radius * scale, np.zeros_like(scale)], axis=-1)[:, None, :]

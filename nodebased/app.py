@@ -16407,10 +16407,10 @@ class Window(QMainWindow):
         source = node["inputs"].get("image") or node["inputs"].get("bg")
         if source is None:
             self._show_command_error(ValueError("Connect an image before using Stick to plate")); return False
-        busy = [i for i in chosen if items[i].get("locked") or any(f in items[i] for f in ("transform", "extra_matrix"))]
+        busy = [i for i in chosen if items[i].get("locked")]
         targets = [i for i in chosen if i not in busy]
         if not targets:
-            self.statusBar().showMessage("Stick to plate: the selected strokes are locked or have a transform of their own", 6000)
+            self.statusBar().showMessage("Stick to plate: the selected strokes are locked", 6000)
             return False
         ref = int(document["time"]["current"])
         timeline = document["time"]
@@ -16426,8 +16426,12 @@ class Window(QMainWindow):
         if frames_wanted[-1] - frames_wanted[0] > 5000:
             self._show_command_error(ValueError("Stick to plate is limited to 5,001 frames")); return False
         reference = {i: paintknobs.resolve_stuck(items[i], ref) if paintknobs.sticks(items[i]) else items[i] for i in targets}
-        reference_points = {i: [{"x": float(p["x"]), "y": float(p["y"])} for p in reference[i]["points"]] for i in targets}
-        brush = {i: float(reference[i]["brush"]["size"]) for i in targets}
+        # a stroke with a transform of its own is followed where it is drawn, on the painted frame; the results are taken back
+        # through the inverse of each frame's transform afterwards (rotostick.localise_results)
+        drawn = {i: paintknobs.resolve_stroke(reference[i], ref, {}) if paintknobs.needs_resolving(reference[i]) else reference[i] for i in targets}
+        reference_points = {i: [{"x": float(p["x"]), "y": float(p["y"])} for p in drawn[i]["points"]] for i in targets}
+        brush = {i: float(drawn[i]["brush"]["size"]) for i in targets}
+        stroke_items = {i: copy.deepcopy(items[i]) for i in targets}
         doc = copy.deepcopy(document)
         cancel = threading.Event()
         job = {"key": key, "kind": "RotoPaint", "stick": True, "label": "Stick to plate", "targets": targets, "ref": ref,
@@ -16469,7 +16473,7 @@ class Window(QMainWindow):
                     per_frame.update(tracked)
                 for data in per_frame.values():
                     data["points"] = [(x + left, y + top) for x, y in data["points"]]
-                results[si] = per_frame
+                results[si] = rotostick.localise_results(stroke_items[si], per_frame, ref)
             return results
 
         self._points_future = self.executor.submit(analyse)
@@ -16500,7 +16504,7 @@ class Window(QMainWindow):
         if notes:
             summary += " \u00b7 " + "; ".join(notes)
         if job.get("skipped"):
-            summary += f" \u00b7 {job['skipped']} locked or transformed stroke{'s' if job['skipped'] != 1 else ''} left alone"
+            summary += f" \u00b7 {job['skipped']} locked stroke{'s' if job['skipped'] != 1 else ''} left alone"
         self.statusBar().showMessage(summary)
         self.viewer.viewport().update()
         self.rebuild_properties_dock()

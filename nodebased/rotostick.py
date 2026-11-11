@@ -108,6 +108,15 @@ def _average_displacement(field, points, radius):
 
 def local_motion(field, points, spread):
     """Mean 2x2 map of the displacement field over `points`: (scale, rotation in radians) of the motion around the stroke."""
+    return local_motion_shear(field, points, spread)[:2]
+
+
+def local_motion_shear(field, points, spread):
+    """(scale, rotation in radians, shear) of the motion around the stroke.
+
+    The mean 2x2 map J of the picture under the stroke is split as ``J = s R(theta) K``: `s` the scale (square root of the
+    determinant), `R` the turn (as before, from the antisymmetric part) and ``K`` what is left, whose off-diagonal part is the
+    shear: ``K = [[1, k], [k, 1]]`` to first order, `k` returned. A picture that only turns and scales has shear 0."""
     h, w = field.shape[:2]
     s = float(max(2.0, spread))
     anchors = points[_anchor_indices(points, ANCHORS)]
@@ -120,14 +129,18 @@ def local_motion(field, points, spread):
     run_y = np.clip(by + s, 0, h - 1) - np.clip(by - s, 0, h - 1)
     good = (run_x > 0) & (run_y > 0)
     if not good.any():
-        return 1.0, 0.0
+        return 1.0, 0.0, 0.0
     dxx = ((right - left)[good] / run_x[good, None])
     dyy = ((down - up)[good] / run_y[good, None])
     jacobian = np.eye(2) + np.array([[dxx[:, 0].mean(), dyy[:, 0].mean()], [dxx[:, 1].mean(), dyy[:, 1].mean()]])
     determinant = float(np.linalg.det(jacobian))
     scale = math.sqrt(determinant) if determinant > 1e-6 else 1.0
     rotation = math.atan2(jacobian[1, 0] - jacobian[0, 1], jacobian[0, 0] + jacobian[1, 1])
-    return float(min(max(scale, 0.25), 4.0)), float(rotation)
+    scale = min(max(scale, 0.25), 4.0)
+    cosine, sine = math.cos(rotation), math.sin(rotation)
+    residual = np.array([[cosine, sine], [-sine, cosine]]) @ jacobian / scale        # (s R)^-1 J
+    shear = float(np.clip(0.5 * (residual[0, 1] + residual[1, 0]), -0.9, 0.9))
+    return float(scale), float(rotation), shear
 
 
 def padded_quad(points, brush_size, bounds):
@@ -265,7 +278,7 @@ def stick_stroke(get_frame, points, reference_frame, frames, *, brush_size=25.0,
         score = _ncc(reference_image, warped, anchor_points[:, 0] - 0.5, anchor_points[:, 1] - 0.5, PATCH_RADIUS)
         low_anchor = score < match_threshold
         moved = reference_points + _average_displacement(field, reference_points, NEIGHBOURHOOD)
-        scale, rotation = local_motion(field, reference_points, spread)
+        scale, rotation, shear = local_motion_shear(field, reference_points, spread)
         low = np.zeros(count, dtype=bool)
         fallback = False
         if low_anchor.any():
@@ -279,7 +292,7 @@ def stick_stroke(get_frame, points, reference_frame, frames, *, brush_size=25.0,
                     moved = plane
                     plane_field = _planar_field(matrix, (height, width))
                     field = plane_field
-                    scale, rotation = local_motion(plane_field, reference_points, spread)
+                    scale, rotation, shear = local_motion_shear(plane_field, reference_points, spread)
                 else:
                     nearest = np.abs(np.arange(count)[:, None] - anchors[None, :]).argmin(axis=1)
                     low = low_anchor[nearest]
@@ -287,7 +300,7 @@ def stick_stroke(get_frame, points, reference_frame, frames, *, brush_size=25.0,
             else:
                 low[:] = low_anchor[np.abs(np.arange(count)[:, None] - anchors[None, :]).argmin(axis=1)]
         output[frame] = {"points": [(float(x), float(y)) for x, y in moved], "scale": float(scale),
-                         "rotation": float(rotation), "confidence": float(np.clip(score.mean(), 0.0, 1.0)),
+                         "rotation": float(rotation), "shear": float(shear), "confidence": float(np.clip(score.mean(), 0.0, 1.0)),
                          "fallback": bool(fallback), "low": [int(i) for i in np.flatnonzero(low)]}
         previous = image
         if progress is not None:
@@ -314,8 +327,11 @@ def key_stroke(item, results, reference_frame):
         points.append(moved)
     out["points"] = points
     stick = dict(item.get("stick") or {})
-    for field, neutral in (("scale", 1.0), ("rotation", 0.0)):
-        series = {frame: data[field] for frame, data in results.items()}
+    fields = [("scale", 1.0), ("rotation", 0.0)]
+    if any(abs(data.get("shear", 0.0)) > 1e-6 for data in results.values()) or "shear" in stick:
+        fields.append(("shear", 0.0))                  # keyed only when the picture shears, so an unsheared stroke is saved as before
+    for field, neutral in fields:
+        series = {frame: data.get(field, neutral) for frame, data in results.items()}
         stick[field] = point_track.key_scalar(stick.get(field, neutral), series, reference_frame, auto_key=True)
     out["stick"] = stick
     return out
@@ -342,3 +358,94 @@ def describe_fallback(name, results):
             runs.append((start, last))
             parts.append(f"{label} on frames " + ", ".join(str(a) if a == b else f"{a}–{b}" for a, b in runs))
     return f"{name}: " + "; ".join(parts) if parts else ""
+
+
+# -- a stroke with a transform of its own -----------------------------------------------------------------------------------
+# A stroke's points are keyed in its own space and Roto then draws them through the stroke's transform (centre, translate,
+# rotate, scale, skew, and the 4 x 4 matrix). The picture is followed where the stroke is drawn, so every frame's tracked points
+# are taken back through the inverse of that frame's transform before they are keyed, as Track points does for shapes.
+
+def _transform_parts(item, frame):
+    """(A, translate, E, offset, stored_centre, brush_factor) of the stroke's transform at `frame`: the linear part A (skew, then
+    scale, then rotate), the translation, the matrix `extra_matrix` as (2 x 2 linear, offset), the centre where one is stored
+    (None where the default, the middle of the points' bounding box, applies) and the factor the brush size scales by."""
+    from . import shapes as shape_model
+    stored = item.get("transform") or {}
+    t = {name: shape_model.resolve_scalar(stored.get(name, default), int(frame), name)
+         for name, default in shape_model.TRANSFORM_DEFAULTS.items()}
+    t["skew_order"] = stored.get("skew_order", "XY")
+    angle = math.radians(t["rotate"])
+    rotate = np.array([[math.cos(angle), -math.sin(angle)], [math.sin(angle), math.cos(angle)]])
+    skew = np.array(shape_model._skew_matrix(t)).reshape(2, 2) if (t["skew_x"] or t["skew_y"]) else np.eye(2)
+    linear = rotate @ np.diag([t["scale_x"], t["scale_y"]]) @ skew
+    centre = [float(t["center_x"]) if "center_x" in stored else None, float(t["center_y"]) if "center_y" in stored else None]
+    matrix = item.get("extra_matrix")
+    if matrix is not None:
+        m = [float(v) for v in matrix]
+        extra, offset = np.array([[m[0], m[1]], [m[4], m[5]]]), np.array([m[3], m[7]])
+    else:
+        extra, offset = np.eye(2), np.zeros(2)
+    area = abs(float(np.linalg.det(linear))) * abs(float(np.linalg.det(extra)))
+    return linear, np.array([t["translate_x"], t["translate_y"]]), extra, offset, centre, math.sqrt(area)
+
+
+def stroke_brush_factor(item, frame):
+    """How the stroke's own transform scales its brush size at `frame` (the square root of the transform's area; 1 for none)."""
+    if "transform" not in item and "extra_matrix" not in item:
+        return 1.0
+    return _transform_parts(item, frame)[5]
+
+
+def unresolve_stroke_points(item, rendered, frame):
+    """The stroke's own-space points that Roto draws at `rendered` (a list of (x, y)) through the transform at `frame`.
+
+    Inverts, in the order Roto applies them: the 4 x 4 matrix, then the translation, then skew, scale and rotation about the
+    centre. A centre the stroke does not store is the middle of its own-space points' bounding box, which depends on the answer;
+    that closes exactly, because the bounding box of the points moves with the centre as ``c - A^-1 c`` and the answer is
+    ``c = A * middle(A^-1 (R - t))``. Returns an (n, 2) array. A stroke with no transform returns `rendered` unchanged."""
+    rendered = np.asarray(rendered, dtype=np.float64).reshape(-1, 2)
+    if "transform" not in item and "extra_matrix" not in item:
+        return rendered
+    linear, translate, extra, offset, stored, _ = _transform_parts(item, frame)
+    try:
+        inverse = np.linalg.inv(linear)
+        inverse_extra = np.linalg.inv(extra)
+    except np.linalg.LinAlgError:
+        return rendered
+    drawn = (rendered - offset) @ inverse_extra.T                    # undo the matrix, applied last
+    base = (drawn - translate) @ inverse.T                           # A^-1 (R - t)
+    low, high = base.min(axis=0), base.max(axis=0)
+    middle = (low + high) / 2.0
+    centre = np.array([0.0, 0.0])
+    known = [c is not None for c in stored]
+    if not any(known):
+        centre = linear @ middle
+    elif all(known):
+        centre = np.array(stored)
+    else:
+        axis = 0 if not known[0] else 1                              # the axis that is not stored
+        other = 1 - axis
+        centre[other] = stored[other]
+        if abs(inverse[axis, axis]) > 1e-12:
+            centre[axis] = (middle[axis] - inverse[axis, other] * centre[other]) / inverse[axis, axis]
+        else:
+            centre[axis] = middle[axis]
+    return base + centre - centre @ inverse.T
+
+
+def localise_results(item, results, reference_frame):
+    """Take `stick_stroke` results measured on a stroke drawn through its own transform back into its own space.
+
+    Each frame's points go through the inverse of that frame's transform, and the scale (which multiplies the brush size)
+    is divided by what the transform itself does to the brush on that frame, so the drawn brush follows the picture's scale
+    from its size on the painted frame. Strokes with no transform come back untouched."""
+    if "transform" not in item and "extra_matrix" not in item:
+        return results
+    base = stroke_brush_factor(item, reference_frame)
+    out = {}
+    for frame, data in results.items():
+        local = unresolve_stroke_points(item, data["points"], frame)
+        factor = stroke_brush_factor(item, frame)
+        out[frame] = dict(data, points=[(float(x), float(y)) for x, y in local],
+                          scale=float(data["scale"] * (base / factor if factor > 1e-9 else 1.0)))
+    return out
