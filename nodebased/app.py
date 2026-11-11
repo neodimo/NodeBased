@@ -11508,14 +11508,20 @@ class Window(QMainWindow):
         frames = range(time_range["first"], time_range["last"] + 1)
         if self.playing:
             document = playing_document(document)      # the frames playback caches carry its own sample cap
+        # Hashing the whole document for each proxy tier and walking every Roto point's curves cost 16 ms on each picture a drag
+        # showed, though the document had not changed: both are kept for one document revision.
+        stamp = (id(self.dispatcher), self.dispatcher.revision, bool(self.playing), tuple(getattr(self, "graph_path", ()) or ()))
+        memo = getattr(self, "_timeline_marks_memo", None)
+        if memo is None or memo["stamp"] != stamp:
+            memo = self._timeline_marks_memo = {"stamp": stamp, "identities": None, "labels": {}}
         try:
             # A frame counts as cached at any proxy tier. Playback with "Proxy while playing"
             # fills a proxy tier; judging the band by the tier selected after stopping made it
             # collapse to the one or two frames that happened to be shown at full resolution.
             cached = set()
-            for tier in PROXY_TIERS:
-                identity = DisplayCache.identity(
-                    document, document.get("view"), tier)
+            if memo["identities"] is None:
+                memo["identities"] = [DisplayCache.identity(document, document.get("view"), tier) for tier in PROXY_TIERS]
+            for identity in memo["identities"]:
                 cached |= self.display_cache.resident_frames(identity, frames)
         except Exception:
             # A malformed in-flight document must never take the timeline down with it; an empty
@@ -11526,28 +11532,31 @@ class Window(QMainWindow):
         selected = self.graph.selected_id() if getattr(self, "graph", None) is not None else None
         scope = {selected: curves[selected]} if selected in curves else ({} if selected else curves)
         nodes = self.graph_nodes()
-        labels = {}
-        for node_key, node_curves in scope.items():
-            node_name = (nodes.get(node_key) or {}).get("name", node_key)
-            for param, curve in node_curves.items():
-                for curve_key in curve["keys"]:
-                    labels.setdefault(curve_key["frame"], []).append(
-                        f"{node_name} · {param.replace('_', ' ')}")
-        if selected and (nodes.get(selected) or {}).get("type") == "Roto":
-            payload = document.get("node_data", {}).get(selected, {})
-            for shape in payload.get("shapes", []):
-                def add_shape_keys(value):
-                    if isinstance(value, dict):
-                        curve = value.get("curve")
-                        if curve:
-                            for item in curve["keys"]:
-                                labels.setdefault(item["frame"], []).append(
-                                    f"{nodes[selected]['name']} · {shape['name']}")
-                        else:
-                            for child in value.values(): add_shape_keys(child)
-                    elif isinstance(value, list):
-                        for child in value: add_shape_keys(child)
-                add_shape_keys(shape)
+        labels = memo["labels"].get(selected)
+        if labels is None:
+            labels = {}
+            for node_key, node_curves in scope.items():
+                node_name = (nodes.get(node_key) or {}).get("name", node_key)
+                for param, curve in node_curves.items():
+                    for curve_key in curve["keys"]:
+                        labels.setdefault(curve_key["frame"], []).append(
+                            f"{node_name} · {param.replace('_', ' ')}")
+            if selected and (nodes.get(selected) or {}).get("type") == "Roto":
+                payload = document.get("node_data", {}).get(selected, {})
+                for shape in payload.get("shapes", []):
+                    def add_shape_keys(value):
+                        if isinstance(value, dict):
+                            curve = value.get("curve")
+                            if curve:
+                                for item in curve["keys"]:
+                                    labels.setdefault(item["frame"], []).append(
+                                        f"{nodes[selected]['name']} · {shape['name']}")
+                            else:
+                                for child in value.values(): add_shape_keys(child)
+                        elif isinstance(value, list):
+                            for child in value: add_shape_keys(child)
+                    add_shape_keys(shape)
+            memo["labels"][selected] = labels
         keyed = set(labels)
         self.keyed_frames = sorted(keyed)
         self.frame_slider.set_marks(cached, keyed, labels)

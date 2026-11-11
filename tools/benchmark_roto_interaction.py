@@ -781,6 +781,8 @@ def main():
         print(markdown_table(runs))
         return 0
     global MOVE_SCALE
+    if os.environ.get("NODEBASED_SWITCH_INTERVAL"):        # experiment: how long the GUI thread waits for the render thread's GIL
+        sys.setswitchinterval(float(os.environ["NODEBASED_SWITCH_INTERVAL"]))
     if args.short:
         MOVE_SCALE = 0.2
     if args.self_check:

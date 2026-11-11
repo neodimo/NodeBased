@@ -220,6 +220,26 @@ class FastRotoTests(unittest.TestCase):
         faded_curve[0]["opacity"] = {"value": 1.0, "curve": {"interpolation": "linear", "keys": [{"frame": 1, "value": 1.0}, {"frame": 9, "value": 0.0}]}}
         self.assertNotEqual(rotopanel.panel_signature({"shapes": faded_curve}, 2), rotopanel.panel_signature({"shapes": faded_curve}, 3))
 
+    def test_timeline_marks_are_computed_once_per_document_revision(self):
+        from nodebased import app as app_module
+        self.open([blob(i) for i in range(4)])
+        window = self.window
+        calls = []
+        original = app_module.DisplayCache.identity
+        app_module.DisplayCache.identity = staticmethod(lambda *args: calls.append(args) or original(*args))
+        try:
+            window.refresh_timeline_marks()
+            first = len(calls)
+            self.assertGreater(first, 0)
+            window.refresh_timeline_marks()
+            window.refresh_timeline_marks()
+            self.assertEqual(len(calls), first)                      # a drag's pictures do not hash the document again
+            window.command({"op": "set_shapes", "id": "r", "shapes": [blob(i) for i in range(5)]}, render=False)
+            window.refresh_timeline_marks()
+            self.assertGreater(len(calls), first)                    # an edit does
+        finally:
+            app_module.DisplayCache.identity = original
+
     def test_the_panel_signature_accepts_an_animated_colour_channel(self):
         from nodebased import rotopanel
         shape = blob(0)
