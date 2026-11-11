@@ -1,0 +1,315 @@
+{
+ "tool": "benchmark_roto_interaction",
+ "platform": "xcb",
+ "display": ":0",
+ "python": "3.12.13",
+ "label": "after-finish-shared",
+ "size": "1080p",
+ "cases": {
+  "realistic": {
+   "actions": {
+    "drag_point": {
+     "label": "drag_point",
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.29,
+      "p95": 3.06,
+      "max": 4.25
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 22.93,
+      "p95": 40.96,
+      "max": 83.27
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 7.14,
+      "p95": 22.86,
+      "max": 29.57
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 29.59,
+      "p95": 48.37,
+      "max": 50.18
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 38.33,
+      "p95": 64.2,
+      "max": 66.6
+     },
+     "renders_requested": 39,
+     "renders_started": 34,
+     "pictures_shown": 21,
+     "renders_dropped": 17,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 64.71,
+      "p95": 90.94,
+      "max": 93.85
+     },
+     "last_picture_after_last_event_ms": 1195.5,
+     "undo_steps_added": 1,
+     "repeats": 3
+    },
+    "drag_feather": {
+     "label": "drag_feather",
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.24,
+      "p95": 3.7,
+      "max": 4.0
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 13.68,
+      "p95": 39.08,
+      "max": 45.16
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 3.45,
+      "p95": 16.43,
+      "max": 23.01
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 29.48,
+      "p95": 44.05,
+      "max": 45.64
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 36.86,
+      "p95": 86.83,
+      "max": 90.43
+     },
+     "renders_requested": 38,
+     "renders_started": 33,
+     "pictures_shown": 19,
+     "renders_dropped": 19,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 92.1,
+      "p95": 208.13,
+      "max": 217.22
+     },
+     "last_picture_after_last_event_ms": 1386.8,
+     "undo_steps_added": 1,
+     "repeats": 3
+    },
+    "drag_shape": {
+     "label": "drag_shape",
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.27,
+      "p95": 3.48,
+      "max": 7.16
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 26.29,
+      "p95": 45.38,
+      "max": 47.61
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 8.63,
+      "p95": 17.26,
+      "max": 24.96
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 31.97,
+      "p95": 52.58,
+      "max": 54.63
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 53.04,
+      "p95": 87.05,
+      "max": 90.68
+     },
+     "renders_requested": 42,
+     "renders_started": 41,
+     "pictures_shown": 22,
+     "renders_dropped": 20,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 68.08,
+      "p95": 117.03,
+      "max": 120.83
+     },
+     "last_picture_after_last_event_ms": 1198.0,
+     "undo_steps_added": 1,
+     "repeats": 3
+    },
+    "paint_stroke": {
+     "label": "paint_stroke",
+     "events_posted": 122,
+     "moves_posted": 120,
+     "moves_handled": 120,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 360,
+      "median": 0.32,
+      "p95": 1.34,
+      "max": 6.19
+     },
+     "move_overlay_ms": {
+      "n": 360,
+      "median": 26.6,
+      "p95": 132.43,
+      "max": 345.34
+     },
+     "move_late_ms": {
+      "n": 360,
+      "median": 14.79,
+      "p95": 106.42,
+      "max": 134.33
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 84.96,
+      "p95": 177.7,
+      "max": 187.05
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 107.9,
+      "p95": 248.95,
+      "max": 262.0
+     },
+     "renders_requested": 28,
+     "renders_started": 8,
+     "pictures_shown": 8,
+     "renders_dropped": 21,
+     "picture_age_ms": {
+      "n": 5,
+      "median": 1167.3,
+      "p95": 1820.24,
+      "max": 1892.79
+     },
+     "last_picture_after_last_event_ms": 4845.3,
+     "undo_steps_added": 1,
+     "repeats": 3
+    },
+    "shape_list_row": {
+     "label": "shape_list_row",
+     "events_posted": 6,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 18,
+      "median": 77.03,
+      "p95": 81.59,
+      "max": 82.65
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": -6129.5,
+     "undo_steps_added": 0,
+     "repeats": 3
+    },
+    "step_frame_keyed": {
+     "label": "step_frame_keyed",
+     "events_posted": 8,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 24,
+      "median": 57.76,
+      "p95": 121.92,
+      "max": 145.83
+     },
+     "renders_requested": 8,
+     "renders_started": 8,
+     "pictures_shown": 8,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 568.0,
+     "undo_steps_added": 8,
+     "repeats": 3
+    }
+   },
+   "proxy_tier": 1
+  }
+ }
+}
