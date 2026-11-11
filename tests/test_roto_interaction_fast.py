@@ -220,6 +220,12 @@ class FastRotoTests(unittest.TestCase):
         faded_curve[0]["opacity"] = {"value": 1.0, "curve": {"interpolation": "linear", "keys": [{"frame": 1, "value": 1.0}, {"frame": 9, "value": 0.0}]}}
         self.assertNotEqual(rotopanel.panel_signature({"shapes": faded_curve}, 2), rotopanel.panel_signature({"shapes": faded_curve}, 3))
 
+    def test_the_panel_signature_accepts_an_animated_colour_channel(self):
+        from nodebased import rotopanel
+        shape = blob(0)
+        shape["color"] = [{"value": 1.0, "curve": {"interpolation": "linear", "keys": [{"frame": 1, "value": 1.0}, {"frame": 5, "value": 0.0}]}}, 0.0, 0.0, 1.0]
+        self.assertNotEqual(rotopanel.panel_signature({"shapes": [shape]}, 2), rotopanel.panel_signature({"shapes": [shape]}, 3))
+
     def test_a_heavy_panel_is_not_built_again_when_an_edit_changes_nothing_it_shows(self):
         shapes = [blob(i) for i in range(self.window_items())]
         self.open(shapes)

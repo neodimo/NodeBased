@@ -40,7 +40,11 @@ class RotoArtistPanelTests(unittest.TestCase):
         self.window.saved_document=self.window.dispatcher.document
         self.window.close(); APP.processEvents()
 
-    def panel(self): return self.window.properties.widget().findChild(QWidget,"roto-shapes-panel")
+    def panel(self):
+        if self.window._panel_rebuild_timer.isActive():        # a Roto panel is rebuilt once the interface is quiet: do it now
+            self.window._panel_rebuild_timer.stop()
+            self.window._run_panel_rebuild()
+        return self.window.properties.widget().findChild(QWidget,"roto-shapes-panel")
 
     def test_two_shapes_knobs_render_same_as_evaluator_and_hand_checked_feather_opacity_pixel(self):
         panel=self.panel(); self.assertIsNotNone(panel)

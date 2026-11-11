@@ -24,7 +24,13 @@ def panel_signature(payload, frame):
         if isinstance(value, dict):
             if value.get("curve"):
                 frames = tuple(item["frame"] for item in value["curve"]["keys"])
-                return ("curve", shape_model.resolve_scalar(value, frame, field), frames, frame in frames)
+                try:
+                    here = shape_model.resolve_scalar(value, frame, field)
+                except KeyError:
+                    # a field with no declared limits (an animated colour channel): every frame is its own signature, so the
+                    # panel is simply rebuilt when the frame changes
+                    here = ("frame", frame, tuple(item["value"] for item in value["curve"]["keys"]))
+                return ("curve", here, frames, frame in frames)
             return {name: other(inner, name) for name, inner in value.items()}
         if isinstance(value, (list, tuple)):
             return [other(inner, field) for inner in value]
