@@ -413,7 +413,27 @@ Light shot (a single Roto on a constant):
 
 Reading the table. A drag of a point, a feather point or a whole shape now follows the cursor in 40 to 60 ms median (was 1.9 to 4 s) and its picture is on screen 75 to 100 ms after the edit (was 2.9 to 4 s). A painted stroke's overlay is 1.8 ms (was 15 s) and the stroke is on screen 1.7 s after its last move (was 19 s). Clicking a shape list row is 89 ms (was 1.4 s), undo and redo 55 ms (was 1.3 s), stepping a keyed frame 60 ms median (was 2.8 s), the first picture of a drawn Bezier 94 ms (was 1.4 s). Tool switches, click select, marquee and the opacity knob were already near the 50 ms target.
 
-Still over target (realistic shot): the overlay during a point, feather or shape drag (54 / 86 ms against a target of 16 ms p95); the drag-release click (62 / 115 ms against 50); a painted stroke's picture (1.7 / 2.4 s, the rasteriser applies 30 existing plus the new strokes); the shape list row (89 / 103 ms); the light shot shows about 500 ms for list rows, undo and drag releases, which is the time to the next viewer paint rather than a handler cost (a profile pass of the same actions sees 3 to 4 ms of GUI work), so the overlay appears to repaint only with the new picture there; this is the next thing to look at.
+Finish pass (11/11, same tool, same display, quiet machine, three repeats; `benchmarks/roto-interaction-1110/after-finish.json`). Medians / p95 in milliseconds, "U1" being the table above:
+
+| Action | U1: move overlay; click overlay; picture age | Finish: move overlay; click overlay; picture age |
+|---|---|---|
+| realistic drag_point | 54.09 / 85.67; 62.26 / 114.73; 102.8 / 131.95 | 30.7 / 47.1; 54.06 / 87.0; 75.62 / 113.33 |
+| realistic drag_feather | 40.22 / 88.24; 55.49 / 87.47; 75.73 / 112 | 20.33 / 44.09; 41.66 / 79.82; 64.19 / 97.82 |
+| realistic drag_shape | 61.42 / 97.56; 64.71 / 131.71; 101.53 / 155.1 | 32.22 / 51.9; 55.12 / 95.75; 74.13 / 121.37 |
+| realistic paint_stroke | 1.77 / 4.53; 75.81 / 156.02; 1665.64 / 2376.28 | 25.87 / 128.84; 134.19 / 327.17; 1219.86 / 1904.15 |
+| realistic shape_list_row | -; 88.88 / 102.86; - | -; 79.62 / 84.75; - |
+| realistic undo_redo | -; 55.07 / 61.14; - | -; 53.89 / 55.55; - |
+| light drag_point | 10.93 / 68.63; 514.58 / 535.98; 317.85 / 594.08 | 3.0 / 25.15; 6.7 / 31.9; 28.15 / 52.07 |
+| light drag_shape | 1.8 / 29.3; 3.66 / 512.95; 315.92 / 582.16 | 3.13 / 18.99; 9.43 / 23.41; 71.33 / 162.42 |
+| light shape_list_row | -; 505.17 / 537.36; - | -; 2.56 / 4.23; - |
+| light step_frame_keyed | -; 1048.08 / 1061.78; - | -; 17.12 / 17.9; - |
+| light undo_redo | -; 515.41 / 523.95; - | -; 19.46 / 20.45; - |
+
+The light shot's 500 ms was GUI-thread work, not a wait (the earlier note here read it as a wait). A Roto panel is 280 widgets with one shape and 430 with twenty, about 0.5 to 1.2 s to build, and the rebuild was deferred only for panels of eight or more shapes, so every undo, list row and frame step of a one-shape Roto built it inside the click (cProfile of one undo: 477 ms in `inspect`, of which `build_node_panel` 223 ms and `set_properties_widget` 254 ms). Every Roto and RotoPaint panel now rebuilds once, 150 ms after the interface goes quiet. Along the way the signature test that skips a rebuild raised `KeyError` for an animated colour channel; it now treats such a channel as changing with the frame.
+
+What else the finish pass changed: the viewer overlay keeps each shape's outline, handle centres and a recorded picture of its point circles per document revision (a drag copies and redraws only the shape it moves; pixels checked identical against the previous paint code in five states); each picture the viewer shows no longer hashes the whole document four times and walks every Roto point's curves for the timeline (16 ms per picture); a brush stroke's dabs compute only their own window instead of the whole stroke region (coverage equal bit for bit, tested), and plain colour strokes are written into the running result instead of a full-frame copy each. A shorter thread switch interval (0.5 ms) was tried against the render thread's hold on the interpreter lock and changed nothing measurable, so it is not in.
+
+Still over target (realistic shot): the overlay during a point, feather or shape drag (20 to 31 ms median, 44 to 52 ms p95, against 16 ms p95); the drag-release click (42 to 55 ms median, 80 to 96 p95, against 50); a painted stroke's picture (1.2 s median, 1.9 s p95); the shape list row (80 / 85 ms); a keyed frame step (57 / 110 ms). The profile with renders off (the GUI thread's own work) now shows a move's paint at 2.5 ms; what is left per move is the GUI thread being busy with other things when the move arrives: each picture handover takes about 17 ms (`preview_ready`, 29 per drag, of which the timeline marks were 16 ms before this pass and a progressive refinement request, which hashes the document for its cache identity about three times at 3 to 4 ms each, is most of the rest), and the one heavy panel rebuild after the release (1.0 to 1.2 s, `addWidget` of 430 widgets and the 128 000 application event-filter calls). A painted stroke's moves got later (26 / 129 ms against 1.8 / 4.5) in the same run that made its picture 450 ms sooner; the likely cause is the pictures arriving faster, each costing the GUI thread its handover (unconfirmed).
 
 Top costs on the GUI thread after the fixes (cProfile, realistic shot, cumulative, one pass; its timings are inflated, the order is the point):
 
@@ -421,7 +441,7 @@ Top costs on the GUI thread after the fixes (cProfile, realistic shot, cumulativ
 - painted stroke: `rasterise` 2.3 s (`apply_stroke` 2.2 s over 182 strokes), `run_tile` 1.7 s, the Roto matte evaluation 0.9 s.
 - click select: `paint_overlays` 322 ms over 76 paints, `_roto_hit_spline` 157 ms over 6 presses.
 
-Next fixes, in order: cache the flattened and resolved outlines and draw only handles of the selected shapes (the overlay), draw the handle ellipses as one batched path, let the panel rebuild build rows lazily, cache the rasterised strokes already painted so a new stroke composites on top, skip the event filter for events that are not mouse or key.
+Next fixes, in order: stop asking for a picture during a brush stroke's drag, since the overlay already draws it (the benchmark counts 28 picture requests in a 120-move stroke and its later moves are consistent with the handovers delaying them; not yet confirmed by a profile); cache the document identity for a progressive refinement request and make `preview_ready` skip the status, topbar and floor-width updates when nothing changed (about 17 ms per picture); build the Roto panel lazily (tabs and collapsed sections built when opened, so the 1 s rebuild becomes a fraction of it) and skip the application event filter for events that are not mouse or key; cache the rasterised strokes already painted so a new stroke composites on top.
 
 ## Lane 8 step notes
 
