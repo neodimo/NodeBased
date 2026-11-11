@@ -264,6 +264,39 @@ def find_holes(body, silhouette, min_fraction=MIN_HOLE_FRACTION, min_cells=MIN_H
     return [part for part in _components(silhouette & ~body) if part.sum() >= threshold]
 
 
+def find_islands(raw, body, hole, min_fraction=MIN_HOLE_FRACTION, min_cells=MIN_HOLE_CELLS, area=None):
+    """The islands inside one hole: components of the segmentation (`raw`, before the subject was picked out) that lie in
+    the `hole` and are not part of the subject's `body`, covering at least `min_fraction` of `area` (the silhouette's
+    area; the hole's own when omitted) and `min_cells` cells. Smaller ones are specks and stay cut out with the hole."""
+    area = float(hole.sum()) if area is None else float(area)
+    threshold = max(float(min_cells), min_fraction * area)
+    return [part for part in _components(raw & hole & ~body) if part.sum() >= threshold]
+
+
+OPEN_HOLE_REACH = 0.025    # of the long side of the grid: a gap this narrow (twice it) still counts as closed
+
+
+def find_open_holes(silhouette, min_fraction=MIN_HOLE_FRACTION, min_cells=MIN_HOLE_CELLS):
+    """Background regions the subject almost encloses: a gap in its edge narrower than twice `OPEN_HOLE_REACH` of the grid's
+    long side leaves a pocket that is not a hole (it connects to the outside), so the outline keeps it as background.
+
+    Found by closing the `silhouette` (grow, then shrink, by `OPEN_HOLE_REACH` of the long side): a region that the closed
+    subject encloses and the silhouette does not is a pocket. Only pockets covering at least `min_fraction` of the
+    silhouette's area and `min_cells` cells count; they are returned biggest first, as boolean masks."""
+    reach = max(2, int(round(OPEN_HOLE_REACH * max(silhouette.shape))))
+    padded = np.pad(silhouette, reach + 1)
+    grown = _dilate(padded, reach)
+    shrunk = ~_dilate(~grown, reach)                 # erosion by the same diamond
+    shrunk |= padded
+    outside = np.zeros_like(shrunk)
+    outside[0, :] = outside[-1, :] = outside[:, 0] = outside[:, -1] = True
+    outside = _grow(outside & ~shrunk, ~shrunk)
+    pockets = (~outside & ~shrunk)[reach + 1:-reach - 1, reach + 1:-reach - 1]
+    area = float(silhouette.sum())
+    threshold = max(float(min_cells), min_fraction * area)
+    return [part for part in _components(pockets) if part.sum() >= threshold]
+
+
 def _segment(rgb, seed, box, init=None, rounds=ROUNDS, want_body=False):
     """The subject mask of the working image `rgb` (HxWx3), as a float field u in [0, 1].
 
@@ -303,7 +336,8 @@ def _segment(rgb, seed, box, init=None, rounds=ROUNDS, want_body=False):
         f = (DATA_WEIGHT * np.clip(evidence, -DATA_CLIP, DATA_CLIP)).astype(np.float32)
         start = (f < 0).astype(np.float32) if u is None else u
         u = _primal_dual(f, g, fixed_fg, fixed_bg, start, iterations)
-        body, mask = _body_and_silhouette(u >= 0.5, seed)
+        raw = u >= 0.5
+        body, mask = _body_and_silhouette(raw, seed)
         if not mask.any():
             raise OutlineError("no subject found at that point")
         # the next round learns from the settled interior and the settled exterior (a hole is not interior when holes are kept)
@@ -313,7 +347,7 @@ def _segment(rgb, seed, box, init=None, rounds=ROUNDS, want_body=False):
         fg_samples = inner | fixed_fg
         far = ~_dilate(mask, 2)
         sample_bg = far | sample_bg if box is None else (far & ~outside) | sample_bg
-    return (mask, body) if want_body else mask
+    return (mask, body, raw) if want_body else mask
 
 
 def _dilate(mask, steps=1):
@@ -619,7 +653,7 @@ def _mask_in_region(rgb, region, seed, box, init_box=None, init_mask=None, want_
         init = init_mask(size, region)
     result = _segment(small, work_seed, work_box, init=init, rounds=ROUNDS if init is None else ROUNDS[1:], want_body=want_body)
     if want_body:
-        return result[0], result[1], (1.0 / sx, 1.0 / sy), region
+        return result[0], result[1], result[2], (1.0 / sx, 1.0 / sy), region
     return result, (1.0 / sx, 1.0 / sy), region
 
 
@@ -633,8 +667,9 @@ def _find_subject(image, seed, box, holes):
         raise OutlineError("the click is outside the picture")
     rgb = _rgb(array)
     region = _work_region(width, height, box)
+    raw = None
     if holes:
-        mask, body, (sx, sy), region = _mask_in_region(rgb, region, seed, box, want_body=True)
+        mask, body, raw, (sx, sy), region = _mask_in_region(rgb, region, seed, box, want_body=True)
     else:
         (mask, (sx, sy), region), body = _mask_in_region(rgb, region, seed, box), None
     x0, y0 = region[0], region[1]
@@ -654,7 +689,7 @@ def _find_subject(image, seed, box, holes):
             return coarse[iy][:, ix]
         box_fine = None if box is None else box
         if holes:
-            mask, body, (sx, sy), region = _mask_in_region(rgb, fine, seed, box_fine, init_mask=init_mask, want_body=True)
+            mask, body, raw, (sx, sy), region = _mask_in_region(rgb, fine, seed, box_fine, init_mask=init_mask, want_body=True)
         else:
             mask, (sx, sy), region = _mask_in_region(rgb, fine, seed, box_fine, init_mask=init_mask)
         x0, y0 = region[0], region[1]
@@ -663,7 +698,7 @@ def _find_subject(image, seed, box, holes):
         raise OutlineError("the subject is too small")
     if area > 0.9 * mask.size:
         raise OutlineError("the region found fills the picture; draw a box around the subject")
-    return rgb, mask, body, x0, y0, sx, sy, width, height
+    return rgb, mask, body, x0, y0, sx, sy, width, height, raw
 
 
 def _bezier_outline(rgb, mask, x0, y0, sx, sy, width, height, min_points, max_points):
@@ -706,7 +741,7 @@ def outline_from_click(image, seed, box=None, min_points=MIN_POINTS, max_points=
     ``x, y, in_x, in_y, out_x, out_y`` (tangents relative to their point), or raises `OutlineError`.
     Holes in the subject are filled: this is the silhouette (see `outline_with_holes`).
     """
-    rgb, mask, _, x0, y0, sx, sy, width, height = _find_subject(image, seed, box, holes=False)
+    rgb, mask, _, x0, y0, sx, sy, width, height, _ = _find_subject(image, seed, box, holes=False)
     return _bezier_outline(rgb, mask, x0, y0, sx, sy, width, height, min_points, max_points)
 
 
@@ -719,15 +754,51 @@ def outline_with_holes(image, seed, box=None, min_points=MIN_POINTS, max_points=
     `min_hole_cells` cells of the working image; smaller ones are specks and stay part of the subject. Holes are returned
     biggest first. Rendered with the holes as shapes that subtract, the matte is the subject with its holes cut out.
     """
-    rgb, mask, body, x0, y0, sx, sy, width, height = _find_subject(image, seed, box, holes=True)
+    return outline_with_islands(image, seed, box, min_points, max_points, min_hole_fraction, min_hole_cells)[:2]
+
+
+class OutlineResult(tuple):
+    """``(outer, holes, islands, open_holes)``: the outline, its hole outlines, the island outlines inside the holes and the
+    number of background pockets the subject nearly encloses (see `find_open_holes`), which are left as background."""
+    __slots__ = ()
+
+    def __new__(cls, outer, holes, islands, open_holes):
+        return super().__new__(cls, (outer, holes, islands, open_holes))
+
+    outer = property(lambda self: self[0])
+    holes = property(lambda self: self[1])
+    islands = property(lambda self: self[2])
+    open_holes = property(lambda self: self[3])
+
+
+def outline_with_islands(image, seed, box=None, min_points=MIN_POINTS, max_points=MAX_POINTS,
+                         min_hole_fraction=MIN_HOLE_FRACTION, min_hole_cells=MIN_HOLE_CELLS):
+    """`outline_with_holes` plus the islands inside the holes: ``(outer, [hole, ...], [island, ...], open_holes)``.
+
+    An island is a piece of the picture inside a hole that the segmentation counted as subject but that does not touch
+    the subject's body (the pupil inside the eye-shaped hole of a mask, a bolt in the middle of a ring). A hole is cut out
+    whole, so the island goes back as an ordinary shape drawn after the holes (in front of them); it has to cover at
+    least the same minimum area as a hole (`min_hole_fraction` of the silhouette and `min_hole_cells` cells). Islands
+    come biggest first. `open_holes` counts the background pockets that touch the subject's edge (a gap in the edge makes
+    them part of the background, not holes); the outline leaves them as they are and the caller says so."""
+    rgb, mask, body, x0, y0, sx, sy, width, height, raw = _find_subject(image, seed, box, holes=True)
     outer = _bezier_outline(rgb, mask, x0, y0, sx, sy, width, height, min_points, max_points)
-    holes = []
+    area = float(mask.sum())
+    holes, islands, island_masks = [], [], []
     for part in find_holes(body, mask, min_hole_fraction, min_hole_cells):
         try:
             holes.append(_bezier_outline(rgb, part, x0, y0, sx, sy, width, height, min_points, max_points))
         except Exception:
             continue    # a hole whose contour cannot be traced is left as part of the subject
-    return outer, holes
+        island_masks.extend(find_islands(raw, body, part, min_hole_fraction, min_hole_cells, area))
+    island_masks.sort(key=lambda part: -int(part.sum()))
+    for part in island_masks:
+        try:
+            islands.append(_bezier_outline(rgb, part, x0, y0, sx, sy, width, height, min_points, max_points))
+        except Exception:
+            continue
+    pockets = find_open_holes(mask, min_hole_fraction, min_hole_cells)
+    return OutlineResult(outer, holes, islands, len(pockets))
 
 
 def _edge_score(field, points):
@@ -748,30 +819,86 @@ def _guarded_fit(field, points, band=1.5):
     return points
 
 
-def bspline_controls(points, samples_per_span=2):
+CORNER_ANGLE = 35.0        # a Bezier point whose arriving and leaving directions differ by more than this is a corner
+
+
+def bezier_corners(points, angle=CORNER_ANGLE):
+    """Indices of the points of a closed Bezier outline where the curve turns sharply (the outline's own corners).
+
+    The direction of travel into a point is its span's end tangent (the chord from the previous point when the incoming
+    handle is zero) and the direction out is the next span's start tangent; a point is a corner when they differ by
+    more than `angle` degrees. Points the fit left smooth turn by a few degrees at most."""
+    count = len(points)
+    found = []
+    for i, p in enumerate(points):
+        before, after = points[i - 1], points[(i + 1) % count]
+        arrive = np.array([-p["in_x"], -p["in_y"]])
+        if float(np.hypot(*arrive)) < 1e-9:
+            arrive = np.array([p["x"] - (before["x"] + before["out_x"]), p["y"] - (before["y"] + before["out_y"])])
+            if float(np.hypot(*arrive)) < 1e-9:
+                arrive = np.array([p["x"] - before["x"], p["y"] - before["y"]])
+        leave = np.array([p["out_x"], p["out_y"]])
+        if float(np.hypot(*leave)) < 1e-9:
+            leave = np.array([after["x"] + after["in_x"] - p["x"], after["y"] + after["in_y"] - p["y"]])
+            if float(np.hypot(*leave)) < 1e-9:
+                leave = np.array([after["x"] - p["x"], after["y"] - p["y"]])
+        if float(np.hypot(*arrive)) < 1e-9 or float(np.hypot(*leave)) < 1e-9:
+            continue
+        turn = abs(math.degrees(math.atan2(arrive[0] * leave[1] - arrive[1] * leave[0], float(arrive @ leave))))
+        if turn > angle:
+            found.append(i)
+    return found
+
+
+def bspline_controls(points, samples_per_span=2, sharp=True):
     """Control points of a closed uniform cubic B-spline that passes through the outline.
 
     The B-Spline tool stores control points, not points on the curve, so the Bezier outline is
     sampled (each point and the middle of each span) and the controls ``Q`` solved from
-    ``P_i = (Q_(i-1) + 4 Q_i + Q_(i+1)) / 6``. A B-spline has no corners: sharp tips round off.
+    ``P_i = (Q_(i-1) + 4 Q_i + Q_(i+1)) / 6``. A B-spline has no corners of its own, so with `sharp` (the default) every
+    corner of the outline (see `bezier_corners`) gets three control points on the same spot: a uniform cubic B-spline
+    with a triple control point reaches it exactly and runs straight in and out, which keeps star tips and box corners
+    sharp. The other controls are solved around them (the samples next to a corner become part of the triple; a span
+    between two corners takes four samples so its two triples do not meet). Without corners nothing changes.
     """
     count = len(points)
-    samples = []
+    corners = set(bezier_corners(points)) if sharp else set()
+    samples = []                     # curve samples, one per control
+    owner = []                       # the outline point that a sample belongs to, or None for a span's inner sample
     for i, a in enumerate(points):
         b = points[(i + 1) % count]
         p0 = np.array([a["x"], a["y"]]); p1 = p0 + [a["out_x"], a["out_y"]]
         p3 = np.array([b["x"], b["y"]]); p2 = p3 + [b["in_x"], b["in_y"]]
-        for k in range(samples_per_span):
-            t = k / samples_per_span
+        per_span = 4 if (i in corners and (i + 1) % count in corners) else samples_per_span
+        for k in range(per_span):
+            t = k / per_span
             samples.append(_evaluate(np.array([p0, p1, p2, p3]), np.array([t]))[0])
+            owner.append(i if k == 0 else None)
     samples = np.array(samples)
     n = len(samples)
-    matrix = np.zeros((n, n))
-    for i in range(n):
-        matrix[i, (i - 1) % n] += 1.0
-        matrix[i, i] += 4.0
-        matrix[i, (i + 1) % n] += 1.0
-    controls = np.linalg.solve(matrix / 6.0, samples)
+    fixed = {}                       # control index -> position
+    for index, who in enumerate(owner):
+        if who in corners:
+            for offset in (-1, 0, 1):
+                fixed[(index + offset) % n] = samples[index]
+    free = [i for i in range(n) if i not in fixed]
+    controls = np.zeros((n, 2))
+    for i, position in fixed.items():
+        controls[i] = position
+    if free:
+        slot = {control: row for row, control in enumerate(free)}
+        matrix = np.zeros((len(free), len(free)))
+        rhs = np.zeros((len(free), 2))
+        for row, i in enumerate(free):
+            rhs[row] = 6.0 * samples[i]
+            for weight, j in ((1.0, (i - 1) % n), (4.0, i), (1.0, (i + 1) % n)):
+                if j in slot:
+                    matrix[row, slot[j]] += weight
+                else:
+                    rhs[row] -= weight * controls[j]
+        solved = np.linalg.solve(matrix, rhs)
+        for row, i in enumerate(free):
+            controls[i] = solved[row]
     return [{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0} for x, y in controls]
 
 

@@ -3949,10 +3949,11 @@ class Viewer(PanZoomView):
         try:
             raster = self.window.evaluator.evaluate_raster(document, target=source, frame=int(document["time"]["current"]))
             image = raster.to_display()
-            points, holes = rotooutline.outline_with_holes(image, seed, box)
+            points, holes, islands, open_holes = rotooutline.outline_with_islands(image, seed, box)
             if self.roto_shape_tool == "B-Spline":
                 points = rotooutline.bspline_controls(points)
                 holes = [rotooutline.bspline_controls(hole) for hole in holes]
+                islands = [rotooutline.bspline_controls(island) for island in islands]
         except rotooutline.OutlineError as error:
             self.window.statusBar().showMessage(f"Outline from click: {error}", 6000)
             return False
@@ -3964,16 +3965,21 @@ class Viewer(PanZoomView):
         if not self.begin_roto_draw(key):
             return False
         self.roto_draw_points = [dict(p, scene=self._roto_scene_point(p, tier)) for p in points]
-        if not self.finish_roto_draw(closed=True, holes=holes):
+        if not self.finish_roto_draw(closed=True, holes=holes, islands=islands):
             return False
         context = self._roto_context()
         if context is not None:
-            index = len(context[2].get("shapes", [])) - 1 - len(holes)
+            index = len(context[2].get("shapes", [])) - 1 - len(holes) - len(islands)
             self.roto_selected_shape_index = index
             self.roto_selected_points = {(index, i) for i in range(len(points))}
             self.window.rebuild_properties_dock()
         note = f" and {len(holes)} hole{'s' if len(holes) != 1 else ''} (shapes that subtract)" if holes else ""
-        self.window.statusBar().showMessage(f"Outline from click: {len(points)} points{note}", 4000)
+        if islands:
+            note += f" and {len(islands)} island{'s' if len(islands) != 1 else ''} inside {'it' if len(holes) == 1 else 'them'} (shapes that add back)"
+        if open_holes:
+            note += (f". {open_holes} pocket{'s' if open_holes != 1 else ''} touching the subject's edge stay{'' if open_holes != 1 else 's'} "
+                     f"background: draw {'them' if open_holes != 1 else 'it'} as shapes that subtract")
+        self.window.statusBar().showMessage(f"Outline from click: {len(points)} points{note}", 8000 if open_holes else 4000)
         self.viewport().update()
         return True
 
@@ -4295,9 +4301,11 @@ class Viewer(PanZoomView):
         self.hide_prompt()
         self.viewport().update()
 
-    def finish_roto_draw(self, closed=False, holes=None):
+    def finish_roto_draw(self, closed=False, holes=None, islands=None):
         """Commit the shape being drawn. `holes` (Outline from click) are closed point lists added in the same command as
-        extra shapes set to subtract, right after the new shape, so they cut it out and one undo removes them all."""
+        extra shapes set to subtract, right after the new shape, so they cut it out and one undo removes them all; `islands`
+        are closed point lists for the pieces inside a hole, added after the holes as ordinary shapes (union) so they show
+        again in front of the hole they sit in."""
         if not self.roto_drawing:
             return False
         context = self._roto_context()
@@ -4345,6 +4353,11 @@ class Viewer(PanZoomView):
                 index += 1
             new_shapes.append({**copy.deepcopy(shape), "name": f"shape{index}", "mode": "subtract",
                                "points": [{field: p[field] for field in shape_model.POINT_FIELDS} for p in hole]})
+        for island in islands or ():
+            while f"shape{index}" in names or any(f"shape{index}" == other["name"] for other in new_shapes):
+                index += 1
+            new_shapes.append({**copy.deepcopy(shape), "name": f"shape{index}", "mode": "union",
+                               "points": [{field: p[field] for field in shape_model.POINT_FIELDS} for p in island]})
         shapes.extend(new_shapes)
         self.cancel_roto_edit()
         # Whole-payload replacement is the Dispatcher validation/undo boundary.  The local frame
