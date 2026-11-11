@@ -1332,6 +1332,23 @@ timelines are deliberate local scratch at
 `scratch/nb-lanes/run/bench-L8-matte-process-1111/`; the table is in
 `benchmarks/2d-playback/radeon-1108-breakdown.md`.
 
+### GPU playback: Radeon 24 fps follow-up (11/11)
+
+Three fresh, quiet 1080p Radeon passes on the current GPU-island path measured 46.999,
+45.755 and 45.202 ms interval p95 (first-pass 23.799, 23.997 and 24.028 fps). Their
+fresh-frame accounting was 41.440, 40.893 and 41.106 ms respectively. Node evaluation
+(22.348 to 31.209 ms) and display conversion (9.568 to 13.658 ms) hold the bulk of each
+frame; the remaining p95 tail is worker scheduling and conversion handoff variance.
+
+The Read decoder was then given two full-resolution frames of lead instead of one. Its
+three passes measured 45.223, 45.914 and 45.249 ms p95, with first-pass fps of 24.034,
+24.017 and 23.988. The result overlaps the original path and does not hold the 41.670 ms
+gate, so the default remains one frame and the experiment is not shipped. Evidence is
+`benchmarks/2d-playback/radeon-1111-baseline-*.json` and
+`benchmarks/2d-playback/radeon-1111-lead2-*.json`; each has its matching raw and
+fresh-frame timeline. The next cut is same-submission display conversion or retaining the
+island output on the card, estimated to remove most of the 10 to 14 ms conversion stage.
+
 ## Lane 2 step notes
 
 ### Playback pipeline: the next frame evaluates while this one is converted and shown (10/22)
