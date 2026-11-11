@@ -1,5 +1,6 @@
 """Roto shape-list and per-shape controls, isolated from the shared properties builder."""
 import copy
+import time
 from . import shapes as shape_model
 from . import rotolist
 from PySide6.QtCore import Qt, QTimer
@@ -467,6 +468,7 @@ def build_panel(window, key):
                 button.clicked.connect(lambda _=False, idx=i, d=delete, box=scope: edit_key_scope(idx, box.currentData(), d))
                 scope_controls.addWidget(button)
             layout.addLayout(scope_controls)
+            yield
             def edit(field,value):
                 entries=current()
                 if i < len(entries):
@@ -484,6 +486,7 @@ def build_panel(window, key):
                     save(entries,i)
             name=QLineEdit(shape["name"]); name.setObjectName("roto-shape-name")
             name.editingFinished.connect(lambda: edit("name",name.text())); layout.addWidget(name)
+            yield
             follow=QComboBox(); follow.setObjectName(f"roto-shape-track-link-{i}")
             follow.addItem("No Tracker link", None)
             trackers=window.dispatcher.document["nodes"]
@@ -510,14 +513,17 @@ def build_panel(window, key):
             follow_mode.setCurrentIndex(follow_mode.findData(shape.get("track_follow", "translate")))
             follow_mode.currentIndexChanged.connect(lambda index, idx=i, box=follow_mode: row_edit(idx, "track_follow", box.itemData(index)))
             layout.addWidget(follow_mode)
+            yield
             for field,label in (("locked","Lock"),("invert","Invert"),("motion_blur","Motion blur")):
                 cb=QCheckBox(label); cb.setObjectName("roto-shape-"+field); cb.setChecked(shape.get(field,False)); cb.toggled.connect(lambda v,f=field:edit(f,bool(v))); layout.addWidget(cb)
+            yield
             source = QComboBox(); source.setObjectName("roto-shape-source")
             for label, value in (("Colour", "color"), ("Foreground", "foreground"), ("Background", "background")):
                 source.addItem(label, value)
             source.setCurrentIndex(max(0, source.findData(shape.get("source", "color"))))
             source.currentIndexChanged.connect(lambda index, box=source: edit("source", box.itemData(index)))
             layout.addWidget(QLabel("Shape source")); layout.addWidget(source)
+            yield
             # Nuke's Clone tab controls belong to this shape and only affect picture sources.
             clone_box = QWidget(); clone_layout = QVBoxLayout(clone_box)
             clone_layout.setContentsMargins(8, 2, 2, 2)
@@ -540,6 +546,7 @@ def build_panel(window, key):
                 spin.setKeyboardTracking(False); spin.editingFinished.connect(
                     lambda p=part, w=spin: clone_vec("source_transform_translate", p, float(w.value())))
                 clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+            yield
             for field, label, default in (("source_transform_rotate", "Rotate", 0.0),
                                           ("source_transform_scale", "Scale", 1.0),
                                           ("source_transform_skewX", "Skew X", 0.0),
@@ -548,6 +555,7 @@ def build_panel(window, key):
                 spin.setRange(-1000, 1000); spin.setValue(float(shape.get(field, default))); spin.setKeyboardTracking(False)
                 spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
                 clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+            yield
             for field, label, values, default in (("source_transform_skew_order", "Skew order", ("XY", "YX"), "XY"),
                                                    ("source_filter", "Filter", ("impulse", "cubic", "keys", "simon", "rifman", "mitchell", "parzen", "notch"), "cubic"),
                                                    ("source_time_offset_type", "Time offset type", ("relative", "absolute"), "relative")):
@@ -557,11 +565,13 @@ def build_panel(window, key):
                 combo.currentIndexChanged.connect(lambda idx, f=field, w=combo: clone_edit(f, w.itemData(idx)))
                 clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(combo)
             center = shape.get("source_transform_center", [0, 0])
+            yield
             for part, label in enumerate(("Center X", "Center Y")):
                 spin = QDoubleSpinBox(); spin.setObjectName(f"roto-shape-source-transform-center-{part}")
                 spin.setRange(-65536, 65536); spin.setValue(float(center[part])); spin.setKeyboardTracking(False)
                 spin.editingFinished.connect(lambda p=part, w=spin: clone_vec("source_transform_center", p, float(w.value())))
                 clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
+            yield
             for field, label, default in (("source_translate_round", "Round translation", False),
                                           ("source_black_outside", "Black outside source", False)):
                 check = QCheckBox(label); check.setObjectName("roto-shape-" + field)
@@ -573,6 +583,7 @@ def build_panel(window, key):
                 spin.editingFinished.connect(lambda f=field, w=spin: clone_edit(f, float(w.value())))
                 clone_layout.addWidget(QLabel(label)); clone_layout.addWidget(spin)
             layout.addWidget(clone_box)
+            yield
             clone_box.setEnabled(shape.get("source", "color") != "color")
             source.currentIndexChanged.connect(lambda index, box=clone_box, control=source:
                                                box.setEnabled(control.itemData(index) != "color"))
@@ -597,6 +608,7 @@ def build_panel(window, key):
                 key_button.setAccessibleName(f"{label} key")
                 row.addWidget(key_button)
                 layout.addLayout(row)
+                yield
             transform = shape.get("transform", {})
             for field, label, lo, hi, step in (
                     ("translate_x", "Translate X", -65536, 65536, 1),
@@ -621,6 +633,7 @@ def build_panel(window, key):
                     object_name=f"roto-shape-key-transform-{field}-{i}")
                 button.setAccessibleName(f"{label} key"); row.addWidget(button)
                 layout.addWidget(QLabel(label)); layout.addLayout(row)
+                yield
             def plain(field, value):
                 """Set a setting that is a plain value on the shape (a flag, a choice, a whole number), not an animatable scalar."""
                 entries = current()
@@ -674,12 +687,19 @@ def build_panel(window, key):
                     row.addWidget(button)
                 layout.addLayout(row)
             plain_combo("skew_order", "Skew order", ("XY", "YX"), "XY", plain_transform)
+            yield
             plain_check("feather_on", "Feather on", True)
+            yield
             plain_spin("falloff_power", "Feather falloff", 0.0, 16.0, 0.1, 1.0)
+            yield
             plain_spin("motion_blur_samples", "Motion blur samples", 1, 64, 1, 1, whole=True)
+            yield
             plain_spin("motion_blur_shutter", "Motion blur shutter", 0.0, 8.0, 0.05, 0.5)
+            yield
             plain_combo("motion_blur_offset_type", "Motion blur shutter offset", shape_model.OFFSET_TYPES, "start")
+            yield
             plain_spin("motion_blur_offset", "Motion blur custom offset", -8.0, 8.0, 0.05, 0.0)
+            yield
             life = shape.get("lifetime") or {"type": "all"}
             def set_life(part, value):
                 live_entries = current()
@@ -718,6 +738,7 @@ def build_panel(window, key):
             to_visible = kind in ("start_to", "range")
             life_from_label.setVisible(from_visible); spin_from.setVisible(from_visible)
             life_to_label.setVisible(to_visible); spin_to.setVisible(to_visible)
+            yield
             if shape.get("closed", True) is False:
                 plain_combo("cap_start", "Start cap", shape_model.END_CAPS, "rounded")
                 plain_combo("cap_end", "End cap", shape_model.END_CAPS, "rounded")
@@ -737,6 +758,7 @@ def build_panel(window, key):
                         save(entries, i)
             matrix_edit.editingFinished.connect(set_matrix)
             layout.addWidget(QLabel("Extra matrix")); layout.addWidget(matrix_edit)
+            yield
             for field,values in (("feather_falloff",("linear","smooth","gaussian")),("blend_mode",shape_model.BLEND_MODES)):
                 combo=QComboBox(); combo.setObjectName("roto-shape-"+field)
                 for val in values: combo.addItem(val.title(),val)
@@ -764,6 +786,7 @@ def build_panel(window, key):
                 save(entries, i)
             reset_feather.clicked.connect(reset_selected_feather)
             layout.addWidget(reset_feather)
+            yield
             color_row = QHBoxLayout()
             color=QPushButton("Choose colour…"); color.setObjectName("roto-shape-color")
             color.setToolTip("Choose the shape colour")
@@ -798,7 +821,25 @@ def build_panel(window, key):
     detail_holder = QWidget(); detail_holder.setObjectName("roto-shape-detail")
     detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
     layout.addWidget(detail_holder)
-    build_detail(detail_layout)
+    for _ in build_detail(detail_layout):       # the panel's own first build runs to the end at once
+        pass
+
+    DETAIL_SLICE_SECONDS = 0.003
+
+    def build_detail_sliced(holder, lay, steps):
+        """Build the selected shape's controls a few milliseconds at a time: `steps` is build_detail's generator, which pauses
+        between groups of controls. Each event adds groups until its slice is used up and hands the interface thread back, so a
+        selection change inside a drag or after a release never blocks it for the whole 130 widgets (the controls under the
+        list were one 80 ms block plus the style and layout work of the new widgets). A panel replaced meanwhile stops the build."""
+        if holder is not detail_holder:
+            steps.close()
+            return
+        start = time.perf_counter()
+        for _ in steps:
+            if time.perf_counter() - start >= DETAIL_SLICE_SECONDS:
+                QTimer.singleShot(2, holder, lambda: build_detail_sliced(holder, lay, steps))
+                return
+        holder.setMinimumHeight(0)
 
     def refresh(changed, appended=0):
         """Bring the panel on screen up to date for an edit that touched only the points of the shapes in `changed` (and maybe the
@@ -823,13 +864,16 @@ def build_panel(window, key):
         if selected != built["selected"] or layer_name != built["layer"] or not 0 <= selected < len(shapes):
             old = detail_holder
             detail_holder = QWidget(); detail_holder.setObjectName("roto-shape-detail")
+            # as tall as the controls it replaces until its own are all built, so the panel's height (and the scroll bar, whose
+            # coming and going re-fits every row of the panel to a new width) holds still while they are added
+            detail_holder.setMinimumHeight(old.height())
             detail_layout = QVBoxLayout(detail_holder); detail_layout.setContentsMargins(0, 0, 0, 0)
             layout.replaceWidget(old, detail_holder)
             old.hide(); old.setParent(None); old.deleteLater()
             # built in the next event, so the rows above and the controls here are two short blocks of the interface thread,
             # not one; a panel replaced before then takes the timer with it
             QTimer.singleShot(0, detail_holder, lambda holder=detail_holder, lay=detail_layout:
-                              build_detail(lay) if holder is detail_holder else None)
+                              build_detail_sliced(holder, lay, build_detail(lay)))
         else:
             if points_selected != built["points"]:
                 built["points"] = points_selected

@@ -8,6 +8,7 @@ entries, picture requests and panel rebuilds.
 import copy
 import math
 import os
+import re
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -358,6 +359,44 @@ class FastRotoTests(unittest.TestCase):
         self.assertNotEqual(count_after, count_before, "its key count follows the new key")
         self.assertEqual(count_after, "Key 1 / 3")
         self.assertEqual(self.window._panel_signature_shown, self.window._roto_panel_signature("r"))
+
+    def test_a_selection_change_builds_the_shape_controls_in_slices_with_the_same_widgets(self):
+        shapes = [blob(i) for i in range(6)]
+        viewer = self.open(shapes)
+        viewer.roto_selected_shape_index = 1
+        self.window.rebuild_properties_dock()
+        panel = self.window.properties.widget()
+        names = lambda: sorted(w.objectName() for w in panel.findChild(QWidget, "roto-shape-detail").findChildren(QWidget)
+                               if w.objectName().startswith(("roto-shape-", "roto-point-", "roto-spline-", "roto-key-", "roto-item-")))
+        whole_before = names()
+        self.assertGreater(len(whole_before), 40)
+        viewer.roto_selected_shape_index = 4
+        self.window._panel_rebuild_timer.stop()
+        self.window.command({"op": "set_shapes", "id": "r", "shapes": self._keyed_point(
+            [self._animated(s) for s in shapes], 4, 3)})
+        self.window._panel_rebuild_timer.stop()
+        self.window._run_panel_rebuild()
+        detail = panel.findChild(QWidget, "roto-shape-detail")
+        sizes = []
+        for _ in range(400):
+            APP.processEvents()
+            sizes.append(len(detail.findChildren(QWidget)))
+            if detail.minimumHeight() == 0 and sizes[-1] == sizes[-2 if len(sizes) > 1 else -1] and len(sizes) > 5:
+                break
+        self.assertEqual(panel.findChild(QLineEdit, "roto-shape-name").text(), "blob4")
+        self.assertGreater(len(set(sizes)), 2, "the controls arrive over several events, not in one")
+        strip = lambda items: sorted(re.sub(r"-\d+$", "", name) for name in items)
+        self.assertEqual(strip(names()), strip(whole_before), "the slices end with every control a whole build has")
+        self.assertEqual(names().count("roto-shape-opacity"), 1)
+        self.assertEqual(detail.minimumHeight(), 0, "the height held while the controls were added is released")
+
+    @staticmethod
+    def _animated(shape):
+        shape = copy.deepcopy(shape)
+        for point in shape["points"]:
+            point["x"] = {"value": point["x"], "curve": {"interpolation": "smooth",
+                                                          "keys": [{"frame": 1, "value": point["x"]}, {"frame": 3, "value": point["x"]}]}}
+        return shape
 
     @staticmethod
     def _keyed_point(shapes, shape_index, point_index):

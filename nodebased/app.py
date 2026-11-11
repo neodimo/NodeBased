@@ -11468,8 +11468,9 @@ class Window(QMainWindow):
             return
         self.set_time(**{name: value})
 
-    def sync_timeline(self):
-        """Push document time into the widgets without re-emitting edits back into the dispatcher."""
+    def sync_timeline(self, marks_soon=False):
+        """Push document time into the widgets without re-emitting edits back into the dispatcher. `marks_soon` leaves the strip's
+        cached and keyed frame marks to the next event (15 ms on a 20-shape Roto): a drag's release sets them straight after it."""
         time_range = self.dispatcher.document["time"]
         old_playhead = self.frame_slider._visual_value
         widgets = (self.frame_first, self.frame_last, self.frame_current, self.frame_slider,
@@ -11498,7 +11499,12 @@ class Window(QMainWindow):
         span = time_range["last"] - time_range["first"] + 1
         seconds = span / float(time_range["fps"])
         self.frame_info.setText(f"{span} frame{'' if span == 1 else 's'} · {seconds:.2f} s")
-        self.refresh_timeline_marks()
+        if marks_soon:
+            if not getattr(self, "_marks_soon_pending", False):
+                self._marks_soon_pending = True
+                QTimer.singleShot(40, self, self._refresh_timeline_marks_now)
+        else:
+            self.refresh_timeline_marks()
         self.refresh_animated_panel()
         self._direct_frame_moved()
 
@@ -11530,6 +11536,10 @@ class Window(QMainWindow):
                     or (document.get("expressions") or {}).get(key)
                     or contains_curve(payload.get("shapes", []))):
             self.refresh_panel_soon(lambda: self.inspect(self.graph.selected_id()))
+
+    def _refresh_timeline_marks_now(self):
+        self._marks_soon_pending = False
+        self.refresh_timeline_marks()
 
     def refresh_timeline_marks(self):
         """Push the cached-frame and keyed-frame sets onto the strip.
@@ -13147,7 +13157,7 @@ class Window(QMainWindow):
                 self._panel_cache_stamp_seen = self._panel_cache_stamp()
         # Undo, project load and agent "time" edits all land here, so the strip follows the
         # document rather than only the widget that happened to be dragged.
-        self.sync_timeline()
+        self.sync_timeline(marks_soon=bool(command) and command.get("op") in ("set_shapes", "set_paint_items"))
         self.viewer.sync_inputs()
         self.sync_viewer_look()
         self.sync_viewer_frame()

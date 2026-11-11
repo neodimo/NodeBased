@@ -994,10 +994,14 @@ SPAN_TARGETS = ("Window.preview_ready", "Window._show_image", "Window.request_pr
                 "Viewer._flush_drag_preview", "Viewer.paintEvent", "Viewer.drawForeground", "Viewer.paint_overlays",
                 "Viewer._preview_roto_drag", "Viewer._preview_document_drag", "Window.refresh_timeline_marks",
                 "Window.update_status_summary", "Window._offer_direct", "Window._frame_viewer_to", "Window._adapt_playback_proxy",
-                "Window.update_corner_readout", "Window.refresh_output_preview", "Window.start_preview")
+                "Window.update_corner_readout", "Window.refresh_output_preview", "Window.start_preview",
+                "Window.after_command", "Window.sync_timeline", "Window.sync_viewer_look", "Window.sync_viewer_frame",
+                "Window.sync_viewer_knobs", "Window.update_title", "Window.render_identity", "Window.refresh_panel_soon",
+                "Window._commit_roto_shapes", "Window._commit_roto_drag_now", "Window._roto_panel_signature",
+                "Dispatcher.execute", "NodeGraph.rebuild", "Window.viewport_set_document")
 
 
-def stall_stacks(sampler, heartbeat, begin, end, over=50.0, count=8):
+def stall_stacks(sampler, heartbeat, begin, end, over=50.0, count=24):
     """For each GUI stall over `over` ms between `begin` and `end`: when it began, how long it lasted, and the frames (outside this
     tool) most of its samples were in, so a stall is named by the code that held the thread."""
     inside = [begin] + [b for b in heartbeat.beats if begin <= b <= end] + [end]
@@ -1020,7 +1024,9 @@ def stall_stacks(sampler, heartbeat, begin, end, over=50.0, count=8):
 
 def install_spans(recorder, window_class, viewer_class, names=SPAN_TARGETS):
     """Wrap each named method so every call is stamped (GUI thread and render thread alike; the name says which class)."""
-    classes = {"Window": window_class, "Viewer": viewer_class}
+    from nodebased.core import Dispatcher
+    from nodebased.app import Graph as NodeGraph
+    classes = {"Window": window_class, "Viewer": viewer_class, "Dispatcher": Dispatcher, "NodeGraph": NodeGraph}
     for name in names:
         class_name, _, attribute = name.partition(".")
         owner = classes[class_name]
