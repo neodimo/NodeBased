@@ -173,10 +173,10 @@ class RotoListTests(RotoListBase):
         menu = tree.build_menu()
         texts = [a.text() for a in menu.actions() if a.text()]
         # Nuke's commands, then "Fit to edges" (lane 9 step I1), "Track points" (step I2) and "Fill in-betweens"
-        # (lane 2 step I3) and "Shapes from matte" (lane 2 step I8), past Nuke, last.
+        # (lane 2 step I3), "Reduce keys..." (lane 9 step I9) and "Shapes from matte" (lane 2 step I8), past Nuke, last.
         self.assertEqual(texts, ["Add new layer", "Duplicate", "Copy", "Cut", "Paste", "Delete",
                                  "Set lifetime / frame range", "Planar-track", "Fit to edges", "Track points",
-                                 "Fill in-betweens", "Shapes from matte"])
+                                 "Fill in-betweens", "Reduce keys\u2026", "Shapes from matte"])
         self.assertEqual([a.text() for a in menu.findChild(type(menu), "roto-list-copy-menu").actions()], ["Curve"])
         self.assertEqual([a.text() for a in menu.findChild(type(menu), "roto-list-paste-menu").actions()], ["Spline"])
 
