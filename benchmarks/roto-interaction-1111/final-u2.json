@@ -1,0 +1,2416 @@
+{
+ "tool": "benchmark_roto_interaction",
+ "platform": "xcb",
+ "display": ":0",
+ "python": "3.12.13",
+ "label": "u2-final",
+ "size": "1080p",
+ "cases": {
+  "realistic": {
+   "actions": {
+    "tool_switch_keys": {
+     "label": "tool_switch_keys",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 5,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 15,
+      "median": 7.62,
+      "p95": 8.7,
+      "max": 8.75
+     },
+     "click_overlay_ms": {
+      "n": 15,
+      "median": 17.39,
+      "p95": 19.33,
+      "max": 19.64
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "repeats": 3
+    },
+    "tool_switch_toolbar": {
+     "label": "tool_switch_toolbar",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 4,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 12,
+      "median": 2.94,
+      "p95": 3.18,
+      "max": 3.21
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 20.7,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 24.2,
+     "drag_gap_cpu": {
+      "gaps": 2,
+      "gap_ms_total": 49.0,
+      "gui_cpu_ms_in_gaps": 45.7
+     },
+     "drag_gui_busy_gaps_over_10": 3,
+     "repeats": 3
+    },
+    "draw_bezier": {
+     "label": "draw_bezier",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 3,
+       "median": 0.21,
+       "p95": 12.65,
+       "max": 14.03
+      },
+      "evaluate_ms": {
+       "n": 3,
+       "median": 42.25,
+       "p95": 42.39,
+       "max": 42.4
+      },
+      "convert_ms": {
+       "n": 3,
+       "median": 3.71,
+       "p95": 42.04,
+       "max": 46.3
+      },
+      "emit_to_ready_ms": {
+       "n": 3,
+       "median": 0.08,
+       "p95": 45.26,
+       "max": 50.28
+      },
+      "ready_to_shown_ms": {
+       "n": 3,
+       "median": 3.47,
+       "p95": 5.32,
+       "max": 5.53
+      }
+     },
+     "events_posted": 26,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 78,
+      "median": 0.12,
+      "p95": 0.38,
+      "max": 50.93
+     },
+     "click_overlay_ms": {
+      "n": 78,
+      "median": 4.83,
+      "p95": 5.72,
+      "max": 59.28
+     },
+     "renders_requested": 3,
+     "renders_started": 3,
+     "pictures_shown": 3,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 3,
+      "median": 85.07,
+      "p95": 103.27,
+      "max": 103.27
+     },
+     "last_picture_after_last_event_ms": 330.4,
+     "undo_steps_added": 1,
+     "panel_update_ms": 24.6,
+     "panel_done_after_release_ms": 219.0,
+     "post_release_stall_ms": 71.3,
+     "post_release_stalls_over_50": 3,
+     "drag_stall_ms": 5.4,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 0,
+     "repeats": 3
+    },
+    "click_select": {
+     "label": "click_select",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 12,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 36,
+      "median": 6.91,
+      "p95": 16.38,
+      "max": 17.61
+     },
+     "click_overlay_ms": {
+      "n": 36,
+      "median": 11.85,
+      "p95": 21.41,
+      "max": 22.61
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 2.2,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 21.4,
+     "drag_gap_cpu": {
+      "gaps": 5,
+      "gap_ms_total": 109.5,
+      "gui_cpu_ms_in_gaps": 99.3
+     },
+     "drag_gui_busy_gaps_over_10": 6,
+     "repeats": 3
+    },
+    "marquee": {
+     "label": "marquee",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.19,
+      "p95": 0.54,
+      "max": 2.63
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 4.81,
+      "p95": 5.97,
+      "max": 7.59
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 0.53,
+      "p95": 1.07,
+      "max": 1.12
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 7.71,
+      "p95": 14.33,
+      "max": 15.06
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 13.0,
+      "p95": 19.29,
+      "max": 19.99
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 2.8,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 16.6,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 1,
+     "repeats": 3
+    },
+    "drag_point": {
+     "label": "drag_point",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 28,
+       "median": 0.17,
+       "p95": 3.71,
+       "max": 16.08
+      },
+      "evaluate_ms": {
+       "n": 28,
+       "median": 13.92,
+       "p95": 15.73,
+       "max": 62.59
+      },
+      "convert_ms": {
+       "n": 28,
+       "median": 3.93,
+       "p95": 14.22,
+       "max": 39.39
+      },
+      "emit_to_ready_ms": {
+       "n": 28,
+       "median": 0.12,
+       "p95": 31.78,
+       "max": 345.39
+      },
+      "ready_to_shown_ms": {
+       "n": 28,
+       "median": 3.35,
+       "p95": 3.94,
+       "max": 4.2
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.29,
+      "p95": 0.54,
+      "max": 1.51
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 7.14,
+      "p95": 15.39,
+      "max": 22.12
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 1.31,
+      "p95": 9.58,
+      "max": 11.83
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 33.14,
+      "p95": 49.17,
+      "max": 50.87
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 44.08,
+      "p95": 65.84,
+      "max": 68.19
+     },
+     "renders_requested": 28,
+     "renders_started": 28,
+     "pictures_shown": 28,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 62.7,
+      "p95": 95.6,
+      "max": 98.97
+     },
+     "last_picture_after_last_event_ms": 607.0,
+     "undo_steps_added": 1,
+     "panel_update_ms": 18.4,
+     "panel_done_after_release_ms": 195.6,
+     "post_release_stall_ms": 499.9,
+     "post_release_stalls_over_50": 3,
+     "drag_stall_ms": 18.6,
+     "drag_gap_cpu": {
+      "gaps": 5,
+      "gap_ms_total": 74.8,
+      "gui_cpu_ms_in_gaps": 40.7
+     },
+     "drag_gui_busy_gaps_over_10": 9,
+     "repeats": 3
+    },
+    "drag_feather": {
+     "label": "drag_feather",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 26,
+       "median": 5.65,
+       "p95": 7.65,
+       "max": 17.44
+      },
+      "evaluate_ms": {
+       "n": 26,
+       "median": 14.52,
+       "p95": 17.72,
+       "max": 103.58
+      },
+      "convert_ms": {
+       "n": 26,
+       "median": 3.72,
+       "p95": 15.12,
+       "max": 40.01
+      },
+      "emit_to_ready_ms": {
+       "n": 26,
+       "median": 0.4,
+       "p95": 36.64,
+       "max": 472.42
+      },
+      "ready_to_shown_ms": {
+       "n": 26,
+       "median": 3.4,
+       "p95": 4.07,
+       "max": 4.08
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.29,
+      "p95": 0.63,
+      "max": 1.15
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 7.99,
+      "p95": 16.92,
+      "max": 19.91
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 1.71,
+      "p95": 10.71,
+      "max": 11.75
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 32.32,
+      "p95": 47.38,
+      "max": 49.05
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 39.8,
+      "p95": 76.54,
+      "max": 79.45
+     },
+     "renders_requested": 26,
+     "renders_started": 26,
+     "pictures_shown": 26,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 62.83,
+      "p95": 89.3,
+      "max": 92.23
+     },
+     "last_picture_after_last_event_ms": 771.0,
+     "undo_steps_added": 1,
+     "panel_update_ms": 27.2,
+     "panel_done_after_release_ms": 203.0,
+     "post_release_stall_ms": 526.5,
+     "post_release_stalls_over_50": 3,
+     "drag_stall_ms": 17.5,
+     "drag_gap_cpu": {
+      "gaps": 6,
+      "gap_ms_total": 87.1,
+      "gui_cpu_ms_in_gaps": 52.5
+     },
+     "drag_gui_busy_gaps_over_10": 8,
+     "repeats": 3
+    },
+    "drag_shape": {
+     "label": "drag_shape",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 27,
+       "median": 5.87,
+       "p95": 6.83,
+       "max": 20.38
+      },
+      "evaluate_ms": {
+       "n": 27,
+       "median": 15.2,
+       "p95": 49.77,
+       "max": 67.85
+      },
+      "convert_ms": {
+       "n": 27,
+       "median": 4.72,
+       "p95": 7.6,
+       "max": 38.26
+      },
+      "emit_to_ready_ms": {
+       "n": 27,
+       "median": 0.6,
+       "p95": 9.22,
+       "max": 76.99
+      },
+      "ready_to_shown_ms": {
+       "n": 27,
+       "median": 3.23,
+       "p95": 3.77,
+       "max": 3.89
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.29,
+      "p95": 0.42,
+      "max": 2.62
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 8.02,
+      "p95": 15.61,
+      "max": 17.17
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 2.31,
+      "p95": 9.8,
+      "max": 11.96
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 33.96,
+      "p95": 50.87,
+      "max": 52.67
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 43.71,
+      "p95": 68.81,
+      "max": 71.34
+     },
+     "renders_requested": 27,
+     "renders_started": 27,
+     "pictures_shown": 27,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 65.03,
+      "p95": 103.18,
+      "max": 106.83
+     },
+     "last_picture_after_last_event_ms": 346.0,
+     "undo_steps_added": 1,
+     "panel_update_ms": 30.2,
+     "panel_done_after_release_ms": 212.7,
+     "post_release_stall_ms": 507.7,
+     "post_release_stalls_over_50": 3,
+     "drag_stall_ms": 18.8,
+     "drag_gap_cpu": {
+      "gaps": 3,
+      "gap_ms_total": 42.9,
+      "gui_cpu_ms_in_gaps": 25.8
+     },
+     "drag_gui_busy_gaps_over_10": 10,
+     "repeats": 3
+    },
+    "paint_stroke": {
+     "label": "paint_stroke",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 54,
+       "median": 0.15,
+       "p95": 1.22,
+       "max": 10.51
+      },
+      "evaluate_ms": {
+       "n": 54,
+       "median": 19.39,
+       "p95": 27.25,
+       "max": 83.67
+      },
+      "convert_ms": {
+       "n": 54,
+       "median": 1.26,
+       "p95": 2.37,
+       "max": 11.13
+      },
+      "emit_to_ready_ms": {
+       "n": 54,
+       "median": 1.3,
+       "p95": 2.93,
+       "max": 40.53
+      },
+      "ready_to_shown_ms": {
+       "n": 54,
+       "median": 3.59,
+       "p95": 4.14,
+       "max": 4.3
+      }
+     },
+     "events_posted": 122,
+     "moves_posted": 120,
+     "moves_handled": 120,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 360,
+      "median": 0.31,
+      "p95": 0.53,
+      "max": 2.71
+     },
+     "move_overlay_ms": {
+      "n": 360,
+      "median": 8.94,
+      "p95": 23.85,
+      "max": 30.21
+     },
+     "move_late_ms": {
+      "n": 360,
+      "median": 2.8,
+      "p95": 15.11,
+      "max": 24.34
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 25.34,
+      "p95": 49.96,
+      "max": 52.57
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 35.13,
+      "p95": 73.26,
+      "max": 76.99
+     },
+     "renders_requested": 54,
+     "renders_started": 54,
+     "pictures_shown": 54,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 63.47,
+      "p95": 106.07,
+      "max": 110.2
+     },
+     "last_picture_after_last_event_ms": 277.9,
+     "undo_steps_added": 1,
+     "panel_update_ms": 14.4,
+     "panel_done_after_release_ms": 204.7,
+     "post_release_stall_ms": 71.0,
+     "post_release_stalls_over_50": 2,
+     "drag_stall_ms": 29.9,
+     "drag_gap_cpu": {
+      "gaps": 25,
+      "gap_ms_total": 526.9,
+      "gui_cpu_ms_in_gaps": 103.4
+     },
+     "drag_gui_busy_gaps_over_10": 30,
+     "repeats": 3
+    },
+    "shape_list_row": {
+     "label": "shape_list_row",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 6,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 18,
+      "median": 8.88,
+      "p95": 10.73,
+      "max": 10.82
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 19.6,
+     "panel_done_after_release_ms": 180.9,
+     "post_release_stall_ms": 501.7,
+     "post_release_stalls_over_50": 2,
+     "drag_stall_ms": 658.7,
+     "drag_gap_cpu": {
+      "gaps": 11,
+      "gap_ms_total": 2824.9,
+      "gui_cpu_ms_in_gaps": 2777.6
+     },
+     "drag_gui_busy_gaps_over_10": 11,
+     "repeats": 3
+    },
+    "knob_opacity": {
+     "label": "knob_opacity",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 124,
+       "median": 1.08,
+       "p95": 2.29,
+       "max": 33.89
+      },
+      "evaluate_ms": {
+       "n": 123,
+       "median": 15.24,
+       "p95": 57.67,
+       "max": 62.26
+      },
+      "convert_ms": {
+       "n": 123,
+       "median": 5.42,
+       "p95": 37.38,
+       "max": 39.79
+      },
+      "emit_to_ready_ms": {
+       "n": 123,
+       "median": 0.15,
+       "p95": 0.39,
+       "max": 1.7
+      },
+      "ready_to_shown_ms": {
+       "n": 124,
+       "median": 3.63,
+       "p95": 4.45,
+       "max": 5.74
+      }
+     },
+     "events_posted": 42,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 126,
+      "median": 160.84,
+      "p95": 166.51,
+      "max": 167.73
+     },
+     "renders_requested": 41,
+     "renders_started": 41,
+     "pictures_shown": 41,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 131.0,
+     "undo_steps_added": 1,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 87.9,
+     "post_release_stalls_over_50": 1,
+     "drag_stall_ms": 70.4,
+     "drag_gap_cpu": {
+      "gaps": 209,
+      "gap_ms_total": 6304.6,
+      "gui_cpu_ms_in_gaps": 4395.5
+     },
+     "drag_gui_busy_gaps_over_10": 210,
+     "repeats": 3
+    },
+    "step_frame_keyed": {
+     "label": "step_frame_keyed",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 24,
+       "median": 0.76,
+       "p95": 8.78,
+       "max": 9.93
+      },
+      "evaluate_ms": {
+       "n": 24,
+       "median": 41.93,
+       "p95": 187.96,
+       "max": 290.93
+      },
+      "convert_ms": {
+       "n": 24,
+       "median": 4.58,
+       "p95": 35.54,
+       "max": 38.71
+      },
+      "emit_to_ready_ms": {
+       "n": 24,
+       "median": 0.13,
+       "p95": 0.2,
+       "max": 42.17
+      },
+      "ready_to_shown_ms": {
+       "n": 24,
+       "median": 3.34,
+       "p95": 4.43,
+       "max": 6.08
+      }
+     },
+     "events_posted": 8,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 24,
+      "median": 75.49,
+      "p95": 123.3,
+      "max": 148.39
+     },
+     "renders_requested": 8,
+     "renders_started": 8,
+     "pictures_shown": 8,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 404.1,
+     "undo_steps_added": 8,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 73.2,
+     "post_release_stalls_over_50": 1,
+     "drag_stall_ms": 256.5,
+     "drag_gap_cpu": {
+      "gaps": 35,
+      "gap_ms_total": 1502.0,
+      "gui_cpu_ms_in_gaps": 991.9
+     },
+     "drag_gui_busy_gaps_over_10": 36,
+     "repeats": 3
+    },
+    "undo_redo": {
+     "label": "undo_redo",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 6,
+       "median": 34.42,
+       "p95": 36.36,
+       "max": 36.74
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 6,
+       "median": 2.34,
+       "p95": 3.24,
+       "max": 3.32
+      }
+     },
+     "events_posted": 6,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 18,
+      "median": 62.39,
+      "p95": 72.4,
+      "max": 72.89
+     },
+     "renders_requested": 6,
+     "renders_started": 6,
+     "pictures_shown": 6,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 126.5,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 74.2,
+     "post_release_stalls_over_50": 1,
+     "drag_stall_ms": 76.4,
+     "drag_gap_cpu": {
+      "gaps": 12,
+      "gap_ms_total": 421.6,
+      "gui_cpu_ms_in_gaps": 350.3
+     },
+     "drag_gui_busy_gaps_over_10": 13,
+     "repeats": 3
+    }
+   },
+   "proxy_tier": 1
+  },
+  "light": {
+   "actions": {
+    "tool_switch_keys": {
+     "label": "tool_switch_keys",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 5,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 15,
+      "median": 6.63,
+      "p95": 8.38,
+      "max": 8.45
+     },
+     "click_overlay_ms": {
+      "n": 15,
+      "median": 14.68,
+      "p95": 17.13,
+      "max": 17.4
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "repeats": 3
+    },
+    "tool_switch_toolbar": {
+     "label": "tool_switch_toolbar",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 4,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 12,
+      "median": 1.61,
+      "p95": 2.35,
+      "max": 2.38
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 19.6,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 24.1,
+     "drag_gap_cpu": {
+      "gaps": 2,
+      "gap_ms_total": 45.2,
+      "gui_cpu_ms_in_gaps": 39.9
+     },
+     "drag_gui_busy_gaps_over_10": 3,
+     "repeats": 3
+    },
+    "draw_bezier": {
+     "label": "draw_bezier",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 3,
+       "median": 0.12,
+       "p95": 6.94,
+       "max": 7.7
+      },
+      "evaluate_ms": {
+       "n": 3,
+       "median": 1.25,
+       "p95": 3.8,
+       "max": 4.08
+      },
+      "convert_ms": {
+       "n": 3,
+       "median": 2.09,
+       "p95": 13.78,
+       "max": 15.08
+      },
+      "emit_to_ready_ms": {
+       "n": 3,
+       "median": 2.88,
+       "p95": 3.76,
+       "max": 3.86
+      },
+      "ready_to_shown_ms": {
+       "n": 3,
+       "median": 3.56,
+       "p95": 3.75,
+       "max": 3.77
+      }
+     },
+     "events_posted": 26,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 78,
+      "median": 0.11,
+      "p95": 0.36,
+      "max": 7.15
+     },
+     "click_overlay_ms": {
+      "n": 78,
+      "median": 2.59,
+      "p95": 3.91,
+      "max": 11.38
+     },
+     "renders_requested": 3,
+     "renders_started": 3,
+     "pictures_shown": 3,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 3,
+      "median": 23.36,
+      "p95": 23.42,
+      "max": 23.42
+     },
+     "last_picture_after_last_event_ms": 61.6,
+     "undo_steps_added": 1,
+     "panel_update_ms": 25.9,
+     "panel_done_after_release_ms": 187.5,
+     "post_release_stall_ms": 41.9,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 3.6,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 0,
+     "repeats": 3
+    },
+    "click_select": {
+     "label": "click_select",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 12,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 36,
+      "median": 1.96,
+      "p95": 4.85,
+      "max": 5.06
+     },
+     "click_overlay_ms": {
+      "n": 36,
+      "median": 4.88,
+      "p95": 8.1,
+      "max": 8.5
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 1.5,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 7.2,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 0,
+     "repeats": 3
+    },
+    "marquee": {
+     "label": "marquee",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.24,
+      "p95": 0.5,
+      "max": 2.56
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 2.36,
+      "p95": 3.2,
+      "max": 4.51
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 0.66,
+      "p95": 1.06,
+      "max": 1.15
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 2.08,
+      "p95": 4.13,
+      "max": 4.34
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 4.31,
+      "p95": 6.68,
+      "max": 6.88
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 1.7,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 4.1,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 0,
+     "repeats": 3
+    },
+    "drag_point": {
+     "label": "drag_point",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 29,
+       "median": 0.15,
+       "p95": 2.91,
+       "max": 7.41
+      },
+      "evaluate_ms": {
+       "n": 29,
+       "median": 2.14,
+       "p95": 4.22,
+       "max": 9.0
+      },
+      "convert_ms": {
+       "n": 29,
+       "median": 1.48,
+       "p95": 2.75,
+       "max": 22.97
+      },
+      "emit_to_ready_ms": {
+       "n": 29,
+       "median": 0.09,
+       "p95": 0.91,
+       "max": 4.22
+      },
+      "ready_to_shown_ms": {
+       "n": 29,
+       "median": 3.49,
+       "p95": 3.94,
+       "max": 4.16
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.32,
+      "p95": 0.45,
+      "max": 1.61
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 2.83,
+      "p95": 10.3,
+      "max": 11.57
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 0.74,
+      "p95": 7.38,
+      "max": 9.04
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 5.82,
+      "p95": 7.27,
+      "max": 7.38
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 11.55,
+      "p95": 19.08,
+      "max": 19.66
+     },
+     "renders_requested": 29,
+     "renders_started": 29,
+     "pictures_shown": 29,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 23.96,
+      "p95": 31.54,
+      "max": 32.37
+     },
+     "last_picture_after_last_event_ms": 70.0,
+     "undo_steps_added": 1,
+     "panel_update_ms": 30.5,
+     "panel_done_after_release_ms": 195.7,
+     "post_release_stall_ms": 202.7,
+     "post_release_stalls_over_50": 2,
+     "drag_stall_ms": 8.7,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 0,
+     "repeats": 3
+    },
+    "drag_feather": {
+     "label": "drag_feather",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.23,
+      "p95": 0.47,
+      "max": 0.73
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 1.6,
+      "p95": 2.67,
+      "max": 3.19
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 0.43,
+      "p95": 1.05,
+      "max": 2.26
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 2.18,
+      "p95": 4.44,
+      "max": 4.68
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 4.49,
+      "p95": 6.68,
+      "max": 6.92
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 1.5,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 4.3,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 0,
+     "repeats": 3
+    },
+    "drag_shape": {
+     "label": "drag_shape",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 29,
+       "median": 2.88,
+       "p95": 4.39,
+       "max": 10.48
+      },
+      "evaluate_ms": {
+       "n": 29,
+       "median": 3.28,
+       "p95": 7.97,
+       "max": 11.65
+      },
+      "convert_ms": {
+       "n": 29,
+       "median": 1.28,
+       "p95": 2.95,
+       "max": 10.72
+      },
+      "emit_to_ready_ms": {
+       "n": 29,
+       "median": 0.2,
+       "p95": 3.16,
+       "max": 5.29
+      },
+      "ready_to_shown_ms": {
+       "n": 29,
+       "median": 3.58,
+       "p95": 4.51,
+       "max": 5.51
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.26,
+      "p95": 0.47,
+      "max": 2.91
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 1.76,
+      "p95": 9.22,
+      "max": 11.62
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 0.58,
+      "p95": 3.54,
+      "max": 8.96
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 2.24,
+      "p95": 8.0,
+      "max": 8.16
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 5.2,
+      "p95": 14.32,
+      "max": 14.67
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 2,
+      "median": 25.24,
+      "p95": 30.38,
+      "max": 30.95
+     },
+     "last_picture_after_last_event_ms": 67.1,
+     "undo_steps_added": 1,
+     "panel_update_ms": 23.6,
+     "panel_done_after_release_ms": 181.5,
+     "post_release_stall_ms": 170.6,
+     "post_release_stalls_over_50": 2,
+     "drag_stall_ms": 8.6,
+     "drag_gap_cpu": {
+      "gaps": 0,
+      "gap_ms_total": 0,
+      "gui_cpu_ms_in_gaps": 0
+     },
+     "drag_gui_busy_gaps_over_10": 0,
+     "repeats": 3
+    },
+    "paint_stroke": {
+     "label": "paint_stroke",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 54,
+       "median": 0.14,
+       "p95": 0.47,
+       "max": 3.42
+      },
+      "evaluate_ms": {
+       "n": 54,
+       "median": 9.88,
+       "p95": 16.04,
+       "max": 47.2
+      },
+      "convert_ms": {
+       "n": 54,
+       "median": 1.07,
+       "p95": 2.06,
+       "max": 15.01
+      },
+      "emit_to_ready_ms": {
+       "n": 54,
+       "median": 0.87,
+       "p95": 2.07,
+       "max": 5.06
+      },
+      "ready_to_shown_ms": {
+       "n": 54,
+       "median": 3.36,
+       "p95": 4.3,
+       "max": 4.75
+      }
+     },
+     "events_posted": 122,
+     "moves_posted": 120,
+     "moves_handled": 120,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 360,
+      "median": 0.29,
+      "p95": 0.58,
+      "max": 1.42
+     },
+     "move_overlay_ms": {
+      "n": 360,
+      "median": 3.39,
+      "p95": 12.7,
+      "max": 18.67
+     },
+     "move_late_ms": {
+      "n": 360,
+      "median": 0.95,
+      "p95": 7.57,
+      "max": 12.31
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 5.06,
+      "p95": 11.71,
+      "max": 12.31
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 11.73,
+      "p95": 23.33,
+      "max": 24.46
+     },
+     "renders_requested": 54,
+     "renders_started": 54,
+     "pictures_shown": 54,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 27.53,
+      "p95": 46.56,
+      "max": 48.01
+     },
+     "last_picture_after_last_event_ms": 131.3,
+     "undo_steps_added": 1,
+     "panel_update_ms": 185.3,
+     "panel_done_after_release_ms": 349.4,
+     "post_release_stall_ms": 204.6,
+     "post_release_stalls_over_50": 1,
+     "drag_stall_ms": 18.8,
+     "drag_gap_cpu": {
+      "gaps": 8,
+      "gap_ms_total": 129.6,
+      "gui_cpu_ms_in_gaps": 22.2
+     },
+     "drag_gui_busy_gaps_over_10": 13,
+     "repeats": 3
+    },
+    "shape_list_row": {
+     "label": "shape_list_row",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      }
+     },
+     "events_posted": 6,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 18,
+      "median": 5.55,
+      "p95": 773.62,
+      "max": 1029.19
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": null,
+     "undo_steps_added": 0,
+     "panel_update_ms": 16.4,
+     "panel_done_after_release_ms": 177.3,
+     "post_release_stall_ms": 239.5,
+     "post_release_stalls_over_50": 2,
+     "drag_stall_ms": 243.9,
+     "drag_gap_cpu": {
+      "gaps": 8,
+      "gap_ms_total": 1131.0,
+      "gui_cpu_ms_in_gaps": 1102.1
+     },
+     "drag_gui_busy_gaps_over_10": 9,
+     "repeats": 3
+    },
+    "knob_opacity": {
+     "label": "knob_opacity",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 124,
+       "median": 0.29,
+       "p95": 1.19,
+       "max": 33.4
+      },
+      "evaluate_ms": {
+       "n": 123,
+       "median": 3.26,
+       "p95": 35.76,
+       "max": 38.95
+      },
+      "convert_ms": {
+       "n": 123,
+       "median": 2.73,
+       "p95": 11.11,
+       "max": 11.91
+      },
+      "emit_to_ready_ms": {
+       "n": 123,
+       "median": 0.16,
+       "p95": 1.64,
+       "max": 3.57
+      },
+      "ready_to_shown_ms": {
+       "n": 124,
+       "median": 3.61,
+       "p95": 4.34,
+       "max": 4.92
+      }
+     },
+     "events_posted": 42,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 126,
+      "median": 85.71,
+      "p95": 88.19,
+      "max": 169.47
+     },
+     "renders_requested": 41,
+     "renders_started": 41,
+     "pictures_shown": 41,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 73.9,
+     "undo_steps_added": 1,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 29.4,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 114.6,
+     "drag_gap_cpu": {
+      "gaps": 61,
+      "gap_ms_total": 1095.9,
+      "gui_cpu_ms_in_gaps": 705.1
+     },
+     "drag_gui_busy_gaps_over_10": 61,
+     "repeats": 3
+    },
+    "step_frame_keyed": {
+     "label": "step_frame_keyed",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 24,
+       "median": 0.21,
+       "p95": 4.24,
+       "max": 4.96
+      },
+      "evaluate_ms": {
+       "n": 24,
+       "median": 0.64,
+       "p95": 1.26,
+       "max": 1.8
+      },
+      "convert_ms": {
+       "n": 24,
+       "median": 1.84,
+       "p95": 14.12,
+       "max": 14.73
+      },
+      "emit_to_ready_ms": {
+       "n": 24,
+       "median": 0.73,
+       "p95": 6.24,
+       "max": 6.7
+      },
+      "ready_to_shown_ms": {
+       "n": 24,
+       "median": 3.51,
+       "p95": 4.04,
+       "max": 4.08
+      }
+     },
+     "events_posted": 8,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 24,
+      "median": 23.86,
+      "p95": 68.8,
+      "max": 92.45
+     },
+     "renders_requested": 8,
+     "renders_started": 8,
+     "pictures_shown": 8,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 50.9,
+     "undo_steps_added": 8,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 22.9,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 46.5,
+     "drag_gap_cpu": {
+      "gaps": 15,
+      "gap_ms_total": 339.1,
+      "gui_cpu_ms_in_gaps": 271.9
+     },
+     "drag_gui_busy_gaps_over_10": 15,
+     "repeats": 3
+    },
+    "undo_redo": {
+     "label": "undo_redo",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 6,
+       "median": 36.28,
+       "p95": 148.99,
+       "max": 186.03
+      },
+      "evaluate_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "convert_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "emit_to_ready_ms": {
+       "n": 0,
+       "median": null,
+       "p95": null,
+       "max": null
+      },
+      "ready_to_shown_ms": {
+       "n": 6,
+       "median": 2.7,
+       "p95": 3.0,
+       "max": 3.03
+      }
+     },
+     "events_posted": 6,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 18,
+      "median": 27.08,
+      "p95": 158.89,
+      "max": 202.5
+     },
+     "renders_requested": 6,
+     "renders_started": 6,
+     "pictures_shown": 6,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 90.5,
+     "undo_steps_added": 0,
+     "panel_update_ms": 11.1,
+     "panel_done_after_release_ms": 172.1,
+     "post_release_stall_ms": 27.4,
+     "post_release_stalls_over_50": 0,
+     "drag_stall_ms": 200.9,
+     "drag_gap_cpu": {
+      "gaps": 8,
+      "gap_ms_total": 194.1,
+      "gui_cpu_ms_in_gaps": 175.4
+     },
+     "drag_gui_busy_gaps_over_10": 9,
+     "repeats": 3
+    }
+   },
+   "proxy_tier": 1
+  }
+ }
+}

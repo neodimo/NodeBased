@@ -960,6 +960,10 @@ def merge(results):
         if rows:
             merged[key] = {"n": sum(r["n"] for r in rows), "median": round(statistics.median(r["median"] for r in rows), 2),
                            "p95": round(max(r["p95"] for r in rows), 2), "max": round(max(r["max"] for r in rows), 2)}
+    values = [r["last_picture_after_last_event_ms"] for r in results if r.get("last_picture_after_last_event_ms") is not None]
+    if values:
+        merged["last_picture_after_last_event_ms"] = round(statistics.median(values), 1)     # the median repeat, not the first (cold) one
+        merged["last_picture_after_last_event_worst_ms"] = round(max(values), 1)
     for key in ("moves_handled", "moves_coalesced", "renders_requested", "renders_started", "pictures_shown", "renders_dropped"):
         merged[key] = round(statistics.median(r[key] for r in results), 1)
     for key in ("panel_update_ms", "panel_done_after_release_ms", "post_release_stall_ms", "post_release_stalls_over_50",

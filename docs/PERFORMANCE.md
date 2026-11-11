@@ -443,6 +443,34 @@ Top costs on the GUI thread after the fixes (cProfile, realistic shot, cumulativ
 
 Next fixes, in order: stop asking for a picture during a brush stroke's drag, since the overlay already draws it (the benchmark counts 28 picture requests in a 120-move stroke and its later moves are consistent with the handovers delaying them; not yet confirmed by a profile); cache the document identity for a progressive refinement request and make `preview_ready` skip the status, topbar and floor-width updates when nothing changed (about 9 ms per picture); build the Roto panel lazily (tabs and collapsed sections built when opened, so the 1 s rebuild becomes a fraction of it) and skip the application event filter for events that are not mouse or key; cache the rasterised strokes already painted so a new stroke composites on top.
 
+### Roto interaction latency, U2 pass (11/11/2026)
+
+Same tool, same shot, same display, three repeats, real Qt events. Raw runs are in `benchmarks/roto-interaction-1111/` (`before-u2.json` is main before this step, `after-u2.json` the first pass of this step, `final-u2.json` all actions after the last change, `final2-u2.json` the drags, the stroke, draw and undo again with the repeat-median picture time; the machine was quiet except an idle test-suite wrapper). Median / p95 in milliseconds, realistic shot.
+
+| Action | Before: move overlay; picture after the release | U2 final: move overlay; picture after the release | Target |
+|---|---|---|---|
+| drag_point | 25.2 / 46.7; 1194 | 6.4 / 13.2; 354 | overlay p95 at most 16: met |
+| drag_feather | 17.9 / 36.5; 1302 | 6.6 / 15.2; 447 | met |
+| drag_shape | 30.3 / 49.8; 1257 | 8.1 / 15.8; 325 | met (15.75 is on the line) |
+| paint_stroke | 31.1 / 143.3; 4802 | 5.6 / 18.6; 248 (worst repeat 251) | overlay 16: over by 2.6; picture 250: met on the median, not on the worst repeat |
+| draw_bezier | -; - | -; 207 (worst repeat 296) | - |
+| undo_redo | -; 141 | -; 152 | unchanged |
+
+What was slow and what changed:
+
+- A painted stroke's picture took 2.1 to 4.8 s. The benchmark was part of the cause (see the last paragraph), but most of it was real: a finished brush stroke has build-up on, and `_distance_grid` computed every dab over the whole tile (about 1 000 dabs of 120 moves, each a full-tile sqrt, clip and blend, for every tile the stroke touches: 0.3 s of CPU). The build-up branch now computes each dab only inside the dab's own window, as the non-build-up branch already did. Pixels are identical: outside a dab's window the dab is exactly zero, and `1 - (1 - a)` is a fixed point of float32 arithmetic on every value this formula can produce, so a skipped pixel keeps the bits it had. `tests/test_roto_paint_stroke_cache.py` checks the windowed coverage against the plain every-dab-over-the-tile computation byte for byte (random strokes, hardness, dynamic hardness, pressure options, tile origins), and a tiled build-up stroke against the uncached render; 1 440 more random cases were compared against the previous function while writing it. With the per-tile stroke cache from the first pass (a new stroke paints only itself over the stored picture of the rest), a finished 120-move stroke over 30 strokes at 1080p is on screen about 58 ms after the render starts, 248 ms after the release.
+- The drag overlay: a drag's per-move preview deep-copied every part of the document except the node data (all nodes, curves, time) 20 to 60 times a drag, on the interface thread, about 6 ms each. A drag changes nothing but the one node's list, and the render worker only reads a drag's snapshot, so that copy is made once per drag (keyed on the document revision and frame) and dropped when the drag ends. Shape drag overlay p95 went 18.2 to 15.8 ms; a point drag was 13.9 / 13.2 and a feather drag 15.6 / 15.2 (the two runs).
+- The picture after a drag's release: 1.2 to 1.3 s before this step, 0.27 s in the first pass of this step, 0.33 to 0.45 s in the final runs with the repeat median (the first pass kept the first repeat's value; the tool now keeps the median and the worst).
+
+Still over target (realistic shot):
+
+- The interface thread still stalls 215 to 250 ms (worst repeat 500 ms in the all-actions run, where the other actions' work shares the process) in the second after a drag's release, against 50 ms. The tool now names each stall by the code that held the thread (`stall_stacks`): the commit of the edit in `mouseReleaseEvent` (56 ms, `_commit_roto_shapes`, `after_command`), the selected shape's controls built again in `rotopanel.build_detail` (83 ms of Python, about 130 widgets) and then about 230 ms inside Qt with no Python frame under it (style polish and layout of the new widgets, `knobfit.resizeEvent`). The panel's own update after the release is within target (17 to 30 ms for the in-place part), the rest is the build of the selected shape's controls. Next fix: build only the visible group of the selected shape's controls (keys and the points table on demand), reuse the widgets and set their values when the selection did not change, and disable updates while the rest is added.
+- The painted stroke's overlay (18.6 ms p95 against 16) and the shape drag (15.8, on the line): the remaining time is the interface thread waiting for the interpreter lock while the render thread does its Python parts of a tile (resolving the strokes, hashing them, `sticks`); each is a few ms per tile and the render thread is now busy more often because it no longer waits on a starved lock.
+- The drag-release click (39 to 40 ms median, 56 to 61 ms p95, against 50 ms) and a knob drag (161 / 167 ms in the all-actions run against 62 / 74 in the first pass; unexplained, likely the render thread now getting its share of the lock during the knob's pictures).
+- Not measured here: the RTX (the Roto path is CPU; no GPU code changed).
+
+How the benchmark was wrong, and what changed in it: the viewed node's first render was racing the first move (a view switch followed at once by a press), so the painted stroke's first moves were measured against a cold 1.3 s render of a picture the artist had not looked at yet; it now waits for the picture of the node it views, as an artist does before drawing. And its waits spun in `processEvents` without ever blocking, which held the interpreter lock and made the render thread ten times slower than it is in the application (`evaluate_ms` p95 978 ms against 320 ms with the same work); it now blocks in a Qt event loop, as the application does when idle. The before columns of the first table above were measured with the old harness; the before column here is `before-u2.json`, also the old harness, so the before numbers are pessimistic by that amount for the stroke and the picture times.
+
 ## Lane 8 step notes
 
 ### R6-1: the realistic comp with Grade, Transform, Blur and Merge resident on the GPU (10/25, step A of 3)
