@@ -1,3 +1,38 @@
+# NodeBased 0.55.0-preview.1
+
+Preview build of 0.55.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.55.0 release that follows.
+
+## What changed since 0.54.0
+
+- **Roto responds to clicks and drags.** Measured in a real window on a realistic shot (1080p, 20 keyed Bezier shapes, 30 RotoPaint strokes, a Merge and a Grade downstream), before the work started, in 0.54.0, and now:
+
+  | action | before | 0.54.0 | 0.55.0 |
+  | --- | ---: | ---: | ---: |
+  | drag a point, feather or shape: outline follows the cursor | 2 to 4 s | about 50 ms | 23 ms (41 ms at the slow end) |
+  | the picture during a drag | — | 75 to 100 ms | 65 ms |
+  | click a row in the shape list | 1.4 s | 89 ms | 3 ms |
+  | undo or redo | 1.3 s | 55 ms | 19 ms |
+  | step to a keyed frame | 2.8 s | 60 ms | 17 ms |
+  | a painted stroke's picture | — | 1.7 s | 1.2 s |
+
+  0.54.0 already carried the first half of this work, though its notes said otherwise. The cause was work done on every mouse move: the whole document copied, every shape re-resolved, and the Roto panel (about 280 widgets) rebuilt inside every click. Now each Roto and RotoPaint panel rebuilds once after you stop, the Viewer caches each shape's outline and copies only the shape a drag moves, a brush dab computes only its own window, and timeline marks are computed once per edit instead of on every picture. Drawing and brush results are identical pixel for pixel.
+- **GPU playback is fast again.** A change in 0.54.0 moved Roto's read-ahead matte into a separate process, which cost the GPU engine about 25 ms a frame copying the matte across (Radeon: 46 to 72 ms worst-case frame gaps, 24 to 14.5 fps on first play). The GPU engine now skips that process: 45 to 48 ms and 23 to 24 fps again. The CPU engine keeps it.
+
+## Known limits
+
+- A drag's outline is 14 to 26 ms per move against a 16 ms target, the Roto panel takes about a second to refresh after you release a drag, and a painted stroke takes 1.2 s to appear. These three are the next Roto step, already written.
+- GPU playback still misses steady 24 fps on the Radeon (45 to 47 ms at the 95th percentile against 41.7 ms). Two quick tries did not help; the next step is a design where the GPU draws straight into the picture the Viewer shows.
+- Roto mattes on the graphics card stay off by default (about 1e-5 from the processor matte at worst) until the tolerance is approved.
+- Still no comparison with a real Nuke render; pixel truth stays unmeasured until the reference pack (`tools/make_nuke_reference_pack.py`) is run in Nuke.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0 (big-endian, the default, is unaffected).
+- LensDistortion's polynomial, fisheye and beam-splitter models and its grid solve stay unsupported.
+
+## Moved to 0.56.0
+
+- Roto: drag outline under 16 ms, no freeze after a release, painted strokes under a quarter second.
+- 24 fps GPU playback on the Radeon.
+- Carried: a field-of-view limit for generated footage, re-anchored generation in shorter pieces, more camera-following benchmark scenes, and measuring the 2D nodes against real Nuke renders.
+
 # NodeBased 0.54.0 — Roto catches up with Nuke, then goes past it
 
 ## What changed since 0.53.0
