@@ -166,19 +166,23 @@ class FastRotoTests(unittest.TestCase):
         painter.end()
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=self.at(60, 60))
 
-    def test_a_heavy_roto_panel_rebuilds_once_after_a_burst_and_a_light_one_at_once(self):
+    def test_a_roto_panel_of_one_shape_or_twenty_rebuilds_once_after_a_burst(self):
         self.open([triangle()])
         builds = []
         original = self.window.build_node_panel
         self.window.build_node_panel = lambda key: builds.append(key) or original(key)
         self.window.command({"op": "set_shapes", "id": "r", "shapes": [triangle(), blob(1)]})
-        self.assertIn("r", builds)                                  # a light panel is rebuilt inside the command
+        self.assertEqual(builds, [])                                # a one-shape panel is 280 widgets: never built inside the command
+        self.assertTrue(self.window._panel_rebuild_timer.isActive())
+        self.window._panel_rebuild_timer.stop()
+        self.window._run_panel_rebuild()
+        self.assertEqual(builds, ["r"])
         self.close()
-        self.open([blob(i) for i in range(self.window.HEAVY_PANEL_ITEMS)])
+        self.open([blob(i) for i in range(self.window_items())])
         builds = []
         original = self.window.build_node_panel
         self.window.build_node_panel = lambda key: builds.append(key) or original(key)
-        shapes = [blob(i) for i in range(self.window.HEAVY_PANEL_ITEMS)]
+        shapes = [blob(i) for i in range(self.window_items())]
         for count in (1, 2, 3, 4):
             self.window.command({"op": "set_shapes", "id": "r", "shapes": shapes[:-1] + [blob(count)]})
         self.assertEqual(builds, [])                                # nothing rebuilt inside the burst
@@ -239,7 +243,7 @@ class FastRotoTests(unittest.TestCase):
         self.assertEqual(builds, ["r"])
 
     def window_items(self):
-        return Window.HEAVY_PANEL_ITEMS
+        return max(Window.HEAVY_PANEL_ITEMS, 8)
 
     def test_the_panel_rebuild_waits_for_a_held_handle(self):
         shapes = [blob(i) for i in range(self.window_items())]
@@ -259,6 +263,49 @@ class FastRotoTests(unittest.TestCase):
         self.window._panel_rebuild_timer.stop()
         self.window._run_panel_rebuild()
         self.assertEqual(builds, ["r"])
+
+    def test_the_overlay_cache_paints_what_a_cold_paint_does_and_a_drag_copies_only_its_shape(self):
+        shapes = [blob(i) for i in range(6)]
+        viewer = self.open(shapes)
+        viewer.roto_selected_shape_index = 2
+        viewer.roto_selected_points = {(1, 3), (2, 4)}
+
+        def grab():
+            image = QImage(300, 300, QImage.Format.Format_ARGB32)
+            image.fill(0)
+            painter = QPainter(image)
+            viewer.paint_overlays(painter, QRectF(0, 0, 300, 300))
+            painter.end()
+            return image
+
+        viewer._roto_overlay_cache = (None, {})
+        cold = grab()
+        warm = grab()                                   # served from the per-shape cache
+        self.assertEqual(cold, warm)
+        self.assertEqual(len(viewer._roto_overlay_cache[1]), len(shapes))
+        cached_path = viewer._roto_overlay_cache[1][4]["path"]
+        viewer.roto_drag = {"kind": "tension", "scene": QPointF(5, 5)}      # a drag that moves no point
+        grab()
+        self.assertIs(viewer._roto_overlay_cache[1][4]["path"], cached_path)  # the outline is not rebuilt per paint
+        viewer.roto_drag = None
+        viewer.roto_selected_points = set()
+        self.assertNotEqual(grab(), cold)               # the selected points show without a rebuilt cache
+
+    def test_a_stroke_written_in_place_matches_the_copying_route_and_leaves_the_plate_alone(self):
+        import numpy as np
+        from nodebased import paint
+        from tests.test_roto_paint import stroke
+        plate = np.random.default_rng(3).random((40, 50, 4), dtype=np.float32)
+        before = plate.copy()
+        items = [stroke(points=[{"x": 8.0 + 5 * k, "y": 10.0 + 2 * k, "pressure": 0.8} for k in range(5)], name=f"s{i}")
+                 for i in range(4)]
+        painted = paint.rasterise(plate, items, 1, source=plate)
+        np.testing.assert_array_equal(plate, before)                         # the input is never written
+        expected = plate.copy()
+        for item in items:
+            expected = paint.apply_stroke(expected, item, 1, source=plate)   # the copying route
+        np.testing.assert_array_equal(painted, expected)
+        self.assertFalse(np.array_equal(painted, plate))
 
 
 if __name__ == "__main__":

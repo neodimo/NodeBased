@@ -1973,6 +1973,7 @@ class Viewer(PanZoomView):
         self._overlay_images = [None, None]
         self._reveal_onion_cache_key = None
         self._roto_resolved_cache = None
+        self._roto_overlay_cache = (None, {})            # per-shape outline path and handle circles of the last paint
         self._drag_preview_fn = None
         self._drag_preview_last = 0.0
         self._reveal_onion_cache_image = None
@@ -5639,8 +5640,16 @@ class Viewer(PanZoomView):
             hide_handles = bool(select_settings.get("hide_transform_handles", False) or
                                  (select_settings.get("hide_transform_handles_on_move", False) and moving))
             resolved = self._roto_resolved(context)
+            touched = ()
             if self.roto_drag is not None:
-                resolved = [{**shape, "points": [dict(point) for point in shape["points"]]} for shape in resolved]   # the drag moves points below
+                drag = self.roto_drag
+                if drag.get("kind") == "box":
+                    touched = {si for si, _ in drag.get("selected", ())}
+                elif "point" in drag:
+                    touched = {drag["point"][0]}
+                # the drag moves points below: copy the shapes it moves, never the other nineteen
+                resolved = [{**shape, "points": [dict(point) for point in shape["points"]]} if index in touched else shape
+                            for index, shape in enumerate(resolved)]
                 # Keep the wireframe responsive while the document remains unchanged.  The
                 # payload is only replaced on release, so a cancelled drag cannot leave a partial
                 # command behind.
@@ -5671,31 +5680,46 @@ class Viewer(PanZoomView):
                 painter.restore()
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            frame = int(self.window.dispatcher.document["time"]["current"])
+            rect = self.format_rect
+            overlay_stamp = (id(self.window.dispatcher), self.window.dispatcher.revision, context[0], frame, tier,
+                             (rect.left(), rect.top()) if rect is not None else None)
+            if self._roto_overlay_cache[0] != overlay_stamp:
+                self._roto_overlay_cache = (overlay_stamp, {})
+            overlay_entries = self._roto_overlay_cache[1]
+            radius = 5.0 / max(abs(self.view_zoom()), 0.05)
             for shape_index, shape in enumerate(resolved):
                 points = shape["points"]
                 closed = shape.get("closed", True)
                 if len(points) < (3 if closed else 2):
                     continue
-                path = QPainterPath(self._roto_scene_point(points[0], tier))
-                for index in range(len(points) if closed else len(points) - 1):
-                    start, end = points[index], points[(index + 1) % len(points)]
-                    path.cubicTo(self._roto_scene_point({"x": start["x"] + start["out_x"],
-                                                          "y": start["y"] + start["out_y"]}, tier),
-                                 self._roto_scene_point({"x": end["x"] + end["in_x"],
-                                                         "y": end["y"] + end["in_y"]}, tier),
-                                 self._roto_scene_point(end, tier))
-                frame = int(self.window.dispatcher.document["time"]["current"])
-                is_keyed = any(isinstance(value, dict) and value.get("curve") and
-                               any(item["frame"] == frame for item in value["curve"]["keys"])
-                               for point in context[2].get("shapes", [])[shape_index]["points"]
-                               for value in point.values())
-                is_animated = any(isinstance(value, dict) and value.get("curve")
-                                  for point in context[2].get("shapes", [])[shape_index]["points"]
-                                  for value in point.values())
-                overlay_color = shape.get("overlay_color")       # the list's Overlay color column; the outline only, never rendered
-                color = ("#9de7ff" if is_keyed else "#b08cff" if is_animated else
-                         QColor.fromRgbF(*[min(max(float(c), 0.0), 1.0) for c in overlay_color]).name() if overlay_color else
-                         "#ff986f" if shape["mode"] == "subtract" else self.roto_handle_colour(context[1]))
+                entry = None if shape_index in touched else overlay_entries.get(shape_index)
+                if entry is None or entry["shape"] is not shape:
+                    # The outline, its colour class and the handle centres only change with the document, the frame, the tier or
+                    # the view rectangle: a drag of one shape never recomputes the other nineteen.
+                    centers = [self._roto_scene_point(point, tier) for point in points]
+                    path = QPainterPath(centers[0])
+                    for index in range(len(points) if closed else len(points) - 1):
+                        start, end = points[index], points[(index + 1) % len(points)]
+                        path.cubicTo(self._roto_scene_point({"x": start["x"] + start["out_x"],
+                                                              "y": start["y"] + start["out_y"]}, tier),
+                                     self._roto_scene_point({"x": end["x"] + end["in_x"],
+                                                             "y": end["y"] + end["in_y"]}, tier),
+                                     centers[(index + 1) % len(points)])
+                    raw_points = context[2].get("shapes", [])[shape_index]["points"]
+                    is_keyed = any(isinstance(value, dict) and value.get("curve") and
+                                   any(item["frame"] == frame for item in value["curve"]["keys"])
+                                   for point in raw_points for value in point.values())
+                    is_animated = any(isinstance(value, dict) and value.get("curve")
+                                      for point in raw_points for value in point.values())
+                    overlay_color = shape.get("overlay_color")       # the list's Overlay color column; the outline only, never rendered
+                    color = ("#9de7ff" if is_keyed else "#b08cff" if is_animated else
+                             QColor.fromRgbF(*[min(max(float(c), 0.0), 1.0) for c in overlay_color]).name() if overlay_color else
+                             "#ff986f" if shape["mode"] == "subtract" else self.roto_handle_colour(context[1]))
+                    entry = {"shape": shape, "centers": centers, "path": path, "color": color, "circles": None}
+                    if shape_index not in touched:
+                        overlay_entries[shape_index] = entry
+                path, centers, color = entry["path"], entry["centers"], entry["color"]
                 pen = QPen(QColor(color), max(2.0, shape.get("stroke_width", 1.0) / tier) if not closed else 2)
                 if not closed:
                     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -5706,24 +5730,48 @@ class Viewer(PanZoomView):
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 if not hide_splines: painter.drawPath(path)
                 flagged_points = self.roto_flagged_points(context[0], frame, shape_index, len(points))
-                for point_index, point in enumerate(points):
-                    if hide_points: continue
-                    center = self._roto_scene_point(point, tier)
-                    radius = 5.0 / max(abs(self.view_zoom()), 0.05)
-                    painter.setBrush(QColor("#f4ce63") if (shape_index, point_index) in self.roto_selected_points else QColor("#202127"))
-                    if point_index in flagged_points:        # Track points: this point's match was below the threshold on this frame
-                        painter.setBrush(QColor("#ff3b30")); painter.drawEllipse(center, radius*1.5, radius*1.5)
-                    else:
-                        painter.drawEllipse(center, radius, radius)
-                    if select_settings.get("label_points", False):
-                        painter.setPen(QPen(QColor("#f4ce63"), 1))
-                        painter.drawText(QPointF(center.x()+radius, center.y()-radius), str(point_index+1))
-                    if not hide_handles and shape_index == self.roto_selected_shape_index:
-                        for hx, hy in (("in_x", "in_y"), ("out_x", "out_y")):
-                            if point[hx] == 0 and point[hy] == 0: continue
-                            handle = self._roto_scene_point({"x": point["x"]+point[hx], "y": point["y"]+point[hy]}, tier)
-                            painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(center, handle)
-                            painter.setBrush(QColor("#f4ce63")); painter.drawEllipse(handle, radius*.7, radius*.7)
+                if hide_points:
+                    pass
+                elif (shape_index != self.roto_selected_shape_index and not select_settings.get("label_points", False)):
+                    # A shape that is not selected shows only its point circles, all in the one pen: three batched fills
+                    # (plain, selected, flagged) instead of one drawEllipse call and brush change per point.
+                    chosen = tuple(sorted(pi for si, pi in self.roto_selected_points if si == shape_index))
+                    circle_key = (radius, chosen, tuple(sorted(flagged_points)), pen.widthF())
+                    circles = entry["circles"]
+                    if circles is None or circles[0] != circle_key:
+                        # Recorded once into a QPicture and replayed: every circle keeps its own outline, as drawn point by point,
+                        # but the 240 Python-to-Qt calls of twenty shapes become twenty replays.
+                        picture = QPicture()
+                        recorder = QPainter(picture)
+                        recorder.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                        recorder.setPen(pen)
+                        for point_index, center in enumerate(centers):
+                            if point_index in flagged_points:
+                                recorder.setBrush(QColor("#ff3b30")); recorder.drawEllipse(center, radius*1.5, radius*1.5)
+                            else:
+                                recorder.setBrush(QColor("#f4ce63") if point_index in chosen else QColor("#202127"))
+                                recorder.drawEllipse(center, radius, radius)
+                        recorder.end()
+                        circles = (circle_key, picture)
+                        entry["circles"] = circles
+                    painter.drawPicture(0, 0, circles[1])
+                else:
+                    for point_index, point in enumerate(points):
+                        center = centers[point_index]
+                        painter.setBrush(QColor("#f4ce63") if (shape_index, point_index) in self.roto_selected_points else QColor("#202127"))
+                        if point_index in flagged_points:        # Track points: this point's match was below the threshold on this frame
+                            painter.setBrush(QColor("#ff3b30")); painter.drawEllipse(center, radius*1.5, radius*1.5)
+                        else:
+                            painter.drawEllipse(center, radius, radius)
+                        if select_settings.get("label_points", False):
+                            painter.setPen(QPen(QColor("#f4ce63"), 1))
+                            painter.drawText(QPointF(center.x()+radius, center.y()-radius), str(point_index+1))
+                        if not hide_handles and shape_index == self.roto_selected_shape_index:
+                            for hx, hy in (("in_x", "in_y"), ("out_x", "out_y")):
+                                if point[hx] == 0 and point[hy] == 0: continue
+                                handle = self._roto_scene_point({"x": point["x"]+point[hx], "y": point["y"]+point[hy]}, tier)
+                                painter.setPen(QPen(QColor("#f4ce63"), 1)); painter.drawLine(center, handle)
+                                painter.setBrush(QColor("#f4ce63")); painter.drawEllipse(handle, radius*.7, radius*.7)
                 if (not hide_handles and shape_index == self.roto_selected_shape_index and shape.get("feather_model") == "edge"
                         and (shape["feather"] != 0 or any(p.get("feather_x", 0) or p.get("feather_y", 0) for p in points))):
                     feather_points = shape_model.feather_handle_points(points, shape["feather"])
@@ -15904,7 +15952,7 @@ class Window(QMainWindow):
             self.inspect(self.graph.selected_id(), reuse=True)
             self.refresh_timeline_marks()
 
-    HEAVY_PANEL_ITEMS = 8           # a Roto or RotoPaint with this many shapes or strokes builds a panel in about a second
+    HEAVY_PANEL_ITEMS = 0           # a Roto or RotoPaint panel is 280 widgets with one shape and 430 with twenty: 0.5 to 1.2 s either way
     PANEL_REBUILD_DELAY_MS = 150
 
     def _panel_is_heavy(self, key):

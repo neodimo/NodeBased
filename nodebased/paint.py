@@ -77,7 +77,9 @@ def _stroke_region(width, height, points, size, origin=(0, 0)):
 
 
 def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
-                 source_origin=(0, 0), source_bounds=None, plate=None):
+                 source_origin=(0, 0), source_bounds=None, plate=None, inplace=False):
+    """`inplace` lets a caller that owns `image` (rasterise's running result, shared with nothing) have a plain colour brush mark
+    written into it instead of into a full-frame copy: thirty strokes no longer copy a 1080p frame thirty times."""
     if not active(stroke, frame) or not stroke["visible"]:
         return image
     write_on = stroke.get("write_on")
@@ -123,7 +125,7 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None, origin=(0, 0),
         painted = source_patch * inverse
         painted[..., :3] += (rgba[:3] * rgba[3]) * alpha
         painted[..., 3:4] += rgba[3] * alpha
-        out = image.copy()
+        out = image if inplace and image.dtype == np.float32 else image.copy()
         out[y0:y1, x0:x1] = painted
         return np.asarray(out, np.float32)
     # The source is read-only here. Every tool below either builds a fresh output or explicitly
@@ -295,7 +297,7 @@ def rasterise(image, items, frame, source=None, reveal=None, origin=(0, 0),
             else:
                 out = apply_stroke(out, item, frame, source=clone_source, reveal=item_reveal, origin=origin,
                                    source_origin=origins, source_bounds=bounds,
-                                   plate=plate if item.get("source") == "background" else None)
+                                   plate=plate if item.get("source") == "background" else None, inplace=True)
         else:
             from . import roto
             if any(k in item for k in ("transform", "extra_matrix", "feather_falloff", "falloff_power", "invert", "closed",
