@@ -10663,6 +10663,7 @@ class Window(QMainWindow):
         self._progressive_target = None
         self._progressive_generation = None
         self._progressive_document = None
+        self._progressive_document_owned = False
         self._fluid_edit_bake = None
         self._fluid_stale = False
         self.playback_elapsed_frames = 0
@@ -18728,6 +18729,7 @@ class Window(QMainWindow):
             self._progressive_target = int(self.proxy.currentData())
             # A drag preview refines the dragged picture, not the document the drag has not yet changed.
             self._progressive_document = document_override
+            self._progressive_document_owned = bool(document_owned)     # a drag's own snapshot is read-only to the worker: its refinement shares it
             tier = 8
         elif progressive_target is not None and not self.playing:
             self._progressive_target = int(progressive_target)
@@ -18736,6 +18738,7 @@ class Window(QMainWindow):
             self._progressive_target = None
             self._progressive_generation = None
             self._progressive_document = None
+            self._progressive_document_owned = False
             tier = self.proxy.currentData() if tier_override is None else int(tier_override)
         bake = getattr(self, "_fluid_edit_bake", None)
         if bake is not None and not bake["done"]:
@@ -19990,7 +19993,9 @@ class Window(QMainWindow):
                 # Queued here, before this handler returns, so the coarse frame is never the newest
                 # request: frame_generation trails generation until the selected tier is on screen.
                 self.request_preview(tier_override=next_tier, progressive_target=target_tier,
-                                     document_override=self._progressive_document)
+                                     document_override=self._progressive_document,
+                                     document_owned=bool(self._progressive_document_owned
+                                                         and self._progressive_document is not None))
         if request.display and frame is not None and (fresh or catching_up):
             self._adapt_playback_proxy(request, self.last_frame_ms or float("inf"))
         if self._stop_refine_pending and not self.playing and request.tier == 2:

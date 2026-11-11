@@ -239,6 +239,18 @@ class FastRotoTests(unittest.TestCase):
         finally:
             app_module.DisplayCache.identity = original
 
+    def test_a_drag_snapshot_is_shared_by_its_refinement_not_copied(self):
+        self.open([blob(i) for i in range(3)])
+        window = self.window
+        snapshot = copy.deepcopy(window.dispatcher.document)
+        window.request_preview(progressive=True, document_override=snapshot, document_owned=True)
+        self.assertIs(window._progressive_document, snapshot)
+        self.assertTrue(window._progressive_document_owned)
+        window.request_preview(progressive=True, document_override=copy.deepcopy(snapshot))
+        self.assertFalse(window._progressive_document_owned)         # a caller that did not hand the snapshot over still gets a copy
+        window.request_preview()
+        self.assertIsNone(window._progressive_document)
+
     def test_the_panel_signature_accepts_an_animated_colour_channel(self):
         from nodebased import rotopanel
         shape = blob(0)
