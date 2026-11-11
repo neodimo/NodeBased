@@ -367,6 +367,62 @@ At 175 percent (`QT_SCALE_FACTOR=1.75`, 1400x780 window): 205 nodes drag at 41 r
 
 Still slow: a pan with most of a 500-node graph in view (27 ms a paint: mostly Qt drawing a few hundred items and sockets, plus about 3 ms for the minimap, which redraws every node on each scroll), and wheel zoom, where every zoom step redraws the cached pictures at the new scale.
 
+## Lane 9 step notes
+
+### Roto interaction latency (11/10/2026, step U1)
+
+What was slow: with the realistic shot (a 1080p textured plate, a Roto of 20 closed Bezier shapes of 12 points keyed on 6 of 48 frames, a RotoPaint of 30 strokes, a Merge and a Grade), every mouse move over the viewer cost 50 to 100 ms of Python before it painted: each move built a full copy of the document for its picture, asked every upstream node for its cache identity, resolved every shape's animation again, and rebuilt the Roto properties panel (about 1.2 s for 20 shapes). The moves queued behind each other, so the overlay followed the cursor several seconds late. A marquee drag also raised an error on every repaint.
+
+Measured with `tools/benchmark_roto_interaction.py` on the real display (DISPLAY=:0, xcb), real Qt mouse and key events through the event loop, three repeats per action, quiet machine (no integrator suite running), median / p95 in milliseconds. "Move overlay" is the event's scheduled time to the end of the viewer paint that follows it; "click overlay" the same for a press, release or key; "picture age" the age of the edit shown in each picture painted during the drag. Results: `benchmarks/roto-interaction-1110/` (before-main.json, after-branch.json, after-profile-realistic.json).
+
+Realistic shot:
+
+| Action | Before (main): move overlay; click overlay; picture age | After (this branch): move overlay; click overlay; picture age |
+|---|---|---|
+| tool_switch_keys | -; 15 / 19.88; - | -; 13.38 / 16.47; - |
+| tool_switch_toolbar | -; 8.64 / 10.51; - | -; 4.37 / 7.22; - |
+| draw_bezier | -; 6.98 / 11.39; 1430.34 / 1495.81 | -; 5.73 / 7.96; 93.97 / 124.24 |
+| click_select | -; 15.99 / 25.13; - | -; 12.47 / 21.03; - |
+| marquee | 3.93 / 4.86; 15.03 / 21.55; - | 6.85 / 8.76; 13.17 / 20.07; - |
+| drag_point | 3445.08 / 3944.8; 2306.16 / 3240.67; 3585.36 / 4000.02 | 54.09 / 85.67; 62.26 / 114.73; 102.8 / 131.95 |
+| drag_feather | 1886.49 / 3685.33; 1738.99 / 3485.75; 2940.6 / 3860.9 | 40.22 / 88.24; 55.49 / 87.47; 75.73 / 112 |
+| drag_shape | 3957 / 4414.15; 1895.86 / 3592.24; 3989.82 / 4456.09 | 61.42 / 97.56; 64.71 / 131.71; 101.53 / 155.1 |
+| paint_stroke | 14935.2 / 19320.6; 9483.53 / 18084.7; 19353.7 / 19919.5 | 1.77 / 4.53; 75.81 / 156.02; 1665.64 / 2376.28 |
+| shape_list_row | -; 1436.54 / 1461.9; - | -; 88.88 / 102.86; - |
+| knob_opacity | -; 62.58 / 73.82; - | -; 57.9 / 61.59; - |
+| step_frame_keyed | -; 2764.47 / 2824.93; - | -; 59.8 / 221.98; - |
+| undo_redo | -; 1312.73 / 1327.03; - | -; 55.07 / 61.14; - |
+
+Light shot (a single Roto on a constant):
+
+| Action | Before (main): move overlay; click overlay; picture age | After (this branch): move overlay; click overlay; picture age |
+|---|---|---|
+| tool_switch_keys | -; 11.07 / 13.07; - | -; 8.37 / 9.74; - |
+| tool_switch_toolbar | -; 0.92 / 1.98; - | -; 1.85 / 2.2; - |
+| draw_bezier | -; 1.76 / 3.65; 799.22 / 833.69 | -; 1.49 / 2.68; 531.64 / 569.38 |
+| click_select | -; 3.84 / 6.4; - | -; 3.11 / 5.31; - |
+| marquee | 2.14 / 3.15; 4.21 / 6.66; - | 2.16 / 2.71; 3.32 / 4.6; - |
+| drag_point | 17.14 / 31.11; 641.18 / 651.17; 29.89 / 125.47 | 10.93 / 68.63; 514.58 / 535.98; 317.85 / 594.08 |
+| drag_feather | 2.19 / 2.92; 4.44 / 9.25; - | 1.82 / 2.29; 3.22 / 5.51; - |
+| drag_shape | 2.28 / 60.25; 4.33 / 647.21; 56.76 / 209.12 | 1.8 / 29.3; 3.66 / 512.95; 315.92 / 582.16 |
+| paint_stroke | 7.99 / 19.98; 214.18 / 489.21; 122.74 / 729.83 | 2 / 14.75; 176.99 / 382.8; 256.62 / 536.12 |
+| shape_list_row | -; 631.95 / 671.44; - | -; 505.17 / 537.36; - |
+| knob_opacity | -; 17.09 / 18.15; - | -; 16.73 / 17.27; - |
+| step_frame_keyed | -; 1274.45 / 1442.08; - | -; 1048.08 / 1061.78; - |
+| undo_redo | -; 605.48 / 655.36; - | -; 515.41 / 523.95; - |
+
+Reading the table. A drag of a point, a feather point or a whole shape now follows the cursor in 40 to 60 ms median (was 1.9 to 4 s) and its picture is on screen 75 to 100 ms after the edit (was 2.9 to 4 s). A painted stroke's overlay is 1.8 ms (was 15 s) and the stroke is on screen 1.7 s after its last move (was 19 s). Clicking a shape list row is 89 ms (was 1.4 s), undo and redo 55 ms (was 1.3 s), stepping a keyed frame 60 ms median (was 2.8 s), the first picture of a drawn Bezier 94 ms (was 1.4 s). Tool switches, click select, marquee and the opacity knob were already near the 50 ms target.
+
+Still over target (realistic shot): the overlay during a point, feather or shape drag (54 / 86 ms against a target of 16 ms p95); the drag-release click (62 / 115 ms against 50); a painted stroke's picture (1.7 / 2.4 s, the rasteriser applies 30 existing plus the new strokes); the shape list row (89 / 103 ms); the light shot shows about 500 ms for list rows, undo and drag releases, which is the time to the next viewer paint rather than a handler cost (a profile pass of the same actions sees 3 to 4 ms of GUI work), so the overlay appears to repaint only with the new picture there; this is the next thing to look at.
+
+Top costs on the GUI thread after the fixes (cProfile, realistic shot, cumulative, one pass; its timings are inflated, the order is the point):
+
+- point drag: `paintEvent` 937 ms over 207 paints (drawForeground, `paint_overlays` 900 ms, of which `drawEllipse` 292 ms for 57 000 handle circles and 192 ms own time), the heavy panel build after release (`build_node_panel` 646 ms, `addWidget` 384 ms over 429 widgets) and the application event filter (288 ms over 134 000 calls).
+- painted stroke: `rasterise` 2.3 s (`apply_stroke` 2.2 s over 182 strokes), `run_tile` 1.7 s, the Roto matte evaluation 0.9 s.
+- click select: `paint_overlays` 322 ms over 76 paints, `_roto_hit_spline` 157 ms over 6 presses.
+
+Next fixes, in order: cache the flattened and resolved outlines and draw only handles of the selected shapes (the overlay), draw the handle ellipses as one batched path, let the panel rebuild build rows lazily, cache the rasterised strokes already painted so a new stroke composites on top, skip the event filter for events that are not mouse or key.
+
 ## Lane 8 step notes
 
 ### R6-1: the realistic comp with Grade, Transform, Blur and Merge resident on the GPU (10/25, step A of 3)
