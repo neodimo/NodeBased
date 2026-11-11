@@ -867,15 +867,19 @@ node and left out of a saved shot while off) nothing changes, and the tools draw
    everything outside the box. `g` is small across strong colour edges so the cut follows them. As in GrabCut the mixtures are refitted from the
    result and the cut is solved again (three rounds). It runs on a copy of the picture reduced to 256 pixels on the long side; without a box a
    second, finer pass runs on the subject's bounding box.
-2. *Contour*: the region connected to the click, holes filled, traced with marching squares (sub-pixel). The outline is the silhouette, so a
-   hole through the subject is not cut out.
+2. *Contour*: the region connected to the click, holes filled, traced with marching squares (sub-pixel). The outline is the silhouette; the
+   holes, the islands inside them and the pockets that touch the edge are handled as described under Lane 2 I6 and Lane 9 I10 below.
 3. *Edge refinement*: the contour is resampled evenly and refined to the full-resolution edges with the active contour of the edge-snap
    feature (above).
 4. *Bezier fit*: corners are found from the turning angle and Schneider's least-squares cubic fit runs between them. The error tolerance grows
    until there are at most 40 points, so straight runs get few points and curves more; a straight span gets zero tangents; a result with fewer than
    8 points is subdivided to 8. A last fit-to-edges pass is kept only if it raises the edge response along the outline without moving a point
    more than 1.5 px (on corners it rounds them off, and then it is not used). For the B-Spline tool the Bezier outline is turned into B-spline
-   control points that pass through it; a B-spline has no corners, so sharp tips round off there.
+   control points that pass through it. A B-spline has no corners of its own, so every corner of the outline (a point whose arriving and
+   leaving directions differ by more than 35 degrees) gets **three control points on the same spot**: a uniform cubic B-spline reaches a
+   triple control point exactly and runs straight in and out, so star tips and box corners stay sharp (a span between two corners takes four
+   samples so the two triples do not meet). The other controls are solved around them, and an outline without corners gives the same
+   controls as before.
 
 **Measured** (`tests/test_roto_outline_i5.py`, 320 x 280 synthetic subjects at 4x oversampling; distance from every vertex of the outline to
 the true boundary):
@@ -897,6 +901,57 @@ thread: 0.47 to 0.67 s for a 320 x 280 frame and 0.9 s for a 1920 x 1080 frame (
 model comes from the frame border, so a subject that fills the frame needs a box. Fur, hair and motion blur have a soft edge that this does not
 model; the outline follows the strongest edge.
 
+## Lane 9 step notes
+
+### Lane 9 I10: islands, sharp B-Spline tips, pockets, strokes with a transform
+
+**Islands inside a hole.** A hole is cut out whole, so a piece of the picture inside it (the pupil inside an eye-shaped hole, a bolt in the
+middle of a ring) went with it. `outline_with_islands(image, seed, box)` returns the outline, the holes and the **islands**: regions of the
+segmentation that lie inside a hole and do not touch the subject's body, as long as they cover the same minimum as a hole (1% of the silhouette
+and 16 cells of the 256 px working image; smaller ones stay cut out). Each island goes through the same contour, edge refinement and Bezier fit,
+and the click adds it as an ordinary shape (adds, not subtracts) after the holes in the shape list, so it draws in front of the hole it sits in,
+all in the same undo step. The status bar counts them ("... and 1 island inside it (shapes that add back)"). Measured on a ring with a disc in
+its hole (`tests/test_roto_leftouts_i10.py`): one hole of mean radius 44.9 px (true 45) and one island of 19.9 px (true 20) whether the
+island is the subject's colour or a third colour, and in the rendered matte every pixel that disagrees with the truth lies within 1 px of the
+true edge. A 3 px speck in the hole is not an island. `outline_with_holes` still returns two values.
+
+**Sharp B-Spline tips.** Measured on the five-point star (distance from the flattened curve to the true boundary):
+
+| Outline | Points | Mean | Max |
+| --- | --- | --- | --- |
+| Bezier (as before) | 16 | 0.20 px | 0.67 px |
+| B-Spline, before (controls through the outline, tips rounded) | 32 | 0.87 px | 2.34 px |
+| B-Spline, after (triple control points at the 10 corners) | 44 | 0.26 px | 1.03 px |
+
+The tests hold the Bezier outline's own limits (mean 1.0 px, maximum 3.0 px) and at least a halving of the old mean. Every one of the star's
+ten vertices has the curve within 1.5 px, and the four corners of a square within 1.2 px. The price is control points: the star has 44 where
+it had 32, because each corner takes three. A disc or rounded rectangle has no corners and its controls are unchanged.
+
+**A pocket that touches the subject's edge.** A background region that the subject nearly encloses, through a gap in its edge, is connected to
+the outside and so is background, not a hole. That stays as it is. The outline now finds them, by closing the silhouette by 2.5% of the long side
+of the working image (a gap up to twice that), and when a pocket of at least the hole minimum is found the status bar says so ("1 pocket touching the
+subject's edge stays background: draw it as a shape that subtracts"), so the artist knows to draw it. `outline_with_islands` returns the count as
+its fourth value. Measured on a C-shaped ring (gaps of 3, 6 and 12 px): one pocket each, no hole; a gap of 40 px is a C shape and reports none;
+a closed ring, a star and a disc report none.
+
+**Strokes with a transform of their own.** Stick to plate used to skip a stroke with a transform of its own (centre, translate, rotate, scale,
+skew, the 4 x 4 matrix). It now follows the picture where the stroke is drawn on the painted frame, and on every frame takes the answer back
+through the inverse of that frame's transform (`rotostick.unresolve_stroke_points`), so the keys it writes sit in the stroke's own space and the
+transform stays as the artist set it, animated or not. A transform that stores no centre uses the middle of the stroke's points, which depends on the
+answer; that closes exactly (`c = A * middle(A^-1 (R - t))`), and a centre stored on one axis only is handled the same way. The brush size
+follows the picture's scale from its drawn size on the painted frame, divided by what the transform itself does to the brush on that frame.
+Measured at frame 10 of a plate rendered through a known map (`tests/test_roto_stick_i10.py`; mean / max px of the drawn stroke from where the
+plate carried it): rotate 15 and scale 1.2 on a translating plate 0.17 / 0.47, on a rotating plate 0.14 / 0.44, on a bending plate 0.16 / 0.42;
+skew 0.18 / 0.33; a stored centre 0.18 / 0.50; the 4 x 4 matrix 0.16 / 0.42; rotate with the matrix and a default centre 0.24 / 0.66. In the app a stroke
+with a transform ends frame 11 within 0.18 px mean and 0.36 px maximum. Only locked strokes are left alone now.
+
+**Shear in the clone offset.** The picture under the stroke does more than turn and scale: a plate that shears moved the clone's source along
+the wrong way. The mean 2 x 2 map of the flow is now split as `J = s R(theta) K` and the off-diagonal part of `K` is kept as `stick.shear`
+(keyed like the scale and the turn, written only when the picture shears, so an ordinary stroke is saved as before); the clone offset is
+sheared by it before the scale and turn. On a plate sheared by 0.14 (x moves by 0.14 times the distance below the middle) a clone offset of
+20 x 10 px lands within 0.09 px of where the plate's map puts it (21.4 x 10); without the shear it is 1.61 px away. The shear is the symmetric
+part to first order, and a stretch along one axis (the diagonal of `K`) is still not carried. Reduce keys counts the shear as a key channel.
+
 ## Lane 2 step notes
 
 ### Lane 2 I6: outlines with holes
@@ -914,7 +969,7 @@ B-Spline shapes too. Holes take the settings of the outline's tool except the bl
 Measured on synthetic subjects with 4 x 4 supersampled edges (tests/test_roto_outline_holes_i6.py): a ring (disc with a hole), a letter-like
 block with two holes and a disc with one hole and a 3 px speck each give the expected number of holes (1, 2 and 1), and in the rendered matte
 every pixel that disagrees with the true coverage lies within 0.93 px of the true edge. A hole that touches the subject's edge is part of the
-background, not a hole; an island of a different colour inside a hole is cut out with the hole.
+background, not a hole (see Lane 9 I10 above for how that is reported); an island inside a hole is added back as a shape (also I10).
 
 ## Strokes that stick to the plate (past Nuke)
 
@@ -925,7 +980,7 @@ saved shot that never used the command is unchanged.
 
 * **Where.** Select a stroke, go to the frame it was painted on, and use **Stick to plate** in the Tracking section of the RotoPaint properties
   (next to Track points, with the same direction and frame range), in the right-click menu of the shape list, or in the strip of the Select
-  tools. One undo step covers every key it writes. A locked stroke, or one with a transform of its own, is left alone and the status bar says so.
+  tools. One undo step covers every key it writes. A locked stroke is left alone and the status bar says so; a stroke with a transform of its own sticks too (see Lane 9 I10 above).
 * **What it writes.** The stroke's points get keys on every frame in the range (and keep the painted frame exactly as painted), the same
   kind of key Track points gives a shape point, so lifetime, ripple, undo and the curve tools treat it as ordinary animation. The stroke
   also gets a `stick` entry with the local scale and turn of the motion, keyed the same way: the **brush size follows the scale** and the **clone
@@ -943,7 +998,7 @@ saved shot that never used the command is unchanged.
 4. **When the plate is covered.** The warped picture is compared with the painted frame at up to 48 anchors along the stroke (normalised
    correlation of a 13 x 13 patch). A stroke whose anchors no longer match (an object passes over it, or the flow failed) falls back to the planar
    motion of its region: a homography fitted through the samples around the stroke that still match, and the planar tracker (`planar.track_region`)
-   when too few do. The status bar names the frames ("stroke1: planar motion on frames 4\u20139"), and the field is reset to the planar motion so
+   when too few do. The status bar names the frames ("stroke1: planar motion on frames 4–9"), and the field is reset to the planar motion so
    the chain picks the plate up again when it shows. A few low anchors on an otherwise good frame put only those points on the planar motion.
 
 **Measured** (`tests/test_roto_paint_stick_i7.py`; a 320 x 240 smoothed random texture rendered through an analytic map, a 24-point curved
@@ -964,8 +1019,7 @@ patch has gone. In the app the stroke ends frame 11 within 0.22 px mean and 0.56
 
 **Limits.** The stroke follows the picture, not the object it is painted on: a stroke on a surface that the plate hides for good, or on pixels
 that are not in the plate at all, has nothing to follow. A plate with no texture under the stroke (a flat wall) has no motion to measure; the
-planar fallback then reports it. The stroke's own transform (Roto transform knobs) is not combined with it. The clone offset keeps the stretch
-and turn of the picture, not shear.
+planar fallback then reports it. The clone offset keeps the scale, turn and shear of the picture (Lane 9 I10 above), not a stretch along one axis.
 
 ### Lane 2 I8: shapes from a matte (past Nuke)
 
@@ -1028,7 +1082,7 @@ Track points, Fill in-betweens and Stick to plate key every frame. That is accur
 key on every frame. Nuke has no key reduction for Roto. Here **Reduce keys** removes the keys a shape or stroke does not need while every
 frame stays within a tolerance. It is **off unless run**: nothing changes until the command is used, and one undo step puts every key back.
 
-* **Where.** Select shapes or strokes (a Roto node's shapes, or a RotoPaint node's shapes and strokes) and use **Reduce keys\u2026** in the right-click menu
+* **Where.** Select shapes or strokes (a Roto node's shapes, or a RotoPaint node's shapes and strokes) and use **Reduce keys…** in the right-click menu
   of the shape list (it asks for the tolerance and an optional frame range), or the **Reduce keys** button in the strip of the Select tools, which
   reads **Reduce tolerance** (default 0.5 px) and **Reduce from** and **Reduce to** (0 and 0 mean every frame) from the strip. Locked shapes are left
   alone. The status bar says how many keys were kept out of how many ("Reduce keys: kept 2 of 40 keys on 1 shape (every frame within 0.5 px; largest
