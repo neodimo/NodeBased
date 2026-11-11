@@ -1,3 +1,45 @@
+# NodeBased 0.54.0-preview.1
+
+Preview build of 0.54.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.54.0 release that follows.
+
+## What changed since 0.53.0
+
+- **Roto's tool settings strip.** Each Viewer tool gets Nuke's settings strip above the picture: selection and feather-link settings, Autokey, brush and stroke settings, and the past-Nuke switches below. Freehand drawing tools are in, and Roto's item controls use slider fields.
+- **Roto timing and animation, the way Nuke does it.** Autokey behaves as Nuke's at the node level, with Nuke's defaults. Shape, spline and point keys have their own controls, and a keyframe scope chooses what a key covers. Lifetimes and transform keys match Nuke, motion blur is keyable (also from the list), and the transform pivot matches Nuke's. RotoPaint gets the same spline and point key controls, plus per-stroke dynamic size and transparency.
+- **More of Nuke's Roto.** B-Spline tension, S cycles the tool modes, layers carry transforms, Roto's whole blending list is offered (RotoPaint shapes and strokes too, with their own colour and invert), and the list shows the front-most shape first as Nuke does.
+- **Ripple edit.** A point edit can spread over the shape's other keys: all of them, from the start, to the end, or a range, in one undo step. Fit to edges ripples too.
+- **Past Nuke: tools Nuke's Roto does not have.** All are opt-in; a shot that does not use them saves and renders exactly as before.
+  - *Snap and fit to edges.* Points snap to the strongest nearby edge (within 0.09 px on test images), and Fit to edges pulls a whole shape onto the picture's edges (0.3 px RMS from a 4 px error).
+  - *Track points.* Every control point tracks its own patch, steadied by the planar track, so an outline follows a subject that bends or stretches (0.5 px where the planar track alone misses by 3.6 px). Points it is unsure of are flagged in red.
+  - *Fill in-betweens.* Between two keys, each frame is fitted to its own image edges and only the points that moved get keys (from 2 to 5 px off down to 0.2 px on the test subject).
+  - *Outline from a click.* One click outlines the subject as an editable Bezier or B-Spline shape (0.2 to 0.26 px mean error), cuts its holes out as subtracting shapes, adds back islands inside the holes, keeps B-Spline corners sharp, and names pockets that touch the edge. About 0.9 s on a 1080p frame.
+  - *Strokes that stick to the plate.* A RotoPaint stroke follows the picture across frames, including its brush size and clone offset (about 0.2 px mean on translating, rotating and bending test plates). Strokes with their own transform stick too.
+  - *Shapes from a matte.* Trace a matte into editable shapes with holes and a feather matched to the edge, keyed every Nth frame and checked on every in-between frame (a key is added wherever the shape drifts more than 1 px).
+  - *Reduce keys.* Thin out the keys of shapes and strokes within a pixel tolerance measured on the drawn outline, in one undo step.
+  - *Roto mattes on the graphics card* (experimental, off by default; Settings → Interface). 2.2 to 4.4 times faster on 30 shapes at 1080p, within about 1/300 of an 8-bit level of the processor matte.
+- **Roto walkthrough.** A guided tour drives 25 scenes through the real Viewer with real mouse and key events; 24 of them work. The README summarises every past-Nuke tool with its measured accuracy.
+- **New nodes: DustBust and MarkerRemoval**, with DustBust spots in the Viewer.
+- **2D node fidelity.** The 2D analysis nodes match Nuke's results and layouts more closely, the Metadata panel gains Nuke's filter scope, and retime vector detail that cannot match Nuke is marked unsupported instead of passing.
+- **Playback.** Roto's read-ahead matte work runs in a separate process, the read-ahead reaches further, and the feather reuses its result buffer.
+- **Fluids: up-res swirl.** FluidUpres3D can add swirl (curl noise and vorticity confinement on the fine grid, scaled by the coarse flow's speed) to the smoke density; flame, temperature and fuel keep the coarse flow. It is off by default, and changing it reruns only the up-res.
+
+## Known limits
+
+- **Roto responds slowly to clicks and drags in the Viewer.** Everything above was checked for accuracy in tests with no visible window; responsiveness was never measured. Measuring and fixing it is the first Roto job for 0.55.0.
+- One walkthrough scene of 25 still differs from the guide.
+- Roto mattes on the graphics card are not bit-identical to the processor's (about 1e-5 at worst), so the switch stays off until the tolerance is approved.
+- GPU playback still misses 24 fps on the Radeon test machine (about 46 ms per frame at the 95th percentile against a 41.7 ms target), and the decoder is above its 8 ms target.
+- Still no comparison with a real Nuke render; pixel truth stays unmeasured until the reference pack (`tools/make_nuke_reference_pack.py`) is run in Nuke.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0 (big-endian, the default, is unaffected).
+- LensDistortion's polynomial, fisheye and beam-splitter models and its grid solve stay unsupported.
+
+## Moved to 0.55.0
+
+- Roto responsiveness: measure click, drag and redraw times in a real window and make them feel instant.
+- The decoder redesign and the Roto/Read overlap aimed at 24 fps GPU playback.
+- Panel sweeps for the remaining nodes.
+- Carried: a field-of-view limit for generated footage, re-anchored generation in shorter pieces, more camera-following benchmark scenes, and measuring the 2D nodes against real Nuke renders.
+
 # NodeBased 0.53.0 — Roto's list and toolbar, the way Nuke has them
 
 ## What changed since 0.52.0
