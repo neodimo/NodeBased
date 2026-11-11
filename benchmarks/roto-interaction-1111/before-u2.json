@@ -1,0 +1,831 @@
+{
+ "tool": "benchmark_roto_interaction",
+ "platform": "xcb",
+ "display": ":0",
+ "python": "3.12.13",
+ "label": "u2-before",
+ "size": "1080p",
+ "cases": {
+  "realistic": {
+   "actions": {
+    "drag_point": {
+     "label": "drag_point",
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.31,
+      "p95": 3.57,
+      "max": 4.67
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 25.22,
+      "p95": 46.65,
+      "max": 49.35
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 7.12,
+      "p95": 22.28,
+      "max": 27.53
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 28.66,
+      "p95": 43.09,
+      "max": 44.58
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 51.11,
+      "p95": 87.78,
+      "max": 91.37
+     },
+     "renders_requested": 38,
+     "renders_started": 35,
+     "pictures_shown": 21,
+     "renders_dropped": 17,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 68.86,
+      "p95": 96.64,
+      "max": 99.77
+     },
+     "last_picture_after_last_event_ms": 1193.9,
+     "undo_steps_added": 1,
+     "repeats": 3,
+     "profile_top": [
+      {
+       "cum_ms": 2548.3,
+       "self_ms": 246.7,
+       "calls": 262,
+       "where": "~:0(<built-in method processEvents>)"
+      },
+      {
+       "cum_ms": 1223.9,
+       "self_ms": 0.0,
+       "calls": 7,
+       "where": "app.py:16009(_run_panel_rebuild)"
+      },
+      {
+       "cum_ms": 1223.8,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:13105(<lambda>)"
+      },
+      {
+       "cum_ms": 1223.8,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:16017(inspect)"
+      },
+      {
+       "cum_ms": 1223.8,
+       "self_ms": 0.1,
+       "calls": 1,
+       "where": "app.py:16041(_show_cached_panel)"
+      },
+      {
+       "cum_ms": 816.3,
+       "self_ms": 1.2,
+       "calls": 283,
+       "where": "app.py:2151(paintEvent)"
+      },
+      {
+       "cum_ms": 790.4,
+       "self_ms": 17.2,
+       "calls": 285,
+       "where": "~:0(<function Recorder._install.<locals>.paint at 0x7f0c96a4c4a0>)"
+      },
+      {
+       "cum_ms": 771.3,
+       "self_ms": 1.6,
+       "calls": 283,
+       "where": "app.py:5593(drawForeground)"
+      },
+      {
+       "cum_ms": 769.2,
+       "self_ms": 60.2,
+       "calls": 283,
+       "where": "app.py:5611(paint_overlays)"
+      },
+      {
+       "cum_ms": 652.3,
+       "self_ms": 2.2,
+       "calls": 1,
+       "where": "app.py:13884(build_node_panel)"
+      },
+      {
+       "cum_ms": 569.6,
+       "self_ms": 0.7,
+       "calls": 1,
+       "where": "app.py:16227(set_properties_widget)"
+      },
+      {
+       "cum_ms": 396.3,
+       "self_ms": 299.5,
+       "calls": 429,
+       "where": "~:0(<method 'addWidget' of 'PySide6.QtWidgets.QBoxLayout' objects>)"
+      },
+      {
+       "cum_ms": 349.8,
+       "self_ms": 349.8,
+       "calls": 5389,
+       "where": "~:0(<method 'drawPicture' of 'PySide6.QtGui.QPainter' objects>)"
+      },
+      {
+       "cum_ms": 297.2,
+       "self_ms": 108.7,
+       "calls": 139979,
+       "where": "app.py:18347(eventFilter)"
+      }
+     ]
+    },
+    "drag_feather": {
+     "label": "drag_feather",
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.28,
+      "p95": 3.33,
+      "max": 4.17
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 17.88,
+      "p95": 36.5,
+      "max": 46.67
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 4.03,
+      "p95": 17.31,
+      "max": 25.23
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 29.86,
+      "p95": 53.64,
+      "max": 55.73
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 38.31,
+      "p95": 64.08,
+      "max": 66.49
+     },
+     "renders_requested": 35,
+     "renders_started": 30,
+     "pictures_shown": 19,
+     "renders_dropped": 16,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 62.46,
+      "p95": 96.83,
+      "max": 99.97
+     },
+     "last_picture_after_last_event_ms": 1301.7,
+     "undo_steps_added": 1,
+     "repeats": 3,
+     "profile_top": [
+      {
+       "cum_ms": 2625.6,
+       "self_ms": 243.5,
+       "calls": 260,
+       "where": "~:0(<built-in method processEvents>)"
+      },
+      {
+       "cum_ms": 1301.3,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:16009(_run_panel_rebuild)"
+      },
+      {
+       "cum_ms": 1301.3,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:13105(<lambda>)"
+      },
+      {
+       "cum_ms": 1301.3,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:16017(inspect)"
+      },
+      {
+       "cum_ms": 1301.2,
+       "self_ms": 0.1,
+       "calls": 1,
+       "where": "app.py:16041(_show_cached_panel)"
+      },
+      {
+       "cum_ms": 821.2,
+       "self_ms": 1.2,
+       "calls": 280,
+       "where": "app.py:2151(paintEvent)"
+      },
+      {
+       "cum_ms": 795.4,
+       "self_ms": 18.2,
+       "calls": 282,
+       "where": "~:0(<function Recorder._install.<locals>.paint at 0x7f0c96a4c4a0>)"
+      },
+      {
+       "cum_ms": 775.5,
+       "self_ms": 1.6,
+       "calls": 280,
+       "where": "app.py:5593(drawForeground)"
+      },
+      {
+       "cum_ms": 773.4,
+       "self_ms": 59.7,
+       "calls": 280,
+       "where": "app.py:5611(paint_overlays)"
+      },
+      {
+       "cum_ms": 692.8,
+       "self_ms": 2.4,
+       "calls": 1,
+       "where": "app.py:13884(build_node_panel)"
+      },
+      {
+       "cum_ms": 606.5,
+       "self_ms": 0.8,
+       "calls": 1,
+       "where": "app.py:16227(set_properties_widget)"
+      },
+      {
+       "cum_ms": 433.7,
+       "self_ms": 334.4,
+       "calls": 429,
+       "where": "~:0(<method 'addWidget' of 'PySide6.QtWidgets.QBoxLayout' objects>)"
+      },
+      {
+       "cum_ms": 351.1,
+       "self_ms": 351.1,
+       "calls": 5332,
+       "where": "~:0(<method 'drawPicture' of 'PySide6.QtGui.QPainter' objects>)"
+      },
+      {
+       "cum_ms": 300.7,
+       "self_ms": 110.5,
+       "calls": 139523,
+       "where": "app.py:18347(eventFilter)"
+      }
+     ]
+    },
+    "drag_shape": {
+     "label": "drag_shape",
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.3,
+      "p95": 3.83,
+      "max": 7.48
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 30.29,
+      "p95": 49.84,
+      "max": 93.44
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 8.8,
+      "p95": 20.57,
+      "max": 26.99
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 34.99,
+      "p95": 54.62,
+      "max": 56.77
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 53.13,
+      "p95": 92.52,
+      "max": 96.35
+     },
+     "renders_requested": 41,
+     "renders_started": 41,
+     "pictures_shown": 22,
+     "renders_dropped": 19,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 77.77,
+      "p95": 118.81,
+      "max": 122.82
+     },
+     "last_picture_after_last_event_ms": 1256.7,
+     "undo_steps_added": 1,
+     "repeats": 3,
+     "profile_top": [
+      {
+       "cum_ms": 2541.0,
+       "self_ms": 169.2,
+       "calls": 169,
+       "where": "~:0(<built-in method processEvents>)"
+      },
+      {
+       "cum_ms": 1202.3,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:16009(_run_panel_rebuild)"
+      },
+      {
+       "cum_ms": 1202.3,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:13105(<lambda>)"
+      },
+      {
+       "cum_ms": 1202.3,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:16017(inspect)"
+      },
+      {
+       "cum_ms": 1202.3,
+       "self_ms": 0.1,
+       "calls": 1,
+       "where": "app.py:16041(_show_cached_panel)"
+      },
+      {
+       "cum_ms": 655.8,
+       "self_ms": 2.2,
+       "calls": 1,
+       "where": "app.py:13884(build_node_panel)"
+      },
+      {
+       "cum_ms": 588.2,
+       "self_ms": 0.8,
+       "calls": 189,
+       "where": "app.py:2151(paintEvent)"
+      },
+      {
+       "cum_ms": 570.3,
+       "self_ms": 11.4,
+       "calls": 191,
+       "where": "~:0(<function Recorder._install.<locals>.paint at 0x7f0c96a4c4a0>)"
+      },
+      {
+       "cum_ms": 557.4,
+       "self_ms": 2.2,
+       "calls": 189,
+       "where": "app.py:5593(drawForeground)"
+      },
+      {
+       "cum_ms": 554.8,
+       "self_ms": 46.9,
+       "calls": 189,
+       "where": "app.py:5611(paint_overlays)"
+      },
+      {
+       "cum_ms": 544.3,
+       "self_ms": 0.7,
+       "calls": 1,
+       "where": "app.py:16227(set_properties_widget)"
+      },
+      {
+       "cum_ms": 510.5,
+       "self_ms": 1.7,
+       "calls": 24,
+       "where": "app.py:4423(_commit_roto_drag)"
+      },
+      {
+       "cum_ms": 387.0,
+       "self_ms": 290.0,
+       "calls": 429,
+       "where": "~:0(<method 'addWidget' of 'PySide6.QtWidgets.QBoxLayout' objects>)"
+      },
+      {
+       "cum_ms": 381.2,
+       "self_ms": 0.0,
+       "calls": 23,
+       "where": "app.py:4736(_preview_roto_drag)"
+      }
+     ]
+    },
+    "paint_stroke": {
+     "label": "paint_stroke",
+     "events_posted": 122,
+     "moves_posted": 120,
+     "moves_handled": 120,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 360,
+      "median": 0.31,
+      "p95": 5.75,
+      "max": 5.75
+     },
+     "move_overlay_ms": {
+      "n": 360,
+      "median": 31.1,
+      "p95": 143.25,
+      "max": 355.34
+     },
+     "move_late_ms": {
+      "n": 360,
+      "median": 18.61,
+      "p95": 111.4,
+      "max": 138.73
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 91.08,
+      "p95": 194.62,
+      "max": 204.86
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 130.71,
+      "p95": 258.5,
+      "max": 272.01
+     },
+     "renders_requested": 27,
+     "renders_started": 8,
+     "pictures_shown": 8,
+     "renders_dropped": 19,
+     "picture_age_ms": {
+      "n": 5,
+      "median": 1169.98,
+      "p95": 1821.65,
+      "max": 1894.06
+     },
+     "last_picture_after_last_event_ms": 4802.1,
+     "undo_steps_added": 1,
+     "repeats": 3,
+     "profile_top": [
+      {
+       "cum_ms": 2383.7,
+       "self_ms": 271.8,
+       "calls": 2,
+       "where": "color.py:89(to_working)"
+      },
+      {
+       "cum_ms": 2059.1,
+       "self_ms": 1420.0,
+       "calls": 1431,
+       "where": "~:0(<built-in method processEvents>)"
+      },
+      {
+       "cum_ms": 1389.2,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:16009(_run_panel_rebuild)"
+      },
+      {
+       "cum_ms": 1389.1,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:13105(<lambda>)"
+      },
+      {
+       "cum_ms": 1389.1,
+       "self_ms": 0.0,
+       "calls": 1,
+       "where": "app.py:16017(inspect)"
+      },
+      {
+       "cum_ms": 1389.1,
+       "self_ms": 0.1,
+       "calls": 1,
+       "where": "app.py:16041(_show_cached_panel)"
+      },
+      {
+       "cum_ms": 731.9,
+       "self_ms": 3.5,
+       "calls": 1,
+       "where": "app.py:13884(build_node_panel)"
+      },
+      {
+       "cum_ms": 654.1,
+       "self_ms": 0.8,
+       "calls": 1,
+       "where": "app.py:16227(set_properties_widget)"
+      },
+      {
+       "cum_ms": 547.0,
+       "self_ms": 5.5,
+       "calls": 1435,
+       "where": "app.py:2151(paintEvent)"
+      },
+      {
+       "cum_ms": 491.5,
+       "self_ms": 372.9,
+       "calls": 373,
+       "where": "~:0(<method 'addWidget' of 'PySide6.QtWidgets.QBoxLayout' objects>)"
+      },
+      {
+       "cum_ms": 441.6,
+       "self_ms": 157.6,
+       "calls": 274168,
+       "where": "app.py:18347(eventFilter)"
+      },
+      {
+       "cum_ms": 384.4,
+       "self_ms": 47.4,
+       "calls": 1437,
+       "where": "~:0(<function Recorder._install.<locals>.paint at 0x7f0c96a4c4a0>)"
+      },
+      {
+       "cum_ms": 335.3,
+       "self_ms": 23.7,
+       "calls": 1435,
+       "where": "app.py:5593(drawForeground)"
+      },
+      {
+       "cum_ms": 309.3,
+       "self_ms": 54.2,
+       "calls": 1435,
+       "where": "app.py:5611(paint_overlays)"
+      }
+     ]
+    },
+    "shape_list_row": {
+     "label": "shape_list_row",
+     "events_posted": 6,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 18,
+      "median": 97.89,
+      "p95": 102.89,
+      "max": 103.94
+     },
+     "renders_requested": 0,
+     "renders_started": 0,
+     "pictures_shown": 0,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": -6157.2,
+     "undo_steps_added": 0,
+     "repeats": 3,
+     "profile_top": [
+      {
+       "cum_ms": 9023.2,
+       "self_ms": 840.0,
+       "calls": 151,
+       "where": "~:0(<built-in method processEvents>)"
+      },
+      {
+       "cum_ms": 7260.3,
+       "self_ms": 0.0,
+       "calls": 6,
+       "where": "app.py:16009(_run_panel_rebuild)"
+      },
+      {
+       "cum_ms": 7260.2,
+       "self_ms": 0.5,
+       "calls": 6,
+       "where": "app.py:16179(rebuild_properties_dock)"
+      },
+      {
+       "cum_ms": 3986.6,
+       "self_ms": 14.6,
+       "calls": 6,
+       "where": "app.py:13884(build_node_panel)"
+      },
+      {
+       "cum_ms": 3254.4,
+       "self_ms": 3.7,
+       "calls": 6,
+       "where": "app.py:16227(set_properties_widget)"
+      },
+      {
+       "cum_ms": 2349.1,
+       "self_ms": 1765.7,
+       "calls": 2568,
+       "where": "~:0(<method 'addWidget' of 'PySide6.QtWidgets.QBoxLayout' objects>)"
+      },
+      {
+       "cum_ms": 1774.9,
+       "self_ms": 646.9,
+       "calls": 858214,
+       "where": "app.py:18347(eventFilter)"
+      },
+      {
+       "cum_ms": 1438.0,
+       "self_ms": 18.3,
+       "calls": 6,
+       "where": "rotopanel.py:210(build_panel)"
+      },
+      {
+       "cum_ms": 1153.0,
+       "self_ms": 814.4,
+       "calls": 6,
+       "where": "~:0(<method 'setWidget' of 'PySide6.QtWidgets.QScrollArea' objects>)"
+      },
+      {
+       "cum_ms": 1103.4,
+       "self_ms": 775.0,
+       "calls": 6,
+       "where": "~:0(<method 'takeWidget' of 'PySide6.QtWidgets.QScrollArea' objects>)"
+      },
+      {
+       "cum_ms": 1002.7,
+       "self_ms": 489.6,
+       "calls": 2185308,
+       "where": "~:0(<method 'type' of 'PySide6.QtCore.QEvent' objects>)"
+      },
+      {
+       "cum_ms": 804.3,
+       "self_ms": 3.9,
+       "calls": 6,
+       "where": "rotolist.py:194(__init__)"
+      },
+      {
+       "cum_ms": 794.1,
+       "self_ms": 0.2,
+       "calls": 6,
+       "where": "rotolist.py:269(populate)"
+      },
+      {
+       "cum_ms": 722.3,
+       "self_ms": 1.2,
+       "calls": 283,
+       "where": "app.py:2151(paintEvent)"
+      }
+     ]
+    },
+    "undo_redo": {
+     "label": "undo_redo",
+     "events_posted": 6,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 18,
+      "median": 56.82,
+      "p95": 59.76,
+      "max": 60.25
+     },
+     "renders_requested": 6,
+     "renders_started": 6,
+     "pictures_shown": 6,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": 140.9,
+     "undo_steps_added": 0,
+     "repeats": 3,
+     "profile_top": [
+      {
+       "cum_ms": 6272.8,
+       "self_ms": 1370.2,
+       "calls": 971,
+       "where": "~:0(<built-in method processEvents>)"
+      },
+      {
+       "cum_ms": 4752.1,
+       "self_ms": 7.8,
+       "calls": 1909,
+       "where": "app.py:2151(paintEvent)"
+      },
+      {
+       "cum_ms": 4575.0,
+       "self_ms": 30.2,
+       "calls": 1915,
+       "where": "~:0(<function Recorder._install.<locals>.paint at 0x7f0c96a4c4a0>)"
+      },
+      {
+       "cum_ms": 4535.2,
+       "self_ms": 9.1,
+       "calls": 1909,
+       "where": "app.py:5593(drawForeground)"
+      },
+      {
+       "cum_ms": 4523.1,
+       "self_ms": 355.3,
+       "calls": 1909,
+       "where": "app.py:5611(paint_overlays)"
+      },
+      {
+       "cum_ms": 1982.0,
+       "self_ms": 1982.0,
+       "calls": 36271,
+       "where": "~:0(<method 'drawPicture' of 'PySide6.QtGui.QPainter' objects>)"
+      },
+      {
+       "cum_ms": 1459.9,
+       "self_ms": 1459.9,
+       "calls": 40137,
+       "where": "~:0(<method 'drawPath' of 'PySide6.QtGui.QPainter' objects>)"
+      },
+      {
+       "cum_ms": 470.6,
+       "self_ms": 0.1,
+       "calls": 6,
+       "where": "app.py:12736(command)"
+      },
+      {
+       "cum_ms": 469.9,
+       "self_ms": 0.2,
+       "calls": 6,
+       "where": "app.py:13092(after_command)"
+      },
+      {
+       "cum_ms": 321.2,
+       "self_ms": 321.2,
+       "calls": 93006,
+       "where": "~:0(<method 'drawEllipse' of 'PySide6.QtGui.QPainter' objects>)"
+      },
+      {
+       "cum_ms": 302.5,
+       "self_ms": 0.9,
+       "calls": 6,
+       "where": "app.py:18697(request_preview)"
+      },
+      {
+       "cum_ms": 210.3,
+       "self_ms": 100.1,
+       "calls": 224634,
+       "where": "copy.py:118(deepcopy)"
+      },
+      {
+       "cum_ms": 210.3,
+       "self_ms": 36.2,
+       "calls": 36462,
+       "where": "copy.py:217(_deepcopy_dict)"
+      },
+      {
+       "cum_ms": 207.8,
+       "self_ms": 6.7,
+       "calls": 3960,
+       "where": "copy.py:191(_deepcopy_list)"
+      }
+     ]
+    }
+   },
+   "proxy_tier": 1
+  }
+ }
+}
