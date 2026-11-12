@@ -5224,6 +5224,7 @@ class Viewer(PanZoomView):
         if self.pan is not None:
             PanZoomView.mouseReleaseEvent(self, event)
             return
+        self.released_at = time.monotonic()      # the window shortens its panel rebuild delay for the edit this release commits
         handled = self.hit_release(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event))
         self.viewport().update()           # the finished drag is drawn as committed now, not when the final picture arrives
         if handled:
@@ -16013,6 +16014,8 @@ class Window(QMainWindow):
 
     HEAVY_PANEL_ITEMS = 0           # a Roto or RotoPaint panel is 280 widgets with one shape and 430 with twenty: 0.5 to 1.2 s either way
     PANEL_REBUILD_DELAY_MS = 150
+    PANEL_AFTER_RELEASE_DELAY_MS = 60       # the same wait after a drag's release commits its edit
+    PANEL_RELEASE_WINDOW_S = 0.25
 
     def _panel_is_heavy(self, key):
         """True when the selected node's panel is slow enough to build that rebuilding it inside a click or a drag would stall
@@ -16115,7 +16118,11 @@ class Window(QMainWindow):
             self._cancel_panel_rebuild()        # the panel on screen already shows everything this edit changed
             return
         self._panel_rebuild = rebuild
-        self._panel_rebuild_timer.start(self.PANEL_REBUILD_DELAY_MS)
+        # An edit the viewer's release has just committed ends a gesture, not a burst: its panel is brought up to date soon after.
+        # Any other edit keeps the longer wait, which is what lets a held frame-step key or a run of clicks rebuild it once
+        # (60 ms made the frame step's p95 190 ms against 100).
+        after_release = time.monotonic() - getattr(self.viewer, "released_at", -1.0) < self.PANEL_RELEASE_WINDOW_S
+        self._panel_rebuild_timer.start(self.PANEL_AFTER_RELEASE_DELAY_MS if after_release else self.PANEL_REBUILD_DELAY_MS)
 
     def _cancel_panel_rebuild(self):
         self._panel_rebuild = None

@@ -100,3 +100,38 @@ class KnobPreviewTests(unittest.TestCase):
             window.request_preview = real
             window.saved_document = window.dispatcher.document
             window.close()
+
+
+class PanelRebuildDelayTests(unittest.TestCase):
+    """The Roto panel is brought up to date soon after a drag's release, and after the usual quiet wait for any other edit (a held
+    frame-step key or a run of clicks rebuilds it once)."""
+
+    def test_release_shortens_the_wait_and_other_edits_keep_it(self):
+        import os
+        import time
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+        from nodebased.app import Window
+        from tests.test_roto_ui import roto_document, triangle
+        QApplication.instance() or QApplication([])
+        QSettings("NodeBased", "NodeBased").clear()
+        window = Window(roto_document([triangle()]))
+        try:
+            window.timer.stop()
+            window.graph.items_by_id["r"].setSelected(True)
+            QApplication.instance().processEvents()
+            window._cancel_panel_rebuild()
+            window._panel_signature_shown = None            # the panel on screen differs from the document: a rebuild is queued
+            window.viewer.released_at = time.monotonic()
+            window.refresh_panel_soon(lambda: None)
+            self.assertEqual(window._panel_rebuild_timer.interval(), window.PANEL_AFTER_RELEASE_DELAY_MS)
+            window._cancel_panel_rebuild()
+            window.viewer.released_at = time.monotonic() - 5.0
+            window.refresh_panel_soon(lambda: None)
+            self.assertEqual(window._panel_rebuild_timer.interval(), window.PANEL_REBUILD_DELAY_MS)
+            self.assertLess(window.PANEL_AFTER_RELEASE_DELAY_MS, window.PANEL_REBUILD_DELAY_MS)
+        finally:
+            window._cancel_panel_rebuild()
+            window.saved_document = window.dispatcher.document
+            window.close()
