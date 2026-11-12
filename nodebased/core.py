@@ -2736,8 +2736,30 @@ def _add_roto_bg_slot(nodes):
             _add_roto_bg_slot(graph["nodes"])
 
 
+_ATOMS = (str, int, float, bool, type(None))
+
+
+def fast_copy(value):
+    """An independent copy of a document's data: dicts, lists and tuples are rebuilt, strings and numbers are shared (they cannot
+    change), anything else falls back to `copy.deepcopy`. A document holds nothing but JSON data, and this is three to four times
+    faster than `copy.deepcopy`, which every edit, drag preview and undo step pays for the whole document. Unlike deepcopy it does not
+    keep two references to one list as one list in the copy; a document has no such aliasing to keep."""
+    kind = type(value)
+    if kind is dict:
+        return {key: (item if type(item) in _ATOMS else fast_copy(item)) for key, item in value.items()}
+    if kind is list:
+        return [item if type(item) in _ATOMS else fast_copy(item) for item in value]
+    if kind in _ATOMS:
+        return value
+    if kind is tuple:
+        return tuple(fast_copy(item) for item in value)
+    if isinstance(value, (str, int, float)):      # a numpy float64 is a float: immutable, shared like one
+        return value
+    return copy.deepcopy(value)
+
+
 def upgrade_document(document):
-    doc = copy.deepcopy(document)
+    doc = fast_copy(document)
     if isinstance(doc, dict) and doc.get("version") == 1:
         for node in doc.get("nodes", {}).values():
             if node.get("type") == "Read":
@@ -3503,7 +3525,7 @@ def _validate_split(doc, node_id, kind, name, value):
         raise ValueError(f"{name} is driven by an expression: a split value cannot be driven yet; clear the expression first")
 
 
-def validate(doc, _depth=0):
+def validate(doc, _depth=0, _trusted=None):
     if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data", "expressions", "references"} or doc["version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported or malformed NodeBased document")
     validate_time(doc["time"])
@@ -3655,7 +3677,7 @@ def validate(doc, _depth=0):
                 if actual_type not in expected_type:
                     raise ValueError(f"Input {slot!r} on {node['name']!r} expects {' or '.join(expected_type)}, "
                                      f"got {actual_type} from {nodes[source]['name']!r}")
-    shapes.validate_node_data(doc["node_data"], nodes)
+    shapes.validate_node_data(doc["node_data"], nodes, None if _trusted is None else (_trusted["node_data"], _trusted["nodes"]))
     expr.validate_expressions(doc["expressions"], nodes, lambda kind: SPECS[kind]["params"])
     # One driver per parameter. A curve and an expression on the same knob is rejected rather than
     # resolved by a precedence rule, because a silent precedence rule is the bug where an artist
@@ -3772,6 +3794,18 @@ class Dispatcher:
         self.redo_stack = []
         self.revision = 0
 
+    @classmethod
+    def adopt(cls, document):
+        """A dispatcher over a document that is already valid and current, with no copy, upgrade or validation. `execute` edits a
+        copy and leaves this document alone, so the caller may hand it the live document of another dispatcher to ask what an
+        edit would produce (`.document` after `execute`); it must not edit the document itself."""
+        self = cls.__new__(cls)
+        self.document = document
+        self.undo_stack = []
+        self.redo_stack = []
+        self.revision = 0
+        return self
+
     def execute(self, request):
         if not isinstance(request, dict):
             raise ValueError("Command must be an object")
@@ -3858,7 +3892,7 @@ class Dispatcher:
                 self.document = source.pop()
                 self.revision += 1
             return {"revision": self.revision}
-        draft = copy.deepcopy(self.document)
+        draft = fast_copy(self.document)
         if op == "load":
             draft = load_document(request["path"])
             result = {}
@@ -3869,7 +3903,7 @@ class Dispatcher:
             result = [self._edit(draft, command) for command in commands]
         else:
             result = self._edit(draft, request)
-        validate(draft)
+        validate(draft, _trusted=self.document)
         if draft != self.document:
             # Transport playback updates the persisted playhead through the same validated command
             # boundary, but must not fill the artist's undo history once per frame.
@@ -4185,9 +4219,9 @@ class Dispatcher:
             # in the document and two comps that look identical also serialize identically.
             existing = doc["node_data"].get(key, {})
             if items or (layers and not carried) or existing.get("tool_settings"):
-                doc["node_data"][key] = {slot: copy.deepcopy(items)}
+                doc["node_data"][key] = {slot: fast_copy(items)}
                 if layers:
-                    doc["node_data"][key]["layers"] = copy.deepcopy(layers)
+                    doc["node_data"][key]["layers"] = fast_copy(layers)
                 if node["type"] in ("Roto", "RotoPaint") and existing.get("tool_settings"):
                     doc["node_data"][key]["tool_settings"] = copy.deepcopy(existing["tool_settings"])
             else:

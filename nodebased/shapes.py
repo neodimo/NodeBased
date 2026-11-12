@@ -523,8 +523,12 @@ def validate_payload(kind, payload, where):
         validate_layers(payload.get("layers", []), items, where, "shapes")
 
 
-def validate_node_data(node_data, nodes):
+def validate_node_data(node_data, nodes, trusted=None):
     """Validate `document["node_data"]` against the document's nodes.
+
+    `trusted` is the `(node_data, nodes)` of a document that already passed validation: a payload equal to its entry there, on
+    a node of the same type, is not walked again (the walk over twenty shapes or thirty strokes was 2 to 3 ms of every knob move).
+    The references between nodes (a followed Tracker, a grid's size) are still checked for every payload.
 
     Orphan entries are an error rather than being dropped: silently discarding an artist's roto
     because a node id went missing is the kind of data loss that is only noticed at review.
@@ -534,7 +538,9 @@ def validate_node_data(node_data, nodes):
     for key, payload in node_data.items():
         if key not in nodes:
             raise ValueError(f"node_data[{key!r}] does not name a node in this document")
-        validate_payload(nodes[key]["type"], payload, f"node_data[{key!r}]")
+        if not (trusted is not None and key in trusted[0] and trusted[0][key] == payload
+                and trusted[1].get(key, {}).get("type") == nodes[key]["type"]):
+            validate_payload(nodes[key]["type"], payload, f"node_data[{key!r}]")
         if nodes[key]["type"] == "RotoPaint":
             for index, item in enumerate(payload["items"]):
                 follow = item.get("follow_track") if item.get("kind") == "stroke" else None

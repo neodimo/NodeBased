@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (QApplication, QTabBar, QMainWindow, QWidget, QVBo
 from . import __version__
 from .roto_settings import TOOL_CONTROLS, GLOBAL_SETTINGS
 from .updater import Updater
-from .core import _downstream_of
+from .core import _downstream_of, fast_copy
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail, node_tab_pixels, node_tab_value, bookmarked_nodes, dope_sheet_rows, NODE_TAB_DEFAULTS, NODE_TAB_FONTS, NODE_TAB_FONT_SIZE, NODE_TAB_FRAME,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
@@ -2580,7 +2580,7 @@ class Viewer(PanZoomView):
         node = document["nodes"].get(key) if key else None
         if node is None or node["type"] not in ("SplineWarp", "GridWarp") or document.get("view") != key:
             return None
-        payload = copy.deepcopy(document.get("node_data", {}).get(key))
+        payload = fast_copy(document.get("node_data", {}).get(key))
         if node["type"] == "SplineWarp":
             payload = payload or {"pairs": []}
         elif payload is None:
@@ -4352,7 +4352,7 @@ class Viewer(PanZoomView):
         points = [{field: p[field] for field in shape_model.POINT_FIELDS} for p in self.roto_draw_points]
         node = self.window.dispatcher.document["nodes"][key]
         if node["type"] == "RotoPaint":
-            items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
+            items = fast_copy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
             names = {item.get("name") for item in items}
         else:
             items = None
@@ -10531,7 +10531,7 @@ class Window(QMainWindow):
         self._panel_cache = {}  # node key -> the wrapped Properties panel last built for it
         self._panel_cache_stamp_seen = None
         self.dispatcher = Dispatcher(document or demo_document())
-        self.saved_document = copy.deepcopy(self.dispatcher.document)
+        self.saved_document = fast_copy(self.dispatcher.document)
         self.preferences = Preferences()
         self.motion = MotionAnimator(self, enabled=not self.preferences.reduce_motion())
         self.theme_name = self.preferences.theme()
@@ -12877,7 +12877,7 @@ class Window(QMainWindow):
         result = self.dispatcher.execute(cmd)
         if cmd.get("op") in ("save", "load"):
             self.project_path = str(Path(cmd["path"]).resolve())
-            self.saved_document = copy.deepcopy(self.dispatcher.document)
+            self.saved_document = fast_copy(self.dispatcher.document)
         if cmd.get("op") not in ("describe", "inspect"):
             if cmd.get("op") == "time":
                 self.sync_timeline()
@@ -12906,7 +12906,7 @@ class Window(QMainWindow):
         include_view = cmd.get("include_view", True)
         if type(include_view) is not bool:
             raise ValueError("reference_context include_view must be boolean")
-        document = copy.deepcopy(self.dispatcher.document)
+        document = fast_copy(self.dispatcher.document)
         view_id = document.get("view")
         reference_ids = list(document.get("references", []))
         ordered = []
@@ -13376,7 +13376,7 @@ class Window(QMainWindow):
             slider.set_simulation_frames(())
 
     def _begin_fluid_edit_bake(self):
-        document = copy.deepcopy(self.dispatcher.document)
+        document = fast_copy(self.dispatcher.document)
         time_range = document.get("time", {})
         first, last = int(time_range.get("first", 1)), int(time_range.get("last", 1))
         self._fluid_edit_bake = {"generation": self.generation, "document": document,
@@ -15256,7 +15256,7 @@ class Window(QMainWindow):
                     selected = self.viewer.paint_selected_item_index = None
 
                 def current_layer_items(k=key):
-                    return copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(k, {}).get("items", []))
+                    return fast_copy(self.dispatcher.document.get("node_data", {}).get(k, {}).get("items", []))
 
                 form.addRow(QLabel("Layers"))
 
@@ -16601,7 +16601,7 @@ class Window(QMainWindow):
         frames_wanted = sorted(f for order in passes for f in order)
         if frames_wanted[-1] - frames_wanted[0] > 5000:
             self._show_command_error(ValueError("Point tracking is limited to 5,001 frames")); return False
-        doc = copy.deepcopy(document)
+        doc = fast_copy(document)
         cancel = threading.Event()
         job = {"key": key, "kind": node["type"], "targets": targets, "ref": ref, "direction": direction,
                "base_shapes": copy.deepcopy(shapes), "base_items": copy.deepcopy(payload.get("items", [])),
@@ -16832,7 +16832,7 @@ class Window(QMainWindow):
         reference_points = {i: [{"x": float(p["x"]), "y": float(p["y"])} for p in drawn[i]["points"]] for i in targets}
         brush = {i: float(drawn[i]["brush"]["size"]) for i in targets}
         stroke_items = {i: copy.deepcopy(items[i]) for i in targets}
-        doc = copy.deepcopy(document)
+        doc = fast_copy(document)
         cancel = threading.Event()
         job = {"key": key, "kind": "RotoPaint", "stick": True, "label": "Stick to plate", "targets": targets, "ref": ref,
                "base_payload": copy.deepcopy(payload), "frames": len(frames_wanted),
@@ -17009,7 +17009,7 @@ class Window(QMainWindow):
         source = node["inputs"].get("image") or node["inputs"].get("bg")
         if source is None:
             self._show_command_error(ValueError("Connect an image before tracking the plane")); return False
-        doc = copy.deepcopy(self.dispatcher.document)
+        doc = fast_copy(self.dispatcher.document)
         ref = int(node["params"].get("reference_frame", 1))
         timeline = doc["time"]
         lo = int(timeline["first"] if first_frame is None else first_frame)
@@ -17021,7 +17021,7 @@ class Window(QMainWindow):
         cancel = threading.Event()
         job = {"key": key, "kind": node["type"], "base_tracks": copy.deepcopy(payload.get("tracks", [])),
                "base_shapes": copy.deepcopy(payload.get("shapes", [])),
-               "base_items": copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(key, {}).get("items", [])),
+               "base_items": fast_copy(self.dispatcher.document.get("node_data", {}).get(key, {}).get("items", [])),
                "corners": copy.deepcopy(corners_override),
                "progress": {"frame": ref, "completed": 0, "total": max(0, hi-lo)}}
         self._planar_job = job
@@ -17947,7 +17947,7 @@ class Window(QMainWindow):
         if source is None:
             self._show_command_error(ValueError("Tracker analysis requires a connected image input"))
             return False
-        snapshot = copy.deepcopy(self.dispatcher.document)
+        snapshot = fast_copy(self.dispatcher.document)
         frame = int(context[1]["params"].get("reference_frame", snapshot["time"]["current"])
                     if reference_frame is None else reference_frame)
         last = int(snapshot["time"]["last"] if last_frame is None else last_frame)
@@ -18203,13 +18203,15 @@ class Window(QMainWindow):
     def preview_param_drag(self, key, param, value):
         """Queue a coarse picture for a properties slider drag without committing its knob value."""
         from .core import Dispatcher
-        document = copy.deepcopy(self.dispatcher.document)
-        preview = Dispatcher(document)
+        # `execute` edits a copy and never touches the document it is given, so the preview dispatcher takes the live document as
+        # it is (already valid and current) instead of copying, upgrading and validating it first; the picture it gets back is its
+        # own copy, made with the quick document copy (this was 25 ms a move, over a third of it three extra copies).
+        preview = Dispatcher.adopt(self.dispatcher.document)
         if self.node_curve(key, param) is None:
             command = {"op": "set", "id": key, "param": param, "value": value}
         else:
             command = {"op": "set_key", "id": key, "param": param,
-                       "frame": int(document["time"]["current"]), "value": float(value)}
+                       "frame": int(preview.document["time"]["current"]), "value": float(value)}
         preview.execute(self.scoped_command(command))
         self.request_preview(progressive=True, document_override=preview.document)
 
@@ -18780,7 +18782,7 @@ class Window(QMainWindow):
             return False
         self.project_path = str(path)
         self.preferences.set_last_project_directory(str(Path(path).parent))
-        self.saved_document = copy.deepcopy(self.dispatcher.document)
+        self.saved_document = fast_copy(self.dispatcher.document)
         self.update_title()
         self.graph.fit()
         return True
@@ -18806,7 +18808,7 @@ class Window(QMainWindow):
             return False
         self.project_path = path
         self.preferences.set_last_project_directory(str(Path(path).parent))
-        self.saved_document = copy.deepcopy(self.dispatcher.document)
+        self.saved_document = fast_copy(self.dispatcher.document)
         self.update_title()
         return True
 
@@ -18850,14 +18852,14 @@ class Window(QMainWindow):
         if document_override is not None and document_owned:
             snapshot = document_override        # the caller built it for this request: its own copy, or shared read-only data
         else:
-            snapshot = copy.deepcopy(self.dispatcher.document if document_override is None
+            snapshot = fast_copy(self.dispatcher.document if document_override is None
                                      else document_override)
         bake = getattr(self, "_fluid_edit_bake", None)
         if bake is not None:
             current_identity = self._fluid_bake_identity(self.dispatcher.document)
             if current_identity == bake["identity"]:
                 bake["generation"] = self.generation
-                bake["document"] = copy.deepcopy(self.dispatcher.document)
+                bake["document"] = fast_copy(self.dispatcher.document)
             else:
                 self._clear_fluid_edit_bake()
         if self.playing:
@@ -20673,7 +20675,7 @@ class Window(QMainWindow):
             return
         # A range render is long and must stay interruptible; the document is snapshotted once so
         # an edit landing mid-render cannot change what the remaining frames are rendered from.
-        document = copy.deepcopy(self.dispatcher.document)
+        document = fast_copy(self.dispatcher.document)
         bundle_on = bool(document["nodes"][key]["params"].get("bundle", 0))
         if bundle_on and file_type != "exr":
             QMessageBox.warning(self, "Write", "The conditioning bundle needs an EXR output path "
