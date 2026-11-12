@@ -1,3 +1,9 @@
+## 2026-11-12 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback, Radeon 24 fps gate: show each frame on the playback clock (finish 2: a sequential playout pointer) (integrator tick)
+
+- **What was done:** `main` `1c7187f8` -> `2190fa0b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `2190fa0b`: Ran 9876 tests in 1668.049 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-12 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback, Radeon 24 fps gate: show each frame on the playback clock (finish 1: the clock stalls) (integrator tick)
 
 - **What was done:** `main` `066b79c2` -> `74250446` plus this docs commit. Evidence and per-lane commit

@@ -1,5 +1,24 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (3:45 AM on 2026-11-12 PDT)
+
+`main` moved `1c7187f8` -> `2190fa0b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `2190fa0b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1112-0315.log`, started 3:15 AM): **Ran 9876 tests in 1668.049 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback, Radeon 24 fps gate: show each frame on the playback clock (finish 2: a sequential playout pointer).** Commits:
+  - `8b4a38ab` Use sequential playout clock for playback
+  Diff: 3 files changed, 126 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (3:05 AM on 2026-11-12 PDT)
 
 `main` moved `066b79c2` -> `74250446` (lane commits cherry-picked onto main in lane order) and then to this
