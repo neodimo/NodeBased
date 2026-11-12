@@ -1,3 +1,9 @@
+## 2026-11-12 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) Fluids 17 step C (Thu 11/12): swirl that builds up, so the smoke curls (integrator tick)
+
+- **What was done:** `main` `acf28de8` -> `7b40a740` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `7b40a740`: Ran 9894 tests in 1629.707 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-12 — Lane 6 Fluids 17 step C (swirl that builds up, persistent `u_fine` in the up-res node): DONE, smoke still does not curl, default off
 
 - **What was done (evidence):** `FluidUpres3D` keeps a fine velocity `u_fine` from frame to frame (advect, inject curl noise, confine, decay by `swirl_life`, Jacobi projection, clamp to `swirl_max` times the coarse speed), CPU (`fluid_upres.swirl_persist_cpu`) and GPU (`fluid_upres_gpu.swirl_persist`), stored as a `ufine` block in the bake cache. New knobs `swirl_life` (1.0; 0 is step B) and `swirl_max` (1.5); old documents load with `swirl_life` 0. 16 new tests plus step B's 15 (now at `swirl_life` 0) and the up-res modules: 53 tests pass on the RTX 3080 Ti, the Radeon 8060S and llvmpipe; knob, panel, document and knowledge modules pass. Measured eight settings on the fire shot (`benchmarks/fire_shot/fire-smoke-persist-2026-11-12.json`): `u_fine` rises over nine frames and levels off, contrast 0.334 to 0.47, curl share 18.4 to 19.7 % (step B 35.5 %), grain 0.0063, bake at most 21 s, 128-sample frame 1.5 to 5.6 s (gate 0.75 s missed with or without the swirl). Stills: no curls.

@@ -1,5 +1,26 @@
 ## Lane 6 Fluids 17 step C (1:08 PM on 2026-11-12 PDT): persistent swirl in the up-res node, off by default
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (1:45 PM on 2026-11-12 PDT)
+
+`main` moved `acf28de8` -> `7b40a740` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `7b40a740` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1112-1315.log`, started 1:15 PM): **Ran 9894 tests in 1629.707 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), Fluids 17 step C (Thu 11/12): swirl that builds up, so the smoke curls.** Commits:
+  - `b1e7d945` Fluids 17 C: task note and state entry for the persistent swirl step
+  - `20969624` Fluids 17 C: persistent swirl evidence (eight settings against swirl off and step B, stills, projection sweeps, seeded-detail side test), docs section with bundled copy, --persist-sweep in render_evidence
+  - `92527683` Up-res persistent swirl: a fine velocity carried frame to frame (advect, inject, confine, decay, project, clamp) on CPU and GPU, kept in the bake cache; swirl_life and swirl_max knobs, swirl_life 0 is step B
+  Diff: 27 files changed, 2887 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-fluids-spike`, commits 92527683 (code, tests) and 20969624 (evidence, docs). `FluidUpres3D` carries a fine velocity `u_fine` between frames (cache block `ufine`), knobs `swirl_life` and `swirl_max`; `swirl` 0 reproduces the old output bit for bit and `swirl_life` 0 is step B. 53 targeted tests pass on RTX 3080 Ti, Radeon 8060S and llvmpipe. Fire shot, factor 2: `u_fine` builds up and levels off; contrast 0.334 to 0.47; curl share 18.4 to 19.7 % (step B 35.5 %); grain 0.0063; bake at most 21 s; 128-sample frame above its gate with or without swirl. The smoke does not curl; default stays off. Details: `docs/FLUIDS_SPIKE.md` "Fluids 17 C swirl that builds up". Not verified: Windows, the real display, factor 4.
 
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
