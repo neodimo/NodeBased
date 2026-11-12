@@ -163,6 +163,9 @@ class PlayoutBuffer:
         key = (int(generation), int(frame_number))
         return self._items.pop(key, None)
 
+    def has(self, frame_number, generation):
+        return (int(generation), int(frame_number)) in self._items
+
     def drop_before(self, frame_number, generation, direction=1):
         """Discard entries the playhead has passed and return their count."""
         generation, frame_number = int(generation), int(frame_number)
@@ -178,6 +181,67 @@ class PlayoutBuffer:
 
     def __len__(self):
         return len(self._items)
+
+
+class PlayoutClock:
+    """Sequential player clock, independent of Qt and render timing.
+
+    It never chases a wall-clock frame number.  A late picture holds one
+    slot, then resets the cadence from the actual show time.
+    """
+
+    def __init__(self, first, last, frame, fps, direction=1, mode="loop"):
+        self.first, self.last = int(first), int(last)
+        self.next_frame = int(frame)
+        self.fps = float(fps)
+        self.direction = -1 if direction < 0 else 1
+        self.mode = mode
+        self.origin_time = None
+        self.slot = 0
+        self.late = False
+        self.late_count = 0
+
+    @property
+    def period(self):
+        return 1.0 / max(1.0, self.fps)
+
+    def after(self, frame):
+        span = self.last - self.first + 1
+        if span <= 1:
+            return self.first
+        if self.mode == "once":
+            return min(max(frame + self.direction, self.first), self.last)
+        if self.mode == "pingpong":
+            # `playhead_at` is the source of truth for ping-pong; callers use
+            # this helper only for one speculative successor.
+            offset = 1 if self.direction > 0 else -1
+            candidate = frame + offset
+            if candidate > self.last or candidate < self.first:
+                candidate = frame - offset
+            return candidate
+        return self.first + (frame - self.first + self.direction) % span
+
+    def next_after(self):
+        return self.after(self.next_frame)
+
+    def tick(self, now, take):
+        """Return ``(frame, payload)`` when a picture may be shown now."""
+        now = float(now)
+        if self.origin_time is not None and now < self.origin_time + self.slot * self.period:
+            return None
+        payload = take(self.next_frame)
+        if payload is None:
+            if not self.late and self.origin_time is not None:
+                self.late_count += 1
+                self.late = True
+            return None
+        frame = self.next_frame
+        if self.origin_time is None or self.late:
+            self.origin_time = now - self.slot * self.period
+            self.late = False
+        self.next_frame = self.after(frame)
+        self.slot += 1
+        return frame, payload
 
 
 class ConversionStage:

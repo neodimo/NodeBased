@@ -71,7 +71,7 @@ from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
 from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
-from .playback import PlaybackQueue, PlayoutBuffer, DisplayCache, ConversionStage, STATIC_FRAME, playing_document, first_look_document
+from .playback import PlaybackQueue, PlayoutBuffer, PlayoutClock, DisplayCache, ConversionStage, STATIC_FRAME, playing_document, first_look_document
 from .queuepanel import QueuePanel, create_default_queue
 from . import pipeline
 from .motion import MotionAnimator
@@ -11814,6 +11814,10 @@ class Window(QMainWindow):
                     time_range = self.dispatcher.document["time"]
             self.playback_origin_frame = time_range["current"]
             self.playback_origin_time = time.monotonic()
+            if self.playout_enabled:
+                first, last = viewerknobs.playback_range(self.dispatcher.document)
+                self._playout_clock = PlayoutClock(first, last, time_range["current"], time_range["fps"],
+                                                   self.play_direction, self.loop_mode)
             self.playback_elapsed_frames = 0
             self._playback_next_deadline = None
             self.playback_dropped_frames = 0
@@ -11853,6 +11857,8 @@ class Window(QMainWindow):
             # adds UI/event-loop work without improving picture cadence, and the overhead costs
             # measurable throughput on cache-hot HD ranges.
             self._schedule_playback_tick(float(time_range["fps"]))
+            if self.playout_enabled:
+                self._playout_last_queued = time_range["current"]
             self.request_preview()
         else:
             if self._clock_ramp is not None:
@@ -11972,12 +11978,8 @@ class Window(QMainWindow):
         if time.monotonic() - self._realtime_light_updated > 0.25:
             self._realtime_light_updated = time.monotonic()
             self.update_realtime_light()
-        # Playout deliberately trails completed evaluation by one frame.  That
-        # is the small player buffer: frame f can be converted while f + 1 is
-        # already on the worker, then f is presented on its clock slot.
         playout_enabled = getattr(self, "playout_enabled", False)
-        rendered_limit = max(0, self.playback_frames_rendered - 1) if playout_enabled else self.playback_frames_rendered
-        bounded_frames = min(elapsed_frames, rendered_limit)
+        bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
         first, last = viewerknobs.playback_range(self.dispatcher.document)
         target, finished = playhead_at(first, last, self.playback_origin_frame,
                                        bounded_frames, self.play_direction, self.loop_mode)
@@ -11987,16 +11989,16 @@ class Window(QMainWindow):
             if target > limit:
                 target, finished = limit, True
         if playout_enabled:
-            # A completed evaluation is not a finished picture: conversion may
-            # still be running.  Keep the current playhead until the clock's
-            # target picture is actually available.
-            entry = self.playout_buffer.take(target, self._playout_generation)
-            if entry is None and target != time_range["current"]:
-                self.playout_late_frames += 1
-                target = time_range["current"]
-            if entry is not None:
+            clock = getattr(self, "_playout_clock", None)
+            shown = clock.tick(time.monotonic(), lambda frame: self.playout_buffer.take(frame, self._playout_generation)) if clock else None
+            if shown is not None:
+                target, entry = shown
                 self.set_time(transient=True, playhead_only=True, render=False, current=target)
                 self._show_playout_entry(entry)
+                self.playout_buffer.drop_before(clock.next_frame, self._playout_generation, self.play_direction)
+                self._queue_playout_ahead()
+            if clock is not None:
+                self.playout_late_frames = clock.late_count
         elif target != time_range["current"]:
             self.set_time(transient=True, playhead_only=True, current=target)
         if finished:
@@ -19350,12 +19352,18 @@ class Window(QMainWindow):
             if len(self.preview_queue):
                 self.start_preview()
 
-    def _queue_playout_ahead(self, request):
-        """Keep exactly the next playback frame on the worker while this one converts."""
-        future = self.future_frames(request.frame, count=1)
-        if future and future[0] != getattr(self, "_playout_last_queued", None):
-            self._playout_last_queued = future[0]
-            self.request_preview(playhead_only=True, frame_override=future[0])
+    def _queue_playout_ahead(self, request=None):
+        """Keep the pointer frame and one successor requested, never farther ahead."""
+        clock = getattr(self, "_playout_clock", None)
+        if clock is None:
+            return
+        for frame in (clock.next_frame, clock.next_after()):
+            if self.playout_buffer.has(frame, self._playout_generation):
+                continue
+            if frame != getattr(self, "_playout_last_queued", None):
+                self._playout_last_queued = frame
+                self.request_preview(playhead_only=True, frame_override=frame)
+                return
 
     def _show_playout_entry(self, entry):
         """Present a completed picture at its playback-clock tick on the Qt thread."""

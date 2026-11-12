@@ -8,7 +8,7 @@ import numpy as np
 from nodebased.core import Dispatcher, demo_document
 from nodebased.imaging import Evaluator
 from nodebased.media import write_exr
-from nodebased.playback import MAX_PREFETCH, DisplayCache, PlaybackQueue, PlayoutBuffer
+from nodebased.playback import MAX_PREFETCH, DisplayCache, PlaybackQueue, PlayoutBuffer, PlayoutClock
 
 
 class PlaybackQueueTests(unittest.TestCase):
@@ -100,6 +100,39 @@ class PlayoutBufferTests(unittest.TestCase):
         buffer.clear()
         self.assertIsNone(buffer.take(1, 1))
         self.assertEqual(buffer.dropped, 0)
+
+
+class PlayoutClockTests(unittest.TestCase):
+    def test_jittered_ready_frames_present_on_24fps_slots(self):
+        clock = PlayoutClock(1, 24, 1, 24.0)
+        ready = {frame: 0.030 + frame / 24.0 + (0.018 if frame % 2 else -0.005) for frame in range(1, 25)}
+        shown = []
+        for step in range(300):
+            now = step / 240.0
+            available = {frame for frame, at in ready.items() if at <= now}
+            result = clock.tick(now, lambda frame: frame if frame in available else None)
+            if result:
+                shown.append((now, result[0]))
+        shown = shown[:24]
+        self.assertEqual([frame for _at, frame in shown], list(range(1, 25)))
+        intervals = [b[0] - a[0] for a, b in zip(shown, shown[1:])]
+        self.assertLessEqual(max(intervals), 1 / 24 + 1 / 240)
+
+    def test_one_late_frame_reanchors_then_recovers_cadence(self):
+        clock = PlayoutClock(1, 8, 1, 24.0)
+        ready = {frame: frame / 24.0 for frame in range(1, 9)}
+        ready[4] += 0.200
+        shown = []
+        for step in range(500):
+            now = step / 240.0
+            result = clock.tick(now, lambda frame: frame if ready[frame] <= now else None)
+            if result:
+                shown.append((now, result[0]))
+        shown = shown[:8]
+        self.assertEqual([frame for _at, frame in shown], list(range(1, 9)))
+        intervals = [b[0] - a[0] for a, b in zip(shown, shown[1:])]
+        self.assertEqual(sum(interval > 0.08 for interval in intervals), 1)
+        self.assertLessEqual(max(intervals[-3:]), 1 / 24 + 1 / 240)
 
 
 class DisplayCacheTests(unittest.TestCase):
