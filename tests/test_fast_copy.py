@@ -53,3 +53,49 @@ class FastCopyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KnobPreviewTests(unittest.TestCase):
+    """A properties slider drag previews the knob's edit on a copy: the live document and the undo history stay as they were, and the
+    picture request carries exactly the document the committed edit produces."""
+
+    def test_knob_preview_is_the_committed_edit_on_its_own_copy(self):
+        import os
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+        from nodebased.app import Window
+        from tests.test_roto_ui import roto_document, triangle
+        QApplication.instance() or QApplication([])
+        QSettings("NodeBased", "NodeBased").clear()
+        window = Window(roto_document([triangle()]))
+        try:
+            window.timer.stop()
+            window.timer.start = lambda *a, **k: None
+            seen = []
+            real = window.request_preview
+            window.request_preview = lambda *a, **k: seen.append((a, k))
+            live = window.dispatcher.document
+            before = copy.deepcopy(live)
+            undo_before = len(window.dispatcher.undo_stack)
+            window.preview_param_drag("r", "pt1_x", 12.5)
+            (args, kwargs), = seen
+            self.assertIs(window.dispatcher.document, live)
+            self.assertEqual(live, before)
+            self.assertEqual(len(window.dispatcher.undo_stack), undo_before)
+            shown = kwargs["document_override"]
+            self.assertIsNot(shown, live)
+            self.assertTrue(kwargs["document_owned"])
+            self.assertEqual(shown["nodes"]["r"]["params"]["pt1_x"], 12.5)
+            committed = Dispatcher(copy.deepcopy(before))
+            committed.execute({"op": "set", "id": "r", "param": "pt1_x", "value": 12.5})
+            self.assertEqual(shown, committed.document)
+            seen.clear()
+            window.preview_param_drag("r", "pt1_x", before["nodes"]["r"]["params"]["pt1_x"])     # an edit that changes nothing
+            (args, kwargs), = seen
+            self.assertIsNot(kwargs["document_override"], live)
+            self.assertEqual(kwargs["document_override"], before)
+        finally:
+            window.request_preview = real
+            window.saved_document = window.dispatcher.document
+            window.close()

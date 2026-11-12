@@ -18205,7 +18205,7 @@ class Window(QMainWindow):
         from .core import Dispatcher
         # `execute` edits a copy and never touches the document it is given, so the preview dispatcher takes the live document as
         # it is (already valid and current) instead of copying, upgrading and validating it first; the picture it gets back is its
-        # own copy, made with the quick document copy (this was 25 ms a move, over a third of it three extra copies).
+        # own copy (this was 25 ms a move, over a third of it three extra copies).
         preview = Dispatcher.adopt(self.dispatcher.document)
         if self.node_curve(key, param) is None:
             command = {"op": "set", "id": key, "param": param, "value": value}
@@ -18213,7 +18213,12 @@ class Window(QMainWindow):
             command = {"op": "set_key", "id": key, "param": param,
                        "frame": int(preview.document["time"]["current"]), "value": float(value)}
         preview.execute(self.scoped_command(command))
-        self.request_preview(progressive=True, document_override=preview.document)
+        # The edited document is the dispatcher's own copy, so the request keeps it as it is (a drag's picture is never one
+        # already cached, so the cached-picture probe, a hash of the whole document, is skipped too: 5 ms of every move).
+        edited = preview.document
+        if edited is self.dispatcher.document:       # an edit that changed nothing leaves the live document in place
+            edited = fast_copy(edited)
+        self.request_preview(progressive=True, document_override=edited, document_owned=True)
 
     def animatable_row(self, key, param, control, expression=None):
         """Pack a numeric control next to its keyframe button."""

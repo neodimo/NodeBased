@@ -975,7 +975,7 @@ def merge(results):
     return merged
 
 
-def top_functions(profiler, count=14):
+def top_functions(profiler, count=int(os.environ.get("NODEBASED_BENCH_TOP", "14"))):
     stream = io.StringIO()
     stats = pstats.Stats(profiler, stream=stream)
     stats.sort_stats("cumulative")
