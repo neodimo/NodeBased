@@ -86,6 +86,7 @@ class KnobPreviewTests(unittest.TestCase):
             shown = kwargs["document_override"]
             self.assertIsNot(shown, live)
             self.assertTrue(kwargs["document_owned"])
+            self.assertEqual(kwargs["drag_tier"], window.viewer.DRAG_PREVIEW_TIER)
             self.assertEqual(shown["nodes"]["r"]["params"]["pt1_x"], 12.5)
             committed = Dispatcher(copy.deepcopy(before))
             committed.execute({"op": "set", "id": "r", "param": "pt1_x", "value": 12.5})

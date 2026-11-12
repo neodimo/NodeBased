@@ -18218,7 +18218,10 @@ class Window(QMainWindow):
         edited = preview.document
         if edited is self.dispatcher.document:       # an edit that changed nothing leaves the live document in place
             edited = fast_copy(edited)
-        self.request_preview(progressive=True, document_override=edited, document_owned=True)
+        # One proxy tier for every picture of the held knob, never refined while the hand is down, as a Roto drag's pictures are
+        # (each move was three renders, 8, 4 and the selected tier, and the first two were thrown away by the next move).
+        self.request_preview(progressive=True, document_override=edited, document_owned=True,
+                             drag_tier=self.viewer.DRAG_PREVIEW_TIER)
 
     def animatable_row(self, key, param, control, expression=None):
         """Pack a numeric control next to its keyframe button."""
