@@ -75,6 +75,22 @@ class PlaybackQueueTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported proxy tier"):
             queue.replace(1, 1, self.document, tier=3)
 
+    def test_played_requests_append_in_order_before_the_worker_takes_them(self):
+        queue = PlaybackQueue()
+        self.assertTrue(queue.enqueue_played(4, 10, self.document))
+        self.assertTrue(queue.enqueue_played(4, 11, self.document))
+        self.assertEqual([queue.take()[0].frame, queue.take()[0].frame], [10, 11])
+
+    def test_played_request_dedupes_queued_and_running_frames(self):
+        queue = PlaybackQueue()
+        self.assertTrue(queue.enqueue_played(4, 10, self.document))
+        self.assertFalse(queue.enqueue_played(4, 10, self.document))
+        request, cancel = queue.take()
+        self.assertEqual(request.frame, 10)
+        self.assertFalse(queue.enqueue_played(4, 10, self.document))
+        queue.retire(cancel)
+        self.assertTrue(queue.enqueue_played(4, 10, self.document))
+
 
 class PlayoutBufferTests(unittest.TestCase):
     def test_take_is_ordered_by_frame_and_generation(self):

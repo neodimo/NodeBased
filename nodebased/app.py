@@ -11858,8 +11858,9 @@ class Window(QMainWindow):
             # measurable throughput on cache-hot HD ranges.
             self._schedule_playback_tick(float(time_range["fps"]))
             if self.playout_enabled:
-                self._playout_last_queued = time_range["current"]
-            self.request_preview()
+                self._queue_playout_ahead()
+            else:
+                self.request_preview()
         else:
             if self._clock_ramp is not None:
                 self._clock_ramp.finish()
@@ -19360,10 +19361,16 @@ class Window(QMainWindow):
         for frame in (clock.next_frame, clock.next_after()):
             if self.playout_buffer.has(frame, self._playout_generation):
                 continue
-            if frame != getattr(self, "_playout_last_queued", None):
-                self._playout_last_queued = frame
-                self.request_preview(playhead_only=True, frame_override=frame)
-                return
+            snapshot = playing_document(fast_copy(self.dispatcher.document))
+            snapshot["time"]["current"] = frame
+            target = snapshot.get("view")
+            if target:
+                self.tile_executor.prefetch_reads(snapshot, target, [frame])
+            self.generation += 1
+            self.preview_queue.enqueue_played(self.generation, frame, snapshot,
+                                              tier=int(self.proxy.currentData()), viewport=None)
+        if not self.busy and len(self.preview_queue):
+            self.start_preview()
 
     def _show_playout_entry(self, entry):
         """Present a completed picture at its playback-clock tick on the Qt thread."""

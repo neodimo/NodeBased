@@ -58,6 +58,7 @@ class PlaybackQueue:
         # behind it, and `active_cancel` names only the newer, so a cancel that reached only that left the running render
         # (a 100 s processor frame of the stopped scene) to finish before the first played frame could start.
         self._running: set[threading.Event] = set()
+        self._running_frames: dict[threading.Event, tuple[int, int]] = {}
 
     def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None,
                 playing=False, cancel_active=True, live_preview=False, uncached=False):
@@ -106,6 +107,19 @@ class PlaybackQueue:
     def retire(self, cancel):
         """The worker is done with the job whose cancel event this is (finished, failed or cancelled)."""
         self._running.discard(cancel)
+        self._running_frames.pop(cancel, None)
+
+    def enqueue_played(self, generation, frame, document, tier=FULL_TIER, viewport=None):
+        """Append a played request without replacing earlier played work.
+
+        The playout pointer asks for two adjacent pictures.  Replacing the
+        queue here loses the first one before the worker has taken it.
+        """
+        key = (int(generation), int(frame))
+        if any(running_frame == key[1] for _running_generation, running_frame in self._running_frames.values()) or any(item.frame == key[1] for item in self._items):
+            return False
+        self._items.append(FrameRequest(key[0], key[1], True, document, int(tier), viewport, True))
+        return True
 
     def enqueue_background(self, generation, frame, document, tier=FULL_TIER):
         """Append one non-displayed frame evaluation behind the visible request.
@@ -126,6 +140,7 @@ class PlaybackQueue:
         request = self._items.popleft()
         self.active_cancel = threading.Event()
         self._running.add(self.active_cancel)
+        self._running_frames[self.active_cancel] = (request.generation, request.frame)
         return request, self.active_cancel
 
     def finish(self, cancel):
