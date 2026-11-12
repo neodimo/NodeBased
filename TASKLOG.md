@@ -1,3 +1,9 @@
+## 2026-11-11 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step U2 (Wed 11/11): Roto must feel instant: overlay under 16 ms, panel lazy, painted strokes cached (finish 1) (integrator tick)
+
+- **What was done:** `main` `5970bf57` -> `d59f227d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `d59f227d`: Ran 9865 tests in 1640.687 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-11 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step U2 (Wed 11/11): Roto must feel instant: overlay under 16 ms, panel lazy, painted strokes cached (integrator tick)
 
 - **What was done:** `main` `be89ddf0` -> `67e36437` plus this docs commit. Evidence and per-lane commit

@@ -1,5 +1,25 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:15 PM on 2026-11-11 PDT)
+
+`main` moved `5970bf57` -> `d59f227d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d59f227d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1111-1545.log`, started 3:45 PM): **Ran 9865 tests in 1640.687 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step U2 (Wed 11/11): Roto must feel instant: overlay under 16 ms, panel lazy, painted strokes cached (finish 1).** Commits:
+  - `2805ac6a` docs: PERFORMANCE.md: Roto interaction U2 finish pass (release stall 215 to 250 ms down to 53 to 71 ms; what is still over target); finish measurements
+  - `122213d7` Roto panel: the selected shape's controls are built a few milliseconds per event with the panel height held, and a shape edit's timeline marks follow 40 ms later; the benchmark times more of the release (stall stacks, dispatcher and graph spans); test
+  Diff: 7 files changed, 1359 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:15 PM on 2026-11-11 PDT)
 
 `main` moved `be89ddf0` -> `67e36437` (lane commits cherry-picked onto main in lane order) and then to this
