@@ -1,3 +1,9 @@
+## 2026-11-12 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback, Radeon 24 fps gate: show each frame on the playback clock (finish 1: the clock stalls) (integrator tick)
+
+- **What was done:** `main` `066b79c2` -> `74250446` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `74250446`: Ran 9874 tests in 1642.187 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-11 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) Lane 9 step U2 (Wed 11/11): Roto must feel instant: overlay under 16 ms, panel lazy, painted strokes cached (finish 1) (integrator tick)
 
 - **What was done:** `main` `a7c7e427` -> `b82c0cb5` plus this docs commit. Evidence and per-lane commit
