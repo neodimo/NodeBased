@@ -1,5 +1,31 @@
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (7:45 PM on 2026-11-11 PDT)
+
+`main` moved `a7c7e427` -> `b82c0cb5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `b82c0cb5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1111-1916.log`, started 7:16 PM): **Ran 9871 tests in 1646.251 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 9 step U2 (Wed 11/11): Roto must feel instant: overlay under 16 ms, panel lazy, painted strokes cached (finish 1).** Commits:
+  - `42a218dc` Tests: a held Properties slider's preview is at the drag tier (follows the knob drag change in 53c24aea)
+  - `cfd4ecfe` docs: PERFORMANCE.md: name the raw runs of the U2 finish pass 2
+  - `8a26cf79` docs: PERFORMANCE.md: Roto interaction U2 finish pass 2 (release click, opacity knob drag, controls timing); measurements
+  - `9904624e` Roto panel: after a drag's release the panel is brought up to date 60 ms later (other edits keep the 150 ms wait that coalesces a held frame-step key); test
+  - `15b98646` Roto panel: the selected shape's Transform rows are built when the group is opened, not with every selection; test
+  - `53c24aea` Knob drag pictures render at one held proxy tier, as a Roto drag's do; test
+  - `683db2a2` Knob drag preview keeps its edited copy and skips the cached-picture probe (a hash of the whole document per move); the benchmark's profile length is settable; test
+  - `2fa35e8b` Edits commit faster: a plain-data document copy replaces deepcopy, an edit skips re-validating payloads it did not change, and a knob drag's preview no longer copies and validates the document three extra times; tests
+  Diff: 14 files changed, 3731 insertions(+), 61 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (4:15 PM on 2026-11-11 PDT)
 
 `main` moved `5970bf57` -> `d59f227d` (lane commits cherry-picked onto main in lane order) and then to this
