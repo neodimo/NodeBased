@@ -16,7 +16,7 @@ from .sparsevol import SparseGrid, TILE
 
 DEFAULTS = {"upres_factor": 2, "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
             "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",
-            "swirl": 0.0, "swirl_scale": 6.0,
+            "swirl": 0.0, "swirl_scale": 6.0, "swirl_life": 1.0, "swirl_max": 1.5,
             "cache_memory_mb": 256, "cache_disk_mb": 2048}
 
 # Swirl (docs/FLUIDS_SPIKE.md, "Fluids 17 B"): small-scale rotational motion added to the velocity that carries the fine field.
@@ -24,6 +24,9 @@ SWIRL_WAVES = 24         # random divergence-free waves in the band-limited curl
 SWIRL_CONFINE = 2.0      # vorticity confinement strength per unit of `swirl`
 SWIRL_LIMIT = 2.0        # the added velocity never exceeds this multiple of the coarse speed at the voxel
 SWIRL_KEEP = 0.92        # share of the carried detail kept each frame (the rest relaxes back to the coarse field)
+SWIRL_SPIN = 16.0        # persistent swirl (Fluids 17 C): confinement acceleration per second, per unit of `swirl`
+SWIRL_INJECT = 4.0       # persistent swirl: curl-noise source per second, per unit of `swirl` (times the coarse speed)
+SWIRL_PROJECT = 20       # persistent swirl: Jacobi pressure iterations that keep the carried velocity divergence-free
 SWIRL_MARGIN = 2         # voxels of velocity computed around the active tiles (the confinement stencil reaches two)
 
 
@@ -133,6 +136,104 @@ def swirl_blocks(guide, coords, factor, params, frame, voxel, backend):
         dense = swirl_dense(guide, factor, low, dims, waves, strength, SWIRL_CONFINE * strength, SWIRL_LIMIT, voxel)
     else:
         dense = swirl_dense_cpu(guide, factor, low, dims, waves, strength, voxel)
+    local = np.indices((TILE, TILE, TILE), dtype=np.int64)
+    index = [coords[:, axis, None, None, None].astype(np.int64) * TILE + local[axis] - low[axis] for axis in range(3)]
+    return dense[index[0], index[1], index[2]]
+
+
+def _jacobi_pressure(div, h, iters):
+    """`iters` Jacobi sweeps of the 7-point Poisson equation (edge-clamped neighbours, as the GPU kernel) for `div`."""
+    p = np.zeros_like(div)
+    h2 = np.float32(h * h)
+    for _ in range(int(iters)):
+        q = np.pad(p, 1, mode="edge")
+        total = (q[2:, 1:-1, 1:-1] + q[:-2, 1:-1, 1:-1] + q[1:-1, 2:, 1:-1] + q[1:-1, :-2, 1:-1] +
+                 q[1:-1, 1:-1, 2:] + q[1:-1, 1:-1, :-2])
+        p = ((total - h2 * div) / np.float32(6.0)).astype(np.float32)
+    return p
+
+
+def divergence_dense(u, h):
+    """Central-difference divergence of a dense velocity field (*dims, 3), edge-clamped."""
+    return (_central(u[..., 0], 0, h) + _central(u[..., 1], 1, h) + _central(u[..., 2], 2, h)).astype(np.float32)
+
+
+def swirl_persist_cpu(guide, factor, low, dims, waves, uf0, strength, voxel, dt, life, vmax, iters,
+                      spin=None, inject=None):
+    """Reference persistent swirl step (Fluids 17 C) on the dense box `low`/`dims`: the fine velocity `uf0` of the last frame in,
+    the new one (*dims, 3) out. In order: advect `uf0` by the coarse velocity plus itself (semi-Lagrangian), inject curl noise
+    scaled by the coarse speed, confine vorticity of the total velocity, decay by exp(-dt / life), project with `iters` Jacobi
+    sweeps, and limit to `vmax` times the coarse speed."""
+    spin = SWIRL_SPIN if spin is None else spin
+    inject = SWIRL_INJECT if inject is None else inject
+    K, C, phase = waves
+    coarse = guide.shape[:3]
+    h = float(voxel)
+    axes = [np.arange(dims[a], dtype=np.float32) + np.float32(low[a]) for a in range(3)]
+    q = [np.clip(axes[a] * np.float32((coarse[a] - 1) / (coarse[a] * factor - 1)), 0, coarse[a] - 1) for a in range(3)]
+    qx, qy, qz = np.meshgrid(*q, indexing="ij")
+    vc = np.stack([fluid3d.trilerp(guide[..., a], qx, qy, qz) for a in range(3)], axis=-1).astype(np.float32)
+    speed = np.sqrt(np.sum(vc * vc, axis=-1))
+    step = np.float32(dt / h)
+    gx, gy, gz = np.meshgrid(*[np.arange(n, dtype=np.float32) for n in dims], indexing="ij")
+    total = vc + uf0
+    back = [np.clip(g - total[..., a] * step, 0, dims[a] - 1) for a, g in enumerate((gx, gy, gz))]
+    u = np.stack([fluid3d.trilerp(uf0[..., a], *back) for a in range(3)], axis=-1).astype(np.float32)
+    noise = np.zeros((*dims, 3), np.float32)
+    for i in range(len(phase)):
+        theta = (K[i, 0] * axes[0][:, None, None] + K[i, 1] * axes[1][None, :, None] +
+                 K[i, 2] * axes[2][None, None, :] + phase[i])
+        noise += np.cos(theta).astype(np.float32)[..., None] * C[i]
+    u = u + (np.float32(inject * strength * dt) * speed)[..., None] * noise
+    t = vc + u
+    omega = np.stack([_central(t[..., 2], 1, h) - _central(t[..., 1], 2, h), _central(t[..., 0], 2, h) - _central(t[..., 2], 0, h),
+                      _central(t[..., 1], 0, h) - _central(t[..., 0], 1, h)], axis=-1)
+    mag = np.sqrt(np.sum(omega * omega, axis=-1))
+    eta = np.stack([_central(mag, a, h) for a in range(3)], axis=-1)
+    unit = eta / (np.sqrt(np.sum(eta * eta, axis=-1, keepdims=True)) + np.float32(1e-20))
+    u = (u + np.float32(spin * strength * dt * h) * np.cross(unit, omega)) * np.float32(np.exp(-dt / life))
+    if iters > 0:
+        u = u - np.stack([_central(_jacobi_pressure(divergence_dense(u, h), h, iters), a, h) for a in range(3)], axis=-1)
+    size = np.sqrt(np.sum(u * u, axis=-1))
+    u *= (np.minimum(1.0, np.float32(vmax) * speed / np.maximum(size, np.float32(1e-20))))[..., None]
+    return u.astype(np.float32)
+
+
+def scatter_tiles(coords, blocks, low, dims):
+    """Dense box (*dims, 3) holding the vector tile `blocks` of the fine tiles `coords`; zero elsewhere (and outside the box)."""
+    dense = np.zeros((*[int(n) for n in dims], 3), np.float32)
+    if len(coords) == 0:
+        return dense
+    local = np.indices((TILE, TILE, TILE), dtype=np.int64)
+    index = [np.asarray(coords)[:, axis, None, None, None].astype(np.int64) * TILE + local[axis] - low[axis] for axis in range(3)]
+    inside = np.ones(index[0].shape, bool)
+    for axis in range(3):
+        inside &= (index[axis] >= 0) & (index[axis] < dims[axis])
+    dense[index[0][inside], index[1][inside], index[2][inside]] = np.asarray(blocks, np.float32)[inside]
+    return dense
+
+
+def swirl_persistent_blocks(guide, coords, factor, params, frame, voxel, backend, previous, dt):
+    """The persistent fine velocity `u_fine` at every voxel of the given fine tiles, shape (len(coords), 8, 8, 8, 3).
+
+    The previous frame's `u_fine` is read from its cached sparse grid (zero at the first frame, and where a tile was dropped)."""
+    strength = float(params.get("swirl", 0.0))
+    life = float(params.get("swirl_life", 1.0))
+    vmax = float(params.get("swirl_max", 1.5))
+    waves = swirl_waves(int(params.get("seed", 0)), float(params.get("swirl_scale", 6.0)), factor, int(frame or 0))
+    low, dims = swirl_box(coords)
+    prior = None
+    if previous is not None:
+        prior = previous.sparse if getattr(previous, "sparse", None) is not None else None
+    uf0 = np.zeros((*[int(n) for n in dims], 3), np.float32)
+    if prior is not None and "ufine" in prior.data and len(prior.coords):
+        uf0 = scatter_tiles(prior.coords, prior.data["ufine"], low, dims)
+    if backend == "gpu":
+        from .fluid_upres_gpu import swirl_persist
+        dense = swirl_persist(guide, factor, low, dims, waves, uf0, strength, voxel, dt, life, vmax, SWIRL_PROJECT,
+                              SWIRL_SPIN, SWIRL_INJECT)
+    else:
+        dense = swirl_persist_cpu(guide, factor, low, dims, waves, uf0, strength, voxel, dt, life, vmax, SWIRL_PROJECT)
     local = np.indices((TILE, TILE, TILE), dtype=np.int64)
     index = [coords[:, axis, None, None, None].astype(np.int64) * TILE + local[axis] - low[axis] for axis in range(3)]
     return dense[index[0], index[1], index[2]]
@@ -261,15 +362,28 @@ def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previo
     step = 1.0 / (max(float(fps), 1e-6) * float(source.voxel_size) / factor)
     strength = float((params or DEFAULTS).get("swirl", 0.0)) if guide is not None else 0.0
     reach = 1.0 + min(SWIRL_LIMIT, 1.5 * strength) if strength > 0 else 1.0
+    if strength > 0 and float((params or DEFAULTS).get("swirl_life", 0.0)) > 0:
+        reach = 1.0 + max(0.0, float((params or DEFAULTS).get("swirl_max", 1.5)))
     halo = 1 if guide is None else max(1, int(np.ceil(float(np.max(np.abs(guide))) * reach * step / TILE)) + 1)
     coords = _active_fine_tiles(source, factor, previous, halo)
     names = ("density", "temperature", "flame", "fuel")
     fields = {name: getattr(source, name) for name in names if getattr(source, name) is not None}
     swirl = None
+    ufine = None
     if strength > 0 and len(coords):
-        swirl = swirl_blocks(guide, coords, factor, params, frame, float(source.voxel_size) / factor, backend)
+        if float((params or DEFAULTS).get("swirl_life", 0.0)) > 0:
+            swirl = ufine = swirl_persistent_blocks(guide, coords, factor, params, frame, float(source.voxel_size) / factor,
+                                                    backend, previous, 1.0 / max(float(fps), 1e-6))
+        else:
+            swirl = swirl_blocks(guide, coords, factor, params, frame, float(source.voxel_size) / factor, backend)
     blocks = _sparse_blocks(fields, coords, shape, coarse_shape, backend, guide, previous, step, swirl)
+    if ufine is not None:
+        blocks["ufine"] = ufine.astype(np.float32)
     fresh = None
+    keep = SWIRL_KEEP
+    if ufine is not None:
+        # A persistent swirl keeps the smoke's displacement as long as the swirl itself lasts (never less than step B's share).
+        keep = max(SWIRL_KEEP, float(np.exp(-1.0 / (max(float(fps), 1e-6) * float(params["swirl_life"])))))
     if frame is not None:
         # Reinjection: coarse field now + (fine carried - coarse carried). With no previous frame this is just the coarse field now.
         now = _sparse_blocks(fields, coords, shape, coarse_shape, backend, None, None, step) if guide is not None or previous is not None else blocks
@@ -280,7 +394,7 @@ def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previo
                 if name in carried and swirl is not None and name == "density":
                     # The fine field was carried by the guide plus the swirl, the coarse one by the guide alone: what is left
                     # is the swirl's displacement of the smoke plus the carried detail, kept and relaxed back to the coarse field.
-                    blocks[name] = now[name] + np.float32(SWIRL_KEEP) * (blocks[name] - carried[name])
+                    blocks[name] = now[name] + np.float32(keep) * (blocks[name] - carried[name])
                 elif name in carried:
                     blocks[name] = now[name] + blocks[name] - carried[name]
                 else:

@@ -2264,6 +2264,8 @@ KNOB_LAYOUT.update({
                             KnobGroup("float", ("swirl_size",), label="Swirl size"),
                             KnobGroup("float", ("swirl",), label="Swirl strength"),
                             KnobGroup("float", ("swirl_scale",), label="Swirl scale"),
+                            KnobGroup("float", ("swirl_life",), label="Swirl life (s)"),
+                            KnobGroup("float", ("swirl_max",), label="Swirl speed limit"),
                             KnobGroup("int", ("grain",), label="Grain"),
                             KnobGroup("float", ("pulse_length",), label="Pulse length"),
                             KnobGroup("float", ("shredding",), label="Shredding"),

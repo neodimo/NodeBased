@@ -20,7 +20,7 @@ class FluidEditClassificationTests(unittest.TestCase):
         "FluidFoam3D": "e880f124076259386d054695634a1f3f617ca3fd0732de2fc6ee279c5fe692c5",
         "FluidWhitewater3D": "0a7bcc97a0e496b5b288efee90d24d99a2fb708fbf0bc735c98cb62702843dab",
         "FluidCache3D": "2d7f028be81f6e2233d23c5a7991643b348a258076561dafc34dcf836c0036c1",
-        "FluidUpres3D": "45a4d0ec6708227cfe9dbbe6db42869df10a122d74b1e4d27f86a2c9bbcb0286",  # + swirl, swirl_scale (look: the up-res reruns, the solve is reused)
+        "FluidUpres3D": "d96500f1399b17a7238e1eeaa6440e6b8f5e6688018a5194dfe7d2bf41e7f949",  # + swirl, swirl_scale, swirl_life, swirl_max (look: the up-res reruns, the solve is reused)
         "WriteVDB3D": "68d114011b3c3e1050b598f6d9a20ee5950efa58d7aea3b03918550dfa34e804",
     }
 

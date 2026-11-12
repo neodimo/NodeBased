@@ -21,7 +21,8 @@ def plume(speed=1.2, shear=True):
 
 
 def params(**extra):
-    return {**fluid_upres.DEFAULTS, "upres_factor": "2", "swirl": 1.0, "swirl_scale": 3.0, **extra}
+    # `swirl_life` 0: no persistence, step B's per-frame swirl (the persistent one is tested in test_fluid_upres_persist).
+    return {**fluid_upres.DEFAULTS, "upres_factor": "2", "swirl": 1.0, "swirl_scale": 3.0, "swirl_life": 0.0, **extra}
 
 
 def box_of(source, factor=2):
@@ -96,7 +97,7 @@ class SwirlGridTests(unittest.TestCase):
     def test_swirl_off_is_the_old_result_bit_for_bit(self):
         first, second = plume(), plume(1.4)
         off = {**fluid_upres.DEFAULTS, "upres_factor": "2", "upres_backend": "cpu"}
-        old = {key: value for key, value in off.items() if key not in ("swirl", "swirl_scale")}
+        old = {key: value for key, value in off.items() if key not in ("swirl", "swirl_scale", "swirl_life", "swirl_max")}
         grids = []
         for p in (old, {**off, "swirl": 0.0}):
             a = fluid_upres.upres_sparse_grid(first, 2, "cpu", None, None, p, None, 1)
@@ -152,7 +153,7 @@ class SwirlRegistrationTests(unittest.TestCase):
 
     def test_an_old_document_loads_with_swirl_off(self):
         doc = core.empty_document()
-        old = {key: value for key, value in core.SPECS["FluidUpres3D"]["params"].items() if key not in ("swirl", "swirl_scale")}
+        old = {key: value for key, value in core.SPECS["FluidUpres3D"]["params"].items() if key not in ("swirl", "swirl_scale", "swirl_life", "swirl_max")}
         doc["nodes"]["up"] = {"type": "FluidUpres3D", "name": "up", "pos": [0, 0], "disabled": False,
                               "inputs": {"volume": None}, "params": old}
         loaded = core.upgrade_document(doc)
