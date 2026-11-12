@@ -10586,7 +10586,11 @@ class Window(QMainWindow):
         # playback it waits here for the transport clock, avoiding the visible
         # early/late alternation caused by presenting it immediately.
         self.playout_buffer = PlayoutBuffer()
-        self.playout_enabled = os.environ.get("NODEBASED_PLAYOUT", "1") != "0"
+        # Keep the established transport as the default until the clock-owned
+        # presentation path has cleared its playback gate.  The experimental
+        # playout buffer is explicitly enabled for its benchmark with
+        # NODEBASED_PLAYOUT=1.
+        self.playout_enabled = os.environ.get("NODEBASED_PLAYOUT", "0") == "1"
         self._playout_generation = 0
         self.playout_late_frames = 0
         self.display_cache = DisplayCache(force_float32=self.preferences.display_cache_float32())
@@ -11971,7 +11975,8 @@ class Window(QMainWindow):
         # Playout deliberately trails completed evaluation by one frame.  That
         # is the small player buffer: frame f can be converted while f + 1 is
         # already on the worker, then f is presented on its clock slot.
-        rendered_limit = max(0, self.playback_frames_rendered - 1) if self.playout_enabled else self.playback_frames_rendered
+        playout_enabled = getattr(self, "playout_enabled", False)
+        rendered_limit = max(0, self.playback_frames_rendered - 1) if playout_enabled else self.playback_frames_rendered
         bounded_frames = min(elapsed_frames, rendered_limit)
         first, last = viewerknobs.playback_range(self.dispatcher.document)
         target, finished = playhead_at(first, last, self.playback_origin_frame,
@@ -11981,7 +11986,7 @@ class Window(QMainWindow):
             limit = bake["first"] + self._contiguous_fluid_frames(bake) - 1
             if target > limit:
                 target, finished = limit, True
-        if self.playout_enabled:
+        if playout_enabled:
             # A completed evaluation is not a finished picture: conversion may
             # still be running.  Keep the current playhead until the clock's
             # target picture is actually available.
@@ -20192,6 +20197,12 @@ class Window(QMainWindow):
             self.playout_buffer.put(request.frame, self._playout_generation,
                                     (request, frame, image, status, render_region, extras))
             self._queue_playout_ahead(request)
+            # On the serial path preview_ready owns the worker hand-off.  Launch
+            # the successor before playback_tick can present this picture; the
+            # buffer otherwise waits for the clock to show f before it ever
+            # requests f + 1.
+            if len(self.preview_queue):
+                self.start_preview()
             self.playback_tick()
         elif request.display and (fresh or catching_up or live_preview) and not abandoned:
             if self.playing:
