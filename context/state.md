@@ -1,3 +1,7 @@
+## Lane 6 Fluids 17 step C (1:08 PM on 2026-11-12 PDT): persistent swirl in the up-res node, off by default
+
+Branch `openclaw/nb-fluids-spike`, commits 92527683 (code, tests) and 20969624 (evidence, docs). `FluidUpres3D` carries a fine velocity `u_fine` between frames (cache block `ufine`), knobs `swirl_life` and `swirl_max`; `swirl` 0 reproduces the old output bit for bit and `swirl_life` 0 is step B. 53 targeted tests pass on RTX 3080 Ti, Radeon 8060S and llvmpipe. Fire shot, factor 2: `u_fine` builds up and levels off; contrast 0.334 to 0.47; curl share 18.4 to 19.7 % (step B 35.5 %); grain 0.0063; bake at most 21 s; 128-sample frame above its gate with or without swirl. The smoke does not curl; default stays off. Details: `docs/FLUIDS_SPIKE.md` "Fluids 17 C swirl that builds up". Not verified: Windows, the real display, factor 4.
+
 ## 2026-11-08 — Lane 9 step Z (initial merge partial; lane finish complete)
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (4:25 AM on 2026-11-12 PDT)
