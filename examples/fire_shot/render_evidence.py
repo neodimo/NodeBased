@@ -569,6 +569,9 @@ def upres_time(args):
     Same sequence as `flame_time`: one warm-up render, then five renders with new seeds, median of the five. Also the bake time of the
     cache (frame 24) and the time the up-res node adds to it."""
     settings = json.loads(args.upres_settings) if args.upres_time == 'on' else False
+    from nodebased import fluid_upres
+    for key, value in json.loads(args.persist_constants).items():
+        setattr(fluid_upres, key, value)
     document = build_document(args.width, args.height, smoke_upres=settings)
     params = document['nodes']['render']['params']
     evaluator = Evaluator(sim=simcache.SimCache(root=args.workdir / ('upres-time-' + args.upres_time), memory_budget=1 << 30,
@@ -615,7 +618,11 @@ def effective_curl(evaluator, document, settings, frame=16):
     q = [np.clip(axes[a] * np.float32(ratio[a]), 0, guide.shape[a] - 1) for a in range(3)]
     qx, qy, qz = np.meshgrid(*q, indexing='ij')
     velocity = np.stack([fluid3d.trilerp(guide[..., a], qx, qy, qz) for a in range(3)], axis=-1)
-    if float(params['swirl']) > 0:
+    if float(params['swirl']) > 0 and float(params.get('swirl_life', 0.0)) > 0:
+        # The persistent swirl (17 C): the carried fine velocity was stored with the frame; scatter it into the box.
+        if 'ufine' in grid.data:
+            velocity = velocity + fluid_upres.scatter_tiles(grid.coords, grid.data['ufine'], low, dims)
+    elif float(params['swirl']) > 0:
         waves = fluid_upres.swirl_waves(int(params['seed']), float(params['swirl_scale']), factor, frame)
         velocity = velocity + fluid_upres.swirl_dense_cpu(guide, factor, low, dims, waves, float(params['swirl']), voxel)
     lo = np.maximum(low, 0)
@@ -626,6 +633,88 @@ def effective_curl(evaluator, document, settings, frame=16):
     camera = document['nodes']['camera']['params']
     return flame_metrics.projected_curl(density[world], velocity[inside], origin, voxel, (camera['tx'], camera['ty'], camera['tz']),
                                         (0.0, camera['target_y'], 0.0))
+
+
+PERSIST_VARIANTS = {
+    'off': {},
+    'stepB': {'swirl': 0.5, 'swirl_scale': 6.0, 'swirl_life': 0.0},
+    **{f's{swirl}_l{life}': {'swirl': swirl, 'swirl_scale': 6.0, 'swirl_life': life}
+       for swirl in (0.25, 0.5) for life in (0.5, 1.0, 2.0)},
+    # Not in the brief's grid: new smoke seeded with fine density detail (the up-res `turbulence`), with and without the persistent swirl.
+    'seeded': {'turbulence': 0.5, 'swirl_size': 4.0},
+    'seeded_s0.5_l2.0': {'turbulence': 0.5, 'swirl_size': 4.0, 'swirl': 0.5, 'swirl_scale': 6.0, 'swirl_life': 2.0},
+}
+
+
+def ufine_trace(evaluator, document, frames=range(1, 25)):
+    """Mean |u_fine| per frame over the stored voxels (all, and the ones holding smoke above 5 % of the frame's peak)."""
+    out = {}
+    for frame in frames:
+        with gpu_lock():
+            volume = evaluator.evaluate_raster(document, 'upres', frame=frame, typed=True)
+        grid = volume.sparse
+        if grid is None or 'ufine' not in grid.data:
+            out[str(frame)] = {'all': 0.0, 'smoke': 0.0}
+            continue
+        size = np.sqrt(np.sum(grid.data['ufine'].astype(np.float64) ** 2, axis=-1))
+        density = grid.data['density']
+        smoke = density > .05 * float(density.max())
+        out[str(frame)] = {'all': float(size.mean()), 'smoke': float(size[smoke].mean()) if smoke.any() else 0.0}
+    return out
+
+
+def persist_sweep(args):
+    """`--persist-sweep`: the persistent swirl (Fluids 17 C) against swirl off and step B's per-frame swirl, one row per variant.
+
+    Field numbers always (bake, curl of the carrying velocity, density contrast, flame measures, the u_fine trace); with `--persist-renders`
+    also the frames 8, 16 and 24 as stills, frame-16 grain, smoke structure and the 128-sample frame times (their own process)."""
+    images_dir = REPO / 'docs' / 'images' / 'fire_shot'
+    images_dir.mkdir(parents=True, exist_ok=True)
+    results = {}
+    reference = {}
+    for name in args.variants or list(PERSIST_VARIANTS):
+        option = PERSIST_VARIANTS[name]
+        document = build_document(args.width, args.height, smoke_upres=option)
+        params = document['nodes']['render']['params']
+        evaluator, bake_s, frames = bake_and_measure(document, args.workdir, 'persist-' + name, 'upres')
+        row = {'settings': option, 'bake_seconds': round(bake_s, 3), 'summary': flame_metrics.summarise(frames)}
+        row['projected_curl'] = effective_curl(evaluator, document, option)
+        row['ufine_mean'] = ufine_trace(evaluator, document)
+        print(name, json.dumps({k: row[k] for k in ('bake_seconds', 'summary', 'projected_curl')}), flush=True)
+        if args.persist_renders:
+            pictures = {}
+            row['render'] = {}
+            for frame in FRAMES:
+                with gpu_lock():
+                    params.update(render_output='rgba', pt_samples=128, pt_seed=1)
+                    first = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                    params['pt_seed'] = 2
+                    second = evaluator.evaluate_raster(document, 'render', frame=frame).pixels.copy()
+                pictures[frame] = (first, second)
+                write_png(images_dir / f'fire-smoke-persist-{name}{args.persist_suffix}-{frame:03d}.png', first)
+                row['render'][str(frame)] = {'grain_rms': float(np.sqrt(((first[..., :3] - second[..., :3]) ** 2).mean() / 2))}
+            if name == 'off':
+                reference = pictures
+            for frame in FRAMES:
+                if reference:
+                    mask = flame_metrics.smoke_mask(reference[frame][0])
+                    row['render'][str(frame)]['smoke_image'] = flame_metrics.smoke_structure(*pictures[frame], mask)
+            if not args.persist_no_timing:
+                timing = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--workdir', str(args.workdir), '--width', str(args.width),
+                                         '--height', str(args.height), '--upres-time', 'on', '--upres-settings', json.dumps(option),
+                                         '--persist-constants', args.persist_constants],
+                                        check=True, capture_output=True, text=True)
+                measured = json.loads(timing.stdout.strip().splitlines()[-1])
+                for frame, numbers in measured.pop('frames').items():
+                    row['render'][frame].update(numbers)
+                row['timing_process'] = measured
+            print(name, 'rendered', json.dumps(row['render']), flush=True)
+        results[name] = row
+        shutil.rmtree(args.workdir / ('persist-' + name), ignore_errors=True)
+        with gpu_lock():
+            device = gpu3d._state()['info'].get('device', 'unknown')
+        out = {'date': args.date, 'device': device, 'resolution': [args.width, args.height], 'samples': 128, 'variants': results}
+        (REPO / 'benchmarks' / 'fire_shot' / f'fire-smoke-persist-{args.tag}.json').write_text(json.dumps(out, indent=2) + '\n')
 
 
 def upres_compare(args):
@@ -852,10 +941,21 @@ def main():
     parser.add_argument('--upres-before', default=None, help='--upres: FluidUpres3D settings as JSON for the "before" side instead of no up-res '
                         '(the swirl step compares swirl off against swirl on); also measures the image-plane curl')
     parser.add_argument('--curl-sweep', action='store_true', help='render 64 cells with sideways curl strengths')
+    parser.add_argument('--persist-sweep', action='store_true', help='the persistent swirl (17 C) against swirl off and step B, one row per --variants name')
+    parser.add_argument('--persist-renders', action='store_true', help='--persist-sweep: also render frames 8, 16 and 24, grain, structure and times')
+    parser.add_argument('--persist-constants', default='{}', help='--persist-sweep: fluid_upres module constants as JSON (SWIRL_SPIN, SWIRL_INJECT, SWIRL_PROJECT)')
+    parser.add_argument('--persist-suffix', default='', help='--persist-sweep: appended to the still names')
+    parser.add_argument('--persist-no-timing', action='store_true', help='--persist-sweep: skip the separate 128-sample timing process')
     parser.add_argument('--tag', default='2026-10-30')
     parser.add_argument('--date', default='2026-10-30')
     args = parser.parse_args()
     args.workdir.mkdir(parents=True, exist_ok=True)
+    if args.persist_sweep:
+        from nodebased import fluid_upres
+        for key, value in json.loads(args.persist_constants).items():
+            setattr(fluid_upres, key, value)
+        persist_sweep(args)
+        return
     if args.smoke_grain_estimator:
         args.samples = args.samples or 128
         smoke_grain_estimator(args)

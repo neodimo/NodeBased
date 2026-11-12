@@ -2405,6 +2405,66 @@ reinjected frames) with `tests/test_fluid_upres.py` and `tests/test_fluid_upres_
 **Not verified.** Windows (no Windows machine here); the real display (stills read from saved images); the factor 4 setting with swirl (not rendered: its bake was 73 s without it); the swirl at the shot's other
 settings; a cheaper render path for the finer volume, which is what stops the up-res from being the shot's default. `make_shot.build_document(smoke_upres={"swirl": 0.5, "swirl_scale": 6.0})` builds the shot with the swirl.
 
+### Fluids 17 C swirl that builds up: a persistent fine velocity inside the up-res pass, off by default (2026-11-12)
+
+Step B's swirl was recomputed every frame and added to that frame's carry only, so it never built up. This step keeps a fine-scale velocity field `u_fine` from frame to frame, so rotation can accumulate.
+New knobs on `FluidUpres3D`: `swirl_life` (seconds the swirl lasts, default 1.0; **0 is step B's per-frame swirl**) and `swirl_max` (limit as a multiple of the local coarse speed, default 1.5). `swirl` still defaults to 0 (off).
+**Result: the pass works as designed and the smoke still does not curl.** `u_fine` rises over the first nine frames and levels off, the density contrast in the field rises from 0.334 to 0.47 at the best setting, grain (0.0063), the flame measures and the bake (at most 21 s, gate 30 s) all hold;
+but the image-plane curl barely moves (18.4 to 19.7 % of smoke cells above 30 per second, against 35.5 % for step B), the picture's smoke structure moves by 1 % (0.0806 to 0.0815 at frame 16) and the stills show slightly more streaked smoke and no curls. The 128-sample frame stays far above its 0.75 s gate
+with or without the swirl (1.5 to 2.9 s here; the render path is out of scope). The swirl stays off by default.
+
+**What it does** (`fluid_upres.swirl_persist_cpu`, `fluid_upres_gpu.swirl_persist`; `swirl_persistent_blocks` runs either). On the dense box around the active fine tiles, each frame, in this order:
+
+1. *Advect* last frame's `u_fine` by the coarse velocity (upsampled) plus itself, semi-Lagrangian, the same scheme as the density.
+2. *Inject* the step B curl noise (24 divergence-free plane waves, scaled by the coarse speed at the voxel) times `swirl` times the frame time times `SWIRL_INJECT` (4 per second): about 8 % of the local speed per frame at `swirl` 0.5.
+3. *Confine* vorticity of the total velocity (coarse plus `u_fine`) into `u_fine`: `SWIRL_SPIN` (16 per second) times `swirl` times the frame time times the voxel size times (N x curl).
+4. *Decay* by exp(-dt / `swirl_life`), so it cannot grow without bound and dies out in still air.
+5. *Project* with `SWIRL_PROJECT` Jacobi pressure sweeps on the fine grid (central differences, edge-clamped).
+6. *Clamp* the size to `swirl_max` times the local coarse speed.
+
+The smoke density is carried by coarse plus `u_fine`; flame, temperature and fuel keep the coarse flow (as in step B). The share of the smoke's displacement kept from frame to frame is the larger of step B's 0.92 and exp(-dt / `swirl_life`), so a longer-lived swirl keeps its displacement longer.
+`u_fine` is stored with the frame in the bake cache as a `ufine` block next to the density, so cached playback and a resumed bake read the previous frame's `u_fine` from the cache and reproduce the continuous bake exactly (`test_the_cache_round_trips_ufine_and_a_resumed_bake_matches`).
+With `swirl` 0 the older code runs byte for byte (`test_swirl_off_is_the_old_result_bit_for_bit`, at any `swirl_life`); documents saved before the knobs load with `swirl_life` 0, which keeps their step B output.
+
+**Projection sweeps, measured once.** On the test plume the projection takes the divergence of `u_fine` down to 0.60, 0.597 and 0.596 of the unprojected value at 10, 20 and 40 sweeps (rms over the box; the rest is the central-difference checkerboard mode a compact 7-point Laplacian cannot see, and the clamp). On the fire shot (swirl 0.5, life 1) the three runs give the same picture measures
+(curl share 19.6 / 19.6 / 19.5 %, contrast 0.459 / 0.458 / 0.458) and bakes of 18.1 / 17.0 / 25.0 s. **Kept 20** (the brief's default; 10 gives the same result, 40 costs about 7 s more). It is the constant `SWIRL_PROJECT`.
+The test asserts the divergence bound (10 sweeps leave under 0.8 of the unprojected rms, and 40 do better than 10).
+
+**Gains, chosen by measurement.** First try (inject 1, spin 8): `u_fine` 0.23 m/s in the smoke, contrast 0.358, curl 18.7 %. Inject 4 and spin 16 (kept): 0.75 m/s, 0.458, 19.6 %. Inject 10: 1.5 m/s, 0.538, 20.6 %, with streaks in the stills but still no curls; kept 4 so the per-frame source stays small.
+
+**Measures** (RTX 3080 Ti, factor 2, the step B command and measures, `render_evidence.py --persist-sweep --persist-renders`, `benchmarks/fire_shot/fire-smoke-persist-2026-11-12.json`):
+
+| Setting | Bake (s) | Curl share above 30/s | Mean abs curl (1/s) | Density contrast (field) | Grain, frame 16 | Smoke structure, frame 16 | Mean abs `u_fine` in smoke, frames 4 / 12 / 24 (m/s) | 128-sample frame, 8 / 16 / 24 (s) |
+|---|---|---|---|---|---|---|---|---|
+| swirl off | 14.0 | 18.4 % | 18.4 | 0.334 | 0.00635 | 0.0806 | | 1.46 / 1.71 / 2.02 |
+| step B (0.5, no persistence) | 33.1 (20 s in the 11/10 run) | 35.5 % | 28.9 | 0.594 | 0.00609 | 0.0812 | | 1.82 / 1.88 / 2.21 |
+| 0.25, life 0.5 | 18.3 | 18.9 % | 18.9 | 0.377 | 0.00635 | 0.0809 | 0.32 / 0.33 / 0.35 | 1.51 / 2.37 / 5.13 |
+| 0.25, life 1 | 18.2 | 19.0 % | 19.0 | 0.390 | 0.00635 | 0.0810 | 0.34 / 0.36 / 0.38 | 1.53 / 2.29 / 2.98 |
+| 0.25, life 2 | 20.0 | 19.0 % | 19.1 | 0.398 | 0.00635 | 0.0810 | 0.35 / 0.37 / 0.39 | 1.53 / 2.61 / 5.60 |
+| 0.5, life 0.5 | 21.2 | 19.2 % | 19.6 | 0.438 | 0.00632 | 0.0813 | 0.68 / 0.69 / 0.72 | 1.62 / 2.85 / 2.12 |
+| 0.5, life 1 | 17.0 | 19.6 % | 19.7 | 0.458 | 0.00629 | 0.0815 | 0.72 / 0.74 / 0.76 | 1.54 / 2.04 / 4.35 |
+| 0.5, life 2 (best) | 20.4 | 19.5 % | 19.7 | 0.470 | 0.00629 | 0.0815 | 0.75 / 0.77 / 0.79 | 1.56 / 1.84 / 5.50 |
+
+Flame measures are identical across the rows to the third decimal (core position 0.3048, tongues per slice 1.117, top over bottom 0.684; step B's row moves them to 0.3036 and 0.666). The gates: grain at most 0.0071 **met** by every row; bake under 30 s **met** by every persistent row (step B's own bake varied between 20 and 33 s across runs);
+the 128-sample frame under 0.75 s **not met** by any row, swirl or not. The frame-24 times of the persistent rows jump between 2.1 and 5.6 s from row to row with no pattern in `swirl` or `swirl_life`; they are machine noise on a shared card and show no cost of the swirl.
+**Accumulation**: the mean size of `u_fine` over the smoke rises from 0.37 m/s at frame 1 to a peak of 0.87 at frame 9, settles near 0.72 by frame 15 and sits between 0.76 and 0.78 from frame 17 to 23 (0.5, life 2; the others have the same shape, scaled by `swirl`): it builds up and levels off, and it is flat zero where the coarse flow is still.
+
+**Stills** (`docs/images/fire_shot/fire-smoke-persist-before-after-2026-11-12.png`: rows swirl off, step B, 0.5 / life 2; columns frames 8, 16, 24; the 2x close-up `...-zoom-...`; the nine single frames `fire-smoke-persist-{off,stepB,s0.5_l2.0}-{008,016,024}.png`). The flame is the same in every row. The persistent row shows
+a little more streaking and mottling in the plume than swirl off and looks about like step B's row. **Does the smoke curl now? No.** There are no rolled filaments or visible vortices; the smoke is a billowing cloud with finer texture.
+
+**Why, as far as the evidence says.** The swirl can only move the density that exists, and the 64-cell solve gives a smooth soft cloud: a displacement of the carried density is roughly the density gradient times the displacement, so smooth density gives a faint texture and no roll. Making `u_fine` five times larger (inject 10) raised the field contrast
+to 0.54 and the stills only streaked further. The image-plane curl measure also averages the velocity along the view, so three-dimensional swirl at 10 to 20 cm barely registers in it; the measure and the pictures agree that nothing changed much.
+The missing ingredient is fine density structure for the swirl to wrap: a seeded detail field, or a carried texture (as in wavelet turbulence), moved by `coarse + u_fine`.
+
+**A side test the brief did not ask for** (`benchmarks/fire_shot/fire-smoke-persist-seeded.json`; the stills were looked at and not kept): new smoke seeded with fine density detail (`turbulence` 0.5, `swirl_size` 4), without and with the persistent swirl (0.5, life 2). Seeding alone raises the field contrast to 0.468 and gives the plume's right flank soft rounded billows;
+adding the persistent swirl raises it to 0.542 and smears those billows into streaks. Curl share 18.7 % and 19.9 %, flame measures unchanged, grain 0.0059 to 0.0061, bakes 17.7 and 21.7 s. Still no curls, so seeding detail alone is not enough either; a carried texture is the next thing to try.
+**Tests** (`tests/test_fluid_upres_persist.py`, 16 tests): a single injected vortex keeps over 60 % of its energy over 12 steps at a long `swirl_life` and under 0.01 % at 0.05 s, and it is carried along the flow at the right speed; `u_fine` grows and levels off over 24 frames; divergence after projection (bound above);
+the clamp holds at `swirl` 8; still air keeps no `u_fine`; the cache round-trip of `u_fine` and a resumed bake; swirl off bit-identical at any `swirl_life`; `swirl_life` 0 stores no `ufine`; old documents load with `swirl_life` 0; the dense step and two reinjected frames on the card against the processor.
+With `test_fluid_upres_swirl.py` (step B's 15 tests, now run at `swirl_life` 0), `test_fluid_upres.py` and `test_fluid_upres_reinject.py` they pass on the RTX 3080 Ti, the AMD Radeon 8060S and llvmpipe (53 tests on each adapter), with `test_fluid_edits`, `test_knobs`, `test_tiers`, `test_core`, `test_desktop.FluidPropertiesPanelTests` and `PropertiesLabelTests`, `test_sourcepool`, `test_bypass` and `test_nodecatalog`.
+The card and the processor agree on `u_fine` to 1e-5 in a single step and to 2 % of its peak over three frames.
+
+**Not verified.** Windows (no Windows machine here); the real display (stills read from saved images); factor 4 with swirl; the 3 s render frame (measured, not fixed). `make_shot.build_document(smoke_upres={"swirl": 0.5, "swirl_life": 2.0})` builds the shot with the persistent swirl. **Default stays off**: the stills do not curl, so there is nothing to turn on.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up

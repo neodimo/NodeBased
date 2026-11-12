@@ -1,0 +1,1487 @@
+{
+  "date": "2026-11-12",
+  "device": "NVIDIA GeForce RTX 3080 Ti",
+  "resolution": [
+    960,
+    540
+  ],
+  "samples": 128,
+  "variants": {
+    "off": {
+      "settings": {},
+      "bake_seconds": 14.02,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3048,
+        "top_over_bottom_mean": 0.6843,
+        "top_over_bottom_of_means": 0.8434,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 47.1656,
+        "density_contrast_mean": 0.3343,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5208,
+        "share_above": 0.1838,
+        "mean_abs": 18.397,
+        "p90": 44.336,
+        "rms": 28.177,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "2": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "3": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "4": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "5": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "6": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "7": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "8": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "9": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "10": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "11": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "12": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "13": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "14": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "15": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "16": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "17": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "18": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "19": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "20": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "21": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "22": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "23": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "24": {
+          "all": 0.0,
+          "smoke": 0.0
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006237726658582687,
+          "smoke_image": {
+            "structure": 0.06205,
+            "mean_luminance": 0.14404,
+            "noise_rms_over_mean": 0.04421
+          },
+          "seconds_median": 1.46,
+          "seconds_min": 1.443,
+          "seconds_all": [
+            1.554,
+            1.899,
+            1.46,
+            1.443,
+            1.445
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006349196191877127,
+          "smoke_image": {
+            "structure": 0.08064,
+            "mean_luminance": 0.12956,
+            "noise_rms_over_mean": 0.04963
+          },
+          "seconds_median": 1.711,
+          "seconds_min": 1.693,
+          "seconds_all": [
+            1.741,
+            1.707,
+            1.693,
+            1.711,
+            1.721
+          ]
+        },
+        "24": {
+          "grain_rms": 0.006153850816190243,
+          "smoke_image": {
+            "structure": 0.07787,
+            "mean_luminance": 0.12571,
+            "noise_rms_over_mean": 0.04778
+          },
+          "seconds_median": 2.022,
+          "seconds_min": 1.97,
+          "seconds_all": [
+            4.099,
+            2.497,
+            2.022,
+            1.97,
+            1.987
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 8.247,
+        "upres_bake_seconds": 5.294
+      }
+    },
+    "stepB": {
+      "settings": {
+        "swirl": 0.5,
+        "swirl_scale": 6.0,
+        "swirl_life": 0.0
+      },
+      "bake_seconds": 33.051,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3036,
+        "top_over_bottom_mean": 0.6657,
+        "top_over_bottom_of_means": 0.8361,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 43.1677,
+        "density_contrast_mean": 0.5941,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5708,
+        "share_above": 0.3549,
+        "mean_abs": 28.859,
+        "p90": 63.881,
+        "rms": 40.609,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "2": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "3": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "4": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "5": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "6": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "7": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "8": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "9": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "10": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "11": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "12": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "13": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "14": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "15": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "16": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "17": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "18": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "19": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "20": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "21": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "22": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "23": {
+          "all": 0.0,
+          "smoke": 0.0
+        },
+        "24": {
+          "all": 0.0,
+          "smoke": 0.0
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006096354220062494,
+          "smoke_image": {
+            "structure": 0.06268,
+            "mean_luminance": 0.14354,
+            "noise_rms_over_mean": 0.04389
+          },
+          "seconds_median": 1.819,
+          "seconds_min": 1.525,
+          "seconds_all": [
+            1.819,
+            1.825,
+            1.954,
+            1.762,
+            1.525
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006094484124332666,
+          "smoke_image": {
+            "structure": 0.08121,
+            "mean_luminance": 0.12815,
+            "noise_rms_over_mean": 0.04855
+          },
+          "seconds_median": 1.875,
+          "seconds_min": 1.833,
+          "seconds_all": [
+            1.875,
+            1.833,
+            2.21,
+            2.512,
+            1.851
+          ]
+        },
+        "24": {
+          "grain_rms": 0.005981543567031622,
+          "smoke_image": {
+            "structure": 0.07844,
+            "mean_luminance": 0.12521,
+            "noise_rms_over_mean": 0.04696
+          },
+          "seconds_median": 2.208,
+          "seconds_min": 2.065,
+          "seconds_all": [
+            2.203,
+            7.154,
+            3.521,
+            2.208,
+            2.065
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 0.008,
+        "upres_bake_seconds": 8.819
+      }
+    },
+    "s0.25_l0.5": {
+      "settings": {
+        "swirl": 0.25,
+        "swirl_scale": 6.0,
+        "swirl_life": 0.5
+      },
+      "bake_seconds": 18.294,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3048,
+        "top_over_bottom_mean": 0.6845,
+        "top_over_bottom_of_means": 0.8436,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 47.0134,
+        "density_contrast_mean": 0.377,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5236,
+        "share_above": 0.1895,
+        "mean_abs": 18.94,
+        "p90": 45.127,
+        "rms": 29.053,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.13836489270294428,
+          "smoke": 0.1700420387041329
+        },
+        "2": {
+          "all": 0.17634760288374418,
+          "smoke": 0.2547321266583301
+        },
+        "3": {
+          "all": 0.21394980216220572,
+          "smoke": 0.3052521971889802
+        },
+        "4": {
+          "all": 0.2330545936131958,
+          "smoke": 0.32020434435694
+        },
+        "5": {
+          "all": 0.23494218378147796,
+          "smoke": 0.3291710161475528
+        },
+        "6": {
+          "all": 0.24067398094581036,
+          "smoke": 0.3418282163202836
+        },
+        "7": {
+          "all": 0.24649963240080622,
+          "smoke": 0.3551567979472917
+        },
+        "8": {
+          "all": 0.25012099799699267,
+          "smoke": 0.36626744168917325
+        },
+        "9": {
+          "all": 0.25697205694194436,
+          "smoke": 0.37012362095372375
+        },
+        "10": {
+          "all": 0.24921772886037283,
+          "smoke": 0.3714315022822022
+        },
+        "11": {
+          "all": 0.23111621148327835,
+          "smoke": 0.3524270742767425
+        },
+        "12": {
+          "all": 0.2131965535825481,
+          "smoke": 0.33079159499121263
+        },
+        "13": {
+          "all": 0.20176401561610313,
+          "smoke": 0.31569670566962377
+        },
+        "14": {
+          "all": 0.19246281672408147,
+          "smoke": 0.31096383462581306
+        },
+        "15": {
+          "all": 0.18598064292227062,
+          "smoke": 0.30652274362147525
+        },
+        "16": {
+          "all": 0.18084962070382654,
+          "smoke": 0.31127996601470503
+        },
+        "17": {
+          "all": 0.17968769089693526,
+          "smoke": 0.3217503368710346
+        },
+        "18": {
+          "all": 0.17762470086979062,
+          "smoke": 0.3328205218220657
+        },
+        "19": {
+          "all": 0.1768129069642255,
+          "smoke": 0.33291043802418696
+        },
+        "20": {
+          "all": 0.17324622365338216,
+          "smoke": 0.3298916688740426
+        },
+        "21": {
+          "all": 0.1703435989629559,
+          "smoke": 0.33156405519194615
+        },
+        "22": {
+          "all": 0.16906081210464868,
+          "smoke": 0.33310850896649963
+        },
+        "23": {
+          "all": 0.17073079788967863,
+          "smoke": 0.3383429928542185
+        },
+        "24": {
+          "all": 0.1716338578290365,
+          "smoke": 0.3488701299498612
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006154599599540234,
+          "smoke_image": {
+            "structure": 0.06221,
+            "mean_luminance": 0.14381,
+            "noise_rms_over_mean": 0.0439
+          },
+          "seconds_median": 1.506,
+          "seconds_min": 1.497,
+          "seconds_all": [
+            1.613,
+            1.862,
+            1.498,
+            1.506,
+            1.497
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006351877003908157,
+          "smoke_image": {
+            "structure": 0.08094,
+            "mean_luminance": 0.12948,
+            "noise_rms_over_mean": 0.0496
+          },
+          "seconds_median": 2.367,
+          "seconds_min": 1.841,
+          "seconds_all": [
+            2.03,
+            1.841,
+            3.118,
+            3.457,
+            2.367
+          ]
+        },
+        "24": {
+          "grain_rms": 0.0061495136469602585,
+          "smoke_image": {
+            "structure": 0.07788,
+            "mean_luminance": 0.12574,
+            "noise_rms_over_mean": 0.04768
+          },
+          "seconds_median": 5.132,
+          "seconds_min": 3.026,
+          "seconds_all": [
+            6.846,
+            3.026,
+            5.132,
+            4.206,
+            6.185
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 0.008,
+        "upres_bake_seconds": 10.239
+      }
+    },
+    "s0.25_l1.0": {
+      "settings": {
+        "swirl": 0.25,
+        "swirl_scale": 6.0,
+        "swirl_life": 1.0
+      },
+      "bake_seconds": 18.162,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3048,
+        "top_over_bottom_mean": 0.6845,
+        "top_over_bottom_of_means": 0.8436,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 46.8521,
+        "density_contrast_mean": 0.3902,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5252,
+        "share_above": 0.1898,
+        "mean_abs": 19.039,
+        "p90": 45.066,
+        "rms": 29.197,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.14424656479673664,
+          "smoke": 0.17727510681265676
+        },
+        "2": {
+          "all": 0.1853026938486884,
+          "smoke": 0.26778232610634195
+        },
+        "3": {
+          "all": 0.22662755154131461,
+          "smoke": 0.32329170827370834
+        },
+        "4": {
+          "all": 0.24864820154754677,
+          "smoke": 0.3411904899781153
+        },
+        "5": {
+          "all": 0.25183998048489165,
+          "smoke": 0.352058866273311
+        },
+        "6": {
+          "all": 0.2590126921219939,
+          "smoke": 0.3661398323473407
+        },
+        "7": {
+          "all": 0.2658135734514084,
+          "smoke": 0.38170981739125703
+        },
+        "8": {
+          "all": 0.2701874441794369,
+          "smoke": 0.39463009308916963
+        },
+        "9": {
+          "all": 0.2779819474684649,
+          "smoke": 0.397981537716591
+        },
+        "10": {
+          "all": 0.26890447320386934,
+          "smoke": 0.4004989347995188
+        },
+        "11": {
+          "all": 0.24927984436595685,
+          "smoke": 0.38124065732437856
+        },
+        "12": {
+          "all": 0.23025865981043273,
+          "smoke": 0.35697784371594665
+        },
+        "13": {
+          "all": 0.21877720778173151,
+          "smoke": 0.34078722884283924
+        },
+        "14": {
+          "all": 0.20927125094661164,
+          "smoke": 0.33633127216269304
+        },
+        "15": {
+          "all": 0.20270384713372946,
+          "smoke": 0.3311021793034322
+        },
+        "16": {
+          "all": 0.19759150003336148,
+          "smoke": 0.3365053374610728
+        },
+        "17": {
+          "all": 0.196475270897777,
+          "smoke": 0.34817894575380004
+        },
+        "18": {
+          "all": 0.194607277156496,
+          "smoke": 0.3597620272348731
+        },
+        "19": {
+          "all": 0.19374530277848817,
+          "smoke": 0.3593772526561207
+        },
+        "20": {
+          "all": 0.19021645899276848,
+          "smoke": 0.3559500661833544
+        },
+        "21": {
+          "all": 0.18724096652182204,
+          "smoke": 0.3583704600614551
+        },
+        "22": {
+          "all": 0.18598424488301274,
+          "smoke": 0.3594255013116629
+        },
+        "23": {
+          "all": 0.18766881673094396,
+          "smoke": 0.36510501305994686
+        },
+        "24": {
+          "all": 0.18860447923407533,
+          "smoke": 0.37714300358299807
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0061199297197163105,
+          "smoke_image": {
+            "structure": 0.06227,
+            "mean_luminance": 0.14376,
+            "noise_rms_over_mean": 0.04375
+          },
+          "seconds_median": 1.526,
+          "seconds_min": 1.471,
+          "seconds_all": [
+            1.703,
+            1.757,
+            1.471,
+            1.474,
+            1.526
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006350113078951836,
+          "smoke_image": {
+            "structure": 0.08096,
+            "mean_luminance": 0.12951,
+            "noise_rms_over_mean": 0.04958
+          },
+          "seconds_median": 2.285,
+          "seconds_min": 1.738,
+          "seconds_all": [
+            3.543,
+            1.794,
+            1.738,
+            2.285,
+            2.302
+          ]
+        },
+        "24": {
+          "grain_rms": 0.00615060655400157,
+          "smoke_image": {
+            "structure": 0.07792,
+            "mean_luminance": 0.12573,
+            "noise_rms_over_mean": 0.04772
+          },
+          "seconds_median": 2.979,
+          "seconds_min": 2.193,
+          "seconds_all": [
+            4.173,
+            2.979,
+            5.028,
+            2.629,
+            2.193
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 0.007,
+        "upres_bake_seconds": 10.972
+      }
+    },
+    "s0.25_l2.0": {
+      "settings": {
+        "swirl": 0.25,
+        "swirl_scale": 6.0,
+        "swirl_life": 2.0
+      },
+      "bake_seconds": 19.965,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3048,
+        "top_over_bottom_mean": 0.6845,
+        "top_over_bottom_of_means": 0.8436,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 46.7523,
+        "density_contrast_mean": 0.3981,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5263,
+        "share_above": 0.19,
+        "mean_abs": 19.06,
+        "p90": 45.042,
+        "rms": 29.183,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.14728046188368565,
+          "smoke": 0.18100623104717134
+        },
+        "2": {
+          "all": 0.1899842001361737,
+          "smoke": 0.27455379573642985
+        },
+        "3": {
+          "all": 0.23334458152000465,
+          "smoke": 0.3328794820243742
+        },
+        "4": {
+          "all": 0.2570113835913963,
+          "smoke": 0.35248631602317226
+        },
+        "5": {
+          "all": 0.26075790383057396,
+          "smoke": 0.3645126297569677
+        },
+        "6": {
+          "all": 0.26905257437340874,
+          "smoke": 0.3793561641110753
+        },
+        "7": {
+          "all": 0.276477815679453,
+          "smoke": 0.3961582292542311
+        },
+        "8": {
+          "all": 0.2812100135539182,
+          "smoke": 0.40973214694541676
+        },
+        "9": {
+          "all": 0.28950815573998095,
+          "smoke": 0.4132292227595672
+        },
+        "10": {
+          "all": 0.2797746754278424,
+          "smoke": 0.4163188857622147
+        },
+        "11": {
+          "all": 0.25918231565748134,
+          "smoke": 0.39677781005456925
+        },
+        "12": {
+          "all": 0.23975072376719392,
+          "smoke": 0.3712317874599896
+        },
+        "13": {
+          "all": 0.22817189527115495,
+          "smoke": 0.3552588377321757
+        },
+        "14": {
+          "all": 0.21847487202292162,
+          "smoke": 0.3499148960631057
+        },
+        "15": {
+          "all": 0.21212719746942632,
+          "smoke": 0.344940471209544
+        },
+        "16": {
+          "all": 0.20707417873882641,
+          "smoke": 0.35045841089608415
+        },
+        "17": {
+          "all": 0.20609484193012548,
+          "smoke": 0.362826759701543
+        },
+        "18": {
+          "all": 0.20407165548274298,
+          "smoke": 0.37457346927392776
+        },
+        "19": {
+          "all": 0.20317168204798952,
+          "smoke": 0.3731628470217889
+        },
+        "20": {
+          "all": 0.1999032226941901,
+          "smoke": 0.37014711650393517
+        },
+        "21": {
+          "all": 0.19693408943475885,
+          "smoke": 0.37236314469001264
+        },
+        "22": {
+          "all": 0.1955654618368902,
+          "smoke": 0.37331085272102177
+        },
+        "23": {
+          "all": 0.19756800587212844,
+          "smoke": 0.3776969738741876
+        },
+        "24": {
+          "all": 0.1985925369448379,
+          "smoke": 0.3909987981962427
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006115825846791267,
+          "smoke_image": {
+            "structure": 0.06233,
+            "mean_luminance": 0.14373,
+            "noise_rms_over_mean": 0.04373
+          },
+          "seconds_median": 1.534,
+          "seconds_min": 1.51,
+          "seconds_all": [
+            1.7,
+            1.786,
+            1.51,
+            1.517,
+            1.534
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006352677475661039,
+          "smoke_image": {
+            "structure": 0.081,
+            "mean_luminance": 0.12953,
+            "noise_rms_over_mean": 0.04957
+          },
+          "seconds_median": 2.611,
+          "seconds_min": 2.314,
+          "seconds_all": [
+            2.422,
+            2.723,
+            2.611,
+            4.157,
+            2.314
+          ]
+        },
+        "24": {
+          "grain_rms": 0.006150424014776945,
+          "smoke_image": {
+            "structure": 0.07793,
+            "mean_luminance": 0.12572,
+            "noise_rms_over_mean": 0.04774
+          },
+          "seconds_median": 5.596,
+          "seconds_min": 4.192,
+          "seconds_all": [
+            8.68,
+            4.4,
+            5.596,
+            4.192,
+            5.639
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 0.009,
+        "upres_bake_seconds": 8.138
+      }
+    },
+    "s0.5_l0.5": {
+      "settings": {
+        "swirl": 0.5,
+        "swirl_scale": 6.0,
+        "swirl_life": 0.5
+      },
+      "bake_seconds": 21.209,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3048,
+        "top_over_bottom_mean": 0.6843,
+        "top_over_bottom_of_means": 0.8433,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 46.4757,
+        "density_contrast_mean": 0.4377,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5303,
+        "share_above": 0.1923,
+        "mean_abs": 19.607,
+        "p90": 45.743,
+        "rms": 29.706,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.28277641877304555,
+          "smoke": 0.3494313087415038
+        },
+        "2": {
+          "all": 0.3666920598266714,
+          "smoke": 0.531290066478927
+        },
+        "3": {
+          "all": 0.44940525340661613,
+          "smoke": 0.6422686879425995
+        },
+        "4": {
+          "all": 0.4952107126408841,
+          "smoke": 0.6771169655524886
+        },
+        "5": {
+          "all": 0.49868190822694186,
+          "smoke": 0.7008005499710246
+        },
+        "6": {
+          "all": 0.5081876516314789,
+          "smoke": 0.7260489106653244
+        },
+        "7": {
+          "all": 0.5189649220508434,
+          "smoke": 0.7539900234738047
+        },
+        "8": {
+          "all": 0.526332962978176,
+          "smoke": 0.7724729146645396
+        },
+        "9": {
+          "all": 0.5366491321881485,
+          "smoke": 0.7764452386591496
+        },
+        "10": {
+          "all": 0.5164096784279103,
+          "smoke": 0.7753461883743906
+        },
+        "11": {
+          "all": 0.4812942019977567,
+          "smoke": 0.7378010687587939
+        },
+        "12": {
+          "all": 0.4475979318511671,
+          "smoke": 0.6885158083696009
+        },
+        "13": {
+          "all": 0.4216886407975747,
+          "smoke": 0.6593057220098845
+        },
+        "14": {
+          "all": 0.40294234591406064,
+          "smoke": 0.6507500719571987
+        },
+        "15": {
+          "all": 0.38921264862656907,
+          "smoke": 0.6459879281069844
+        },
+        "16": {
+          "all": 0.3796966625869604,
+          "smoke": 0.6527973907958776
+        },
+        "17": {
+          "all": 0.3769074846100284,
+          "smoke": 0.6769012643807005
+        },
+        "18": {
+          "all": 0.37016370959707434,
+          "smoke": 0.7026242335218561
+        },
+        "19": {
+          "all": 0.36767985541126946,
+          "smoke": 0.6960784534291555
+        },
+        "20": {
+          "all": 0.36065195214599943,
+          "smoke": 0.6909805490729939
+        },
+        "21": {
+          "all": 0.35486527309901333,
+          "smoke": 0.7099002308974971
+        },
+        "22": {
+          "all": 0.3524848228487309,
+          "smoke": 0.6886189654782005
+        },
+        "23": {
+          "all": 0.3562908969738141,
+          "smoke": 0.6974880130597789
+        },
+        "24": {
+          "all": 0.35689060053057753,
+          "smoke": 0.7198551443005904
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.00608268566429615,
+          "smoke_image": {
+            "structure": 0.06262,
+            "mean_luminance": 0.14361,
+            "noise_rms_over_mean": 0.0437
+          },
+          "seconds_median": 1.619,
+          "seconds_min": 1.487,
+          "seconds_all": [
+            1.619,
+            1.643,
+            1.864,
+            1.543,
+            1.487
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006321852095425129,
+          "smoke_image": {
+            "structure": 0.08134,
+            "mean_luminance": 0.12948,
+            "noise_rms_over_mean": 0.04944
+          },
+          "seconds_median": 2.849,
+          "seconds_min": 1.791,
+          "seconds_all": [
+            1.833,
+            1.791,
+            4.15,
+            4.051,
+            2.849
+          ]
+        },
+        "24": {
+          "grain_rms": 0.006151401437819004,
+          "smoke_image": {
+            "structure": 0.07807,
+            "mean_luminance": 0.12578,
+            "noise_rms_over_mean": 0.04773
+          },
+          "seconds_median": 2.118,
+          "seconds_min": 2.066,
+          "seconds_all": [
+            2.101,
+            2.066,
+            2.118,
+            3.512,
+            5.147
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 0.008,
+        "upres_bake_seconds": 9.938
+      }
+    },
+    "s0.5_l1.0": {
+      "settings": {
+        "swirl": 0.5,
+        "swirl_scale": 6.0,
+        "swirl_life": 1.0
+      },
+      "bake_seconds": 16.958,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3048,
+        "top_over_bottom_mean": 0.6842,
+        "top_over_bottom_of_means": 0.8432,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 46.1946,
+        "density_contrast_mean": 0.4582,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5319,
+        "share_above": 0.1961,
+        "mean_abs": 19.735,
+        "p90": 45.694,
+        "rms": 29.773,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.2947605604247279,
+          "smoke": 0.3642417263756786
+        },
+        "2": {
+          "all": 0.3856491606541195,
+          "smoke": 0.5589769179070864
+        },
+        "3": {
+          "all": 0.4766107074683933,
+          "smoke": 0.6807327183387746
+        },
+        "4": {
+          "all": 0.5276323509547648,
+          "smoke": 0.7221927146501463
+        },
+        "5": {
+          "all": 0.5344357411773213,
+          "smoke": 0.7500313374000114
+        },
+        "6": {
+          "all": 0.5459381792109682,
+          "smoke": 0.7763386961228352
+        },
+        "7": {
+          "all": 0.5572071635092892,
+          "smoke": 0.8080274790256341
+        },
+        "8": {
+          "all": 0.5656003392515158,
+          "smoke": 0.8284458868751027
+        },
+        "9": {
+          "all": 0.5760342602455863,
+          "smoke": 0.8381980453009962
+        },
+        "10": {
+          "all": 0.5548152597812727,
+          "smoke": 0.8317853497134249
+        },
+        "11": {
+          "all": 0.5164862484701899,
+          "smoke": 0.7956207302636615
+        },
+        "12": {
+          "all": 0.48119522621577077,
+          "smoke": 0.7425317967822489
+        },
+        "13": {
+          "all": 0.45426237542053977,
+          "smoke": 0.7072415395091852
+        },
+        "14": {
+          "all": 0.43547004934430383,
+          "smoke": 0.6960695286184857
+        },
+        "15": {
+          "all": 0.4205472862678212,
+          "smoke": 0.6936744513194195
+        },
+        "16": {
+          "all": 0.4109258017120558,
+          "smoke": 0.7009174409490607
+        },
+        "17": {
+          "all": 0.40795921381403605,
+          "smoke": 0.7325173180138067
+        },
+        "18": {
+          "all": 0.40070207368298616,
+          "smoke": 0.7519006719587552
+        },
+        "19": {
+          "all": 0.39848181803059346,
+          "smoke": 0.7506316110938333
+        },
+        "20": {
+          "all": 0.39122312208918947,
+          "smoke": 0.7394916888786602
+        },
+        "21": {
+          "all": 0.38521753485250837,
+          "smoke": 0.7479447565460187
+        },
+        "22": {
+          "all": 0.38350112365607464,
+          "smoke": 0.7291749772404096
+        },
+        "23": {
+          "all": 0.3875170327400605,
+          "smoke": 0.7515208593825122
+        },
+        "24": {
+          "all": 0.38886959931160525,
+          "smoke": 0.7581433719322525
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006061099004000425,
+          "smoke_image": {
+            "structure": 0.06276,
+            "mean_luminance": 0.14357,
+            "noise_rms_over_mean": 0.04363
+          },
+          "seconds_median": 1.543,
+          "seconds_min": 1.519,
+          "seconds_all": [
+            1.794,
+            1.745,
+            1.519,
+            1.525,
+            1.543
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006293565034866333,
+          "smoke_image": {
+            "structure": 0.08146,
+            "mean_luminance": 0.12954,
+            "noise_rms_over_mean": 0.04925
+          },
+          "seconds_median": 2.042,
+          "seconds_min": 1.798,
+          "seconds_all": [
+            1.833,
+            1.798,
+            2.042,
+            4.574,
+            2.607
+          ]
+        },
+        "24": {
+          "grain_rms": 0.0061368318274617195,
+          "smoke_image": {
+            "structure": 0.07821,
+            "mean_luminance": 0.12579,
+            "noise_rms_over_mean": 0.04767
+          },
+          "seconds_median": 4.347,
+          "seconds_min": 2.244,
+          "seconds_all": [
+            4.92,
+            2.244,
+            4.347,
+            6.375,
+            3.058
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 0.008,
+        "upres_bake_seconds": 12.171
+      }
+    },
+    "s0.5_l2.0": {
+      "settings": {
+        "swirl": 0.5,
+        "swirl_scale": 6.0,
+        "swirl_life": 2.0
+      },
+      "bake_seconds": 20.358,
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1099,
+        "frames": 17,
+        "core_position_mean": 0.3048,
+        "top_over_bottom_mean": 0.6842,
+        "top_over_bottom_of_means": 0.8431,
+        "tongues_per_slice_mean": 1.1171,
+        "vorticity_mean": 46.0222,
+        "density_contrast_mean": 0.4698,
+        "sway_cells_mean": 3.2794
+      },
+      "projected_curl": {
+        "cells": 5332,
+        "share_above": 0.1949,
+        "mean_abs": 19.665,
+        "p90": 45.797,
+        "rms": 29.614,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "ufine_mean": {
+        "1": {
+          "all": 0.30093943229231435,
+          "smoke": 0.3718794652349996
+        },
+        "2": {
+          "all": 0.39556655353278564,
+          "smoke": 0.5738807355808985
+        },
+        "3": {
+          "all": 0.491035732287595,
+          "smoke": 0.7014622449271128
+        },
+        "4": {
+          "all": 0.5456508985291209,
+          "smoke": 0.7469213622053981
+        },
+        "5": {
+          "all": 0.5539148160469483,
+          "smoke": 0.7762870161168525
+        },
+        "6": {
+          "all": 0.5663198424591136,
+          "smoke": 0.8045172925679389
+        },
+        "7": {
+          "all": 0.5785179682499558,
+          "smoke": 0.8378747418872866
+        },
+        "8": {
+          "all": 0.5870357774687358,
+          "smoke": 0.8615502430140114
+        },
+        "9": {
+          "all": 0.5979600384987706,
+          "smoke": 0.8689904233935464
+        },
+        "10": {
+          "all": 0.5754587031053457,
+          "smoke": 0.8663561678046543
+        },
+        "11": {
+          "all": 0.5352633960566208,
+          "smoke": 0.8216956804709464
+        },
+        "12": {
+          "all": 0.4992347562526264,
+          "smoke": 0.7660990873286557
+        },
+        "13": {
+          "all": 0.47144042787718127,
+          "smoke": 0.7303501939289462
+        },
+        "14": {
+          "all": 0.4523658461926702,
+          "smoke": 0.722626836019191
+        },
+        "15": {
+          "all": 0.43714191891398557,
+          "smoke": 0.7154298383269733
+        },
+        "16": {
+          "all": 0.427056656026298,
+          "smoke": 0.7243109857902756
+        },
+        "17": {
+          "all": 0.4233903806157367,
+          "smoke": 0.7592608241651279
+        },
+        "18": {
+          "all": 0.41763520575065216,
+          "smoke": 0.7685736033905141
+        },
+        "19": {
+          "all": 0.4150381531060457,
+          "smoke": 0.7785614289490436
+        },
+        "20": {
+          "all": 0.40766634880657193,
+          "smoke": 0.770263561706555
+        },
+        "21": {
+          "all": 0.4019150332244512,
+          "smoke": 0.7616675079206549
+        },
+        "22": {
+          "all": 0.4007768470849944,
+          "smoke": 0.7568035788810688
+        },
+        "23": {
+          "all": 0.40533242781266837,
+          "smoke": 0.7646060892181928
+        },
+        "24": {
+          "all": 0.40739830061468324,
+          "smoke": 0.7904356414595267
+        }
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.00602622190490365,
+          "smoke_image": {
+            "structure": 0.06283,
+            "mean_luminance": 0.14353,
+            "noise_rms_over_mean": 0.04348
+          },
+          "seconds_median": 1.558,
+          "seconds_min": 1.53,
+          "seconds_all": [
+            1.81,
+            1.746,
+            1.54,
+            1.558,
+            1.53
+          ]
+        },
+        "16": {
+          "grain_rms": 0.006286998745054007,
+          "smoke_image": {
+            "structure": 0.08148,
+            "mean_luminance": 0.12957,
+            "noise_rms_over_mean": 0.04921
+          },
+          "seconds_median": 1.84,
+          "seconds_min": 1.742,
+          "seconds_all": [
+            1.782,
+            1.742,
+            2.309,
+            1.84,
+            2.594
+          ]
+        },
+        "24": {
+          "grain_rms": 0.006131798028945923,
+          "smoke_image": {
+            "structure": 0.07823,
+            "mean_luminance": 0.12579,
+            "noise_rms_over_mean": 0.04765
+          },
+          "seconds_median": 5.498,
+          "seconds_min": 2.062,
+          "seconds_all": [
+            6.183,
+            8.212,
+            2.826,
+            2.062,
+            5.498
+          ]
+        }
+      },
+      "timing_process": {
+        "coarse_bake_seconds": 0.009,
+        "upres_bake_seconds": 11.107
+      }
+    }
+  }
+}
