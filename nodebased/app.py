@@ -71,7 +71,7 @@ from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
 from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
-from .playback import PlaybackQueue, DisplayCache, ConversionStage, STATIC_FRAME, playing_document, first_look_document
+from .playback import PlaybackQueue, PlayoutBuffer, DisplayCache, ConversionStage, STATIC_FRAME, playing_document, first_look_document
 from .queuepanel import QueuePanel, create_default_queue
 from . import pipeline
 from .motion import MotionAnimator
@@ -10582,6 +10582,13 @@ class Window(QMainWindow):
         self._write_job = None
         self.node_errors = {}
         self.preview_queue = PlaybackQueue()
+        # The picture can finish at any point in a frame period.  During
+        # playback it waits here for the transport clock, avoiding the visible
+        # early/late alternation caused by presenting it immediately.
+        self.playout_buffer = PlayoutBuffer()
+        self.playout_enabled = os.environ.get("NODEBASED_PLAYOUT", "1") != "0"
+        self._playout_generation = 0
+        self.playout_late_frames = 0
         self.display_cache = DisplayCache(force_float32=self.preferences.display_cache_float32())
         self.display_cache.background_compaction = True       # a full cache rounds old frames off the preview worker
         # (key, picture) of the last display conversion; see render() in start_preview.
@@ -11647,7 +11654,7 @@ class Window(QMainWindow):
         if rate is not None:
             self.set_time(fps=float(rate))
 
-    def set_time(self, transient=False, playhead_only=False, **changes):
+    def set_time(self, transient=False, playhead_only=False, render=True, **changes):
         """Single funnel for every playhead/range edit — UI, keys and agents share this boundary."""
         current = self.dispatcher.document["time"]
         if all(current.get(key) == value for key, value in changes.items()):
@@ -11671,7 +11678,8 @@ class Window(QMainWindow):
                 self.dispatcher.execute({"op": "time", "transient": True, **changes})
                 self.sync_timeline()
                 self.update_title()
-                self.request_preview(playhead_only=playhead_only)
+                if render:
+                    self.request_preview(playhead_only=playhead_only)
             except (ValueError, KeyError, TypeError) as error:
                 self._show_command_error(error)
         else:
@@ -11765,10 +11773,15 @@ class Window(QMainWindow):
         if widget is not None:
             widget.overlay_async = start      # while a picture plays the card paints the overlay off the Qt thread
         if start:
+            self.playout_buffer.clear()
+            self._playout_generation += 1
+            self.playout_late_frames = 0
+            self._playout_last_queued = None
             self._playback_saved_disk_spills = self.evaluator.disk_spills_enabled
             self.evaluator.disk_spills_enabled = False
             self.play_direction = -1 if direction < 0 else 1
         else:
+            self.playout_buffer.clear()
             saved_spills = getattr(self, "_playback_saved_disk_spills", None)
             if saved_spills is not None:
                 self.evaluator.disk_spills_enabled = saved_spills
@@ -11955,7 +11968,11 @@ class Window(QMainWindow):
         if time.monotonic() - self._realtime_light_updated > 0.25:
             self._realtime_light_updated = time.monotonic()
             self.update_realtime_light()
-        bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
+        # Playout deliberately trails completed evaluation by one frame.  That
+        # is the small player buffer: frame f can be converted while f + 1 is
+        # already on the worker, then f is presented on its clock slot.
+        rendered_limit = max(0, self.playback_frames_rendered - 1) if self.playout_enabled else self.playback_frames_rendered
+        bounded_frames = min(elapsed_frames, rendered_limit)
         first, last = viewerknobs.playback_range(self.dispatcher.document)
         target, finished = playhead_at(first, last, self.playback_origin_frame,
                                        bounded_frames, self.play_direction, self.loop_mode)
@@ -11964,7 +11981,18 @@ class Window(QMainWindow):
             limit = bake["first"] + self._contiguous_fluid_frames(bake) - 1
             if target > limit:
                 target, finished = limit, True
-        if target != time_range["current"]:
+        if self.playout_enabled:
+            # A completed evaluation is not a finished picture: conversion may
+            # still be running.  Keep the current playhead until the clock's
+            # target picture is actually available.
+            entry = self.playout_buffer.take(target, self._playout_generation)
+            if entry is None and target != time_range["current"]:
+                self.playout_late_frames += 1
+                target = time_range["current"]
+            if entry is not None:
+                self.set_time(transient=True, playhead_only=True, render=False, current=target)
+                self._show_playout_entry(entry)
+        elif target != time_range["current"]:
             self.set_time(transient=True, playhead_only=True, current=target)
         if finished:
             self.toggle_playback(False)
@@ -18857,7 +18885,8 @@ class Window(QMainWindow):
         return False
 
     def request_preview(self, *_, playhead_only=False, tier_override=None, progressive=False,
-                        progressive_target=None, document_override=None, document_owned=False, drag_tier=None):
+                        progressive_target=None, document_override=None, document_owned=False, drag_tier=None,
+                        frame_override=None):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
@@ -18879,6 +18908,8 @@ class Window(QMainWindow):
                 self._clear_fluid_edit_bake()
         if self.playing:
             snapshot = playing_document(snapshot)
+        if frame_override is not None:
+            snapshot["time"]["current"] = int(frame_override)
         frame = snapshot["time"]["current"]
         selected_tier = int(self.proxy.currentData())
         if (progressive and not self.playing and not document_owned       # a drag's own picture is never one already cached
@@ -19285,6 +19316,7 @@ class Window(QMainWindow):
 
     def _cancel_staged(self):
         """A seek, an edit or stop: pictures still waiting on the conversion stage belong to the old content."""
+        self.playout_buffer.clear()
         staged, self._staged_cancels = self._staged_cancels, []
         for cancel in staged:
             cancel.set()
@@ -19302,6 +19334,8 @@ class Window(QMainWindow):
         self.busy = False
         if request.display and request.playing and not cancel.is_set():
             self.playback_frames_rendered += 1
+            if self.playing and self.playout_enabled:
+                self._queue_playout_ahead(request)
         if self.playing and len(self.preview_queue):
             self.timer.start(0)
         if len(self.preview_queue):
@@ -19310,6 +19344,30 @@ class Window(QMainWindow):
             self.playback_tick()
             if len(self.preview_queue):
                 self.start_preview()
+
+    def _queue_playout_ahead(self, request):
+        """Keep exactly the next playback frame on the worker while this one converts."""
+        future = self.future_frames(request.frame, count=1)
+        if future and future[0] != getattr(self, "_playout_last_queued", None):
+            self._playout_last_queued = future[0]
+            self.request_preview(playhead_only=True, frame_override=future[0])
+
+    def _show_playout_entry(self, entry):
+        """Present a completed picture at its playback-clock tick on the Qt thread."""
+        request, frame, image, status, render_region, extras = entry
+        self.frame = frame
+        self.frame_b = extras["frame_b"] if extras is not None else None
+        self.frame_generation = request.generation
+        self._displayed_frame = request.frame
+        self.statusBar().showMessage(status + f"  ·  late {self.playout_late_frames}"
+                                     f"  ·  dropped {self.playback_dropped_frames + self.convert_stage.dropped + self.playout_buffer.dropped}")
+        self.viewer_info.setText(self.statusBar().currentMessage())
+        self.playback_shown_times.append(time.monotonic())
+        self._show_image(image, request.tier, render_region,
+                         extras["image_b"] if extras is not None else None,
+                         generation=request.generation)
+        _trace_mark("handover")
+        _trace_frame("shown", request.generation)
 
     def _direct_linear_for(self, request, view, frame=None, channel=None):
         """Runs on the worker. True when this frame goes to the direct viewer as floats and skips
@@ -20125,7 +20183,17 @@ class Window(QMainWindow):
         # show: it must not blank the picture, the format rectangle and every overlay with "Evaluation error" (10/22:
         # stopping playback did, and the next request was not always there to put them back).
         abandoned = frame is None and cancel.is_set()
-        if request.display and (fresh or catching_up or live_preview) and not abandoned:
+        buffering = (self.playing and self.playout_enabled and request.playing and frame is not None)
+        if buffering and not abandoned:
+            # Keep all presentation state with the picture.  The current
+            # playhead can be a frame behind while the worker is usefully
+            # evaluating ahead, so never put this state on the live viewer
+            # until playback_tick owns its clock slot.
+            self.playout_buffer.put(request.frame, self._playout_generation,
+                                    (request, frame, image, status, render_region, extras))
+            self._queue_playout_ahead(request)
+            self.playback_tick()
+        elif request.display and (fresh or catching_up or live_preview) and not abandoned:
             if self.playing:
                 status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
                            f"  ·  dropped {self.playback_dropped_frames + self.convert_stage.dropped}")

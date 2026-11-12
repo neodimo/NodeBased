@@ -136,6 +136,50 @@ class PlaybackQueue:
         return len(self._items)
 
 
+class PlayoutBuffer:
+    """A tiny clock-owned store for finished playback pictures.
+
+    The render worker is allowed to finish early or late; the transport alone
+    decides when its picture reaches the viewer.  Entries are keyed by the
+    playback session generation, so a seek or edit can never present a
+    picture made from the old document.
+    """
+
+    def __init__(self, capacity=2):
+        self.capacity = int(capacity)
+        self._items = OrderedDict()
+        self.dropped = 0
+
+    def put(self, frame_number, generation, payload):
+        key = (int(generation), int(frame_number))
+        if key in self._items:
+            self._items.pop(key)
+        self._items[key] = payload
+        while len(self._items) > self.capacity:
+            self._items.popitem(last=False)
+            self.dropped += 1
+
+    def take(self, frame_number, generation):
+        key = (int(generation), int(frame_number))
+        return self._items.pop(key, None)
+
+    def drop_before(self, frame_number, generation, direction=1):
+        """Discard entries the playhead has passed and return their count."""
+        generation, frame_number = int(generation), int(frame_number)
+        stale = [key for key in self._items
+                 if key[0] != generation or (key[1] < frame_number if direction >= 0 else key[1] > frame_number)]
+        for key in stale:
+            self._items.pop(key, None)
+        self.dropped += len(stale)
+        return len(stale)
+
+    def clear(self):
+        self._items.clear()
+
+    def __len__(self):
+        return len(self._items)
+
+
 class ConversionStage:
     """One thread that turns finished frames into pictures while the evaluator works on the next.
 

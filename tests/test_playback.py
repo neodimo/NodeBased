@@ -8,7 +8,7 @@ import numpy as np
 from nodebased.core import Dispatcher, demo_document
 from nodebased.imaging import Evaluator
 from nodebased.media import write_exr
-from nodebased.playback import MAX_PREFETCH, DisplayCache, PlaybackQueue
+from nodebased.playback import MAX_PREFETCH, DisplayCache, PlaybackQueue, PlayoutBuffer
 
 
 class PlaybackQueueTests(unittest.TestCase):
@@ -74,6 +74,32 @@ class PlaybackQueueTests(unittest.TestCase):
         queue = PlaybackQueue()
         with self.assertRaisesRegex(ValueError, "Unsupported proxy tier"):
             queue.replace(1, 1, self.document, tier=3)
+
+
+class PlayoutBufferTests(unittest.TestCase):
+    def test_take_is_ordered_by_frame_and_generation(self):
+        buffer = PlayoutBuffer()
+        buffer.put(11, 7, "eleven")
+        buffer.put(10, 7, "ten")
+        self.assertEqual(buffer.take(10, 7), "ten")
+        self.assertIsNone(buffer.take(11, 8))
+        self.assertEqual(buffer.take(11, 7), "eleven")
+
+    def test_capacity_and_playhead_drop_are_counted(self):
+        buffer = PlayoutBuffer(capacity=2)
+        for frame in (1, 2, 3):
+            buffer.put(frame, 4, frame)
+        self.assertEqual(buffer.dropped, 1)
+        self.assertEqual(buffer.drop_before(3, 4), 1)
+        self.assertEqual(buffer.dropped, 2)
+        self.assertEqual(buffer.take(3, 4), 3)
+
+    def test_clear_removes_old_session_without_counting_a_drop(self):
+        buffer = PlayoutBuffer()
+        buffer.put(1, 1, "old")
+        buffer.clear()
+        self.assertIsNone(buffer.take(1, 1))
+        self.assertEqual(buffer.dropped, 0)
 
 
 class DisplayCacheTests(unittest.TestCase):
