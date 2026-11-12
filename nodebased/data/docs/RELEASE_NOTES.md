@@ -1,3 +1,38 @@
+# NodeBased 0.56.0 — Roto keeps up with the hand
+
+## What changed since 0.55.0
+
+- **Roto drags, releases and brush strokes are quicker again.** Measured on the same realistic shot as 0.55.0 (1080p, 20 keyed Bezier shapes, 30 RotoPaint strokes, a Merge and a Grade downstream), three repeats on the real display:
+
+  | action | 0.55.0 | 0.56.0 |
+  | --- | ---: | ---: |
+  | drag a point, feather or shape: outline follows the cursor | about 23 ms (41 at the slow end) | 6 to 8 ms (13 to 16 at the slow end) |
+  | letting go of a drag: screen held | about a second until the panel caught up | 25 to 35 ms |
+  | the shape's controls complete after letting go | about a second | about 0.1 s |
+  | a finished painted stroke's picture | 1.2 s | about 0.25 s |
+  | drag the opacity knob: picture follows | — | about 30 ms |
+
+  What was slow: every edit copied the whole document and checked all of it again (13 ms for a shape edit, 9 ms for a knob), each brush dab was computed over the whole tile, and the shape's 130 controls were rebuilt in one block after every selection. Now an edit copies only plain data and skips re-checking nodes it did not touch (5 ms and 2.7 ms), a dab computes only its own patch, the controls arrive a few milliseconds at a time with the panel height held still, and the Transform group is built when you open it. A held drag, Roto or knob, renders one preview size and never refines it until you let go. Brush and drawing results are identical pixel for pixel.
+
+## Known limits
+
+- The overlay of a stroke being painted is 18.6 ms per move at the slow end against a 16 ms target, and the worst pause in the second after letting go of a drag is 50 to 53 ms against 50.
+- Stepping to a keyed frame varies from 100 to 250 ms at the slow end from run to run; no change in this release touched it.
+- These numbers are from the processor path on Linux; the Roto path was not measured on the RTX machine or on Windows.
+- GPU playback still misses steady 24 fps on the Radeon (45 to 47 ms at the 95th percentile against 41.7 ms).
+- Roto mattes on the graphics card stay off by default (about 1e-5 from the processor matte at worst) until the tolerance is approved.
+- Still no comparison with a real Nuke render; pixel truth stays unmeasured until the reference pack (`tools/make_nuke_reference_pack.py`) is run in Nuke.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0 (big-endian, the default, is unaffected).
+- LensDistortion's polynomial, fisheye and beam-splitter models and its grid solve stay unsupported.
+
+## Moved to 0.57.0
+
+- Roto: the painted-stroke overlay under 16 ms and the last few milliseconds of the release pause.
+- Nuke behaviour checks for the Color, Keyer and Channel nodes.
+- A design for smoke that curls (accumulated swirl), and faster 128-sample fluid frames.
+- 24 fps GPU playback on the Radeon.
+- Carried: a field-of-view limit for generated footage, re-anchored generation in shorter pieces, more camera-following benchmark scenes, and measuring the 2D nodes against real Nuke renders.
+
 # NodeBased 0.55.0 — Roto responds to the mouse
 
 ## What changed since 0.54.0
