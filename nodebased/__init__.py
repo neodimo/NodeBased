@@ -1,5 +1,5 @@
 """NodeBased: explicit graph state, scene-linear images, native desktop UI."""
-__version__ = "0.55.0"
+__version__ = "0.56.0-preview.1"
 
 import os as _os
 import sys as _sys
