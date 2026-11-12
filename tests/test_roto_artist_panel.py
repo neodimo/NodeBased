@@ -107,6 +107,9 @@ class RotoArtistPanelTests(unittest.TestCase):
 
     def test_shape_transform_knobs_show_bounds_center_and_key_that_default(self):
         panel = self.panel(); self.assertIsNotNone(panel)
+        self.assertIsNone(panel.findChild(QDoubleSpinBox, "roto-shape-transform-center_x-0"))     # built when the group is opened
+        toggle = panel.findChild(QPushButton, "roto-shape-transform-toggle")
+        self.assertIsNotNone(toggle); toggle.click()
         center = panel.findChild(QDoubleSpinBox, "roto-shape-transform-center_x-0")
         scale = panel.findChild(QDoubleSpinBox, "roto-shape-transform-scale_x-0")
         self.assertIsNotNone(center); self.assertIsNotNone(scale)

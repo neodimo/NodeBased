@@ -610,30 +610,50 @@ def build_panel(window, key):
                 layout.addLayout(row)
                 yield
             transform = shape.get("transform", {})
-            for field, label, lo, hi, step in (
-                    ("translate_x", "Translate X", -65536, 65536, 1),
-                    ("translate_y", "Translate Y", -65536, 65536, 1),
-                    ("rotate", "Rotate", -360000, 360000, 1),
-                    ("scale_x", "Scale X", -1000, 1000, .01),
-                    ("scale_y", "Scale Y", -1000, 1000, .01),
-                    ("center_x", "Center X", -65536, 65536, 1),
-                    ("center_y", "Center Y", -65536, 65536, 1),
-                    ("skew_x", "Skew X", -89, 89, 1),
-                    ("skew_y", "Skew Y", -89, 89, 1)):
-                default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][field]
-                control = float_slider(shape_model.resolve_scalar(transform.get(field, default), frame, field), lo, hi,
-                                       step, f"roto-shape-transform-{field}-{i}")
-                spin = control.spin; spin.setKeyboardTracking(False)
-                spin.editingFinished.connect(lambda f=field, w=spin: edit_transform(i, f, float(w.value())))
-                row = QHBoxLayout(); row.addWidget(control, 1)
-                raw = transform.get(field)
-                curve = raw.get("curve") if isinstance(raw, dict) else None
-                button = window.make_key_button(key, f"shape-{i}-transform-{field}", control,
-                    curve_override=curve, on_toggle=lambda f=field: key_field(i, "transform." + f),
-                    object_name=f"roto-shape-key-transform-{field}-{i}")
-                button.setAccessibleName(f"{label} key"); row.addWidget(button)
-                layout.addWidget(QLabel(label)); layout.addLayout(row)
-                yield
+
+            def build_transform_rows(layout):
+                """The nine Transform rows: built when the artist opens the group (they were a third of the controls and the
+                slowest part of the build, and few edits touch them), not with every selection."""
+                for field, label, lo, hi, step in (
+                        ("translate_x", "Translate X", -65536, 65536, 1),
+                        ("translate_y", "Translate Y", -65536, 65536, 1),
+                        ("rotate", "Rotate", -360000, 360000, 1),
+                        ("scale_x", "Scale X", -1000, 1000, .01),
+                        ("scale_y", "Scale Y", -1000, 1000, .01),
+                        ("center_x", "Center X", -65536, 65536, 1),
+                        ("center_y", "Center Y", -65536, 65536, 1),
+                        ("skew_x", "Skew X", -89, 89, 1),
+                        ("skew_y", "Skew Y", -89, 89, 1)):
+                    default = shape_model.resolve_shapes({"shapes": [shape]}, frame)[0]["transform"][field]
+                    control = float_slider(shape_model.resolve_scalar(transform.get(field, default), frame, field), lo, hi,
+                                           step, f"roto-shape-transform-{field}-{i}")
+                    spin = control.spin; spin.setKeyboardTracking(False)
+                    spin.editingFinished.connect(lambda f=field, w=spin: edit_transform(i, f, float(w.value())))
+                    row = QHBoxLayout(); row.addWidget(control, 1)
+                    raw = transform.get(field)
+                    curve = raw.get("curve") if isinstance(raw, dict) else None
+                    button = window.make_key_button(key, f"shape-{i}-transform-{field}", control,
+                        curve_override=curve, on_toggle=lambda f=field: key_field(i, "transform." + f),
+                        object_name=f"roto-shape-key-transform-{field}-{i}")
+                    button.setAccessibleName(f"{label} key"); row.addWidget(button)
+                    layout.addWidget(QLabel(label)); layout.addLayout(row)
+            transform_toggle = QPushButton("Transform \u25b8"); transform_toggle.setObjectName("roto-shape-transform-toggle")
+            transform_toggle.setCheckable(True); transform_toggle.setFlat(True)
+            transform_toggle.setToolTip("Show the shape's translate, rotate, scale, centre and skew controls")
+            transform_holder = QWidget(); transform_holder.setObjectName("roto-shape-transform")
+            transform_layout = QVBoxLayout(transform_holder); transform_layout.setContentsMargins(0, 0, 0, 0)
+            transform_holder.setVisible(False)
+            transform_built = []
+
+            def open_transform(shown, toggle=transform_toggle, holder=transform_holder, rows=transform_layout, built_rows=transform_built):
+                toggle.setText("Transform \u25be" if shown else "Transform \u25b8")
+                if shown and not built_rows:
+                    built_rows.append(True)
+                    build_transform_rows(rows)
+                holder.setVisible(shown)
+            transform_toggle.toggled.connect(open_transform)
+            layout.addWidget(transform_toggle); layout.addWidget(transform_holder)
+            yield
             def plain(field, value):
                 """Set a setting that is a plain value on the shape (a flag, a choice, a whole number), not an animatable scalar."""
                 entries = current()
