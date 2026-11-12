@@ -1,0 +1,1765 @@
+{
+ "tool": "benchmark_roto_interaction",
+ "platform": "xcb",
+ "display": ":0",
+ "python": "3.12.13",
+ "label": "",
+ "size": "1080p",
+ "cases": {
+  "realistic": {
+   "actions": {
+    "knob_opacity": {
+     "label": "knob_opacity",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 124,
+       "median": 0.95,
+       "p95": 1.85,
+       "max": 36.18
+      },
+      "evaluate_ms": {
+       "n": 123,
+       "median": 12.47,
+       "p95": 47.41,
+       "max": 54.08
+      },
+      "convert_ms": {
+       "n": 123,
+       "median": 5.53,
+       "p95": 38.2,
+       "max": 41.35
+      },
+      "emit_to_ready_ms": {
+       "n": 123,
+       "median": 0.14,
+       "p95": 0.28,
+       "max": 0.52
+      },
+      "ready_to_shown_ms": {
+       "n": 124,
+       "median": 3.32,
+       "p95": 4.2,
+       "max": 5.72
+      }
+     },
+     "events_posted": 42,
+     "moves_posted": 0,
+     "moves_handled": 0,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_overlay_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "move_late_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_handler_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "click_overlay_ms": {
+      "n": 126,
+      "median": 156.05,
+      "p95": 163.1,
+      "max": 192.56
+     },
+     "renders_requested": 41,
+     "renders_started": 41,
+     "pictures_shown": 41,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 0,
+      "median": null,
+      "p95": null,
+      "max": null
+     },
+     "last_picture_after_last_event_ms": -873.7,
+     "undo_steps_added": 1,
+     "panel_update_ms": 0.0,
+     "panel_done_after_release_ms": 0.0,
+     "post_release_stall_ms": 80.1,
+     "post_release_stalls_over_50": 1,
+     "drag_stall_ms": 68.0,
+     "drag_gap_cpu": {
+      "gaps": 185,
+      "gap_ms_total": 5165.1,
+      "gui_cpu_ms_in_gaps": 3367.3
+     },
+     "drag_gui_busy_gaps_over_10": 186,
+     "last_picture_after_last_event_worst_ms": 124.7,
+     "repeats": 3,
+     "spans": {
+      "drag": [
+       {
+        "where": "Window.request_preview",
+        "calls": 41,
+        "total_ms": 1002.7,
+        "median_ms": 24.62,
+        "max_ms": 25.9
+       },
+       {
+        "where": "Dispatcher.execute",
+        "calls": 41,
+        "total_ms": 477.7,
+        "median_ms": 11.68,
+        "max_ms": 12.61
+       },
+       {
+        "where": "Viewer.paint_overlays",
+        "calls": 41,
+        "total_ms": 179.3,
+        "median_ms": 4.39,
+        "max_ms": 5.25
+       },
+       {
+        "where": "Window.preview_ready",
+        "calls": 41,
+        "total_ms": 113.9,
+        "median_ms": 2.7,
+        "max_ms": 3.53
+       },
+       {
+        "where": "Window._show_image",
+        "calls": 41,
+        "total_ms": 27.8,
+        "median_ms": 0.68,
+        "max_ms": 0.8
+       },
+       {
+        "where": "Window.refresh_timeline_marks",
+        "calls": 41,
+        "total_ms": 7.9,
+        "median_ms": 0.18,
+        "max_ms": 0.25
+       },
+       {
+        "where": "Window._frame_viewer_to",
+        "calls": 41,
+        "total_ms": 5.9,
+        "median_ms": 0.14,
+        "max_ms": 0.22
+       },
+       {
+        "where": "Window.start_preview",
+        "calls": 41,
+        "total_ms": 4.4,
+        "median_ms": 0.11,
+        "max_ms": 0.16
+       },
+       {
+        "where": "Window.update_corner_readout",
+        "calls": 41,
+        "total_ms": 2.6,
+        "median_ms": 0.06,
+        "max_ms": 0.1
+       },
+       {
+        "where": "Window.render_identity",
+        "calls": 41,
+        "total_ms": 2.2,
+        "median_ms": 0.05,
+        "max_ms": 0.08
+       },
+       {
+        "where": "Window.update_status_summary",
+        "calls": 41,
+        "total_ms": 1.1,
+        "median_ms": 0.03,
+        "max_ms": 0.03
+       },
+       {
+        "where": "Window._offer_direct",
+        "calls": 41,
+        "total_ms": 0.1,
+        "median_ms": 0.0,
+        "max_ms": 0.0
+       },
+       {
+        "where": "Window._adapt_playback_proxy",
+        "calls": 41,
+        "total_ms": 0.1,
+        "median_ms": 0.0,
+        "max_ms": 0.0
+       }
+      ],
+      "after_release": [
+       {
+        "where": "Dispatcher.execute",
+        "calls": 1,
+        "total_ms": 15.1,
+        "median_ms": 15.07,
+        "max_ms": 15.07
+       },
+       {
+        "where": "Viewer.paint_overlays",
+        "calls": 1,
+        "total_ms": 4.4,
+        "median_ms": 4.39,
+        "max_ms": 4.39
+       },
+       {
+        "where": "Window.after_command",
+        "calls": 1,
+        "total_ms": 1.6,
+        "median_ms": 1.65,
+        "max_ms": 1.65
+       },
+       {
+        "where": "Window.sync_timeline",
+        "calls": 1,
+        "total_ms": 0.3,
+        "median_ms": 0.33,
+        "max_ms": 0.33
+       },
+       {
+        "where": "Window.refresh_timeline_marks",
+        "calls": 1,
+        "total_ms": 0.2,
+        "median_ms": 0.21,
+        "max_ms": 0.21
+       },
+       {
+        "where": "Window.sync_viewer_look",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.02,
+        "max_ms": 0.02
+       },
+       {
+        "where": "Window.sync_viewer_frame",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.01,
+        "max_ms": 0.01
+       },
+       {
+        "where": "Window.sync_viewer_knobs",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.04,
+        "max_ms": 0.04
+       },
+       {
+        "where": "Window.update_title",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.04,
+        "max_ms": 0.04
+       },
+       {
+        "where": "Window.render_identity",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.04,
+        "max_ms": 0.04
+       }
+      ]
+     },
+     "sample_top": {
+      "drag": {
+       "samples": 36647,
+       "busy_samples": 36567,
+       "innermost": [
+        {
+         "where": "benchmark_roto_interaction.py:423(block)",
+         "ms": 35573,
+         "share": 0.971
+        },
+        {
+         "where": "playback.py:486(get)",
+         "ms": 438,
+         "share": 0.012
+        },
+        {
+         "where": "copy.py:118(deepcopy)",
+         "ms": 148,
+         "share": 0.004
+        },
+        {
+         "where": "copy.py:217(_deepcopy_dict)",
+         "ms": 52,
+         "share": 0.001
+        },
+        {
+         "where": "jobs.py:79(_db)",
+         "ms": 46,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 41,
+         "share": 0.001
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 39,
+         "share": 0.001
+        },
+        {
+         "where": "encoder.py:205(iterencode)",
+         "ms": 36,
+         "share": 0.001
+        },
+        {
+         "where": "copy.py:231(_keep_alive)",
+         "ms": 25,
+         "share": 0.001
+        },
+        {
+         "where": "benchmark_roto_interaction.py:1037(wrapped)",
+         "ms": 22,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:19495(_show_image)",
+         "ms": 21,
+         "share": 0.001
+        },
+        {
+         "where": "nodeshelf.py:150(_unit)",
+         "ms": 20,
+         "share": 0.001
+        },
+        {
+         "where": "animation.py:46(validate_curve)",
+         "ms": 15,
+         "share": 0.0
+        },
+        {
+         "where": "topbar.py:209(set_icon_only)",
+         "ms": 11,
+         "share": 0.0
+        },
+        {
+         "where": "shapes.py:154(validate_shape)",
+         "ms": 9,
+         "share": 0.0
+        },
+        {
+         "where": "copy.py:191(_deepcopy_list)",
+         "ms": 9,
+         "share": 0.0
+        },
+        {
+         "where": "copy.py:172(_deepcopy_atomic)",
+         "ms": 9,
+         "share": 0.0
+        },
+        {
+         "where": "loops.py:43(_db)",
+         "ms": 7,
+         "share": 0.0
+        },
+        {
+         "where": "shapes.py:97(_is_number)",
+         "ms": 6,
+         "share": 0.0
+        },
+        {
+         "where": "shapes.py:115(validate_scalar)",
+         "ms": 5,
+         "share": 0.0
+        },
+        {
+         "where": "playback.py:437(identity)",
+         "ms": 4,
+         "share": 0.0
+        },
+        {
+         "where": "topbar.py:227(minimumSizeHint)",
+         "ms": 4,
+         "share": 0.0
+        },
+        {
+         "where": "core.py:3506(validate)",
+         "ms": 4,
+         "share": 0.0
+        },
+        {
+         "where": "topbar.py:280(_refresh)",
+         "ms": 3,
+         "share": 0.0
+        },
+        {
+         "where": "nodeshelf.py:169(sizeHint)",
+         "ms": 3,
+         "share": 0.0
+        },
+        {
+         "where": "loops.py:196(list_snapshots)",
+         "ms": 2,
+         "share": 0.0
+        },
+        {
+         "where": "topbar.py:36(paintEvent)",
+         "ms": 2,
+         "share": 0.0
+        },
+        {
+         "where": "app.py:2123(_place_pixel_readout)",
+         "ms": 2,
+         "share": 0.0
+        },
+        {
+         "where": "benchmark_roto_interaction.py:465(run)",
+         "ms": 1,
+         "share": 0.0
+        },
+        {
+         "where": "core.py:2739(upgrade_document)",
+         "ms": 1,
+         "share": 0.0
+        }
+       ],
+       "cumulative": [
+        {
+         "where": "app.py:14751(<lambda>)",
+         "ms": 727,
+         "share": 0.02
+        },
+        {
+         "where": "app.py:18203(preview_param_drag)",
+         "ms": 727,
+         "share": 0.02
+        },
+        {
+         "where": "app.py:494(mouseMoveEvent)",
+         "ms": 715,
+         "share": 0.02
+        },
+        {
+         "where": "app.py:18842(request_preview)",
+         "ms": 523,
+         "share": 0.014
+        },
+        {
+         "where": "app.py:18826(_selected_tier_is_cached)",
+         "ms": 478,
+         "share": 0.013
+        },
+        {
+         "where": "playback.py:486(get)",
+         "ms": 438,
+         "share": 0.012
+        },
+        {
+         "where": "copy.py:118(deepcopy)",
+         "ms": 243,
+         "share": 0.007
+        },
+        {
+         "where": "copy.py:217(_deepcopy_dict)",
+         "ms": 243,
+         "share": 0.007
+        },
+        {
+         "where": "copy.py:191(_deepcopy_list)",
+         "ms": 242,
+         "share": 0.007
+        },
+        {
+         "where": "queuepanel.py:129(refresh)",
+         "ms": 94,
+         "share": 0.003
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 85,
+         "share": 0.002
+        },
+        {
+         "where": "core.py:3768(__init__)",
+         "ms": 83,
+         "share": 0.002
+        },
+        {
+         "where": "core.py:3775(execute)",
+         "ms": 80,
+         "share": 0.002
+        },
+        {
+         "where": "core.py:2739(upgrade_document)",
+         "ms": 70,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:2158(paintEvent)",
+         "ms": 63,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:5628(drawForeground)",
+         "ms": 63,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:20039(preview_ready)",
+         "ms": 62,
+         "share": 0.002
+        },
+        {
+         "where": "queuepanel.py:189(refresh_loop_history)",
+         "ms": 53,
+         "share": 0.001
+        },
+        {
+         "where": "jobs.py:79(_db)",
+         "ms": 46,
+         "share": 0.001
+        },
+        {
+         "where": "contextlib.py:132(__enter__)",
+         "ms": 44,
+         "share": 0.001
+        },
+        {
+         "where": "core.py:3506(validate)",
+         "ms": 43,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 41,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:20194(schedule_thumbnails)",
+         "ms": 41,
+         "share": 0.001
+        },
+        {
+         "where": "playback.py:437(identity)",
+         "ms": 40,
+         "share": 0.001
+        },
+        {
+         "where": "playback.py:466(key)",
+         "ms": 40,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:365(set_gpu)",
+         "ms": 39,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:399(_announce_floor)",
+         "ms": 39,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:405(_fit)",
+         "ms": 39,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:385(floor_width)",
+         "ms": 39,
+         "share": 0.001
+        },
+        {
+         "where": "shapes.py:526(validate_node_data)",
+         "ms": 37,
+         "share": 0.001
+        }
+       ]
+      },
+      "after_release": {
+       "samples": 1031,
+       "busy_samples": 1029,
+       "innermost": [
+        {
+         "where": "benchmark_roto_interaction.py:423(block)",
+         "ms": 1023,
+         "share": 0.992
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "copy.py:231(_keep_alive)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "animation.py:46(validate_curve)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "timeline.py:348(_draw_key_ticks)",
+         "ms": 1,
+         "share": 0.001
+        }
+       ],
+       "cumulative": [
+        {
+         "where": "core.py:3775(execute)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:16486(<lambda>)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:12785(command)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "queuepanel.py:129(refresh)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "queuepanel.py:189(refresh_loop_history)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "copy.py:118(deepcopy)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "copy.py:231(_keep_alive)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "copy.py:217(_deepcopy_dict)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "copy.py:191(_deepcopy_list)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "shapes.py:154(validate_shape)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "shapes.py:101(validate_curve)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "core.py:3506(validate)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "shapes.py:115(validate_scalar)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "animation.py:46(validate_curve)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "shapes.py:526(validate_node_data)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "shapes.py:363(validate_payload)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:2158(paintEvent)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:5628(drawForeground)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "timeline.py:348(_draw_key_ticks)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "timeline.py:292(paintEvent)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "timeline.py:233(event)",
+         "ms": 1,
+         "share": 0.001
+        }
+       ]
+      }
+     },
+     "stall_stacks": []
+    },
+    "drag_point": {
+     "label": "drag_point",
+     "render_stages": {
+      "worker_wait_ms": {
+       "n": 28,
+       "median": 0.18,
+       "p95": 8.58,
+       "max": 34.29
+      },
+      "evaluate_ms": {
+       "n": 28,
+       "median": 13.91,
+       "p95": 33.36,
+       "max": 46.17
+      },
+      "convert_ms": {
+       "n": 28,
+       "median": 3.76,
+       "p95": 7.09,
+       "max": 52.06
+      },
+      "emit_to_ready_ms": {
+       "n": 28,
+       "median": 0.68,
+       "p95": 6.3,
+       "max": 9.82
+      },
+      "ready_to_shown_ms": {
+       "n": 28,
+       "median": 3.18,
+       "p95": 3.72,
+       "max": 3.78
+      }
+     },
+     "events_posted": 62,
+     "moves_posted": 60,
+     "moves_handled": 60,
+     "moves_coalesced": 0,
+     "move_handler_ms": {
+      "n": 180,
+      "median": 0.29,
+      "p95": 0.47,
+      "max": 4.22
+     },
+     "move_overlay_ms": {
+      "n": 180,
+      "median": 5.96,
+      "p95": 18.48,
+      "max": 26.24
+     },
+     "move_late_ms": {
+      "n": 180,
+      "median": 0.93,
+      "p95": 8.55,
+      "max": 11.11
+     },
+     "click_handler_ms": {
+      "n": 6,
+      "median": 24.29,
+      "p95": 31.81,
+      "max": 32.64
+     },
+     "click_overlay_ms": {
+      "n": 6,
+      "median": 35.06,
+      "p95": 46.98,
+      "max": 48.3
+     },
+     "renders_requested": 28,
+     "renders_started": 28,
+     "pictures_shown": 28,
+     "renders_dropped": 0,
+     "picture_age_ms": {
+      "n": 6,
+      "median": 63.04,
+      "p95": 90.58,
+      "max": 93.64
+     },
+     "last_picture_after_last_event_ms": 235.0,
+     "undo_steps_added": 1,
+     "panel_update_ms": 20.4,
+     "panel_done_after_release_ms": 196.9,
+     "post_release_stall_ms": 108.7,
+     "post_release_stalls_over_50": 2,
+     "drag_stall_ms": 24.6,
+     "drag_gap_cpu": {
+      "gaps": 5,
+      "gap_ms_total": 75.1,
+      "gui_cpu_ms_in_gaps": 44.0
+     },
+     "drag_gui_busy_gaps_over_10": 6,
+     "spans": {
+      "drag": [
+       {
+        "where": "Viewer.paintEvent",
+        "calls": 86,
+        "total_ms": 322.0,
+        "median_ms": 3.53,
+        "max_ms": 6.21
+       },
+       {
+        "where": "Viewer.drawForeground",
+        "calls": 86,
+        "total_ms": 299.2,
+        "median_ms": 3.22,
+        "max_ms": 5.84
+       },
+       {
+        "where": "Viewer.paint_overlays",
+        "calls": 86,
+        "total_ms": 298.7,
+        "median_ms": 3.21,
+        "max_ms": 5.84
+       },
+       {
+        "where": "Window.preview_ready",
+        "calls": 25,
+        "total_ms": 84.7,
+        "median_ms": 3.3,
+        "max_ms": 6.19
+       },
+       {
+        "where": "Window._show_image",
+        "calls": 25,
+        "total_ms": 55.4,
+        "median_ms": 2.15,
+        "max_ms": 4.89
+       },
+       {
+        "where": "Viewer._preview_roto_drag",
+        "calls": 25,
+        "total_ms": 20.0,
+        "median_ms": 0.7,
+        "max_ms": 1.75
+       },
+       {
+        "where": "Viewer._preview_document_drag",
+        "calls": 25,
+        "total_ms": 19.9,
+        "median_ms": 0.7,
+        "max_ms": 1.74
+       },
+       {
+        "where": "Viewer._flush_drag_preview",
+        "calls": 24,
+        "total_ms": 18.7,
+        "median_ms": 0.71,
+        "max_ms": 1.75
+       },
+       {
+        "where": "Window.request_preview",
+        "calls": 25,
+        "total_ms": 3.1,
+        "median_ms": 0.11,
+        "max_ms": 0.22
+       },
+       {
+        "where": "Window._frame_viewer_to",
+        "calls": 25,
+        "total_ms": 2.9,
+        "median_ms": 0.11,
+        "max_ms": 0.25
+       },
+       {
+        "where": "Window.refresh_timeline_marks",
+        "calls": 25,
+        "total_ms": 2.3,
+        "median_ms": 0.09,
+        "max_ms": 0.12
+       },
+       {
+        "where": "Window.update_corner_readout",
+        "calls": 25,
+        "total_ms": 1.4,
+        "median_ms": 0.05,
+        "max_ms": 0.17
+       },
+       {
+        "where": "Window.start_preview",
+        "calls": 25,
+        "total_ms": 1.3,
+        "median_ms": 0.05,
+        "max_ms": 0.08
+       },
+       {
+        "where": "Window._roto_panel_signature",
+        "calls": 1,
+        "total_ms": 1.2,
+        "median_ms": 1.18,
+        "max_ms": 1.18
+       },
+       {
+        "where": "Window.refresh_panel_soon",
+        "calls": 1,
+        "total_ms": 1.2,
+        "median_ms": 1.21,
+        "max_ms": 1.21
+       },
+       {
+        "where": "Window.render_identity",
+        "calls": 25,
+        "total_ms": 1.1,
+        "median_ms": 0.04,
+        "max_ms": 0.08
+       },
+       {
+        "where": "Window.update_status_summary",
+        "calls": 25,
+        "total_ms": 0.4,
+        "median_ms": 0.02,
+        "max_ms": 0.02
+       },
+       {
+        "where": "Window._offer_direct",
+        "calls": 25,
+        "total_ms": 0.1,
+        "median_ms": 0.0,
+        "max_ms": 0.0
+       },
+       {
+        "where": "Window._adapt_playback_proxy",
+        "calls": 25,
+        "total_ms": 0.0,
+        "median_ms": 0.0,
+        "max_ms": 0.0
+       }
+      ],
+      "after_release": [
+       {
+        "where": "Window.preview_ready",
+        "calls": 3,
+        "total_ms": 37.4,
+        "median_ms": 11.13,
+        "max_ms": 24.25
+       },
+       {
+        "where": "Window.request_preview",
+        "calls": 3,
+        "total_ms": 24.5,
+        "median_ms": 8.21,
+        "max_ms": 9.03
+       },
+       {
+        "where": "Viewer.paintEvent",
+        "calls": 5,
+        "total_ms": 21.5,
+        "median_ms": 3.86,
+        "max_ms": 6.22
+       },
+       {
+        "where": "Viewer.paint_overlays",
+        "calls": 5,
+        "total_ms": 19.3,
+        "median_ms": 3.33,
+        "max_ms": 5.9
+       },
+       {
+        "where": "Viewer.drawForeground",
+        "calls": 5,
+        "total_ms": 19.3,
+        "median_ms": 3.33,
+        "max_ms": 5.91
+       },
+       {
+        "where": "Window.after_command",
+        "calls": 1,
+        "total_ms": 15.4,
+        "median_ms": 15.37,
+        "max_ms": 15.37
+       },
+       {
+        "where": "Dispatcher.execute",
+        "calls": 1,
+        "total_ms": 15.3,
+        "median_ms": 15.34,
+        "max_ms": 15.34
+       },
+       {
+        "where": "Window.refresh_timeline_marks",
+        "calls": 4,
+        "total_ms": 15.0,
+        "median_ms": 0.2,
+        "max_ms": 14.37
+       },
+       {
+        "where": "Window._show_image",
+        "calls": 3,
+        "total_ms": 3.9,
+        "median_ms": 1.57,
+        "max_ms": 1.67
+       },
+       {
+        "where": "NodeGraph.rebuild",
+        "calls": 1,
+        "total_ms": 2.9,
+        "median_ms": 2.89,
+        "max_ms": 2.89
+       },
+       {
+        "where": "Window.render_identity",
+        "calls": 4,
+        "total_ms": 2.2,
+        "median_ms": 0.04,
+        "max_ms": 2.08
+       },
+       {
+        "where": "Window._roto_panel_signature",
+        "calls": 2,
+        "total_ms": 1.0,
+        "median_ms": 0.52,
+        "max_ms": 0.65
+       },
+       {
+        "where": "Window._frame_viewer_to",
+        "calls": 3,
+        "total_ms": 0.5,
+        "median_ms": 0.15,
+        "max_ms": 0.19
+       },
+       {
+        "where": "Window.refresh_panel_soon",
+        "calls": 1,
+        "total_ms": 0.4,
+        "median_ms": 0.43,
+        "max_ms": 0.43
+       },
+       {
+        "where": "Window.update_corner_readout",
+        "calls": 3,
+        "total_ms": 0.3,
+        "median_ms": 0.09,
+        "max_ms": 0.14
+       },
+       {
+        "where": "Window.sync_timeline",
+        "calls": 1,
+        "total_ms": 0.1,
+        "median_ms": 0.1,
+        "max_ms": 0.1
+       },
+       {
+        "where": "Window.start_preview",
+        "calls": 5,
+        "total_ms": 0.1,
+        "median_ms": 0.04,
+        "max_ms": 0.06
+       },
+       {
+        "where": "Window.sync_viewer_look",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.01,
+        "max_ms": 0.01
+       },
+       {
+        "where": "Window.sync_viewer_frame",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.01,
+        "max_ms": 0.01
+       },
+       {
+        "where": "Window.sync_viewer_knobs",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.02,
+        "max_ms": 0.02
+       },
+       {
+        "where": "Window.update_title",
+        "calls": 1,
+        "total_ms": 0.0,
+        "median_ms": 0.02,
+        "max_ms": 0.02
+       },
+       {
+        "where": "Window.update_status_summary",
+        "calls": 3,
+        "total_ms": 0.0,
+        "median_ms": 0.01,
+        "max_ms": 0.02
+       },
+       {
+        "where": "Window._offer_direct",
+        "calls": 3,
+        "total_ms": 0.0,
+        "median_ms": 0.0,
+        "max_ms": 0.0
+       },
+       {
+        "where": "Window._adapt_playback_proxy",
+        "calls": 3,
+        "total_ms": 0.0,
+        "median_ms": 0.0,
+        "max_ms": 0.0
+       }
+      ]
+     },
+     "last_picture_after_last_event_worst_ms": 243.9,
+     "repeats": 3,
+     "sample_top": {
+      "drag": {
+       "samples": 624,
+       "busy_samples": 624,
+       "innermost": [
+        {
+         "where": "benchmark_roto_interaction.py:423(block)",
+         "ms": 420,
+         "share": 0.673
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 98,
+         "share": 0.157
+        },
+        {
+         "where": "benchmark_roto_interaction.py:1037(wrapped)",
+         "ms": 43,
+         "share": 0.069
+        },
+        {
+         "where": "app.py:3521(_roto_hit_spline)",
+         "ms": 10,
+         "share": 0.016
+        },
+        {
+         "where": "benchmark_roto_interaction.py:465(run)",
+         "ms": 9,
+         "share": 0.014
+        },
+        {
+         "where": "app.py:19495(_show_image)",
+         "ms": 8,
+         "share": 0.013
+        },
+        {
+         "where": "topbar.py:209(set_icon_only)",
+         "ms": 6,
+         "share": 0.01
+        },
+        {
+         "where": "topbar.py:227(minimumSizeHint)",
+         "ms": 5,
+         "share": 0.008
+        },
+        {
+         "where": "app.py:2123(_place_pixel_readout)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "viewerstrip.py:577(place)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "nodeshelf.py:150(_unit)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "topbar.py:385(floor_width)",
+         "ms": 3,
+         "share": 0.005
+        },
+        {
+         "where": "app.py:2115(set_image_rect)",
+         "ms": 2,
+         "share": 0.003
+        },
+        {
+         "where": "viewerstrip.py:573(free_span)",
+         "ms": 2,
+         "share": 0.003
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 2,
+         "share": 0.003
+        },
+        {
+         "where": "app.py:3505(_roto_hit_point)",
+         "ms": 1,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:6492(mouseMoveEvent)",
+         "ms": 1,
+         "share": 0.002
+        },
+        {
+         "where": "nodeshelf.py:169(sizeHint)",
+         "ms": 1,
+         "share": 0.002
+        },
+        {
+         "where": "topbar.py:36(paintEvent)",
+         "ms": 1,
+         "share": 0.002
+        }
+       ],
+       "cumulative": [
+        {
+         "where": "app.py:2158(paintEvent)",
+         "ms": 131,
+         "share": 0.21
+        },
+        {
+         "where": "app.py:5628(drawForeground)",
+         "ms": 131,
+         "share": 0.21
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 98,
+         "share": 0.157
+        },
+        {
+         "where": "app.py:20039(preview_ready)",
+         "ms": 46,
+         "share": 0.074
+        },
+        {
+         "where": "topbar.py:365(set_gpu)",
+         "ms": 19,
+         "share": 0.03
+        },
+        {
+         "where": "topbar.py:399(_announce_floor)",
+         "ms": 19,
+         "share": 0.03
+        },
+        {
+         "where": "topbar.py:385(floor_width)",
+         "ms": 19,
+         "share": 0.03
+        },
+        {
+         "where": "app.py:19495(_show_image)",
+         "ms": 17,
+         "share": 0.027
+        },
+        {
+         "where": "topbar.py:209(set_icon_only)",
+         "ms": 15,
+         "share": 0.024
+        },
+        {
+         "where": "topbar.py:405(_fit)",
+         "ms": 15,
+         "share": 0.024
+        },
+        {
+         "where": "app.py:6003(hit_press)",
+         "ms": 11,
+         "share": 0.018
+        },
+        {
+         "where": "app.py:6379(mousePressEvent)",
+         "ms": 11,
+         "share": 0.018
+        },
+        {
+         "where": "app.py:3521(_roto_hit_spline)",
+         "ms": 10,
+         "share": 0.016
+        },
+        {
+         "where": "app.py:19551(_frame_viewer_to)",
+         "ms": 6,
+         "share": 0.01
+        },
+        {
+         "where": "app.py:2123(_place_pixel_readout)",
+         "ms": 6,
+         "share": 0.01
+        },
+        {
+         "where": "topbar.py:227(minimumSizeHint)",
+         "ms": 5,
+         "share": 0.008
+        },
+        {
+         "where": "app.py:6492(mouseMoveEvent)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "viewerstrip.py:555(set_image)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "app.py:19478(update_corner_readout)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "viewerstrip.py:577(place)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "nodeshelf.py:150(_unit)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "nodeshelf.py:172(minimumSizeHint)",
+         "ms": 4,
+         "share": 0.006
+        },
+        {
+         "where": "app.py:2329(_update_pixel_readout)",
+         "ms": 3,
+         "share": 0.005
+        },
+        {
+         "where": "nodeshelf.py:153(_metrics)",
+         "ms": 3,
+         "share": 0.005
+        },
+        {
+         "where": "app.py:2115(set_image_rect)",
+         "ms": 2,
+         "share": 0.003
+        },
+        {
+         "where": "viewerstrip.py:573(free_span)",
+         "ms": 2,
+         "share": 0.003
+        },
+        {
+         "where": "queuepanel.py:129(refresh)",
+         "ms": 2,
+         "share": 0.003
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 2,
+         "share": 0.003
+        },
+        {
+         "where": "app.py:3505(_roto_hit_point)",
+         "ms": 1,
+         "share": 0.002
+        },
+        {
+         "where": "nodeshelf.py:160(column_width)",
+         "ms": 1,
+         "share": 0.002
+        }
+       ]
+      },
+      "after_release": {
+       "samples": 911,
+       "busy_samples": 911,
+       "innermost": [
+        {
+         "where": "benchmark_roto_interaction.py:423(block)",
+         "ms": 826,
+         "share": 0.907
+        },
+        {
+         "where": "rotopanel.py:424(build_detail)",
+         "ms": 16,
+         "share": 0.018
+        },
+        {
+         "where": "knobfit.py:298(_unit_need)",
+         "ms": 10,
+         "share": 0.011
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 9,
+         "share": 0.01
+        },
+        {
+         "where": "app.py:532(__init__)",
+         "ms": 6,
+         "share": 0.007
+        },
+        {
+         "where": "copy.py:118(deepcopy)",
+         "ms": 5,
+         "share": 0.005
+        },
+        {
+         "where": "playback.py:437(identity)",
+         "ms": 5,
+         "share": 0.005
+        },
+        {
+         "where": "benchmark_roto_interaction.py:1037(wrapped)",
+         "ms": 4,
+         "share": 0.004
+        },
+        {
+         "where": "app.py:18492(eventFilter)",
+         "ms": 3,
+         "share": 0.003
+        },
+        {
+         "where": "app.py:2123(_place_pixel_readout)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:19495(_show_image)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "jobs.py:79(_db)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "knobfit.py:161(stable_width)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "rotopanel.py:651(plain_combo)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "knobfit.py:147(fitted_width)",
+         "ms": 2,
+         "share": 0.002
+        },
+        {
+         "where": "app.py:911(viewer_auto_3d)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:6533(__init__)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:12750(sync_breadcrumbs)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "timeline.py:292(paintEvent)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:8578(paintEvent)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "app.py:7326(paint)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:405(_fit)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "copy.py:217(_deepcopy_dict)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:209(set_icon_only)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:36(paintEvent)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "topbar.py:68(paintEvent)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "rotopanel.py:829(build_detail_sliced)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "rotopanel.py:658(plain_spin)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "rotopanel.py:168(add_point_tracking)",
+         "ms": 1,
+         "share": 0.001
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 1,
+         "share": 0.001
+        }
+       ],
+       "cumulative": [
+        {
+         "where": "rotopanel.py:829(build_detail_sliced)",
+         "ms": 27,
+         "share": 0.03
+        },
+        {
+         "where": "rotopanel.py:424(build_detail)",
+         "ms": 26,
+         "share": 0.029
+        },
+        {
+         "where": "rotopanel.py:840(<lambda>)",
+         "ms": 25,
+         "share": 0.027
+        },
+        {
+         "where": "knobfit.py:321(best_columns)",
+         "ms": 14,
+         "share": 0.015
+        },
+        {
+         "where": "knobfit.py:335(resizeEvent)",
+         "ms": 14,
+         "share": 0.015
+        },
+        {
+         "where": "knobfit.py:315(_needed)",
+         "ms": 14,
+         "share": 0.015
+        },
+        {
+         "where": "knobfit.py:298(_unit_need)",
+         "ms": 14,
+         "share": 0.015
+        },
+        {
+         "where": "app.py:2158(paintEvent)",
+         "ms": 13,
+         "share": 0.014
+        },
+        {
+         "where": "app.py:5628(drawForeground)",
+         "ms": 13,
+         "share": 0.014
+        },
+        {
+         "where": "app.py:20039(preview_ready)",
+         "ms": 11,
+         "share": 0.012
+        },
+        {
+         "where": "app.py:5646(paint_overlays)",
+         "ms": 9,
+         "share": 0.01
+        },
+        {
+         "where": "app.py:4436(_commit_roto_drag)",
+         "ms": 8,
+         "share": 0.009
+        },
+        {
+         "where": "app.py:5000(hit_release)",
+         "ms": 8,
+         "share": 0.009
+        },
+        {
+         "where": "app.py:5223(mouseReleaseEvent)",
+         "ms": 8,
+         "share": 0.009
+        },
+        {
+         "where": "app.py:4445(_commit_roto_drag_now)",
+         "ms": 8,
+         "share": 0.009
+        },
+        {
+         "where": "app.py:3703(_commit_roto_shapes)",
+         "ms": 8,
+         "share": 0.009
+        },
+        {
+         "where": "app.py:12785(command)",
+         "ms": 8,
+         "share": 0.009
+        },
+        {
+         "where": "copy.py:118(deepcopy)",
+         "ms": 6,
+         "share": 0.007
+        },
+        {
+         "where": "copy.py:217(_deepcopy_dict)",
+         "ms": 6,
+         "share": 0.007
+        },
+        {
+         "where": "copy.py:191(_deepcopy_list)",
+         "ms": 6,
+         "share": 0.007
+        },
+        {
+         "where": "app.py:532(__init__)",
+         "ms": 6,
+         "share": 0.007
+        },
+        {
+         "where": "rotopanel.py:216(float_slider)",
+         "ms": 6,
+         "share": 0.007
+        },
+        {
+         "where": "app.py:13141(after_command)",
+         "ms": 5,
+         "share": 0.005
+        },
+        {
+         "where": "playback.py:437(identity)",
+         "ms": 5,
+         "share": 0.005
+        },
+        {
+         "where": "app.py:18842(request_preview)",
+         "ms": 4,
+         "share": 0.004
+        },
+        {
+         "where": "app.py:11544(refresh_timeline_marks)",
+         "ms": 4,
+         "share": 0.004
+        },
+        {
+         "where": "app.py:19495(_show_image)",
+         "ms": 3,
+         "share": 0.003
+        },
+        {
+         "where": "queuepanel.py:129(refresh)",
+         "ms": 3,
+         "share": 0.003
+        },
+        {
+         "where": "jobs.py:164(snapshot)",
+         "ms": 3,
+         "share": 0.003
+        },
+        {
+         "where": "queuepanel.py:189(refresh_loop_history)",
+         "ms": 3,
+         "share": 0.003
+        }
+       ]
+      }
+     },
+     "stall_stacks": [
+      {
+       "begins_after_release_ms": 327.0,
+       "length_ms": 59.2,
+       "samples": 58,
+       "frames": [
+        {
+         "where": "knobfit.py:321(best_columns)",
+         "samples": 12
+        },
+        {
+         "where": "knobfit.py:335(resizeEvent)",
+         "samples": 12
+        },
+        {
+         "where": "knobfit.py:315(_needed)",
+         "samples": 12
+        },
+        {
+         "where": "knobfit.py:298(_unit_need)",
+         "samples": 12
+        },
+        {
+         "where": "knobfit.py:147(fitted_width)",
+         "samples": 2
+        },
+        {
+         "where": "knobfit.py:177(minimumSizeHint)",
+         "samples": 2
+        },
+        {
+         "where": "rotopanel.py:424(build_detail)",
+         "samples": 1
+        },
+        {
+         "where": "rotopanel.py:197(add_tracking_actions)",
+         "samples": 1
+        },
+        {
+         "where": "rotopanel.py:840(<lambda>)",
+         "samples": 1
+        },
+        {
+         "where": "rotopanel.py:829(build_detail_sliced)",
+         "samples": 1
+        },
+        {
+         "where": "rotopanel.py:168(add_point_tracking)",
+         "samples": 1
+        },
+        {
+         "where": "knobfit.py:161(stable_width)",
+         "samples": 1
+        },
+        {
+         "where": "knobfit.py:173(sizeHint)",
+         "samples": 1
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "proxy_tier": 1
+  }
+ }
+}

@@ -486,6 +486,28 @@ What changed: the selected shape's controls (about 300 widgets) were built in on
 
 Still over target: the release stall above (next fixes: hand the edit to the dispatcher without the second deep copy it makes for undo, take the picture request's document identity from the drag's own snapshot, skip the graph rebuild for an edit that only changes a node's payload); the controls are all in about 200 ms after the release; the knob drag (opacity knob: 161 ms median click, 167 ms p95, against 62 to 74 in the first U2 pass) was not looked at in this pass; the point drag's overlay p95 was 20.5 ms in this run and 12.8 to 13.6 ms in four other runs of the same code (run-to-run spread). The painted stroke's overlay is now 16.65 ms p95 against 16 (18.6 before), its picture 201 ms after the release.
 
+### Roto interaction latency, U2 finish pass 2 (11/11/2026)
+
+Same tool, shot and display; three repeats on the real display (xcb) with no suite running (`pgrep` found none). Raw runs are in `benchmarks/roto-interaction-1111/`: `finish2-base.json` (this step's start), `finish2-final.json`, `finish2-final3.json` (the code as committed). Medians / p95 in milliseconds, realistic shot.
+
+| Action | Before this pass | After | Target |
+|---|---|---|---|
+| release click, drag_point | 35 / 47 | 23 / 27 | p95 at most 50: met |
+| release click, drag_feather | not timed apart; the whole release stall was 62 | 24 / 35 | met |
+| release click, drag_shape | not timed apart; the whole release stall was 71 | 25 / 32 | met |
+| release click, paint_stroke | not timed apart; the whole release stall was 65 | 18 / 33 | met |
+| opacity knob drag, click overlay | 156 / 163 | 29 / 35 | met (62 / 74 was the first U2 pass) |
+| controls complete after a release | 175 to 205 | 97 to 124 | none stated; 150 ms of the old figure was the wait |
+| worst interface stall in the second after a release | 53 to 71 | 50 to 53 | 50: on the line |
+
+What was slow and what changed:
+
+- Every edit copied the whole document with `copy.deepcopy` and then validated all of it, and a Roto of 20 shapes plus a RotoPaint of 30 strokes is 17 000 values: `Dispatcher.execute` took 13 ms for a shape edit and 9 ms for a knob. `core.fast_copy` rebuilds dicts, lists and tuples and shares strings and numbers (3 to 4 times quicker; a document holds nothing else), and `validate` no longer walks a node's payload that is equal to the one in the document it is editing (the references between nodes are still checked). A shape edit is now 5 ms and a knob edit 2.7 ms (micro-measured on this document). The release click holds the screen 25 to 35 ms at p95 where it held 47 to 62.
+- The opacity knob drag did three copies and two validations of the document per move before it asked for a picture, then probed the picture cache by hashing the whole document (5 ms), then rendered each move three times (tiers 8, 4 and the selected one, two of them thrown away by the next move). It now edits through `Dispatcher.adopt` (no copy, upgrade or validation of the live document first), hands the picture request its own edited copy, skips the cache probe, and renders each move at the one held proxy tier a Roto drag uses; one picture per move (an intermediate version of this pass, with the tier left to refine, showed three per move). The final picture still comes from the release's own commit.
+- The selected shape's controls were complete 175 to 205 ms after a release. 150 ms of that was the quiet wait before the panel updates; the update itself is 11 to 22 ms in place plus the sliced build of the controls. A release now shortens the wait to 60 ms (`PANEL_AFTER_RELEASE_DELAY_MS`); every other edit keeps 150 ms, because 60 and 100 ms for all edits raised the frame step's p95 from about 100 to 190 to 250 ms (the held key's repeats no longer coalesce into one rebuild). The Transform group (nine rows, a third of the controls) is built when the artist opens it, not with every selection; on its own it moved the completion time inside the run-to-run spread (176 to 198 ms against 181 to 190).
+
+Not done or not met: the worst stall in the second after a release is 50 to 53 ms against 50 (it was 53 to 71; the release's own commit is what is left, the picture request is 7 to 9 ms of it); a 1 ms gap between the panel build's slices and a 4 ms slice with no gap were both tried (done time unchanged, stalls 105 to 115 ms) and not kept. `step_frame_keyed` varies 100 to 250 ms p95 from run to run with no edit in this pass touching it (first step cold; worst gap 170 to 230 ms in every run including the unchanged code), so no claim is made about it. The RTX was not used: the Roto path is the processor's.
+
 ## Lane 8 step notes
 
 ### R6-1: the realistic comp with Grade, Transform, Blur and Merge resident on the GPU (10/25, step A of 3)
