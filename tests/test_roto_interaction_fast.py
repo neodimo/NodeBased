@@ -300,6 +300,17 @@ class FastRotoTests(unittest.TestCase):
         self.window._run_panel_rebuild()
         self.assertEqual(builds, ["r"])
 
+    @staticmethod
+    def _finish_shape_controls(panel):
+        """The selected shape's controls arrive a few milliseconds per event (rotopanel's build_detail_sliced), so one pass of
+        the event loop builds only part of them on a slow machine: wait until the name field is there and the held height of
+        the controls is released, which the last slice does."""
+        def done():
+            detail = panel.findChild(QWidget, "roto-shape-detail")
+            return (detail is not None and detail.minimumHeight() == 0
+                    and panel.findChild(QLineEdit, "roto-shape-name") is not None)
+        assert wait_until(done, timeout=10.0), "the selected shape's controls were not all built"
+
     def window_items(self):
         return max(Window.HEAVY_PANEL_ITEMS, 8)
 
@@ -322,7 +333,7 @@ class FastRotoTests(unittest.TestCase):
         self.window._run_panel_rebuild()
         # the selection moved to another shape and nothing else changed: the panel on screen is brought up to date in place
         # (the selected shape's controls are built again, in the next event; the list and the knobs stay), so no whole panel is built
-        APP.processEvents()
+        self._finish_shape_controls(self.window.properties.widget())
         self.assertEqual(builds, [])
         name = self.window.properties.widget().findChild(QLineEdit, "roto-shape-name")
         self.assertEqual(name.text(), "blob5")
@@ -464,7 +475,7 @@ class FastRotoTests(unittest.TestCase):
         self.window.command({"op": "set_shapes", "id": "r", "shapes": shapes + [blob(5)]})
         self.window._panel_rebuild_timer.stop()
         self.window._run_panel_rebuild()
-        APP.processEvents()
+        self._finish_shape_controls(panel)
         self.assertEqual(builds, [], "the panel is not built again for a new shape")
         self.assertIs(self.window.properties.widget(), panel)
         self.assertEqual(listing.count(), 6)
