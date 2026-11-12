@@ -188,6 +188,21 @@ docs/DIRECT_VIEWER.md, "Playback (VP2a)".
 
 ### Lane 8: realistic comp playback evaluation (10/22)
 
+### Radeon playout pointer A/B (11/12)
+
+These 12-second uncached 1080p GPU2D passes compare the experimental clock-owned playout path with the established immediate-present path. The pointer path is still opt-in: it loses cadence after its early frames, so it remains off by default.
+
+| Pass | Shown pictures | First pass fps | Interval p95 |
+|---|---:|---:|---:|
+| paced A | 30 | 15.362 | 129.177 ms |
+| unpaced A | 288 | 24.064 | 45.367 ms |
+| paced B | 33 | 15.004 | 156.073 ms |
+| unpaced B | 288 | 24.018 | 45.618 ms |
+| paced C | 44 | 19.991 | 89.254 ms |
+| unpaced C | 288 | 24.036 | 45.654 ms |
+
+The buffer's intended cost is up to one frame period from readiness to presentation. This implementation instead accumulates 12 to 14 late slots and 44 to 48 dropped entries in each paced pass, so it does not yet produce steady cadence. Scrubbing, stepping and stopped viewing remain on the immediate path.
+
 The uncached fixture in `tests/fixtures/playback_comp.nbcomp` measures evaluation through the
 finished float frame handed to the display. Timings below use 2 ms worker-stack samples, so node
 costs are estimates; the paired JSON profiles preserve the timeline and sampling evidence.
