@@ -1837,7 +1837,7 @@ class ProgressivePreviewTests(unittest.TestCase):
         request, _ = w.preview_queue.take()
         self.assertEqual(request.tier, 8)
 
-    def test_properties_slider_move_queues_a_tier8_snapshot_without_committing(self):
+    def test_properties_slider_move_queues_a_held_drag_tier_snapshot_without_committing(self):
         from PySide6.QtWidgets import QSlider
         w = self.window
         w.timer.stop()
@@ -1852,12 +1852,13 @@ class ProgressivePreviewTests(unittest.TestCase):
         slider.setSliderDown(True)
         slider.setValue(min(slider.maximum(), slider.value() + 1200))
         request, _cancel = w.preview_queue.take()
-        self.assertEqual(request.tier, 8)
+        # A held knob renders every picture at the one drag tier, as a Roto drag does (no 8 -> 4 -> selected refinement while held).
+        self.assertEqual(request.tier, w.viewer.DRAG_PREVIEW_TIER)
         self.assertNotEqual(request.document['nodes']['grade']['params']['exposure'], before)
         self.assertEqual(w.dispatcher.document['nodes']['grade']['params']['exposure'], before)
         slider.setSliderDown(False)
 
-    def test_properties_slider_pointer_drag_queues_a_tier8_snapshot(self):
+    def test_properties_slider_pointer_drag_queues_a_held_drag_tier_snapshot(self):
         w = self.window
         w.timer.stop()
         w.graph.items_by_id['grade'].setSelected(True)
@@ -1875,7 +1876,8 @@ class ProgressivePreviewTests(unittest.TestCase):
         QTest.mouseMove(slider, end, 20)
         self.assertGreater(len(w.preview_queue), 0, 'a pointer drag produced no live preview request')
         request, _cancel = w.preview_queue.take()
-        self.assertEqual(request.tier, 8)
+        # A held knob renders every picture at the one drag tier, as a Roto drag does (no 8 -> 4 -> selected refinement while held).
+        self.assertEqual(request.tier, w.viewer.DRAG_PREVIEW_TIER)
         self.assertNotEqual(request.document['nodes']['grade']['params']['exposure'], before)
         self.assertEqual(w.dispatcher.document['nodes']['grade']['params']['exposure'], before,
                          'the live pointer preview committed a knob value before release')
