@@ -488,7 +488,7 @@ Still over target: the release stall above (next fixes: hand the edit to the dis
 
 ### Roto interaction latency, U2 finish pass 2 (11/11/2026)
 
-Same tool, shot and display; three repeats on the real display (xcb) with no suite running (`pgrep` found none). Raw runs are in `benchmarks/roto-interaction-1111/`: `finish2-base.json` (this step's start), `finish2-final.json`, `finish2-final3.json` (the code as committed). Medians / p95 in milliseconds, realistic shot.
+Same tool, shot and display; three repeats on the real display (xcb) with no suite running (`pgrep` found none). Raw runs are in `benchmarks/roto-interaction-1111/`: `finish2-base.json` (this step's start, knob and point drag), `finish2-c.json` (after the copy and validation changes), `finish2-final2.json` (a 60 ms wait for every edit, not kept), `finish2-final3.json` (the code as committed; the knob row of the table is from the run before it, `finish2-final2.json`, where the knob code was the same). Medians / p95 in milliseconds, realistic shot.
 
 | Action | Before this pass | After | Target |
 |---|---|---|---|
