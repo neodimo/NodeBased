@@ -1,0 +1,1370 @@
+{
+ "case": "map-b",
+ "pipeline": true,
+ "direct_picture": false,
+ "adapter": "rtx-1113-map-b",
+ "force_adapter": "default",
+ "resolution": "1920x1080",
+ "cache_mode": "uncached",
+ "duration_s": 12.0,
+ "achieved_fps": 24.0,
+ "first_pass_fps": 10.893,
+ "frame_interval_ms": {
+  "p50": 41.379,
+  "p95": 99.804,
+  "p99": 141.292
+ },
+ "handoff_ms": {
+  "p50": 4.027,
+  "p95": 18.481,
+  "n": 47
+ },
+ "frames_dropped_counted": 4,
+ "conversion_stage_drops": 0,
+ "display_conversions_8bit": 287,
+ "fresh_frame_timeline": {
+  "summary": {
+   "frames": 46,
+   "stages_ms": {
+    "scheduling wait (request to worker)": 4.848,
+    "setup (region, display cache lookup)": 1.519,
+    "node evaluation": 82.62,
+    "frame waits for conversion (cache put, stage pickup)": 0.569,
+    "display conversion": 19.397,
+    "picture hand-off to the Qt queue": 0.004,
+    "Qt queue delivery": 1.645,
+    "Viewer present": 5.5
+   },
+   "latency_ms": 116.102,
+   "transport_wait_ms": 0.0,
+   "overlap_ms": 24.094,
+   "accounted_interval_ms": 92.008,
+   "interval_ms": 92.008,
+   "sum_of_stage_means_ms": 116.102
+  },
+  "frames": [
+   {
+    "generation": 3,
+    "points_ms": {
+     "request": 38.029,
+     "start": 39.038,
+     "eval_begin": 39.616,
+     "eval_end": 116.501,
+     "convert_begin": 119.506,
+     "convert_end": 153.761,
+     "emit": 153.767,
+     "ready_begin": 153.93,
+     "shown": 156.525
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 1.009,
+     "setup (region, display cache lookup)": 0.578,
+     "node evaluation": 76.884,
+     "frame waits for conversion (cache put, stage pickup)": 3.005,
+     "display conversion": 34.255,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 0.163,
+     "Viewer present": 2.596
+    },
+    "latency_ms": 118.496,
+    "interval_ms": null,
+    "overlap_ms": null
+   },
+   {
+    "generation": 4,
+    "points_ms": {
+     "request": 119.364,
+     "start": 120.011,
+     "eval_begin": 120.447,
+     "eval_end": 225.025,
+     "convert_begin": 225.314,
+     "convert_end": 252.809,
+     "emit": 252.817,
+     "ready_begin": 253.143,
+     "shown": 255.887
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.646,
+     "setup (region, display cache lookup)": 0.437,
+     "node evaluation": 104.578,
+     "frame waits for conversion (cache put, stage pickup)": 0.288,
+     "display conversion": 27.495,
+     "picture hand-off to the Qt queue": 0.008,
+     "Qt queue delivery": 0.326,
+     "Viewer present": 2.744
+    },
+    "latency_ms": 136.523,
+    "interval_ms": 99.362,
+    "overlap_ms": 37.161,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 5,
+    "points_ms": {
+     "request": 230.288,
+     "start": 232.371,
+     "eval_begin": 232.902,
+     "eval_end": 344.851,
+     "convert_begin": 345.04,
+     "convert_end": 366.992,
+     "emit": 366.997,
+     "ready_begin": 367.712,
+     "shown": 370.025
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 2.083,
+     "setup (region, display cache lookup)": 0.531,
+     "node evaluation": 111.949,
+     "frame waits for conversion (cache put, stage pickup)": 0.189,
+     "display conversion": 21.952,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 0.715,
+     "Viewer present": 2.313
+    },
+    "latency_ms": 139.737,
+    "interval_ms": 114.138,
+    "overlap_ms": 25.599,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 6,
+    "points_ms": {
+     "request": 347.592,
+     "start": 353.826,
+     "eval_begin": 354.93,
+     "eval_end": 437.545,
+     "convert_begin": 437.753,
+     "convert_end": 459.156,
+     "emit": 459.162,
+     "ready_begin": 460.559,
+     "shown": 462.5
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.234,
+     "setup (region, display cache lookup)": 1.104,
+     "node evaluation": 82.615,
+     "frame waits for conversion (cache put, stage pickup)": 0.208,
+     "display conversion": 21.404,
+     "picture hand-off to the Qt queue": 0.006,
+     "Qt queue delivery": 1.396,
+     "Viewer present": 1.942
+    },
+    "latency_ms": 114.909,
+    "interval_ms": 92.475,
+    "overlap_ms": 22.433,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 7,
+    "points_ms": {
+     "request": 441.499,
+     "start": 448.807,
+     "eval_begin": 449.142,
+     "eval_end": 529.619,
+     "convert_begin": 529.802,
+     "convert_end": 549.468,
+     "emit": 549.473,
+     "ready_begin": 549.981,
+     "shown": 552.773
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 7.309,
+     "setup (region, display cache lookup)": 0.335,
+     "node evaluation": 80.478,
+     "frame waits for conversion (cache put, stage pickup)": 0.183,
+     "display conversion": 19.666,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 0.508,
+     "Viewer present": 2.791
+    },
+    "latency_ms": 111.274,
+    "interval_ms": 90.273,
+    "overlap_ms": 21.001,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 8,
+    "points_ms": {
+     "request": 532.437,
+     "start": 538.049,
+     "eval_begin": 538.498,
+     "eval_end": 620.138,
+     "convert_begin": 620.432,
+     "convert_end": 676.028,
+     "emit": 676.035,
+     "ready_begin": 676.967,
+     "shown": 685.516
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 5.611,
+     "setup (region, display cache lookup)": 0.45,
+     "node evaluation": 81.64,
+     "frame waits for conversion (cache put, stage pickup)": 0.294,
+     "display conversion": 55.597,
+     "picture hand-off to the Qt queue": 0.007,
+     "Qt queue delivery": 0.932,
+     "Viewer present": 8.549
+    },
+    "latency_ms": 153.079,
+    "interval_ms": 132.743,
+    "overlap_ms": 20.336,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 9,
+    "points_ms": {
+     "request": 622.685,
+     "start": 629.183,
+     "eval_begin": 630.215,
+     "eval_end": 711.33,
+     "convert_begin": 711.58,
+     "convert_end": 727.136,
+     "emit": 727.139,
+     "ready_begin": 727.817,
+     "shown": 730.152
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.498,
+     "setup (region, display cache lookup)": 1.032,
+     "node evaluation": 81.115,
+     "frame waits for conversion (cache put, stage pickup)": 0.25,
+     "display conversion": 15.556,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 0.678,
+     "Viewer present": 2.335
+    },
+    "latency_ms": 107.467,
+    "interval_ms": 44.636,
+    "overlap_ms": 62.831,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 10,
+    "points_ms": {
+     "request": 714.063,
+     "start": 719.649,
+     "eval_begin": 726.112,
+     "eval_end": 812.502,
+     "convert_begin": 812.77,
+     "convert_end": 833.62,
+     "emit": 833.625,
+     "ready_begin": 834.711,
+     "shown": 836.516
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 5.586,
+     "setup (region, display cache lookup)": 6.463,
+     "node evaluation": 86.39,
+     "frame waits for conversion (cache put, stage pickup)": 0.269,
+     "display conversion": 20.85,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 1.087,
+     "Viewer present": 1.805
+    },
+    "latency_ms": 122.454,
+    "interval_ms": 106.364,
+    "overlap_ms": 16.089,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 11,
+    "points_ms": {
+     "request": 816.289,
+     "start": 822.295,
+     "eval_begin": 823.812,
+     "eval_end": 903.955,
+     "convert_begin": 913.604,
+     "convert_end": 925.994,
+     "emit": 925.999,
+     "ready_begin": 926.297,
+     "shown": 930.344
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.006,
+     "setup (region, display cache lookup)": 1.517,
+     "node evaluation": 80.143,
+     "frame waits for conversion (cache put, stage pickup)": 9.649,
+     "display conversion": 12.39,
+     "picture hand-off to the Qt queue": 0.006,
+     "Qt queue delivery": 0.298,
+     "Viewer present": 4.047
+    },
+    "latency_ms": 114.055,
+    "interval_ms": 93.828,
+    "overlap_ms": 20.227,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 12,
+    "points_ms": {
+     "request": 906.114,
+     "start": 913.814,
+     "eval_begin": 914.716,
+     "eval_end": 990.071,
+     "convert_begin": 990.257,
+     "convert_end": 1030.452,
+     "emit": 1030.457,
+     "ready_begin": 1030.877,
+     "shown": 1038.074
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 7.7,
+     "setup (region, display cache lookup)": 0.902,
+     "node evaluation": 75.354,
+     "frame waits for conversion (cache put, stage pickup)": 0.187,
+     "display conversion": 40.194,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 0.42,
+     "Viewer present": 7.197
+    },
+    "latency_ms": 131.96,
+    "interval_ms": 107.73,
+    "overlap_ms": 24.23,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 13,
+    "points_ms": {
+     "request": 993.195,
+     "start": 1000.146,
+     "eval_begin": 1000.614,
+     "eval_end": 1070.177,
+     "convert_begin": 1070.364,
+     "convert_end": 1088.835,
+     "emit": 1088.839,
+     "ready_begin": 1090.089,
+     "shown": 1092.078
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.951,
+     "setup (region, display cache lookup)": 0.468,
+     "node evaluation": 69.563,
+     "frame waits for conversion (cache put, stage pickup)": 0.187,
+     "display conversion": 18.471,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 1.251,
+     "Viewer present": 1.988
+    },
+    "latency_ms": 98.883,
+    "interval_ms": 54.004,
+    "overlap_ms": 44.879,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 14,
+    "points_ms": {
+     "request": 1072.932,
+     "start": 1073.028,
+     "eval_begin": 1074.492,
+     "eval_end": 1160.573,
+     "convert_begin": 1160.716,
+     "convert_end": 1176.518,
+     "emit": 1176.52,
+     "ready_begin": 1179.403,
+     "shown": 1182.886
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.096,
+     "setup (region, display cache lookup)": 1.464,
+     "node evaluation": 86.082,
+     "frame waits for conversion (cache put, stage pickup)": 0.142,
+     "display conversion": 15.802,
+     "picture hand-off to the Qt queue": 0.002,
+     "Qt queue delivery": 2.883,
+     "Viewer present": 3.482
+    },
+    "latency_ms": 109.954,
+    "interval_ms": 90.808,
+    "overlap_ms": 19.146,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 15,
+    "points_ms": {
+     "request": 1162.865,
+     "start": 1168.773,
+     "eval_begin": 1176.609,
+     "eval_end": 1250.134,
+     "convert_begin": 1250.31,
+     "convert_end": 1269.361,
+     "emit": 1269.367,
+     "ready_begin": 1270.209,
+     "shown": 1272.16
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 5.908,
+     "setup (region, display cache lookup)": 7.836,
+     "node evaluation": 73.524,
+     "frame waits for conversion (cache put, stage pickup)": 0.176,
+     "display conversion": 19.052,
+     "picture hand-off to the Qt queue": 0.006,
+     "Qt queue delivery": 0.842,
+     "Viewer present": 1.951
+    },
+    "latency_ms": 109.295,
+    "interval_ms": 89.274,
+    "overlap_ms": 20.021,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 16,
+    "points_ms": {
+     "request": 1253.195,
+     "start": 1259.836,
+     "eval_begin": 1260.063,
+     "eval_end": 1340.265,
+     "convert_begin": 1340.817,
+     "convert_end": 1363.124,
+     "emit": 1363.128,
+     "ready_begin": 1363.556,
+     "shown": 1367.236
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.641,
+     "setup (region, display cache lookup)": 0.226,
+     "node evaluation": 80.202,
+     "frame waits for conversion (cache put, stage pickup)": 0.552,
+     "display conversion": 22.307,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 0.428,
+     "Viewer present": 3.68
+    },
+    "latency_ms": 114.04,
+    "interval_ms": 95.076,
+    "overlap_ms": 18.965,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 17,
+    "points_ms": {
+     "request": 1343.48,
+     "start": 1351.772,
+     "eval_begin": 1352.616,
+     "eval_end": 1429.133,
+     "convert_begin": 1429.693,
+     "convert_end": 1452.476,
+     "emit": 1452.478,
+     "ready_begin": 1453.223,
+     "shown": 1454.896
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 8.292,
+     "setup (region, display cache lookup)": 0.844,
+     "node evaluation": 76.517,
+     "frame waits for conversion (cache put, stage pickup)": 0.56,
+     "display conversion": 22.782,
+     "picture hand-off to the Qt queue": 0.002,
+     "Qt queue delivery": 0.746,
+     "Viewer present": 1.673
+    },
+    "latency_ms": 111.416,
+    "interval_ms": 87.66,
+    "overlap_ms": 23.756,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 18,
+    "points_ms": {
+     "request": 1433.138,
+     "start": 1439.937,
+     "eval_begin": 1440.983,
+     "eval_end": 1519.406,
+     "convert_begin": 1519.598,
+     "convert_end": 1537.636,
+     "emit": 1537.639,
+     "ready_begin": 1538.054,
+     "shown": 1540.148
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.798,
+     "setup (region, display cache lookup)": 1.047,
+     "node evaluation": 78.423,
+     "frame waits for conversion (cache put, stage pickup)": 0.191,
+     "display conversion": 18.038,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 0.415,
+     "Viewer present": 2.094
+    },
+    "latency_ms": 107.009,
+    "interval_ms": 85.252,
+    "overlap_ms": 21.758,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 19,
+    "points_ms": {
+     "request": 1522.431,
+     "start": 1522.72,
+     "eval_begin": 1523.396,
+     "eval_end": 1606.735,
+     "convert_begin": 1607.012,
+     "convert_end": 1627.176,
+     "emit": 1627.182,
+     "ready_begin": 1628.953,
+     "shown": 1644.8
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.289,
+     "setup (region, display cache lookup)": 0.677,
+     "node evaluation": 83.338,
+     "frame waits for conversion (cache put, stage pickup)": 0.277,
+     "display conversion": 20.164,
+     "picture hand-off to the Qt queue": 0.006,
+     "Qt queue delivery": 1.771,
+     "Viewer present": 15.847
+    },
+    "latency_ms": 122.37,
+    "interval_ms": 104.652,
+    "overlap_ms": 17.717,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 20,
+    "points_ms": {
+     "request": 1610.397,
+     "start": 1610.607,
+     "eval_begin": 1611.141,
+     "eval_end": 1695.797,
+     "convert_begin": 1696.009,
+     "convert_end": 1716.911,
+     "emit": 1716.916,
+     "ready_begin": 1717.642,
+     "shown": 1720.468
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.21,
+     "setup (region, display cache lookup)": 0.534,
+     "node evaluation": 84.656,
+     "frame waits for conversion (cache put, stage pickup)": 0.212,
+     "display conversion": 20.902,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 0.726,
+     "Viewer present": 2.827
+    },
+    "latency_ms": 110.071,
+    "interval_ms": 75.668,
+    "overlap_ms": 34.403,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 21,
+    "points_ms": {
+     "request": 1699.77,
+     "start": 1706.183,
+     "eval_begin": 1706.442,
+     "eval_end": 1784.004,
+     "convert_begin": 1784.211,
+     "convert_end": 1819.183,
+     "emit": 1819.19,
+     "ready_begin": 1821.948,
+     "shown": 1837.624
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.413,
+     "setup (region, display cache lookup)": 0.259,
+     "node evaluation": 77.561,
+     "frame waits for conversion (cache put, stage pickup)": 0.208,
+     "display conversion": 34.972,
+     "picture hand-off to the Qt queue": 0.007,
+     "Qt queue delivery": 2.758,
+     "Viewer present": 15.677
+    },
+    "latency_ms": 137.854,
+    "interval_ms": 117.156,
+    "overlap_ms": 20.698,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 22,
+    "points_ms": {
+     "request": 1786.867,
+     "start": 1793.55,
+     "eval_begin": 1793.831,
+     "eval_end": 1868.115,
+     "convert_begin": 1869.521,
+     "convert_end": 1887.94,
+     "emit": 1887.944,
+     "ready_begin": 1889.776,
+     "shown": 1906.438
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.683,
+     "setup (region, display cache lookup)": 0.281,
+     "node evaluation": 74.284,
+     "frame waits for conversion (cache put, stage pickup)": 1.406,
+     "display conversion": 18.418,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 1.832,
+     "Viewer present": 16.662
+    },
+    "latency_ms": 119.571,
+    "interval_ms": 68.814,
+    "overlap_ms": 50.757,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 23,
+    "points_ms": {
+     "request": 1870.458,
+     "start": 1870.542,
+     "eval_begin": 1870.681,
+     "eval_end": 1954.355,
+     "convert_begin": 1954.525,
+     "convert_end": 1973.559,
+     "emit": 1973.564,
+     "ready_begin": 1974.423,
+     "shown": 1976.419
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.084,
+     "setup (region, display cache lookup)": 0.139,
+     "node evaluation": 83.674,
+     "frame waits for conversion (cache put, stage pickup)": 0.169,
+     "display conversion": 19.035,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 0.859,
+     "Viewer present": 1.996
+    },
+    "latency_ms": 105.961,
+    "interval_ms": 69.981,
+    "overlap_ms": 35.98,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 24,
+    "points_ms": {
+     "request": 1957.689,
+     "start": 1964.434,
+     "eval_begin": 1965.423,
+     "eval_end": 2043.119,
+     "convert_begin": 2043.334,
+     "convert_end": 2065.514,
+     "emit": 2065.518,
+     "ready_begin": 2067.278,
+     "shown": 2081.589
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.745,
+     "setup (region, display cache lookup)": 0.989,
+     "node evaluation": 77.696,
+     "frame waits for conversion (cache put, stage pickup)": 0.215,
+     "display conversion": 22.18,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 1.76,
+     "Viewer present": 14.31
+    },
+    "latency_ms": 123.899,
+    "interval_ms": 105.17,
+    "overlap_ms": 18.73,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 25,
+    "points_ms": {
+     "request": 2046.489,
+     "start": 2053.653,
+     "eval_begin": 2054.201,
+     "eval_end": 2136.773,
+     "convert_begin": 2136.967,
+     "convert_end": 2145.874,
+     "emit": 2145.879,
+     "ready_begin": 2153.708,
+     "shown": 2156.477
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 7.164,
+     "setup (region, display cache lookup)": 0.549,
+     "node evaluation": 82.572,
+     "frame waits for conversion (cache put, stage pickup)": 0.194,
+     "display conversion": 8.907,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 7.829,
+     "Viewer present": 2.769
+    },
+    "latency_ms": 109.987,
+    "interval_ms": 74.888,
+    "overlap_ms": 35.1,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 26,
+    "points_ms": {
+     "request": 2139.465,
+     "start": 2140.568,
+     "eval_begin": 2151.226,
+     "eval_end": 2223.157,
+     "convert_begin": 2223.384,
+     "convert_end": 2241.902,
+     "emit": 2241.905,
+     "ready_begin": 2243.156,
+     "shown": 2245.149
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 1.103,
+     "setup (region, display cache lookup)": 10.658,
+     "node evaluation": 71.931,
+     "frame waits for conversion (cache put, stage pickup)": 0.228,
+     "display conversion": 18.518,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 1.251,
+     "Viewer present": 1.992
+    },
+    "latency_ms": 105.683,
+    "interval_ms": 88.672,
+    "overlap_ms": 17.012,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 27,
+    "points_ms": {
+     "request": 2226.001,
+     "start": 2239.516,
+     "eval_begin": 2240.839,
+     "eval_end": 2312.126,
+     "convert_begin": 2312.325,
+     "convert_end": 2329.307,
+     "emit": 2329.313,
+     "ready_begin": 2330.987,
+     "shown": 2345.633
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 13.515,
+     "setup (region, display cache lookup)": 1.323,
+     "node evaluation": 71.287,
+     "frame waits for conversion (cache put, stage pickup)": 0.199,
+     "display conversion": 16.982,
+     "picture hand-off to the Qt queue": 0.006,
+     "Qt queue delivery": 1.674,
+     "Viewer present": 14.646
+    },
+    "latency_ms": 119.632,
+    "interval_ms": 100.484,
+    "overlap_ms": 19.148,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 28,
+    "points_ms": {
+     "request": 2315.252,
+     "start": 2315.364,
+     "eval_begin": 2315.58,
+     "eval_end": 2396.965,
+     "convert_begin": 2398.844,
+     "convert_end": 2416.378,
+     "emit": 2416.385,
+     "ready_begin": 2417.217,
+     "shown": 2419.089
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.112,
+     "setup (region, display cache lookup)": 0.217,
+     "node evaluation": 81.385,
+     "frame waits for conversion (cache put, stage pickup)": 1.879,
+     "display conversion": 17.534,
+     "picture hand-off to the Qt queue": 0.007,
+     "Qt queue delivery": 0.832,
+     "Viewer present": 1.872
+    },
+    "latency_ms": 103.838,
+    "interval_ms": 73.456,
+    "overlap_ms": 30.381,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 29,
+    "points_ms": {
+     "request": 2399.793,
+     "start": 2406.657,
+     "eval_begin": 2407.18,
+     "eval_end": 2484.318,
+     "convert_begin": 2484.523,
+     "convert_end": 2503.123,
+     "emit": 2503.127,
+     "ready_begin": 2505.883,
+     "shown": 2508.336
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.864,
+     "setup (region, display cache lookup)": 0.523,
+     "node evaluation": 77.137,
+     "frame waits for conversion (cache put, stage pickup)": 0.205,
+     "display conversion": 18.6,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 2.757,
+     "Viewer present": 2.453
+    },
+    "latency_ms": 108.543,
+    "interval_ms": 89.247,
+    "overlap_ms": 19.296,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 30,
+    "points_ms": {
+     "request": 2488.054,
+     "start": 2504.066,
+     "eval_begin": 2504.407,
+     "eval_end": 2575.768,
+     "convert_begin": 2575.989,
+     "convert_end": 2592.586,
+     "emit": 2592.59,
+     "ready_begin": 2594.819,
+     "shown": 2597.59
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 16.013,
+     "setup (region, display cache lookup)": 0.341,
+     "node evaluation": 71.361,
+     "frame waits for conversion (cache put, stage pickup)": 0.221,
+     "display conversion": 16.597,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 2.229,
+     "Viewer present": 2.771
+    },
+    "latency_ms": 109.537,
+    "interval_ms": 89.254,
+    "overlap_ms": 20.282,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 31,
+    "points_ms": {
+     "request": 2579.378,
+     "start": 2579.53,
+     "eval_begin": 2579.768,
+     "eval_end": 2664.864,
+     "convert_begin": 2665.002,
+     "convert_end": 2676.908,
+     "emit": 2676.911,
+     "ready_begin": 2683.066,
+     "shown": 2688.124
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.152,
+     "setup (region, display cache lookup)": 0.238,
+     "node evaluation": 85.095,
+     "frame waits for conversion (cache put, stage pickup)": 0.138,
+     "display conversion": 11.906,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 6.155,
+     "Viewer present": 5.058
+    },
+    "latency_ms": 108.746,
+    "interval_ms": 90.534,
+    "overlap_ms": 18.212,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 32,
+    "points_ms": {
+     "request": 2667.588,
+     "start": 2667.678,
+     "eval_begin": 2667.882,
+     "eval_end": 2754.6,
+     "convert_begin": 2754.808,
+     "convert_end": 2774.595,
+     "emit": 2774.599,
+     "ready_begin": 2775.869,
+     "shown": 2778.622
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.089,
+     "setup (region, display cache lookup)": 0.204,
+     "node evaluation": 86.718,
+     "frame waits for conversion (cache put, stage pickup)": 0.208,
+     "display conversion": 19.787,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 1.27,
+     "Viewer present": 2.753
+    },
+    "latency_ms": 111.034,
+    "interval_ms": 90.498,
+    "overlap_ms": 20.536,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 33,
+    "points_ms": {
+     "request": 2758.252,
+     "start": 2758.938,
+     "eval_begin": 2766.964,
+     "eval_end": 2846.159,
+     "convert_begin": 2846.342,
+     "convert_end": 2867.202,
+     "emit": 2867.208,
+     "ready_begin": 2867.971,
+     "shown": 2870.282
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.686,
+     "setup (region, display cache lookup)": 8.026,
+     "node evaluation": 79.194,
+     "frame waits for conversion (cache put, stage pickup)": 0.183,
+     "display conversion": 20.861,
+     "picture hand-off to the Qt queue": 0.006,
+     "Qt queue delivery": 0.763,
+     "Viewer present": 2.311
+    },
+    "latency_ms": 112.031,
+    "interval_ms": 91.66,
+    "overlap_ms": 20.37,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 34,
+    "points_ms": {
+     "request": 2849.95,
+     "start": 2856.458,
+     "eval_begin": 2858.033,
+     "eval_end": 2936.274,
+     "convert_begin": 2936.498,
+     "convert_end": 2956.67,
+     "emit": 2956.675,
+     "ready_begin": 2960.717,
+     "shown": 2976.747
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 6.508,
+     "setup (region, display cache lookup)": 1.574,
+     "node evaluation": 78.241,
+     "frame waits for conversion (cache put, stage pickup)": 0.224,
+     "display conversion": 20.173,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 4.041,
+     "Viewer present": 16.03
+    },
+    "latency_ms": 126.797,
+    "interval_ms": 106.465,
+    "overlap_ms": 20.332,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 35,
+    "points_ms": {
+     "request": 2939.386,
+     "start": 2946.46,
+     "eval_begin": 2947.934,
+     "eval_end": 3019.792,
+     "convert_begin": 3020.006,
+     "convert_end": 3035.883,
+     "emit": 3035.887,
+     "ready_begin": 3036.824,
+     "shown": 3038.477
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 7.073,
+     "setup (region, display cache lookup)": 1.475,
+     "node evaluation": 71.858,
+     "frame waits for conversion (cache put, stage pickup)": 0.214,
+     "display conversion": 15.877,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 0.937,
+     "Viewer present": 1.653
+    },
+    "latency_ms": 99.091,
+    "interval_ms": 61.73,
+    "overlap_ms": 37.361,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 36,
+    "points_ms": {
+     "request": 3023.325,
+     "start": 3028.93,
+     "eval_begin": 3029.335,
+     "eval_end": 3101.575,
+     "convert_begin": 3101.809,
+     "convert_end": 3120.746,
+     "emit": 3120.748,
+     "ready_begin": 3121.216,
+     "shown": 3137.511
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 5.605,
+     "setup (region, display cache lookup)": 0.405,
+     "node evaluation": 72.241,
+     "frame waits for conversion (cache put, stage pickup)": 0.234,
+     "display conversion": 18.937,
+     "picture hand-off to the Qt queue": 0.002,
+     "Qt queue delivery": 0.468,
+     "Viewer present": 16.295
+    },
+    "latency_ms": 114.187,
+    "interval_ms": 99.034,
+    "overlap_ms": 15.152,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 37,
+    "points_ms": {
+     "request": 3104.521,
+     "start": 3104.634,
+     "eval_begin": 3111.285,
+     "eval_end": 3184.239,
+     "convert_begin": 3184.446,
+     "convert_end": 3195.991,
+     "emit": 3195.995,
+     "ready_begin": 3198.751,
+     "shown": 3201.979
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.113,
+     "setup (region, display cache lookup)": 6.651,
+     "node evaluation": 72.954,
+     "frame waits for conversion (cache put, stage pickup)": 0.207,
+     "display conversion": 11.545,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 2.756,
+     "Viewer present": 3.228
+    },
+    "latency_ms": 97.458,
+    "interval_ms": 64.468,
+    "overlap_ms": 32.99,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 38,
+    "points_ms": {
+     "request": 3187.196,
+     "start": 3196.918,
+     "eval_begin": 3197.301,
+     "eval_end": 3265.855,
+     "convert_begin": 3266.107,
+     "convert_end": 3281.17,
+     "emit": 3281.172,
+     "ready_begin": 3282.26,
+     "shown": 3284.302
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 9.722,
+     "setup (region, display cache lookup)": 0.383,
+     "node evaluation": 68.554,
+     "frame waits for conversion (cache put, stage pickup)": 0.252,
+     "display conversion": 15.063,
+     "picture hand-off to the Qt queue": 0.002,
+     "Qt queue delivery": 1.088,
+     "Viewer present": 2.043
+    },
+    "latency_ms": 97.107,
+    "interval_ms": 82.323,
+    "overlap_ms": 14.783,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 39,
+    "points_ms": {
+     "request": 3269.505,
+     "start": 3273.03,
+     "eval_begin": 3273.373,
+     "eval_end": 3408.333,
+     "convert_begin": 3408.9,
+     "convert_end": 3426.639,
+     "emit": 3426.642,
+     "ready_begin": 3427.49,
+     "shown": 3431.424
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 3.524,
+     "setup (region, display cache lookup)": 0.343,
+     "node evaluation": 134.959,
+     "frame waits for conversion (cache put, stage pickup)": 0.567,
+     "display conversion": 17.739,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 0.848,
+     "Viewer present": 3.934
+    },
+    "latency_ms": 161.919,
+    "interval_ms": 147.122,
+    "overlap_ms": 14.797,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 40,
+    "points_ms": {
+     "request": 3412.225,
+     "start": 3412.416,
+     "eval_begin": 3417.163,
+     "eval_end": 3552.236,
+     "convert_begin": 3552.53,
+     "convert_end": 3568.625,
+     "emit": 3568.628,
+     "ready_begin": 3569.236,
+     "shown": 3572.057
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.191,
+     "setup (region, display cache lookup)": 4.747,
+     "node evaluation": 135.073,
+     "frame waits for conversion (cache put, stage pickup)": 0.294,
+     "display conversion": 16.095,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 0.608,
+     "Viewer present": 2.821
+    },
+    "latency_ms": 159.832,
+    "interval_ms": 140.633,
+    "overlap_ms": 19.199,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 41,
+    "points_ms": {
+     "request": 3555.072,
+     "start": 3557.385,
+     "eval_begin": 3558.054,
+     "eval_end": 3694.805,
+     "convert_begin": 3695.051,
+     "convert_end": 3708.062,
+     "emit": 3708.065,
+     "ready_begin": 3712.124,
+     "shown": 3716.267
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 2.313,
+     "setup (region, display cache lookup)": 0.669,
+     "node evaluation": 136.751,
+     "frame waits for conversion (cache put, stage pickup)": 0.247,
+     "display conversion": 13.011,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 4.059,
+     "Viewer present": 4.143
+    },
+    "latency_ms": 161.195,
+    "interval_ms": 144.21,
+    "overlap_ms": 16.985,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 42,
+    "points_ms": {
+     "request": 3698.562,
+     "start": 3708.314,
+     "eval_begin": 3708.875,
+     "eval_end": 3780.584,
+     "convert_begin": 3780.798,
+     "convert_end": 3805.726,
+     "emit": 3805.732,
+     "ready_begin": 3806.59,
+     "shown": 3810.424
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 9.753,
+     "setup (region, display cache lookup)": 0.56,
+     "node evaluation": 71.71,
+     "frame waits for conversion (cache put, stage pickup)": 0.214,
+     "display conversion": 24.927,
+     "picture hand-off to the Qt queue": 0.006,
+     "Qt queue delivery": 0.859,
+     "Viewer present": 3.834
+    },
+    "latency_ms": 111.862,
+    "interval_ms": 94.157,
+    "overlap_ms": 17.705,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 43,
+    "points_ms": {
+     "request": 3783.981,
+     "start": 3786.885,
+     "eval_begin": 3787.106,
+     "eval_end": 3860.554,
+     "convert_begin": 3860.832,
+     "convert_end": 3877.247,
+     "emit": 3877.251,
+     "ready_begin": 3878.475,
+     "shown": 3881.048
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 2.905,
+     "setup (region, display cache lookup)": 0.22,
+     "node evaluation": 73.449,
+     "frame waits for conversion (cache put, stage pickup)": 0.278,
+     "display conversion": 16.415,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 1.225,
+     "Viewer present": 2.573
+    },
+    "latency_ms": 97.068,
+    "interval_ms": 70.624,
+    "overlap_ms": 26.443,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 44,
+    "points_ms": {
+     "request": 3864.168,
+     "start": 3867.002,
+     "eval_begin": 3867.675,
+     "eval_end": 3947.512,
+     "convert_begin": 3947.819,
+     "convert_end": 3963.964,
+     "emit": 3963.968,
+     "ready_begin": 3965.681,
+     "shown": 3982.137
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 2.834,
+     "setup (region, display cache lookup)": 0.673,
+     "node evaluation": 79.837,
+     "frame waits for conversion (cache put, stage pickup)": 0.307,
+     "display conversion": 16.145,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 1.713,
+     "Viewer present": 16.457
+    },
+    "latency_ms": 117.97,
+    "interval_ms": 101.089,
+    "overlap_ms": 16.88,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 45,
+    "points_ms": {
+     "request": 3952.628,
+     "start": 3955.576,
+     "eval_begin": 3955.798,
+     "eval_end": 4030.97,
+     "convert_begin": 4031.323,
+     "convert_end": 4044.16,
+     "emit": 4044.163,
+     "ready_begin": 4046.142,
+     "shown": 4050.156
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 2.947,
+     "setup (region, display cache lookup)": 0.223,
+     "node evaluation": 75.172,
+     "frame waits for conversion (cache put, stage pickup)": 0.353,
+     "display conversion": 12.837,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 1.979,
+     "Viewer present": 4.014
+    },
+    "latency_ms": 97.528,
+    "interval_ms": 68.019,
+    "overlap_ms": 29.509,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 46,
+    "points_ms": {
+     "request": 4034.793,
+     "start": 4044.94,
+     "eval_begin": 4045.647,
+     "eval_end": 4117.315,
+     "convert_begin": 4117.52,
+     "convert_end": 4132.924,
+     "emit": 4132.927,
+     "ready_begin": 4133.269,
+     "shown": 4135.426
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 10.147,
+     "setup (region, display cache lookup)": 0.708,
+     "node evaluation": 71.667,
+     "frame waits for conversion (cache put, stage pickup)": 0.205,
+     "display conversion": 15.404,
+     "picture hand-off to the Qt queue": 0.003,
+     "Qt queue delivery": 0.342,
+     "Viewer present": 2.156
+    },
+    "latency_ms": 100.633,
+    "interval_ms": 85.27,
+    "overlap_ms": 15.363,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 47,
+    "points_ms": {
+     "request": 4120.347,
+     "start": 4120.472,
+     "eval_begin": 4120.703,
+     "eval_end": 4201.914,
+     "convert_begin": 4202.141,
+     "convert_end": 4219.238,
+     "emit": 4219.243,
+     "ready_begin": 4220.761,
+     "shown": 4223.185
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.125,
+     "setup (region, display cache lookup)": 0.231,
+     "node evaluation": 81.211,
+     "frame waits for conversion (cache put, stage pickup)": 0.227,
+     "display conversion": 17.097,
+     "picture hand-off to the Qt queue": 0.005,
+     "Qt queue delivery": 1.518,
+     "Viewer present": 2.424
+    },
+    "latency_ms": 102.839,
+    "interval_ms": 87.759,
+    "overlap_ms": 15.079,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 48,
+    "points_ms": {
+     "request": 4205.972,
+     "start": 4216.542,
+     "eval_begin": 4217.541,
+     "eval_end": 4288.053,
+     "convert_begin": 4290.688,
+     "convert_end": 4301.164,
+     "emit": 4301.172,
+     "ready_begin": 4306.695,
+     "shown": 4322.96
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 10.57,
+     "setup (region, display cache lookup)": 0.998,
+     "node evaluation": 70.512,
+     "frame waits for conversion (cache put, stage pickup)": 2.635,
+     "display conversion": 10.476,
+     "picture hand-off to the Qt queue": 0.008,
+     "Qt queue delivery": 5.523,
+     "Viewer present": 16.265
+    },
+    "latency_ms": 116.988,
+    "interval_ms": 99.775,
+    "overlap_ms": 17.213,
+    "transport_wait_ms": 0.0
+   },
+   {
+    "generation": 49,
+    "points_ms": {
+     "request": 4301.482,
+     "start": 4301.678,
+     "eval_begin": 4302.098,
+     "eval_end": 4371.964,
+     "convert_begin": 4372.405,
+     "convert_end": 4385.993,
+     "emit": 4385.997,
+     "ready_begin": 4386.314,
+     "shown": 4388.91
+    },
+    "stages_ms": {
+     "scheduling wait (request to worker)": 0.197,
+     "setup (region, display cache lookup)": 0.42,
+     "node evaluation": 69.865,
+     "frame waits for conversion (cache put, stage pickup)": 0.441,
+     "display conversion": 13.588,
+     "picture hand-off to the Qt queue": 0.004,
+     "Qt queue delivery": 0.317,
+     "Viewer present": 2.596
+    },
+    "latency_ms": 87.428,
+    "interval_ms": 65.95,
+    "overlap_ms": 21.478,
+    "transport_wait_ms": 0.0
+   }
+  ]
+ },
+ "accounting": {
+  "fresh_frames_in_first_pass": 48,
+  "accounted_interval_ms": 92.008,
+  "measured_first_pass_interval_ms": 93.286,
+  "difference_percent": -1.37,
+  "rule": "stage durations + transport wait - overlap with the previous picture, against the first-pass interval"
+ }
+}

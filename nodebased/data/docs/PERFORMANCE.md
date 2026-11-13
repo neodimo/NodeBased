@@ -203,6 +203,26 @@ These 12-second uncached 1080p GPU2D passes compared a clock-owned playout buffe
 
 The buffer's intended cost is up to one frame period from readiness to presentation. This implementation instead accumulates 12 to 14 late slots and 44 to 48 dropped entries in each paced pass, so it does not yet produce steady cadence. Scrubbing, stepping and stopped viewing remain on the immediate path.
 
+### Frame-time map, uncached GPU2D (11/13)
+
+Three 12-second fresh-window passes ran at 1080p on each card, with the sampler disabled so the timing tool could avoid adding GIL contention. Each raw result and its reduced timeline are stored as `benchmarks/2d-playback/{radeon,rtx}-1113-map-{a,b,c}.{json,timeline.json}`. The RTX command used the tool's supported `--force-adapter default --island-adapter discrete` form: this checkout rejects the older brief's `--force-adapter discrete`; the recorded device is NVIDIA GeForce RTX 3080 Ti.
+
+| Card | First-pass fps, mean | Interval p50 / p95, mean | Largest stage mean / p95 | Next cut suggested by measurement |
+|---|---:|---:|---:|---|
+| AMD Radeon 8060S | 23.95 | 41.57 / 45.63 ms | node evaluation 28.36 / 40.44 ms | reduce the evaluation tail by at least 4 ms to meet the 41.67 ms p95 gate |
+| NVIDIA RTX 3080 Ti | 10.79 | 41.31 / 97.86 ms | node evaluation 84.18 / 135.07 ms | investigate the GPU-island upload/readback stalls before changing playback pacing |
+
+| Stage (mean / p95 ms) | AMD Radeon 8060S | NVIDIA RTX 3080 Ti |
+|---|---:|---:|
+| Node evaluation | 28.36 / 40.44 | 84.18 / 135.07 |
+| Display conversion | 12.27 / 20.21 | 20.14 / 34.97 |
+| Scheduling wait | 3.61 / 10.61 | 3.95 / 10.57 |
+| Viewer present | 2.56 / 4.70 | 5.22 / 16.46 |
+| Qt queue delivery | 2.10 / 7.99 | 1.78 / 6.16 |
+| Setup | 1.49 / 6.63 | 1.77 / 7.72 |
+
+The mandated no-sampler command leaves per-node attribution empty; these runs establish the stage bottleneck only. The Radeon holds 24 fps on average but misses the 41.67 ms p95 gate. The RTX reaches 24 fps over the entire twelve-second window after cached repeats, while its fresh first pass and p95 tail expose a separate discrete-card regression.
+
 The uncached fixture in `tests/fixtures/playback_comp.nbcomp` measures evaluation through the
 finished float frame handed to the display. Timings below use 2 ms worker-stack samples, so node
 costs are estimates; the paired JSON profiles preserve the timeline and sampling evidence.
