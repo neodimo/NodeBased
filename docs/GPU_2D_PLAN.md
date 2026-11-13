@@ -5,6 +5,24 @@
 Production precedents and dated sources: [GPU compositing survey](GPU_2D_COMPOSITING.md).
 All effort/gain ranges below are engineering estimates, not local results.
 
+## Display-only played frames
+
+**Contract for `NODEBASED_DISPLAY_ONLY_PLAY=1` (default off).** A display-only result is a separate type carrying an RGBA8 `QImage`, frame geometry and a `(generation, frame, device epoch)` lease for the one retained float island output. It is never an ndarray or `Raster`; `Evaluator.evaluate` and `evaluate_raster` keep their existing float return contracts for every ordinary caller. The fast path is eligible only for a playing `request.display`, a terminal GPU-island output with no processor node after it, a supported display view/look, and no active float readout, scope or A/B comparison. An unsupported view/look, device failure, tiled or overscan path, downstream processor node, or active float consumer uses the current float readback and `to_qimage` path unchanged. The switch-off path is unchanged.
+
+`Window.request_preview` records playback and display intent; `Window.start_preview` captures exposure, channel, background, view and look, then asks `Evaluator` for a display-only terminal. `Evaluator._gpu2d_node` must recognize the terminal before `GPU2D.run` materializes it. `GPU2D._execute` must render the same display math as `to_qimage` on its own device, read back only RGBA8 and keep the final float buffer in a one-entry slot. Replacing the slot releases its old buffer only after submitted work completes. The key includes generation, frame and epoch, so a stale result cannot satisfy a newer edit. `Window.start_preview` hands the already converted image through `signals.finished`; `Window.preview_ready` presents it without assigning it to `self.frame`. `DisplayCache.put` is skipped for this result: that cache's contract is scene-linear float. No 8-bit display result enters the evaluator's float cache, either.
+
+| Float consumer | During eligible playback? | Float on demand |
+| --- | --- | --- |
+| `Window._show_image` / Viewer pixmap | Yes, only display bytes needed | No float request. |
+| `DisplayCache.put`, timeline resident band | No entry for a display-only result | A subsequent ordinary request evaluates a float frame and inserts it. |
+| `Viewer.linear_pixel_at`, `Viewer.pixel_readout_info`, colour picker, direct-picture hover | Pointer readout can be active during playback | An active readout makes the request ineligible; if it opens after handoff, resolve the displayed key from the slot, otherwise re-evaluate. Never report stale float values. |
+| Scopes and analysis/sampler nodes | Analysis nodes are graph work; interactive sampling may start during play | A scope/sample request is ordinary float evaluation. If it asks for the displayed key, download the slot; after eviction re-evaluate. |
+| Paused Viewer and output-preview dock | No: stopping playback queues an ordinary preview | `Window._catch_up_picture` / `Window.request_preview` resolve the current frame through the slot or evaluator; `self.frame` is set only after float arrives. |
+| A/B comparison and `Window._compare_outputs` | No eligible A/B request | The compare request stays on the ordinary float path. |
+| `Window.export`, Write, downstream processor nodes | No eligible export or downstream node | Full-resolution ordinary evaluation; never use display bytes as source data. |
+
+The slot is an optimization, not a second source of truth. A miss runs ordinary float evaluation; a hit downloads that exact float output. Changes are confined to `GPU2D.run`/`_execute` and its resource release, `Evaluator._gpu2d_node`/`evaluate_raster` (or a narrowly scoped terminal entry point), `Window.start_preview`/`preview_ready`/`_catch_up_picture`, and the Viewer float-readout entry points. `to_qimage` and `DisplayCache` retain their existing public contracts. The direct-picture presenter is outside this path.
+
 ## Baseline: distinguish the brief from the committed measurements
 
 The assignment rounds the remaining CPU nodes to **170 ms/frame**, with approximately
