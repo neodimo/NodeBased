@@ -21,6 +21,17 @@ def namespace(**kw):
 
 
 class PureFunctionTests(unittest.TestCase):
+    def test_display_only_handoff_counts_as_presented(self):
+        request = namespace(generation=7)
+        window = namespace(frame_generation=7, frame=None)
+        self.assertTrue(bench.display_result_presented(window, request,
+                                                       gpu2d.DisplayFrame(None, (7, 12, 0))))
+        self.assertFalse(bench.display_result_presented(window, namespace(generation=8),
+                                                        gpu2d.DisplayFrame(None, (7, 12, 0))))
+        self.assertFalse(bench.display_result_presented(window, request, None))
+        window.frame = object()
+        self.assertTrue(bench.display_result_presented(window, request, object()))
+
     def test_frame_specs(self):
         self.assertEqual(tool.parse_frames("1-4"), [1, 2, 3, 4])
         self.assertEqual(tool.parse_frames("49-240:60"), [49, 109, 169, 229])

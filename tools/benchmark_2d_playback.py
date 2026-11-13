@@ -10,6 +10,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'tests/fixtures/playback_comp.nbcomp'
 
 
+def display_result_presented(window, request, frame):
+    """An accepted display-only image counts as shown even though no float lives in Window.frame."""
+    if frame is None or window.frame_generation != request.generation:
+        return False
+    from nodebased.gpu2d import DisplayFrame
+    return window.frame is not None or isinstance(frame, DisplayFrame)
+
+
 def make_inputs(directory: pathlib.Path, width: int, height: int, frames: int = 48):
     import numpy as np
     from nodebased.media import write_exr
@@ -215,16 +223,19 @@ def run_window(args):
             win.evaluator.evaluate_raster(warm_doc,warm_doc['view'],frame=warm_frame,tier=int(win.proxy.currentData() or 1))
         win.evaluator.clear(); win.decode_pool.bump_epoch(); gpu_backend.release_all()
         original_island=gpu_backend.run
-        def island_run(root,cancel=None):
+        original_display_island=gpu_backend.run_display
+        def measured_island(call,*args,**kwargs):
             before=gpu_backend.counters.snapshot(); t0=time.perf_counter()
-            try: return original_island(root,cancel)
+            try: return call(*args,**kwargs)
             finally:
                 delta=gpu2d.Counters.delta(gpu_backend.counters.snapshot(),before)
                 row={'t_ms':round((t0-trace_origin)*1000,3),'wall_ms':round((time.perf_counter()-t0)*1000,3),
                      **{k:(round(v,3) if isinstance(v,float) else v) for k,v in delta.items() if k not in ('nodes_on_gpu','cpu_boundaries','live_bytes','peak_bytes')},
                      'cpu_boundaries':delta['cpu_boundaries']}
                 island_rows.append(row); mark('gpu2d_island',wall_ms=row['wall_ms'],gpu_ms=row['gpu_ms'])
-        gpu_backend.run=island_run
+        gpu_backend.run=lambda root,cancel=None: measured_island(original_island,root,cancel)
+        gpu_backend.run_display=lambda root,settings,key,cancel=None: measured_island(
+            original_display_island,root,settings,key,cancel)
     # Keep the cached run's scene-linear frames warm before the measured playback interval.
     if args.cache_mode=='cached':
         # The normal display-cache budget can retain the complete 48-frame HD sequence but only
@@ -319,7 +330,7 @@ def run_window(args):
     media.read_media_raster=read_media
     def finished(payload,frame,image,status,render_region=None):
         req,cancel=payload
-        presented=frame is not None and win.frame_generation == req.generation and win.frame is not None
+        presented=display_result_presented(win,req,frame)
         mark('ui_handoff',frame=req.frame,tier=int(req.tier),status=status,
              has_frame=frame is not None,presented=presented)
         if presented:
