@@ -479,9 +479,6 @@ def run_window(args):
     request_to_shown=[r['points_ms']['shown']-r['points_ms']['request'] for r in in_window
                       if 'shown' in r['points_ms'] and 'request' in r['points_ms']]
     result={'case':args.case,'pipeline':not args.no_pipeline,'direct_picture':bool(args.direct_picture),
-        'playout_buffer':bool(getattr(win, 'playout_enabled', False)),
-        'late_frames':int(getattr(win, 'playout_late_frames', 0)),
-        'playout_dropped':int(getattr(getattr(win, 'playout_buffer', None), 'dropped', 0)),
         'latency_request_to_shown_ms':{'p50':percentile(request_to_shown,50),'p95':percentile(request_to_shown,95),'n':len(request_to_shown)},
         'display_conversions_8bit':len([t for t in eight_bit if sample_start[0] <= t <= sample_stop[0]]),
         'frames_dropped_counted':win.playback_dropped_frames+win.convert_stage.dropped,
@@ -536,7 +533,7 @@ def run_window(args):
     pathlib.Path(args.output).write_text(json.dumps(result,indent=2)+'\n')
     if args.timeline_output:
         pathlib.Path(args.timeline_output).parent.mkdir(parents=True,exist_ok=True)
-        compact={k:result[k] for k in ('case','pipeline','direct_picture','playout_buffer','late_frames','playout_dropped','latency_request_to_shown_ms','adapter','force_adapter','resolution','cache_mode','duration_s','achieved_fps','first_pass_fps','frame_interval_ms','handoff_ms','frames_dropped_counted','conversion_stage_drops','display_conversions_8bit','fresh_frame_timeline','trace_offset_ms','backend')}
+        compact={k:result[k] for k in ('case','pipeline','direct_picture','latency_request_to_shown_ms','adapter','force_adapter','resolution','cache_mode','duration_s','achieved_fps','first_pass_fps','frame_interval_ms','handoff_ms','frames_dropped_counted','conversion_stage_drops','display_conversions_8bit','fresh_frame_timeline','trace_offset_ms','backend')}
         compact['first_pass_frames']=result['first_pass_frames']
         if result.get('gpu2d'):
             compact['gpu2d']={k:result['gpu2d'][k] for k in ('device','cold_shader_setup_ms','islands','method')}

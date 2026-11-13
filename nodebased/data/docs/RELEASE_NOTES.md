@@ -13,7 +13,6 @@
 
   Flame, grain (0.0063) and bake time (at most 21 s) are unchanged. Tests pass on the RTX, the Radeon and the software renderer.
 
-- **GPU playback (experimental, off by default):** with `NODEBASED_PLAYOUT=1`, playback shows frames from a buffer owned by the playback clock, reads them with a sequential pointer, and queues the next frame without erasing the current one. Normal playback is unchanged.
 
 ## Known limits
 

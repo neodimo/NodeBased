@@ -190,7 +190,7 @@ docs/DIRECT_VIEWER.md, "Playback (VP2a)".
 
 ### Radeon playout pointer A/B (11/12)
 
-These 12-second uncached 1080p GPU2D passes compare the experimental clock-owned playout path with the established immediate-present path. The pointer path is still opt-in: it loses cadence after its early frames, so it remains off by default.
+These 12-second uncached 1080p GPU2D passes compared a clock-owned playout buffer with the established immediate-present path. The experimental path reached only 15 to 20 fps and accumulated late slots and dropped entries, while immediate presentation held about 24 fps with a 45 ms p95 interval. The buffer and its opt-in switch were removed because the slower path also failed playback tests; the recorded JSON files remain as the measurement history.
 
 | Pass | Shown pictures | First pass fps | Interval p95 |
 |---|---:|---:|---:|

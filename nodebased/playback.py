@@ -58,7 +58,6 @@ class PlaybackQueue:
         # behind it, and `active_cancel` names only the newer, so a cancel that reached only that left the running render
         # (a 100 s processor frame of the stopped scene) to finish before the first played frame could start.
         self._running: set[threading.Event] = set()
-        self._running_frames: dict[threading.Event, tuple[int, int]] = {}
 
     def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None,
                 playing=False, cancel_active=True, live_preview=False, uncached=False):
@@ -107,19 +106,6 @@ class PlaybackQueue:
     def retire(self, cancel):
         """The worker is done with the job whose cancel event this is (finished, failed or cancelled)."""
         self._running.discard(cancel)
-        self._running_frames.pop(cancel, None)
-
-    def enqueue_played(self, generation, frame, document, tier=FULL_TIER, viewport=None):
-        """Append a played request without replacing earlier played work.
-
-        The playout pointer asks for two adjacent pictures.  Replacing the
-        queue here loses the first one before the worker has taken it.
-        """
-        key = (int(generation), int(frame))
-        if any(running_frame == key[1] for _running_generation, running_frame in self._running_frames.values()) or any(item.frame == key[1] for item in self._items):
-            return False
-        self._items.append(FrameRequest(key[0], key[1], True, document, int(tier), viewport, True))
-        return True
 
     def enqueue_background(self, generation, frame, document, tier=FULL_TIER):
         """Append one non-displayed frame evaluation behind the visible request.
@@ -140,7 +126,6 @@ class PlaybackQueue:
         request = self._items.popleft()
         self.active_cancel = threading.Event()
         self._running.add(self.active_cancel)
-        self._running_frames[self.active_cancel] = (request.generation, request.frame)
         return request, self.active_cancel
 
     def finish(self, cancel):
@@ -149,114 +134,6 @@ class PlaybackQueue:
 
     def __len__(self):
         return len(self._items)
-
-
-class PlayoutBuffer:
-    """A tiny clock-owned store for finished playback pictures.
-
-    The render worker is allowed to finish early or late; the transport alone
-    decides when its picture reaches the viewer.  Entries are keyed by the
-    playback session generation, so a seek or edit can never present a
-    picture made from the old document.
-    """
-
-    def __init__(self, capacity=2):
-        self.capacity = int(capacity)
-        self._items = OrderedDict()
-        self.dropped = 0
-
-    def put(self, frame_number, generation, payload):
-        key = (int(generation), int(frame_number))
-        if key in self._items:
-            self._items.pop(key)
-        self._items[key] = payload
-        while len(self._items) > self.capacity:
-            self._items.popitem(last=False)
-            self.dropped += 1
-
-    def take(self, frame_number, generation):
-        key = (int(generation), int(frame_number))
-        return self._items.pop(key, None)
-
-    def has(self, frame_number, generation):
-        return (int(generation), int(frame_number)) in self._items
-
-    def drop_before(self, frame_number, generation, direction=1):
-        """Discard entries the playhead has passed and return their count."""
-        generation, frame_number = int(generation), int(frame_number)
-        stale = [key for key in self._items
-                 if key[0] != generation or (key[1] < frame_number if direction >= 0 else key[1] > frame_number)]
-        for key in stale:
-            self._items.pop(key, None)
-        self.dropped += len(stale)
-        return len(stale)
-
-    def clear(self):
-        self._items.clear()
-
-    def __len__(self):
-        return len(self._items)
-
-
-class PlayoutClock:
-    """Sequential player clock, independent of Qt and render timing.
-
-    It never chases a wall-clock frame number.  A late picture holds one
-    slot, then resets the cadence from the actual show time.
-    """
-
-    def __init__(self, first, last, frame, fps, direction=1, mode="loop"):
-        self.first, self.last = int(first), int(last)
-        self.next_frame = int(frame)
-        self.fps = float(fps)
-        self.direction = -1 if direction < 0 else 1
-        self.mode = mode
-        self.origin_time = None
-        self.slot = 0
-        self.late = False
-        self.late_count = 0
-
-    @property
-    def period(self):
-        return 1.0 / max(1.0, self.fps)
-
-    def after(self, frame):
-        span = self.last - self.first + 1
-        if span <= 1:
-            return self.first
-        if self.mode == "once":
-            return min(max(frame + self.direction, self.first), self.last)
-        if self.mode == "pingpong":
-            # `playhead_at` is the source of truth for ping-pong; callers use
-            # this helper only for one speculative successor.
-            offset = 1 if self.direction > 0 else -1
-            candidate = frame + offset
-            if candidate > self.last or candidate < self.first:
-                candidate = frame - offset
-            return candidate
-        return self.first + (frame - self.first + self.direction) % span
-
-    def next_after(self):
-        return self.after(self.next_frame)
-
-    def tick(self, now, take):
-        """Return ``(frame, payload)`` when a picture may be shown now."""
-        now = float(now)
-        if self.origin_time is not None and now < self.origin_time + self.slot * self.period:
-            return None
-        payload = take(self.next_frame)
-        if payload is None:
-            if not self.late and self.origin_time is not None:
-                self.late_count += 1
-                self.late = True
-            return None
-        frame = self.next_frame
-        if self.origin_time is None or self.late:
-            self.origin_time = now - self.slot * self.period
-            self.late = False
-        self.next_frame = self.after(frame)
-        self.slot += 1
-        return frame, payload
 
 
 class ConversionStage:
