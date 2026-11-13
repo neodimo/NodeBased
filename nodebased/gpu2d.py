@@ -103,6 +103,10 @@ class Counters:
     readback_map_ms: float = 0.0     # of readback_ms: the copy submission and the wait for the map (device to host transfer)
     readback_host_ms: float = 0.0    # of readback_ms: the host copy out of the mapped buffer into the Raster
     cpu_boundaries: list = field(default_factory=list)
+    # Per-crossing records are deliberately separate from the numeric totals.  Playback
+    # profiling needs to say which bytes crossed the discrete link, not merely that the
+    # island was expensive.
+    transfers: list = field(default_factory=list)
     nodes_on_gpu: dict = field(default_factory=dict)
     live_bytes: int = 0
     peak_bytes: int = 0
@@ -115,6 +119,7 @@ class Counters:
     def snapshot(self):
         row = {name: getattr(self, name) for name in self._NUMERIC}
         row["cpu_boundaries"] = list(self.cpu_boundaries)
+        row["transfers"] = list(self.transfers)
         row["nodes_on_gpu"] = dict(self.nodes_on_gpu)
         row["live_bytes"], row["peak_bytes"] = self.live_bytes, self.peak_bytes
         return row
@@ -123,6 +128,7 @@ class Counters:
     def delta(after, before):
         row = {name: after[name] - before[name] for name in Counters._NUMERIC}
         row["cpu_boundaries"] = after["cpu_boundaries"][len(before["cpu_boundaries"]):]
+        row["transfers"] = after["transfers"][len(before["transfers"]):]
         row["nodes_on_gpu"] = {k: v - before["nodes_on_gpu"].get(k, 0) for k, v in after["nodes_on_gpu"].items()}
         row["live_bytes"], row["peak_bytes"] = after["live_bytes"], after["peak_bytes"]
         return row
@@ -1129,7 +1135,7 @@ class GPU2D:
 
     # -- uploads -----------------------------------------------------------------------------
 
-    def upload(self, raster, key=None, plane=False, add_params=None, passes=None, held=None):
+    def upload(self, raster, key=None, plane=False, add_params=None, passes=None, held=None, purpose="source"):
         """A resident copy of ``raster`` (kept for reuse under ``key`` while the cache budget allows).
 
         ``plane`` uploads only the alpha channel, one float per pixel: that is all a mask input is ever read for."""
@@ -1170,6 +1176,9 @@ class GPU2D:
             sent = pixels.nbytes
         self.counters.uploads += 1
         self.counters.upload_bytes += sent
+        self.counters.transfers.append({"direction": "host-to-card", "bytes": sent,
+                                        "format": "r32f alpha" if plane else ("rgba16f" if half is not None else "rgba32f"),
+                                        "purpose": purpose})
         self.counters.upload_ms += (time.perf_counter() - started) * 1000
         image = DeviceImage(buffer, raster.data, raster.display, self.epoch, nbytes, key)
         image.meta = getattr(raster, "meta", None)
@@ -1298,7 +1307,8 @@ class GPU2D:
                 for slot, item in enumerate(node.inputs):
                     plane = self._is_mask(node.kind, slot)
                     if item is not None and not isinstance(item, DeferredImage) and (id(item), plane) not in resident:
-                        image = self.upload(item, keymap.get((id(item), plane)), plane, add_params, passes, held)
+                        purpose = "mask input" if plane else f"{node.kind} input"
+                        image = self.upload(item, keymap.get((id(item), plane)), plane, add_params, passes, held, purpose)
                         if image.epoch != self.epoch:
                             raise StaleImage("resident image from an earlier device epoch")
                         resident[(id(item), plane)] = image
@@ -1312,6 +1322,8 @@ class GPU2D:
                     device.queue.write_buffer(tbl, 0, node.plan.tables)
                     counters.uploads += 1
                     counters.upload_bytes += node.plan.tables.nbytes
+                    counters.transfers.append({"direction": "host-to-card", "bytes": node.plan.tables.nbytes,
+                                               "format": "r32f", "purpose": f"{node.kind} coordinate table"})
                     held.append((tbl, tbl_bytes))
                     tables[id(node)] = (tbl, tbl_bytes)
 
@@ -1392,6 +1404,11 @@ class GPU2D:
         counters.readback_host_ms += (done - mapped_at) * 1000
         counters.downloads += 1
         counters.download_bytes += (out_bytes if pixels is not None else 0) + 16
+        counters.transfers.append({"direction": "card-to-host", "bytes": 16,
+                                   "format": "flags u32", "purpose": "finite-pixel check"})
+        if pixels is not None:
+            counters.transfers.append({"direction": "card-to-host", "bytes": out_bytes,
+                                       "format": "rgba32f", "purpose": "island exit for CPU/display"})
         if pixels is None:
             counters.nonfinite_fallbacks += 1
             counters.cpu_boundaries.append("non-finite pixels: whole frame recomputed on the CPU")

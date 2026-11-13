@@ -921,6 +921,12 @@ class IslandTests(DeviceTestCase):
         self.assertEqual(counters["submissions"], 2)          # the island, then the single readback
         self.assertEqual(counters["cpu_boundaries"], [])
         self.assertGreaterEqual(counters["uploads"], 3)       # plate, background and matte (plus the transform table)
+        self.assertEqual(counters["transfers"][-1], {
+            "direction": "card-to-host", "bytes": result.data.width * result.data.height * 16,
+            "format": "rgba32f", "purpose": "island exit for CPU/display",
+        })
+        self.assertIn({"direction": "host-to-card", "bytes": 64 * 48 * 4,
+                       "format": "r32f alpha", "purpose": "mask input"}, counters["transfers"])
 
     def test_whole_pixel_and_zero_blur_chains_match(self):
         source, background, matte = self.data.image(64, 48), self.data.image(64, 48), self.data.matte(64, 48)
