@@ -1,3 +1,39 @@
+# NodeBased 0.57.0 — Swirl that lasts
+
+## What changed since 0.56.0
+
+- **Up-res swirl can now carry over from frame to frame.** The fluid up-res node keeps a fine velocity of its own between frames (moved with the flow, fed, sharpened, slowed and kept divergence-free) on the processor and the graphics card, and it is stored in the bake cache. Two new knobs: **Swirl life** (default 1 second; 0 gives the previous frame-by-frame swirl) and **Swirl speed limit**. The swirl builds over about nine frames, levels off, and dies out in still air. It is off by default.
+
+  Measured on the fire shot on the RTX 3080 Ti, eight settings against swirl off and the previous swirl:
+
+  | measure | swirl off | previous swirl | carried swirl |
+  | --- | ---: | ---: | ---: |
+  | smoke contrast | 0.33 | — | up to 0.47 |
+  | smoke cells that curl | 18.4 % | 35.5 % | up to 19.7 % |
+
+  Flame, grain (0.0063) and bake time (at most 21 s) are unchanged. Tests pass on the RTX, the Radeon and the software renderer.
+
+- **GPU playback (experimental, off by default):** with `NODEBASED_PLAYOUT=1`, playback shows frames from a buffer owned by the playback clock, reads them with a sequential pointer, and queues the next frame without erasing the current one. Normal playback is unchanged.
+
+## Known limits
+
+- The carried swirl does not yet make the smoke curl: the stills show more streaks, not curls. Factor 4, the real display, Windows and the render-frame time were not checked.
+- A 128-sample fluid frame still takes more than 0.75 s, with or without swirl.
+- The experimental playback buffer misses the Radeon 24 fps gate in every paced run (p95 89 to 156 ms against 41.7 ms, 15 to 20 fps), which is why it stays off. Default GPU playback on the Radeon is still 45 to 47 ms at the 95th percentile.
+- The Roto painted-stroke overlay is 18.6 ms per move at the slow end against a 16 ms target.
+- Roto mattes on the graphics card stay off by default until the tolerance is approved.
+- Still no comparison with a real Nuke render; pixel truth stays unmeasured until the reference pack (`tools/make_nuke_reference_pack.py`) is run in Nuke.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0 (big-endian, the default, is unaffected).
+- LensDistortion's polynomial, fisheye and beam-splitter models and its grid solve stay unsupported.
+
+## Moved to 0.58.0
+
+- Smoke that curls: a carried density moved by the combined velocity, or a cheaper render path for the finer volume.
+- Faster 128-sample fluid frames.
+- 24 fps GPU playback on the Radeon (tracing where late slots pile up), and removing the unused pacing code.
+- Roto: the painted-stroke overlay under 16 ms and the last of the release pause.
+- Carried: Nuke behaviour checks for the Color, Keyer and Channel nodes, and measuring the 2D nodes against real Nuke renders.
+
 # NodeBased 0.56.0 — Roto keeps up with the hand
 
 ## What changed since 0.55.0
