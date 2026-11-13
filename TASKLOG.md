@@ -1,3 +1,9 @@
+## 2026-11-13 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback: tidy up, then map where the frame time goes on both cards (integrator tick)
+
+- **What was done:** `main` `b7b52159` -> `0c318035` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `0c318035`: Ran 9887 tests in 1642.027 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-12 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) Fluids 17 step C (Thu 11/12): swirl that builds up, so the smoke curls (integrator tick)
 
 - **What was done:** `main` `acf28de8` -> `7b40a740` plus this docs commit. Evidence and per-lane commit
