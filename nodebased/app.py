@@ -2245,7 +2245,7 @@ class Viewer(PanZoomView):
     def linear_pixel_at(self, scene_pos):
         """The shown frame's linear float RGBA under a scene point, or None off the image. This is the
         pixel the readout reports, before any display transform: what a colour picker samples."""
-        frame = self.window.frame
+        frame = self.window._float_frame_on_demand()
         if frame is None or self.last_frame_size is None or not hasattr(frame, "shape"):
             return None
         scale = max(float(self.last_scale), 1.0)
@@ -2276,7 +2276,7 @@ class Viewer(PanZoomView):
     def pixel_readout_info(self, scene_pos):
         """What the readout shows for a scene point, read from the float picture (`window.frame`),
         or None when the point is off the picture. Shared by the Viewer and the direct picture."""
-        frame = self.window.frame
+        frame = self.window._float_frame_on_demand()
         # While the direct picture plays, the Viewer holds its last picture and the frame on screen is the card's:
         # its size and place come from the hand-over (`readout_geometry`), not from the held picture.
         last_scale, render_region, frame_size = self.readout_geometry or (
@@ -6005,9 +6005,12 @@ class Viewer(PanZoomView):
         """A press at a scene point. True when a handle, pick or drag took it; the Viewer and the direct
         picture both call this, so a click lands on the same handle on either surface."""
         if button == Qt.MouseButton.LeftButton and self.color_sampling is not None:
+            value = self.linear_pixel_at(scene_pos)
+            if value is None and getattr(self.window, "_display_only_key", None) is not None:
+                return True       # an evicted played slot is being re-evaluated; keep the picker armed
             callback, self.color_sampling = self.color_sampling, None
             self.unsetCursor()
-            callback(self.linear_pixel_at(scene_pos))
+            callback(value)
             return True
         if button == Qt.MouseButton.LeftButton and self.zdefocus_picking:
             self.window.zdefocus_pick(self.zdefocus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
@@ -11848,7 +11851,8 @@ class Window(QMainWindow):
             # The transport runs a frame ahead of the picture while the next frame evaluates: on stop the
             # picture catches up with the playhead (a cached frame is instant) instead of lagging it by one.
             catch_up = (self.pipeline_playback and not fluid_project and self.playback_auto_proxy_index is None
-                        and getattr(self, "_displayed_frame", None) not in (None, self.dispatcher.document["time"]["current"]))
+                        and (getattr(self, "_displayed_frame", None) not in (None, self.dispatcher.document["time"]["current"])
+                             or getattr(self, "_display_only_key", None) is not None))
             tier_before_stop = self.proxy.currentIndex()
             if self.playback_auto_proxy_index is not None:
                 if fluid_project:
@@ -16285,6 +16289,8 @@ class Window(QMainWindow):
     def begin_color_sample(self, callback):
         """The next left click in the viewer reports its linear pixel to `callback`."""
         self.viewer.color_sampling = callback
+        if getattr(self, "_display_only_key", None) is not None:
+            self._float_frame_on_demand()
         self.viewer.setCursor(Qt.CursorShape.CrossCursor)
         self.statusBar().showMessage("Click a pixel in the viewer to sample its linear colour", 4000)
 
@@ -18857,7 +18863,8 @@ class Window(QMainWindow):
         return False
 
     def request_preview(self, *_, playhead_only=False, tier_override=None, progressive=False,
-                        progressive_target=None, document_override=None, document_owned=False, drag_tier=None):
+                        progressive_target=None, document_override=None, document_owned=False, drag_tier=None,
+                        frame_override=None):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
@@ -18879,6 +18886,8 @@ class Window(QMainWindow):
                 self._clear_fluid_edit_bake()
         if self.playing:
             snapshot = playing_document(snapshot)
+        if frame_override is not None:
+            snapshot["time"]["current"] = int(frame_override)
         frame = snapshot["time"]["current"]
         selected_tier = int(self.proxy.currentData())
         if (progressive and not self.playing and not document_owned       # a drag's own picture is never one already cached
@@ -19019,6 +19028,13 @@ class Window(QMainWindow):
         view = self.effective_view(request.document)
         look = self.look_args(request.document)
         background = request.document["settings"]["viewer"]["background"]
+        display_only = (os.environ.get("NODEBASED_DISPLAY_ONLY_PLAY") == "1"
+                        and request.playing and request.display and self.evaluator.gpu2d is not None
+                        and not self.viewer._pixel_readout_active and self.viewer.color_sampling is None
+                        and not getattr(self, "_float_requested", False)
+                        and look.get("gpu", True) and not (channel == "A" and look.get("rgb_only") is False)
+                        and compare_model.active_b(request.document)[1] is None
+                        and not self._direct_shown())
         if request.display:
             self.statusBar().showMessage(f"Evaluating frame {request.frame}…")
         def report(stage, fraction, info):
@@ -19208,12 +19224,39 @@ class Window(QMainWindow):
                     tile_detail = "  ·  overscan shown"
                 else:
                     self.evaluator.fluid_cache_migration_notice = False
-                    frame = self.evaluator.evaluate(request.document, cancel=cancel,
-                                                    frame=request.frame, tier=request.tier)
+                    held_float = None
+                    backend = self.evaluator.gpu2d
+                    if (not request.playing and backend is not None and display_key is not None
+                            and display_key == getattr(self, "_display_only_doc_key", None)):
+                        held_float = backend.displayed_float(getattr(self, "_display_only_key", None))
+                    if held_float is not None:
+                        frame = held_float.to_display()
+                    elif display_only:
+                        from . import gpu2d
+                        settings = carddisplay.settings_from(exposure, channel, background, view, look)
+                        key = (request.generation, request.frame, self.evaluator.gpu2d.epoch)
+                        result = self.evaluator.evaluate_raster(request.document, cancel=cancel,
+                                                                frame=request.frame, tier=request.tier,
+                                                                display_only=(settings, key))
+                        frame = result if isinstance(result, gpu2d.DisplayFrame) else result.to_display()
+                    else:
+                        frame = self.evaluator.evaluate(request.document, cancel=cancel,
+                                                        frame=request.frame, tier=request.tier)
                     tile_detail = "  ·  full-frame fallback"
                 _trace_frame("eval_end", request.generation)
                 if cancel.is_set():
                     raise Cancelled()
+                from . import gpu2d
+                if isinstance(frame, gpu2d.DisplayFrame):
+                    from PySide6.QtGui import QImage
+                    pixels = frame.pixels
+                    image = QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0],
+                                   QImage.Format.Format_RGBA8888).copy()
+                    elapsed = (time.perf_counter() - start) * 1000
+                    self.signals.finished.emit((request, cancel), frame, image,
+                                               f"{pixels.shape[1] * request.tier} × {pixels.shape[0] * request.tier}"
+                                               f"  ·  {elapsed:.0f} ms{tile_detail}  ·  display-only", render_region)
+                    return
                 # A picture that is the same on every frame is kept at full precision, so showing
                 # it again hands out the stored array; any other frame is stored lazily, and
                 # rounded to half-float later by compact_display_cache.
@@ -19274,8 +19317,26 @@ class Window(QMainWindow):
         """After a stop: show the frame at the playhead if the picture on screen is an earlier one."""
         current = self.dispatcher.document["time"]["current"]
         if (not self.playing and self.pipeline_playback
-                and getattr(self, "_displayed_frame", None) not in (None, current)):
+                and (getattr(self, "_displayed_frame", None) not in (None, current)
+                     or getattr(self, "_display_only_key", None) is not None)):
             self.request_preview()
+
+    def _float_frame_on_demand(self):
+        """Resolve the displayed float only when a readout actually asks for it."""
+        if self.frame is not None:
+            return self.frame
+        key = getattr(self, "_display_only_key", None)
+        if key is None:
+            return None
+        backend = self.evaluator.gpu2d
+        raster = None if backend is None else backend.displayed_float(key)
+        if raster is not None:
+            self.frame = raster.to_display()
+            return self.frame
+        if not getattr(self, "_float_requested", False):
+            self._float_requested = True
+            self.request_preview(frame_override=getattr(self, "_displayed_frame", None))
+        return None
 
     def _pipelines(self, request):
         """Runs on the worker. True when this played frame's picture is built on the conversion stage. A compare
@@ -20054,6 +20115,7 @@ class Window(QMainWindow):
             self._direct_handed_over(accepted)
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
+        from . import gpu2d
         request, cancel = payload
         _trace_frame("ready_begin", request.generation)
         fallback = re.search(r"fallback: ([^·]+)", status)
@@ -20129,7 +20191,14 @@ class Window(QMainWindow):
             if self.playing:
                 status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
                            f"  ·  dropped {self.playback_dropped_frames + self.convert_stage.dropped}")
-            self.frame = frame
+            display_only_frame = isinstance(frame, gpu2d.DisplayFrame)
+            self.frame = None if display_only_frame else frame
+            self._display_only_key = frame.key if display_only_frame else None
+            self._display_only_doc_key = (DisplayCache.key(request.document, request.document.get("view"),
+                                                           request.frame, request.tier)
+                                          if display_only_frame else None)
+            if not display_only_frame:
+                self._float_requested = False
             self.frame_b = extras["frame_b"] if extras is not None and frame is not None else None
             self.frame_generation = request.generation
             self._displayed_frame = request.frame

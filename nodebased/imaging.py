@@ -1516,13 +1516,21 @@ class Evaluator:
             done[id(item)] = raster
         return done[id(item)]
 
-    def _gpu2d_node(self, key, kind, params, images, keys, interior, cancel, frame):
+    def _gpu2d_node(self, key, kind, params, images, keys, interior, cancel, frame, display_only=None):
         """The GPU island's turn at one node: ``(raster_or_deferred, images)``. A raster of None means
         run the CPU kernel on the returned ``images``, which no longer hold staged nodes."""
         backend = self.gpu2d
         if kind in gpu2d.KINDS:
             try:
                 staged = backend.stage(kind, params, images, keys, key)
+                if display_only is not None and staged.data == staged.display:
+                    from . import carddisplay
+                    settings, display_key = display_only
+                    if carddisplay.supported(settings[3]):
+                        try:
+                            return backend.run_display(staged, settings, display_key, cancel), images
+                        except gpu2d.Unsupported as exc:
+                            backend.boundary(kind, exc.reason)
                 return (staged if interior else backend.run(staged, cancel)), images
             except gpu2d.Unsupported as exc:
                 backend.boundary(kind, exc.reason)
@@ -1543,7 +1551,7 @@ class Evaluator:
 
     def evaluate_raster(self, doc, target=None, cancel: threading.Event | None = None,
                         frame=None, tier=1, typed=False, return_digest=False,
-                        cache_fractional=False, digest_only=False):
+                        cache_fractional=False, digest_only=False, display_only=None):
         """Evaluate `target` at one timeline frame, optionally at a proxy tier.
 
         `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
@@ -1585,7 +1593,7 @@ class Evaluator:
         stack.append(float(asked) if isinstance(asked, float) and not asked.is_integer() else int(asked))
         try:
             return self._evaluate_raster(doc, target, cancel, frame, tier, typed, return_digest,
-                                         cache_fractional, digest_only, scope)
+                                         cache_fractional, digest_only, scope, display_only)
         except BaseException as error:
             earlier = scope.earlier_failure(error)
             if earlier is None:
@@ -1596,7 +1604,7 @@ class Evaluator:
             scope.close()
 
     def _evaluate_raster(self, doc, target, cancel, frame, tier, typed, return_digest,
-                         cache_fractional, digest_only, scope):
+                         cache_fractional, digest_only, scope, display_only=None):
         """`evaluate_raster` with the source tasks it may launch collected in `scope`."""
         tier = int(tier)
         if tier not in tiers.PROXY_TIERS:
@@ -3758,7 +3766,8 @@ class Evaluator:
                     gpu_raster = None
                     if self.gpu2d is not None:
                         gpu_raster, images = self._gpu2d_node(key, kind, params, images, [hashes.get(s) for s in slot_sources],
-                                                              key in gpu_interior, cancel, frame)
+                                                              key in gpu_interior, cancel, frame,
+                                                              display_only if key == target else None)
                     if gpu_raster is not None:
                         raster = gpu_raster
                     elif temporal_samples is not None:
@@ -3819,10 +3828,14 @@ class Evaluator:
                                 kind, params, images, frame, data, cancel=cancel, progress=self,
                                 roto_rasterizer=(self._roto_matte if kind == "Roto" else None),
                                 roto_source_images=(clone_sources if kind == "Roto" else None))
-                    if raster.meta is None and not any(raster is image for image in images):
+                    if (not isinstance(raster, gpu2d.DisplayFrame) and raster.meta is None
+                            and not any(raster is image for image in images)):
                         raster.meta = _inherited_metadata(kind, images, params)
                 if isinstance(raster, gpu2d.DeferredImage):
                     values[key] = raster          # an island node: resolved on the device when its exit node runs
+                    continue
+                if isinstance(raster, gpu2d.DisplayFrame):
+                    values[key] = raster
                     continue
                 if proxy_original is not None and not node["disabled"]:
                     # The proxy file is already small: fit it to the canvas the full-size Read would have at this tier.
@@ -3851,7 +3864,7 @@ class Evaluator:
             values[key] = raster
         scope.resolve_all()
         result = values[target]
-        if not isinstance(result, Raster) and not typed:
+        if not isinstance(result, (Raster, gpu2d.DisplayFrame)) and not typed:
             raise ValueError(f"{nodes[target]['name']} outputs {OUTPUT_TYPES.get(nodes[target]['type'])}, "
                              "not an image; view a Render3D instead")
         if return_digest:

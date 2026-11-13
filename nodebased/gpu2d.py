@@ -38,6 +38,64 @@ import numpy as np
 from .raster import Raster
 from .tiers import Region
 
+
+@dataclass
+class DisplayFrame:
+    """Already transformed display bytes; never a substitute for a scene-linear Raster."""
+    pixels: np.ndarray
+    key: tuple
+
+
+def _display_shader(view):
+    """The carddisplay OCIO program with a storage-buffer input and RGBA8 output."""
+    from . import carddisplay
+    return '''#version 450
+layout(local_size_x=8, local_size_y=8) in;
+layout(set=0,binding=0,std430) readonly buffer Source { vec4 pixels[]; } src;
+layout(set=0,binding=1,std430) buffer Picture { uint pixels[]; } dst;
+layout(set=0,binding=2) uniform Params { vec4 size; vec4 disp0; vec4 disp1; } v;
+layout(set=1,binding=0,std430) readonly buffer OcioTables { vec4 data[]; } ocio_tables;
+''' + carddisplay.view_source(view) + '''
+void main() {
+    ivec2 t = ivec2(gl_GlobalInvocationID.xy);
+    int width = int(v.size.x);
+    if (t.x >= width || t.y >= int(v.size.y)) { return; }
+    int i = t.y * width + t.x;
+    vec4 p = src.pixels[i];
+    float channel = v.disp0.y;
+    vec3 rgb;
+    if (channel > 3.5) {
+        rgb = vec3(p.a);
+    } else {
+        rgb = p.rgb * v.disp0.x;
+        if (channel > 0.5) {
+            float c = channel < 1.5 ? rgb.r : (channel < 2.5 ? rgb.g : rgb.b);
+            rgb = vec3(c);
+        }
+        float w = clamp(p.a, 0.0, 1.0);
+        vec3 straight = w > 1e-8 ? rgb / w : vec3(0.0);
+        float gamma = v.disp0.z;
+        if (gamma != 1.0) {
+            vec3 a = abs(straight);
+            vec3 bent = mix(pow(max(a, vec3(1e-30)), vec3(1.0 / gamma)), vec3(0.0), vec3(equal(a, vec3(0.0))));
+            straight = sign(straight) * bent;
+        }
+        rgb = OCIODisplay(vec4(straight, 1.0)).rgb * w;
+        if (v.disp1.x > 0.5) {
+            float level = ((t.x / 16 + t.y / 16) % 2) == 0 ? v.disp1.y : v.disp1.z;
+            rgb += vec3(level) * (1.0 - w);
+        }
+        rgb = clamp(rgb, 0.0, 1.0);
+        if (v.disp0.w > 0.5 && ((t.x + t.y) / 6) % 2 == 0) {
+            if (any(lessThan(straight, vec3(0.0)))) { rgb = vec3(0.0, 90.0 / 255.0, 1.0); }
+            else if (any(greaterThan(straight, vec3(1.0)))) { rgb = vec3(1.0, 0.0, 0.0); }
+        }
+    }
+    uvec3 b = uvec3(floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5));
+    dst.pixels[i] = b.r | (b.g << 8) | (b.b << 16) | 0xff000000u;
+}
+'''
+
 KINDS = ("Grade", "ColorCorrect", "Transform", "Blur", "Merge")
 
 # Blur radii whose GPU result is validated against the CPU kernel. The CPU uses a float32 shifted
@@ -1083,6 +1141,10 @@ class GPU2D:
 
     def release_all(self):
         """Drop every cached input and pooled buffer (cancel, device change, shutdown)."""
+        slot = getattr(self, "_played_slot", None)
+        if slot is not None:
+            self._release(slot[1].buffer, slot[1].nbytes)
+            self._played_slot = None
         for image in list(self._inputs.values()):
             self._release(image.buffer, image.nbytes)
         self._inputs.clear()
@@ -1102,6 +1164,7 @@ class GPU2D:
     def invalidate(self, reason):
         """Device loss: every resident image is stale; the whole affected frame reruns on the CPU."""
         self.lost = True
+        self._played_slot = None
         self.epoch += 1
         self._pool.clear()
         self._inputs.clear()
@@ -1125,6 +1188,25 @@ class GPU2D:
             self.counters.pipeline_compiles += 1
             self.counters.shader_compile_ms += (time.perf_counter() - started) * 1000
         return pipeline
+
+    def _display_pipeline(self, view):
+        from . import carddisplay
+        key = f"gpu2d:display:{view}"
+        cached = self._pipelines.get(key)
+        if cached is not None:
+            return cached
+        try:
+            module = self.device.create_shader_module(code=_display_shader(view), label=f"gpu2d_{view}_comp")
+            pipeline = self.device.create_compute_pipeline(layout="auto", compute={"module": module, "entry_point": "main"})
+            tables = carddisplay.view_tables(view)
+            buffer = self.device.create_buffer_with_data(data=tables.tobytes(), usage=self.wgpu.BufferUsage.STORAGE)
+        except carddisplay.Unsupported:
+            raise
+        except Exception as exc:
+            raise Unsupported(f"display shader unavailable: {type(exc).__name__}: {exc}") from exc
+        self._pipelines[key] = pipeline, buffer, tables.nbytes, "ocio_tables.data[" in carddisplay.view_source(view)
+        self.counters.pipeline_compiles += 1
+        return self._pipelines[key]
 
     def warm(self):
         """Compile every pipeline now (the cold shader setup the spike reports separately), in ms."""
@@ -1251,6 +1333,45 @@ class GPU2D:
                 self.invalidate(f"{type(exc).__name__}: {exc}")
                 raise DeviceLost(str(exc)) from exc
 
+    def run_display(self, root, settings, key, cancel=None):
+        """Run a terminal island and transfer only its display-encoded RGBA8 image."""
+        with self._lock:
+            self.counters.runs += 1
+            try:
+                return self._execute(root, cancel, display=(settings, key))
+            except Unsupported:
+                raise
+            except Exception as exc:
+                if type(exc).__name__ == "Cancelled":
+                    raise
+                self.invalidate(f"{type(exc).__name__}: {exc}")
+                raise DeviceLost(str(exc)) from exc
+
+    def displayed_float(self, key):
+        """Download the last played float frame only if its exact generation is still held."""
+        with self._lock:
+            slot = getattr(self, "_played_slot", None)
+            if slot is None or slot[0] != key or slot[1].epoch != self.epoch:
+                return None
+            image = slot[1]
+            nbytes = image.data.width * image.data.height * 16
+            staging = self._staging_buffer(nbytes)
+            encoder = self.device.create_command_encoder()
+            encoder.copy_buffer_to_buffer(image.buffer, 0, staging, 0, nbytes)
+            self.device.queue.submit([encoder.finish()])
+            staging.map_sync(self.wgpu.MapMode.READ)
+            try:
+                pixels = np.frombuffer(staging.read_mapped(0, nbytes, copy=False), np.float32,
+                                       count=nbytes // 4).reshape(
+                    image.data.height, image.data.width, 4).copy()
+            finally:
+                staging.unmap()
+            self.counters.downloads += 1
+            self.counters.download_bytes += nbytes
+            self.counters.transfers.append({"direction": "card-to-host", "bytes": nbytes,
+                                            "format": "rgba32f", "purpose": "played float on demand"})
+            return Raster(pixels, image.data, image.display)
+
     @staticmethod
     def _is_mask(kind, slot):
         """Mask inputs (read only for their alpha): Merge's third input, the second of the filters."""
@@ -1262,7 +1383,7 @@ class GPU2D:
             from .cancellation import Cancelled
             raise Cancelled()
 
-    def _execute(self, root, cancel):
+    def _execute(self, root, cancel, display=None):
         counters, device, wgpu = self.counters, self.device, self.wgpu
         self._check(cancel)
         self._fixed_buffers()
@@ -1298,6 +1419,7 @@ class GPU2D:
                         keymap[(id(item), self._is_mask(node.kind, slot))] = key
         resident, fresh_inputs, tables = {}, [], {}
         outputs = []
+        uniform = None
         try:
             self._evict_inputs()
             # Every host write (source uploads, transform tables) happens first, before any pass
@@ -1342,6 +1464,22 @@ class GPU2D:
                         self._free(resident[id(item)], outputs)
             final = resident[id(root)]
             self._scan(final, add_params, passes)
+            display_buffer = None
+            if display is not None:
+                from . import carddisplay
+                settings, _key = display
+                try:
+                    display_pipeline, table_buffer, table_size, needs_tables = self._display_pipeline(settings[3])
+                except (carddisplay.Unsupported, ValueError) as exc:
+                    raise Unsupported(f"display view: {exc}") from exc
+                width, height = final.data.width, final.data.height
+                display_payload = width * height * 4
+                display_buffer, display_bytes = self._acquire(display_payload)
+                held.append((display_buffer, display_bytes))
+                uniform_data = np.asarray([width, height, 0, 0,
+                                           *carddisplay.uniform_values(settings)], np.float32)
+                uniform = device.create_buffer_with_data(data=uniform_data.tobytes(),
+                                                         usage=wgpu.BufferUsage.UNIFORM)
             # encode_ms is the host time spent building the passes; the uploads inside it are counted in upload_ms.
             counters.encode_ms += (time.perf_counter() - encode_started) * 1000 - (counters.upload_ms - upload_before)
 
@@ -1361,6 +1499,22 @@ class GPU2D:
                 cp.dispatch_workgroups(*groups)
                 cp.end()
                 counters.dispatches += 1
+            if display_buffer is not None:
+                group0 = device.create_bind_group(layout=display_pipeline.get_bind_group_layout(0), entries=[
+                    {"binding": 0, "resource": {"buffer": final.buffer, "offset": 0, "size": final.nbytes}},
+                    {"binding": 1, "resource": {"buffer": display_buffer, "offset": 0, "size": display_bytes}},
+                    {"binding": 2, "resource": {"buffer": uniform, "offset": 0, "size": uniform_data.nbytes}}])
+                group1 = (device.create_bind_group(layout=display_pipeline.get_bind_group_layout(1), entries=[
+                    {"binding": 0, "resource": {"buffer": table_buffer, "offset": 0, "size": table_size}}])
+                    if needs_tables else None)
+                cp = encoder.begin_compute_pass()
+                cp.set_pipeline(display_pipeline)
+                cp.set_bind_group(0, group0)
+                if group1 is not None:
+                    cp.set_bind_group(1, group1)
+                cp.dispatch_workgroups((width + 7) // 8, (height + 7) // 8, 1)
+                cp.end()
+                counters.dispatches += 1
             out_bytes = final.data.width * final.data.height * 16
             flag_staging = self._staging_buffer(16)
             encoder.copy_buffer_to_buffer(self._flags, 0, flag_staging, 0, 16)
@@ -1377,22 +1531,36 @@ class GPU2D:
                 flag_staging.unmap()
             gpu_done = time.perf_counter()
             pixels = None
+            picture = None
             mapped_at = gpu_done
             if not flag_word & 1:
-                staging = self._staging_buffer(out_bytes)
+                read_bytes = display_payload if display_buffer is not None else out_bytes
+                staging = self._staging_buffer(read_bytes)
                 copy = device.create_command_encoder()
-                copy.copy_buffer_to_buffer(final.buffer, 0, staging, 0, out_bytes)
+                copy.copy_buffer_to_buffer(display_buffer if display_buffer is not None else final.buffer,
+                                           0, staging, 0, read_bytes)
                 device.queue.submit([copy.finish()])
                 counters.submissions += 1
                 staging.map_sync(wgpu.MapMode.READ)
                 mapped_at = time.perf_counter()
                 try:
-                    mapped = staging.read_mapped(0, out_bytes, copy=False)
-                    pixels = np.frombuffer(mapped, np.float32, out_bytes // 4).reshape(final.data.height, final.data.width, 4).copy()
+                    mapped = staging.read_mapped(0, read_bytes, copy=False)
+                    if display_buffer is not None:
+                        picture = np.frombuffer(mapped, np.uint8, read_bytes).reshape(height, width, 4).copy()
+                    else:
+                        pixels = np.frombuffer(mapped, np.float32, out_bytes // 4).reshape(final.data.height, final.data.width, 4).copy()
                 finally:
                     staging.unmap()
             done = time.perf_counter()
+            if picture is not None:
+                outputs.remove(final)
+                old = getattr(self, "_played_slot", None)
+                if old is not None:
+                    self._release(old[1].buffer, old[1].nbytes)
+                self._played_slot = (display[1], final)
         finally:
+            if uniform is not None:
+                uniform.destroy()
             for buffer, nbytes in held:
                 self._release(buffer, nbytes)
             for image in list(outputs):
@@ -1403,13 +1571,17 @@ class GPU2D:
         counters.readback_map_ms += (mapped_at - gpu_done) * 1000
         counters.readback_host_ms += (done - mapped_at) * 1000
         counters.downloads += 1
-        counters.download_bytes += (out_bytes if pixels is not None else 0) + 16
+        counters.download_bytes += (out_bytes if pixels is not None else
+                                    display_payload if picture is not None else 0) + 16
         counters.transfers.append({"direction": "card-to-host", "bytes": 16,
                                    "format": "flags u32", "purpose": "finite-pixel check"})
         if pixels is not None:
             counters.transfers.append({"direction": "card-to-host", "bytes": out_bytes,
                                        "format": "rgba32f", "purpose": "island exit for CPU/display"})
-        if pixels is None:
+        if picture is not None:
+            counters.transfers.append({"direction": "card-to-host", "bytes": display_payload,
+                                       "format": "rgba8", "purpose": "played display picture"})
+        if pixels is None and picture is None:
             counters.nonfinite_fallbacks += 1
             counters.cpu_boundaries.append("non-finite pixels: whole frame recomputed on the CPU")
             for image in list(self._inputs.values()):     # a poisoned source must not stay cached
@@ -1419,6 +1591,8 @@ class GPU2D:
             raise Unsupported("non-finite pixels")
         for image in fresh_inputs:
             image.verified = True
+        if picture is not None:
+            return DisplayFrame(picture, display[1])
         raster = Raster(pixels, final.data, final.display)
         raster.meta = root.meta
         return raster
