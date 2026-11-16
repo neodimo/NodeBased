@@ -35,6 +35,10 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
     OCIOColorspace, OCIOLogConvert, OCIOLookTransform, OCIODisplay, OCIOFileTransform
                   divide_by_alpha     1: divide the colour by alpha before the OpenColorIO transform and multiply it back after; Nuke transforms the
                                       stored colour (its own (un)premult by does the dividing when asked). Set on graphs saved before.
+    ScreenKeyer   older_intermediate_view
+                  (Keylight)      1: the Intermediate Result view shows the despilled colour with the source's own alpha and no matte. The guide says it "renders the
+                                      original source image with the Screen Matte generated in this Keylight node" (for keying in passes): source colour, matte in alpha.
+                                      Set on graphs saved before.
     IBKGizmo      luminance_level_enable
                                       1: `luminance_level` sets how far the plate follows the luminance match whenever the match is on. Nuke's
                                       "luminance level" has its own enable box (off by default), and with it off the match is whole.
@@ -73,6 +77,7 @@ NEW = {
     "OCIODisplay": {"divide_by_alpha": 0},
     "OCIOFileTransform": {"divide_by_alpha": 0},
     "IBKGizmo": {"luminance_level_enable": 0},
+    "ScreenKeyer": {"older_intermediate_view": 0},
     "GenerateLUT": {"lut_clamp_output": 1},
 }
 OLD = {
@@ -95,9 +100,10 @@ OLD = {
     "OCIODisplay": {"divide_by_alpha": 1},
     "OCIOFileTransform": {"divide_by_alpha": 1},
     "IBKGizmo": {"luminance_level_enable": 1},
+    "ScreenKeyer": {"older_intermediate_view": 1},
     "GenerateLUT": {"lut_clamp_output": 0},
 }
-LIMITS = {"lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_channel_operations": (0, 1)}
+LIMITS = {"lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_intermediate_view": (0, 1), "older_channel_operations": (0, 1)}
 # The operations the Reference Guide lists for ChannelMerge, in its order (the guide's names; "b if not a" is its `A?A:B`).
 CHANNEL_MERGE_OPERATIONS = ("absminus", "b if not a", "divide", "from", "in", "max", "min", "minus", "multiply", "out", "plus", "stencil", "union", "xor")
 CHOICES = {"luminance_math": list(SATURATION_MATH), "channel_operation": list(CHANNEL_MERGE_OPERATIONS)}

@@ -1630,6 +1630,9 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("edge_grade_saturation",), label="Edge grade saturation", soft_range=(0, 2)),
         KnobGroup("float_slider", ("edge_width",), label="Edge width", soft_range=(0.1, 20)),
         KnobGroup("enum", ("keyer_view",), label="View"),
+        KnobGroup("bool", ("older_intermediate_view",), label="Older intermediate view",
+                  help="The Intermediate Result view shows the despilled colour with the source's alpha and no matte, as it did before it followed the guide "
+                       "(the original source with the screen matte in alpha, for keying in passes). Set on graphs saved before."),
         KnobGroup("bool", ("unpremultiply_result",), label="Unpremultiply result"),
         KnobGroup("bool", ("use_alpha_bias_for_despill",), label="Use alpha bias for despill"),
         KnobGroup("float_slider", ("screen_despot_black",), label="Screen despot black", soft_range=(0, 20)),

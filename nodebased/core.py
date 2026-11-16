@@ -1036,7 +1036,7 @@ SPECS = {
                               "bias_colours": 0, "alpha_bias_red": 0.5, "alpha_bias_green": 0.5,
                               "alpha_bias_blue": 0.5, "despill_bias_red": 0.5, "despill_bias_green": 0.5,
                               "despill_bias_blue": 0.5, "keyer_view": "final", "mix": 1.0,
-                              **_keyerknobs.new_params("ScreenKeyer")}},
+                              **_keyerknobs.new_params("ScreenKeyer"), **_behaviour2d.new_params("ScreenKeyer")}},
     # Cryptomatte (step K3): an ID matte from the Cryptomatte layer set of a multichannel EXR (docs/PARITY_2D.md).
     # `crypto_layer` names the set (empty = the first), `matte_list` lists the names (or `<raw ids>`)
     # to extract, `crypto_view` picks the output. Whole-image path only: it reads named layers.

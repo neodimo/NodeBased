@@ -201,7 +201,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 2 | ChromaKeyer | `ChromaKeyer` | supported | 99.2 | 99.2 | 100 (16/16) | 100 (13/13) | 93 | 100 | - | 100 (4/4) | 98 | - | unmeasured |
 | 3 | Difference | `Difference` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (4/4) | 100 | 100 | - | 100 (2/2) | 100 | - | unmeasured |
 | 4 | HueKeyer | `HueKeyer` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 5 | Keylight | `ScreenKeyer` | partial | 99.1 | 98.6 | 98 (34/35) | 100 (27/27) | 97 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
+| 5 | Keylight | `ScreenKeyer` | partial | 99.1 | 98.6 | 98 (34/35) | 100 (27/27) | 97 | 100 | - | 100 (6/6) | 100 | - | unmeasured |
 | 6 | Primatte | - | missing | 0.0 | 0.0 | 0 (0/26) | - | - | 0 | 0 | - | - | - | no fixture |
 | 6 | Ultimatte | - | missing | 0.0 | 0.0 | 0 (0/60) | - | - | 0 | - | - | - | - | no fixture |
 | 7 | IBKColor | `IBKColor` | supported | 97.9 | 100.0 | 100 (6/6) | 100 (4/4) | 100 | 100 | - | 100 (2/2) | 78 | - | unmeasured |
@@ -791,6 +791,7 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `keylight_clip_black` | guide | pass | within tolerance | - |
 | `keylight_clip_white` | guide | pass | within tolerance | - |
 | `keylight_despill_limits_screen_channel` | convention | pass | within tolerance | - |
+| `keylight_intermediate_result_source_and_matte` | guide | pass | within tolerance | - |
 | `ibkcolor_green_plate_island_filled` | convention | pass | within tolerance | - |
 | `ibkcolor_blue_plate_island_filled` | convention | pass | within tolerance | - |
 | `ibkgizmo_matte_from_screen_plate` | guide | pass | within tolerance | - |

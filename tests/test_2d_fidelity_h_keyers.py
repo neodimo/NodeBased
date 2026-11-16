@@ -22,13 +22,15 @@ def one(*rgba):
 
 
 def key(image, inside=None, outside=None, clean=None, mask=None, bg=None, **knobs):
+    if knobs.get("keyer_view") == "intermediate":
+        knobs.setdefault("older_intermediate_view", 1)     # these tests read the despilled colour, which only the older intermediate view shows
     params = {**SPECS["ScreenKeyer"]["params"], **knobs}
     return Evaluator._kernel("ScreenKeyer", params, [image, inside, outside, clean, mask, bg])
 
 
 def old_key(image, **knobs):
     """The keyer as an older document has it."""
-    return key(image, **{**keyerknobs.upgrade_params("ScreenKeyer"), **knobs})
+    return key(image, **{**keyerknobs.upgrade_params("ScreenKeyer"), "older_intermediate_view": 1, **knobs})
 
 
 class DefaultsTests(unittest.TestCase):
@@ -60,7 +62,7 @@ class DefaultsTests(unittest.TestCase):
         rng = np.random.default_rng(3)
         image = rng.random((9, 11, 4)).astype(np.float32)
         image[..., 1] += 0.3
-        legacy = {k: v for k, v in SPECS["ScreenKeyer"]["params"].items() if k not in keyerknobs.NEW["ScreenKeyer"]}
+        legacy = {k: v for k, v in SPECS["ScreenKeyer"]["params"].items() if k not in keyerknobs.NEW["ScreenKeyer"] and k != "older_intermediate_view"}   # a node that never had the flag has the older view
         for view in CHOICES["keyer_view"][:4]:
             with self.subTest(view=view):
                 np.testing.assert_array_equal(old_key(image, keyer_view=view),

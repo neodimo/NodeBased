@@ -7081,6 +7081,9 @@ class Evaluator:
             share = np.clip(inside_mask - screen, 0.0, 1.0).astype(np.float32)
             despilled = _keyerknobs.replace(method, despilled, rgb, share, _keyerknobs.replace_colour(p, "inside_replace"))
         if view == "intermediate":
+            if not p.get("older_intermediate_view", 1):
+                # The guide: "renders the original source image with the Screen Matte generated in this Keylight node" (for keying in passes).
+                return np.concatenate([image[..., :3], matte], axis=2).astype(np.float32)
             return np.concatenate([despilled, image[..., 3:4]], axis=2).astype(np.float32)
         if view == "composite":
             behind = np.zeros_like(image) if bg is None else bg

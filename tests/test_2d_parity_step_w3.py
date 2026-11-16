@@ -127,6 +127,8 @@ class BlendTilePathTests(unittest.TestCase):
 def key(image, inside=None, outside=None, clean=None, mask=None, **params):
     # The keyer as an older document has it: step H's knobs at the values that leave it as it was (their own tests are in
     # tests/test_2d_fidelity_h_keyers.py).
+    if params.get("keyer_view") == "intermediate":
+        params.setdefault("older_intermediate_view", 1)     # these tests read the despilled colour, which only the older intermediate view shows
     return Evaluator._kernel("ScreenKeyer", dict(SPECS["ScreenKeyer"]["params"], **keyerknobs.upgrade_params("ScreenKeyer"),
                                                  **params), [image, inside, outside, clean, mask])
 

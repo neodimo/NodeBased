@@ -3084,6 +3084,7 @@
     {"nodebased": "bg", "nuke": "bg", "kind": "mapped"}
    ],
    "knobs": [
+    {"nodebased": ["older_intermediate_view"], "kind": "extra", "reason": "NodeBased-only: switches the Intermediate Result view back to the despilled colour with the source alpha on graphs saved before; a new node renders the original source with the screen matte in alpha, as the guide says (nodebased/behaviour2d.py)"},
     {"nodebased": ["screen_red", "screen_green", "screen_blue"], "nuke": ["screenColor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
     {"nodebased": ["alpha_bias_red", "alpha_bias_green", "alpha_bias_blue"], "nuke": ["alphaBias"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
     {"nodebased": ["despill_bias_red", "despill_bias_green", "despill_bias_blue"], "nuke": ["despillBias"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},

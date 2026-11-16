@@ -1698,15 +1698,26 @@ def _screen_keyer_behaviour_cases():
                     f"{guide}: Clip White makes the pixels above the slider opaque: with clip white 0.5 the half mix (0.5769) and the spill pixel (0.9231) become 1, skin and grey stay 1; "
                     "the screen's 0 is checked as well (a matte of 0 stays 0), the pixels below the slider that are not 0 are left out"))
 
-    def despill_view(fx):
+    def despill_final(fx):
         k = fx["K"].astype(np.float64)
         ref = despill_limit(k[..., :3], _K_SCREEN)
         full = np.concatenate([ref, k[..., 3:4]], axis=2)
         return full, _valid_where(full.shape, *_k_columns(fx).values(), channels=(0, 1, 2))
-    out.append(Case("keylight_despill_limits_screen_channel", "Keylight", "ScreenKeyer", knobs + (("show", "Intermediate Result"),), ("K",), "ScreenKeyer",
-                    {**nb, "keyer_view": "intermediate", "screen_replace": "none"}, ("K",), despill_view, "convention",
-                    f"{convention}. The intermediate result carries the despilled colour: the screen colour's largest channel is limited to the mean of the other two at the default despill bias, "
-                    "so the spill pixel's green 0.65 becomes 0.6, skin and grey stay as they are, and the screen colour's green 0.8 becomes 0.15"))
+    out.append(Case("keylight_despill_limits_screen_channel", "Keylight", "ScreenKeyer", knobs + (("show", "Final Result"), ("unPreMultiply", True)), ("K",), "ScreenKeyer",
+                    {**nb, "keyer_view": "final", "screen_replace": "none", "unpremultiply_result": 1}, ("K",), despill_final, "convention",
+                    f"{convention}. The final result with Unpremultiply Result on (its default) carries the despilled colour straight: the screen colour's largest channel is limited to the mean of "
+                    "the other two at the default despill bias, so the spill pixel's green 0.65 becomes 0.6, skin and grey stay as they are, and the screen colour's green 0.8 becomes 0.15"))
+
+    def intermediate(fx):
+        k = fx["K"].astype(np.float64)
+        ref = k.copy()
+        ref[..., 3] = np.where(_k_columns(fx)["screen"], 0.0, 1.0)
+        cols = _k_columns(fx)
+        return ref, _valid_where(ref.shape, *cols.values(), channels=(0, 1, 2)) | _valid_where(ref.shape, cols["screen"], cols["skin"], cols["grey"], channels=(3,))
+    out.append(Case("keylight_intermediate_result_source_and_matte", "Keylight", "ScreenKeyer", knobs + (("show", "Intermediate Result"),), ("K",), "ScreenKeyer",
+                    {**nb, "keyer_view": "intermediate"}, ("K",), intermediate, "guide",
+                    f"{guide}: Intermediate Result 'renders the original source image with the Screen Matte generated in this Keylight node': every colour channel is the source's, untouched by the despill, "
+                    "and the alpha is the matte (0 on the screen, 1 on skin and grey; the mixed pixels' alpha is left out here, the cases above score it)"))
     return out
 
 

@@ -152,6 +152,40 @@ class ShuffleCopyConstantsTests(unittest.TestCase):
                 np.testing.assert_allclose(tiled(g.doc, edge), full, atol=1e-5)
 
 
+class KeylightIntermediateViewTests(unittest.TestCase):
+    """The Intermediate Result view renders the original source with the screen matte in alpha (guide); a graph saved before keeps the despilled colour with the
+    source's alpha, bit for bit."""
+
+    KEY = {"screen_red": 0.1, "screen_green": 0.8, "screen_blue": 0.2, "screen_replace": "none"}
+
+    def kernel(self, **knobs):
+        from nodebased.core import SPECS
+        from nodebased.imaging import Evaluator
+        k = ruler.make_fixtures()["K"]
+        params = dict(SPECS["ScreenKeyer"]["params"], **self.KEY, **knobs)
+        return k, np.asarray(Evaluator._kernel("ScreenKeyer", params, [k, None, None, None, None, None]), np.float64)
+
+    def test_a_new_node_shows_the_source_and_the_matte(self):
+        k, out = self.kernel(keyer_view="intermediate")
+        _, matte = self.kernel(keyer_view="screen_matte")
+        np.testing.assert_array_equal(out[..., :3], k[..., :3])
+        np.testing.assert_array_equal(out[..., 3], matte[..., 3])
+
+    def test_the_older_view_is_the_despilled_colour_with_the_source_alpha(self):
+        k, out = self.kernel(keyer_view="intermediate", older_intermediate_view=1)
+        np.testing.assert_allclose(out[..., :3][-1, 12], [0.8, 0.6, 0.4], atol=1e-6)     # the spill pixel, despilled
+        np.testing.assert_array_equal(out[..., 3], k[..., 3])
+
+    def test_a_saved_node_gets_the_older_view_and_renders_as_before(self):
+        from nodebased.core import SPECS, upgrade_document, validate
+        from tests.test_2d_behaviour_filter_a import old_document
+        loaded = old_document("ScreenKeyer", dict(SPECS["ScreenKeyer"]["params"], keyer_view="intermediate"), ("older_intermediate_view",), source="Constant")
+        self.assertEqual(loaded["nodes"]["n"]["params"]["older_intermediate_view"], 1)
+        validate(upgrade_document(loaded))
+        from nodebased.core import SPECS as specs
+        self.assertEqual(specs["ScreenKeyer"]["params"]["older_intermediate_view"], 0)     # a new node follows the guide
+
+
 class PosterizeLayoutTests(unittest.TestCase):
     def test_main_tab_follows_nukes_order(self):
         """Nuke's Posterize tab: channels, Colors, then the mask and (un)premult rows every node has."""
