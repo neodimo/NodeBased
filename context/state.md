@@ -1,5 +1,28 @@
 ## Lane 2 step P (2:30 PM on 2026-11-16 PDT): behaviour cases for ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove and Posterize
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:05 PM on 2026-11-16 PDT)
+
+`main` moved `d495698b` -> `96ff4df6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `96ff4df6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1116-1435.log`, started 2:35 PM): **Ran 9910 tests in 1783.837 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step P (Mon 11/16): behaviour checks for the keyers and channel nodes that have none (ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove, Posterize).** Commits:
+  - `da644f60` Lane 2 step P: correct the case count in the TASKLOG note
+  - `b556a489` Lane 2 step P: Keylight unpremultiply case, regenerated fidelity report, step notes
+  - `173f556c` Lane 2 step P: Keylight's Intermediate Result shows the original source with the screen matte, as the guide says; older graphs keep the despilled view (older_intermediate_view)
+  - `f7fc923e` Lane 2 step P: ShuffleCopy takes black and white as channel sources on both paths; IBKGizmo weight cases; tests for the step's cases, probes, tiles and layout
+  - `2bdd08cd` Lane 2 step P: behaviour cases for ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove and Posterize; probes for ShuffleCopy and Remove knobs; Posterize Colors counted as whole numbers
+  Diff: 19 files changed, 810 insertions(+), 102 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-parity`, fast-forwarded to main 7a43a947 first. Details and numbers are in the TASKLOG note of the same date. Behaviour checked 97 -> 104 of 167;
 overall 96.7 -> 96.7 (98.8 counting existing nodes). Kernels changed: Keylight's Intermediate Result view (legacy flag `older_intermediate_view`, on load via
 `behaviour2d.upgrade_params`, no schema bump) and ShuffleCopy's black/white sources (additive). Regenerated `docs/PARITY_2D_FIDELITY.md` and its bundled copy (the integrator

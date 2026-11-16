@@ -1,3 +1,9 @@
+## 2026-11-16 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step P (Mon 11/16): behaviour checks for the keyers and channel nodes that have none (ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove, Posterize) (integrator tick)
+
+- **What was done:** `main` `d495698b` -> `96ff4df6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `96ff4df6`: Ran 9910 tests in 1783.837 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-16 — Lane 2 step P (2D behaviour): behaviour cases for the keyers and channel nodes that had none
 
 - **What was done (evidence):** 32 scored behaviour cases for ChromaKeyer (4), Keylight (7), IBKColor (2), IBKGizmo (5), ShuffleCopy (7), Remove (6) and Posterize (1),
