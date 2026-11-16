@@ -1708,6 +1708,19 @@ def _screen_keyer_behaviour_cases():
                     f"{convention}. The final result with Unpremultiply Result on (its default) carries the despilled colour straight: the screen colour's largest channel is limited to the mean of "
                     "the other two at the default despill bias, so the spill pixel's green 0.65 becomes 0.6, skin and grey stay as they are, and the screen colour's green 0.8 becomes 0.15"))
 
+    def premultiplied_final(fx):
+        k = fx["K"].astype(np.float64)
+        cols = _k_columns(fx)
+        ref = k.copy()
+        matte = screen_difference_matte(k[..., :3], _K_SCREEN)
+        ref[..., :3] = despill_limit(k[..., :3], _K_SCREEN) * matte[..., None]
+        ref[..., 3] = matte
+        return ref, _valid_where(ref.shape, cols["screen"], cols["skin"], cols["grey"])
+    out.append(Case("keylight_unpremultiply_off_is_premultiplied", "Keylight", "ScreenKeyer", knobs + (("show", "Final Result"), ("unPreMultiply", False)), ("K",), "ScreenKeyer",
+                    {**nb, "keyer_view": "final", "screen_replace": "none", "unpremultiply_result": 0}, ("K",), premultiplied_final, "guide",
+                    f"{guide}: 'Unpremultiply Result [...] When disabled, the key result is not unpremultiplied' (the final result is 'a premultiplied RGBA foreground'): the colour is multiplied by the "
+                    "matte, so the screen is black and skin and grey (matte 1, nothing for the despill to take) keep their colour; the mixed pixels are left out"))
+
     def intermediate(fx):
         k = fx["K"].astype(np.float64)
         ref = k.copy()

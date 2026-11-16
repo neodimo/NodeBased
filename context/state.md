@@ -1,3 +1,10 @@
+## Lane 2 step P (2:30 PM on 2026-11-16 PDT): behaviour cases for ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove and Posterize
+
+Branch `openclaw/nb-2d-parity`, fast-forwarded to main 7a43a947 first. Details and numbers are in the TASKLOG note of the same date. Behaviour checked 97 -> 104 of 167;
+overall 96.7 -> 96.7 (98.8 counting existing nodes). Kernels changed: Keylight's Intermediate Result view (legacy flag `older_intermediate_view`, on load via
+`behaviour2d.upgrade_params`, no schema bump) and ShuffleCopy's black/white sources (additive). Regenerated `docs/PARITY_2D_FIDELITY.md` and its bundled copy (the integrator
+rebuilds once on the stacked tree; Lane 9 regenerates it in parallel).
+
 ## Lane 6 Fluids 17 step C (1:08 PM on 2026-11-12 PDT): persistent swirl in the up-res node, off by default
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (2:25 PM on 2026-11-16 PDT)

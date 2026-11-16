@@ -1,3 +1,25 @@
+## 2026-11-16 — Lane 2 step P (2D behaviour): behaviour cases for the keyers and channel nodes that had none
+
+- **What was done (evidence):** 31 scored behaviour cases for ChromaKeyer (4), Keylight (7), IBKColor (2), IBKGizmo (5), ShuffleCopy (7), Remove (6) and Posterize (1),
+  in `tools/nuke_fidelity_cases_color.py` on new keyer fixtures K, KS, KI and KB (`tools/nuke_fidelity_cases.py`). All pass. Behaviour checked: 97 -> 104 of 167 nodes.
+  Overall fidelity 96.7 -> 96.7 (98.7 -> 98.8 counting only the nodes NodeBased has); Keyer group 93.2 -> 93.3, Channel 99.1 -> 99.2, Color 97.6 -> 97.7;
+  "Knobs that change no pixels" still 1 (Flare). Per node before -> after: ShuffleCopy 100.0 -> 100.0, Remove 97.1 -> 98.3, Posterize 87.7 -> 99.0,
+  ChromaKeyer 98.9 -> 99.2, Keylight 98.8 -> 99.1, IBKColor 97.2 -> 97.9, IBKGizmo 95.7 -> 96.7.
+- **Kernels changed:** (1) Keylight (ScreenKeyer) Intermediate Result now renders the original source colour with the screen matte in alpha, as the guide says;
+  it showed the despilled colour with the source alpha. Graphs saved before keep the old view (`older_intermediate_view` = 1, set on load by `behaviour2d.upgrade_params`,
+  no schema bump; a missing flag in a direct kernel call reads as the older view). (2) ShuffleCopy takes "0" and "1" (black and white) as channel sources on the
+  evaluator and both tile paths (`smallnodes.shuffle_copy_channel`); additive, no saved document holds them.
+- **Other tooling changes:** acts probes for ShuffleCopy and Remove (`tools/nuke_fidelity_requirements.py`, named layers on the probe's inputs; every paired knob acts);
+  a Remove case runner (`_remove` in `run_nodebased`); Posterize's Colors counted as a whole-number knob (`_COUNT_KNOBS`, widget types 0/1 -> 1/1).
+  New tests: `tests/test_2d_behaviour_keyer_p.py` (cases, not-a-pass-through, probes, tiles for ScreenKeyer/IBKColor/Posterize/ShuffleCopy, intermediate view, layout).
+- **Not scored, with reasons in the cases:** ChromaKeyer screen gain/balance/chroma gain/black and white point/alpha bias/replace modes/inside mask (no formula; direction only, in
+  tests/test_2d_behaviour_keyer.py); Keylight despill and alpha bias, replace methods (no formula); IBKColor size, darks, lights, patch black and the fill kernel; IBKGizmo
+  luminance match, use bkg luminance/chroma, yellow/cyan/magenta, screen range; ShuffleCopy second output layer (array comparison reads the primary output);
+  Posterize between 0 and 1 (round(x(n-1))/(n-1) and floor(x n)/n are both in use; they agree only at 0, 1 and two colors).
+- **Open:** Posterize `channels` defaults to rgb here and `all` in Nuke (new nodes would also posterise alpha); Remove's `channels` default is empty here and `all` in Nuke;
+  Keylight/ChromaKeyer screen colour default differs (0.1 0.8 0.2 here, 0 0 0 in Nuke, kept on purpose so a new node keys green); IBKColor `off`/`mult` are single numbers here and RGB
+  triples in Nuke (needs a kernel change); a real Nuke render of the K fixture would replace every convention number in these cases.
+
 ## 2026-11-16 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback on the RTX: finish the display-only played frame (tests switch on/off, then measure) (integrator tick)
 
 - **What was done:** `main` `7a43a947` -> `3fc23bc7` plus this docs commit. Evidence and per-lane commit
