@@ -1523,7 +1523,7 @@ class Evaluator:
         if kind in gpu2d.KINDS:
             try:
                 staged = backend.stage(kind, params, images, keys, key)
-                if display_only is not None and staged.data == staged.display:
+                if display_only is not None:
                     from . import carddisplay
                     settings, display_key = display_only
                     if carddisplay.supported(settings[3]):

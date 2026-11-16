@@ -53,7 +53,7 @@ def _display_shader(view):
 layout(local_size_x=8, local_size_y=8) in;
 layout(set=0,binding=0,std430) readonly buffer Source { vec4 pixels[]; } src;
 layout(set=0,binding=1,std430) buffer Picture { uint pixels[]; } dst;
-layout(set=0,binding=2) uniform Params { vec4 size; vec4 disp0; vec4 disp1; } v;
+layout(set=0,binding=2) uniform Params { vec4 size; vec4 source; vec4 disp0; vec4 disp1; } v;
 layout(set=1,binding=0,std430) readonly buffer OcioTables { vec4 data[]; } ocio_tables;
 ''' + carddisplay.view_source(view) + '''
 void main() {
@@ -61,7 +61,11 @@ void main() {
     int width = int(v.size.x);
     if (t.x >= width || t.y >= int(v.size.y)) { return; }
     int i = t.y * width + t.x;
-    vec4 p = src.pixels[i];
+    ivec2 from = t + ivec2(int(v.source.z), int(v.source.w));
+    vec4 p = vec4(0.0);
+    if (from.x >= 0 && from.y >= 0 && from.x < int(v.source.x) && from.y < int(v.source.y)) {
+        p = src.pixels[from.y * int(v.source.x) + from.x];
+    }
     float channel = v.disp0.y;
     vec3 rgb;
     if (channel > 3.5) {
@@ -1472,11 +1476,13 @@ class GPU2D:
                     display_pipeline, table_buffer, table_size, needs_tables = self._display_pipeline(settings[3])
                 except (carddisplay.Unsupported, ValueError) as exc:
                     raise Unsupported(f"display view: {exc}") from exc
-                width, height = final.data.width, final.data.height
+                width, height = final.display.width, final.display.height
                 display_payload = width * height * 4
                 display_buffer, display_bytes = self._acquire(display_payload)
                 held.append((display_buffer, display_bytes))
                 uniform_data = np.asarray([width, height, 0, 0,
+                                           final.data.width, final.data.height,
+                                           final.display.x - final.data.x, final.display.y - final.data.y,
                                            *carddisplay.uniform_values(settings)], np.float32)
                 uniform = device.create_buffer_with_data(data=uniform_data.tobytes(),
                                                          usage=wgpu.BufferUsage.UNIFORM)

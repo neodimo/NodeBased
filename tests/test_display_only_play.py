@@ -105,6 +105,27 @@ class DisplayOnlyCardTests(unittest.TestCase):
                     delta = np.abs(result.pixels[..., :3].astype(np.int16) - cpu.astype(np.int16))
                     self.assertLessEqual(int(delta.max()), 1)
 
+    def test_display_windows_inside_and_outside_data_match_processor(self):
+        if self.backend is None:
+            self.skipTest(gpu2d.GPU2D.open_error)
+        rng = np.random.default_rng(31)
+        pixels = rng.uniform(-0.2, 1.3, (24, 32, 4)).astype(np.float32)
+        pixels[..., 3] = rng.uniform(0.0, 1.0, (24, 32))
+        data = Region(0, 0, 32, 24)
+        settings = carddisplay.settings_from(0.5, "RGB", "black", "sRGB", {"gamma": 1.3})
+        params = dict(SPECS["Grade"]["params"])
+        for name, display in (("cropped", Region(4, 3, 20, 15)),
+                              ("enlarged", Region(-4, -3, 40, 30))):
+            with self.subTest(window=name):
+                source = Raster(pixels, data, display)
+                reference = self.backend.run(self.backend.stage("Grade", params, [source]))
+                result = self.backend.run_display(self.backend.stage("Grade", params, [source]),
+                                                  settings, (name, 1, self.backend.epoch))
+                expected = to_qimage(reference.to_display(), 0.5, "RGB", "black", "sRGB", {"gamma": 1.3})
+                cpu = np.frombuffer(expected.bits(), np.uint8).reshape(display.height, display.width, 3)
+                delta = np.abs(result.pixels[..., :3].astype(np.int16) - cpu.astype(np.int16))
+                self.assertLessEqual(int(delta.max()), 1)
+
 
 class DisplayOnlyWindowTests(unittest.TestCase):
     def test_play_handoff_then_pause_restores_float(self):
