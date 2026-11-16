@@ -1,6 +1,6 @@
 ## 2026-11-16 — Lane 2 step P (2D behaviour): behaviour cases for the keyers and channel nodes that had none
 
-- **What was done (evidence):** 31 scored behaviour cases for ChromaKeyer (4), Keylight (7), IBKColor (2), IBKGizmo (5), ShuffleCopy (7), Remove (6) and Posterize (1),
+- **What was done (evidence):** 32 scored behaviour cases for ChromaKeyer (4), Keylight (7), IBKColor (2), IBKGizmo (5), ShuffleCopy (7), Remove (6) and Posterize (1),
   in `tools/nuke_fidelity_cases_color.py` on new keyer fixtures K, KS, KI and KB (`tools/nuke_fidelity_cases.py`). All pass. Behaviour checked: 97 -> 104 of 167 nodes.
   Overall fidelity 96.7 -> 96.7 (98.7 -> 98.8 counting only the nodes NodeBased has); Keyer group 93.2 -> 93.3, Channel 99.1 -> 99.2, Color 97.6 -> 97.7;
   "Knobs that change no pixels" still 1 (Flare). Per node before -> after: ShuffleCopy 100.0 -> 100.0, Remove 97.1 -> 98.3, Posterize 87.7 -> 99.0,
