@@ -1,3 +1,9 @@
+## 2026-11-16 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback on the RTX: finish the display-only played frame (tests switch on/off, then measure) (integrator tick)
+
+- **What was done:** `main` `7a43a947` -> `3fc23bc7` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `3fc23bc7`: Ran 9894 tests in 1771.595 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-13 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback on the RTX: cut what crosses the USB4 link each frame (integrator tick)
 
 - **What was done:** `main` `4e8c789b` -> `3ccd1d71` plus this docs commit. Evidence and per-lane commit
