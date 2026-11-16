@@ -337,6 +337,48 @@ def probe_acts(kind, params, fx):
     key = (kind, tuple(sorted(params)))
     if key in _PROBES:
         return _PROBES[key]
+    if kind in ("ShuffleCopy", "Remove"):
+        # Lane 2 step P (11/16): both run on rasters that carry named layers, which the array kernel never sees. The probe feeds them the fixture pictures
+        # with a `depth` layer on each input (ShuffleCopy) or three layers on one (Remove), moves each param off its default and compares the picture,
+        # the layer names and the layers' pixels.
+        from nodebased import core
+        from nodebased.imaging import Evaluator
+        from nodebased.raster import Raster
+        a, b = Raster.of(fx["A"]), Raster.of(fx["B"])
+        depth = lambda value: Raster.of(np.full(fx["A"].shape, value, np.float32))
+        if kind == "ShuffleCopy":
+            first = Raster(a.pixels, a.data, a.display, {"depth": depth(0.3)})
+            second = Raster(b.pixels, b.data, b.display, {"depth": depth(0.6)})
+            slots = [first, second]
+        else:
+            slots = [Raster(a.pixels, a.data, a.display, {n: depth(0.25 * (i + 1)) for i, n in enumerate(("depth", "mask", "id"))})]
+        base = dict(core.SPECS[kind]["params"])
+
+        def signature(p):
+            made = Evaluator._windowed_kernel(kind, p, slots)
+            parts = [np.asarray(made.pixels, np.float64)]
+            for name in sorted(made.layers or {}):
+                parts.append(np.asarray(made.layers[name].pixels, np.float64))
+                parts.append(np.full((1,), float(len(name))))
+            return parts, sorted(made.layers or {})
+        reference = signature(base)
+        moves = {"layer1": ["depth"], "layer2": ["depth"], "layers": ["depth", "all"], "channels2": ["mask"], "channels3": ["mask"], "channels4": ["id"]}
+        acts = {}
+        for name in params:
+            if name not in base:
+                continue
+            acts[name] = False
+            for value in (moves.get(name) or probe_moves(kind, name, base[name])):
+                trial = dict(base, **{name: value})
+                if kind == "Remove" and name in ("channels2", "channels3", "channels4"):
+                    trial["layers"] = "depth"          # the extra rows add to the first one's layers, so move one of the others on top of it
+                parts, names = signature(trial)
+                ref = signature(dict(base, **({"layers": "depth"} if kind == "Remove" and name in ("channels2", "channels3", "channels4") else {})))
+                if names != ref[1] or any(x.shape != y.shape or np.abs(x - y).max() > ACT_TOL for x, y in zip(parts, ref[0])):
+                    acts[name] = True
+                    break
+        _PROBES[key] = acts
+        return acts
     if kind == "DustBust":
         from nodebased.core import Dispatcher, empty_document
         from nodebased.imaging import Evaluator

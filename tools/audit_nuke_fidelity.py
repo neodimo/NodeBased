@@ -422,6 +422,8 @@ _COUNT_KNOBS |= {("HistEQ", "histeqbins"), ("GenerateLUT", "lut1d")}
 # Roto's Motion Blur tab exposes sample counts (whole-number knobs), as do the per-shape settings.
 _COUNT_KNOBS |= {(kind, "global_motionblur") for kind in ("Roto", "RotoPaint")}
 _COUNT_KNOBS |= {(kind, knob) for kind in ("Roto", "RotoPaint") for knob in ("motionblur", "lifetime_start", "lifetime_end")}
+# Lane 2 step P (11/16): Posterize's Colors is a count of levels (default 16), a whole number in Nuke as the other count knobs are, which the guide's number cannot say.
+_COUNT_KNOBS |= {("Posterize", "Colors")}
 _FLOAT_KNOBS = {("IBKGizmo", "level"), ("Kronos", "timingFrame2"), ("OFlow", "timingFrame2")}
 # Knobs whose Nuke widget the guide's default cannot tell: IBKColor's Size (a pixel size, default 10) and multi ("patch black", default 0, which
 # the gizmo may show as a check box or a number). Left unmeasured and counted as such, as the rule asks.

@@ -101,6 +101,35 @@ def _fixture_point():
     return out
 
 
+# Keyer plates (lane 2 step P). Colours chosen so each expected matte is a number that can be stated by hand.
+KEY_SCREEN = (0.1, 0.8, 0.2)                    # a green screen
+KEY_SKIN = (0.8, 0.5, 0.4)                      # a skin tone, far from the screen
+KEY_HALF = (0.45, 0.65, 0.3)                    # half screen, half skin (a mixed edge pixel)
+KEY_GREY = (0.5, 0.5, 0.5)
+KEY_SPILL = (0.8, 0.65, 0.4)                    # skin with green spill: green above the mean of red and blue (0.6)
+KEY_BLUE_SCREEN = (0.1, 0.2, 0.8)
+
+
+def _fixture_keyer():
+    """K: columns 0 to 3 the screen colour, 4 to 7 skin, 8 to 11 the half mix of the two, 12 to 15 grey in the top half and skin with spill in the bottom half.
+    Alpha is 1 everywhere."""
+    out = np.ones((H, W, 4), np.float32)
+    out[:, 0:4, :3] = KEY_SCREEN
+    out[:, 4:8, :3] = KEY_SKIN
+    out[:, 8:12, :3] = KEY_HALF
+    out[:H // 2, 12:16, :3] = KEY_GREY
+    out[H // 2:, 12:16, :3] = KEY_SPILL
+    return out
+
+
+def _fixture_screen_island(screen):
+    """A plate of one screen colour with a 4 x 4 skin-tone island (x 6 to 9, y 4 to 7), alpha 1."""
+    out = np.ones((H, W, 4), np.float32)
+    out[..., :3] = screen
+    out[4:8, 6:10, :3] = KEY_SKIN
+    return out
+
+
 def make_fixtures():
     a, b = _fixtures_ab()
     mask = np.zeros((H, W, 4), np.float32)
@@ -109,7 +138,9 @@ def make_fixtures():
             i = y * W + x
             for c in range(4):
                 mask[y, x, c] = _MASK[(i // (c + 1) + c) % len(_MASK)]
-    return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log(), "E": _fixture_edge(), "P": _fixture_point()}
+    return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log(), "E": _fixture_edge(), "P": _fixture_point(),
+            "K": _fixture_keyer(), "KS": np.concatenate([np.full((H, W, 3), KEY_SCREEN, np.float32), np.ones((H, W, 1), np.float32)], axis=2),
+            "KI": _fixture_screen_island(KEY_SCREEN), "KB": _fixture_screen_island(KEY_BLUE_SCREEN)}
 
 
 # ---------------------------------------------------------------------------------------------------- Merge formulas
@@ -561,6 +592,26 @@ def _run_stamped_document(case):
     return canvas
 
 
+def _run_remove_document(case):
+    """Run a Remove case. Remove acts on named layers, which an array kernel never sees, so the picture is A with three layers (`depth`, `mask`, `id`)
+    riding on it; the answer is A's own pixels with one marker pixel per layer in the bottom row (x 0, 1, 2 = depth, mask, id), all four channels 1
+    when the layer is still there after the node and 0 when it is gone."""
+    from nodebased import core
+    from nodebased.imaging import Evaluator
+    from nodebased.raster import Raster
+    fx = make_fixtures()
+    names = ("depth", "mask", "id")
+    base = Raster.of(fx["A"])
+    layers = {name: Raster.of(np.full((H, W, 4), 0.25 * (i + 1), np.float32)) for i, name in enumerate(names)}
+    source = Raster(base.pixels, base.data, base.display, layers)
+    knobs = {k: v for k, v in case.nb_params.items() if k != "_remove"}
+    made = Evaluator._windowed_kernel("Remove", dict(core.SPECS["Remove"]["params"], **knobs), [source])
+    out = np.asarray(made.pixels, dtype=np.float64).copy()
+    for i, name in enumerate(names):
+        out[H - 1, i, :] = 1.0 if name in (made.layers or {}) else 0.0
+    return out
+
+
 def run_nodebased(case, fx=None):
     """Run a case on NodeBased's evaluator kernel; returns the output array, or None when NodeBased cannot express the case.
 
@@ -570,6 +621,8 @@ def run_nodebased(case, fx=None):
     The array returned is what the viewer shows of the result: the format's rectangle, zero where the data window does not reach."""
     if case.nb_params is None:
         return None
+    if "_remove" in case.nb_params:
+        return _run_remove_document(case)
     if "_shapes" in case.nb_params or "_items" in case.nb_params:
         return _run_payload_document(case)
     if "_tracks" in case.nb_params:
