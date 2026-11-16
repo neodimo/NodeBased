@@ -317,6 +317,8 @@ KNOB_LAYOUT = {
                   help="Erode the edges this much afterwards: positive thins them, negative thickens them."),
         KnobGroup("float_slider", ("edge_blur_quality",), label="Blur quality", soft_range=(1, 100),
                   help="The largest blur worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
+        KnobGroup("bool", ("legacy_edge_prewitt",), label="Legacy Prewitt scale",
+                  help="Divide the Prewitt response by three, as graphs saved before the published masks were used did. Set on those graphs."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Emboss": _groups(KnobGroup("enum", ("emboss_type",), label="Emboss type", help="Traditional adds the relief to the picture; effect outputs the relief alone, about mid grey."),
                       KnobGroup("float_slider", ("angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("width",), soft_range=(0, 20)),
@@ -1142,6 +1144,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("blur",), label="Blur channel"), KnobGroup("float", ("blur_scale",), label="Blur scale"),
         KnobGroup("string", ("maskChannel",), label="Mask channel"), KnobGroup("bool", ("invert_mask",), label="Invert mask"),
         KnobGroup("bool", ("premultiplied",), label="Premultiplied"), KnobGroup("enum", ("filter",)),
+        KnobGroup("bool", ("legacy_idistort",), label="Legacy direction",
+                  help="Read the vectors the older way: a positive U moves the picture right and the offset is added. Set on graphs saved before IDistort followed the guide, where U and V say where a pixel comes from and the offset is subtracted."),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "SplineWarp": _groups(
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),

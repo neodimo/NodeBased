@@ -194,23 +194,24 @@ class STMapTests(Scratch):
 
 class IDistortTests(Scratch):
     def test_constant_offset_map_moves_the_picture_by_that_many_pixels(self):
-        _, raster = self.run_node("IDistort", dot_image(10, 8), dict(uv_layer="motion", filter="nearest"),
+        _, raster = self.run_node("IDistort", dot_image(10, 8), dict(uv_layer="motion", filter="nearest", legacy_idistort=1),
                                   layers=dict(motion=constant_layer(5.0, -2.0)))
         want = dot_image(15, 6)
         np.testing.assert_allclose(raster.pixels, want, atol=1e-6)
 
     def test_zero_map_is_identity_and_scale_and_offset_apply_before_sampling(self):
-        _, zero = self.run_node("IDistort", texture(), dict(uv_layer="motion"),
+        _, zero = self.run_node("IDistort", texture(), dict(uv_layer="motion", legacy_idistort=1),
                                 layers=dict(motion=constant_layer(0.0, 0.0)))
         np.testing.assert_allclose(zero.pixels, texture(), atol=1e-6)
         _, scaled = self.run_node("IDistort", dot_image(10, 8), dict(uv_layer="motion", filter="nearest", uv_scale_x=2.0,
-                                                                     uv_scale_y=-1.0, uv_offset_x=1.0, uv_offset_y=0.0),
+                                                                     uv_scale_y=-1.0, uv_offset_x=1.0, uv_offset_y=0.0,
+                                                                     legacy_idistort=1),
                                   layers=dict(motion=constant_layer(2.0, 3.0)))
         # d = ((2 + 1) * 2, (3 + 0) * -1) = (6, -3)
         np.testing.assert_allclose(scaled.pixels, dot_image(16, 5), atol=1e-6)
 
     def test_fractional_offsets_interpolate_and_a_wired_map_works(self):
-        _, raster = self.run_node("IDistort", dot_image(10, 8), dict(filter="bilinear"),
+        _, raster = self.run_node("IDistort", dot_image(10, 8), dict(filter="bilinear", legacy_idistort=1),
                                   uv_image=constant_layer(0.5, 0.0))
         self.assertAlmostEqual(float(raster.pixels[8, 10, 0]), 0.5, places=5)
         self.assertAlmostEqual(float(raster.pixels[8, 11, 0]), 0.5, places=5)

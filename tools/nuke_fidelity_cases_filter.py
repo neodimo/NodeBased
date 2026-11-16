@@ -271,10 +271,10 @@ def cases():
     out = []
 
     def case(id, nuke, nuke_class, nuke_knobs, nb_kind, nb_params, expected, source, statement, unscored="", nuke_inputs=("A",),
-             nb_inputs=("A",), inexpressible=""):
+             nb_inputs=("A",), inexpressible="", tolerance=0.0):
         out.append(Case(id=id, nuke=nuke, nuke_class=nuke_class, nuke_knobs=nuke_knobs, nuke_inputs=nuke_inputs, nb_kind=nb_kind,
                         nb_params=nb_params, nb_inputs=nb_inputs, expected=expected, source=source, statement=statement,
-                        inexpressible=inexpressible, unscored=unscored))
+                        inexpressible=inexpressible, unscored=unscored, tolerance=tolerance))
 
     def interior(reach, fn, rgba=(0, 1, 2, 3)):
         """A reference that applies `fn` to the channels in `rgba`, leaves the others, and is valid `reach` pixels in from the edge."""
@@ -511,19 +511,59 @@ def cases():
              "filter, whose weights are the plain average over the radius; see the Blur cases)")
 
     # ---------------------------------------------------------------------------------------------------- EdgeDetect
-    for method in ("sobel", "prewitt", "simple"):
+    sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], np.float64)
+    prewitt_x = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]], np.float64)
+
+    def gradient_magnitude(weights_x):
+        """The response of a 3 x 3 mask pair (the mask and its quarter turn) on the mean of the colour channels: the length of the gradient."""
+        def fn(src):
+            lum = src[..., :3].mean(axis=2)[..., None]
+            mag = np.hypot(correlate(lum, weights_x)[..., 0], correlate(lum, weights_x.T)[..., 0])
+            return np.repeat(mag[..., None], 4, axis=2)
+        return fn
+
+    def flat_parts(src):
+        cols = np.arange(src.shape[1])
+        return np.broadcast_to(((cols <= 5) | (cols >= 10))[None, :, None], src.shape).copy()
+
+    edge_note = ("the guide lists the detectors (simple, sobel, prewitt) and gives no kernel or scale; the response here is the published "
+                 "form, the length of the gradient from the unscaled 3 x 3 masks (Sobel: 1 2 1 weights; Prewitt: 1 1 1 weights; Sobel and "
+                 "Feldman 1968, Prewitt 1970), read on the mean of the colour channels; the colour channels take the response and alpha is "
+                 "left as it is; compared one pixel in from the edge")
+    for method, weights in (("sobel", sobel_x), ("prewitt", prewitt_x)):
         case(f"edgedetect_{method}_response", "EdgeDetect", "EdgeDetectWrapper", (("edgedetector", method),), "EdgeDetect",
-             {"edge_type": method.capitalize()}, interior(1, lambda s: s), "convention", f"EdgeDetect {method}: the response's scale",
-             unscored="the guide lists the three detectors and says nothing of their kernels, normalisation, or how the channels combine; "
-                      "tests check that a flat image gives no edge, that a step gives an edge on both sides of it, and that "
-                      "the threshold, blur and erode knobs act")
+             {"edge_type": method.capitalize(), "channels": "all"}, on("S", 1, gradient_magnitude(weights), rgba=(0, 1, 2)), "convention",
+             f"EdgeDetect {method} on a step (0.2 to 0.8): {edge_note}", nb_inputs=("S",))
+    case("edgedetect_simple_response", "EdgeDetect", "EdgeDetectWrapper", (("edgedetector", "simple"),), "EdgeDetect", {"edge_type": "Sobel", "channels": "all"},
+         on("S", 1, lambda s: s), "convention", "EdgeDetect simple: the response's scale",
+         unscored="the guide lists simple beside sobel and prewitt and gives no kernel for it; NodeBased's Edge Detector menu has no simple "
+                  "entry (its third entry is Laplacian), so the detector cannot even be chosen; tests/test_2d_behaviour_filter_q.py checks "
+                  "what every detector shares")
+    for method in ("sobel", "prewitt"):
+        case(f"edgedetect_{method}_flat_regions_give_no_edge", "EdgeDetect", "EdgeDetectWrapper", (("edgedetector", method),), "EdgeDetect",
+             {"edge_type": method.capitalize(), "channels": "all"}, on("S", 0, lambda s: np.concatenate([np.zeros_like(s[..., :3]), s[..., 3:]], axis=2), valid=flat_parts),
+             "convention", f"EdgeDetect {method}: a picture with no change (the parts of the step picture at least two pixels from the edge) has no edge, "
+             "so the response is zero there; " + edge_note, nb_inputs=("S",))
 
     # ------------------------------------------------------------------------------------------------------- Emboss
+    emboss_note = ("the guide says Emboss 'offsets the original input using the Angle and Width controls' (traditional 'applies the emboss "
+                   "effect to the input image') and gives no formula or scale, so only what follows from any reading is scored: the "
+                   "relief is the slope of the brightness along Angle times Width (Angle 0 along x, turning counter-clockwise, the usual "
+                   "convention), so with no slope along Angle or no Width there is no relief and the traditional output is the input")
+    case("emboss_traditional_flat_regions_are_the_input", "Emboss", "Emboss", (("Angle", 0.0), ("Width", 1.0), ("optype", "traditional")), "Emboss",
+         {"angle": 0.0, "width": 1.0, "emboss_type": "traditional", "edge_detector": "sobel", "edge_channels": "rgb"}, on("S", 0, lambda s: s, valid=flat_parts),
+         "convention", "Emboss traditional on the flat parts of a step picture: no slope, so the picture comes back unchanged; " + emboss_note, nb_inputs=("S",))
+    case("emboss_traditional_width_zero_is_the_input", "Emboss", "Emboss", (("Angle", 0.0), ("Width", 0.0), ("optype", "traditional")), "Emboss",
+         {"angle": 0.0, "width": 0.0, "emboss_type": "traditional", "edge_detector": "sobel", "edge_channels": "rgb"}, on("A", 0, lambda s: s),
+         "convention", "Emboss traditional at width 0: no relief, the picture comes back unchanged; " + emboss_note)
+    case("emboss_traditional_angle_along_the_step_is_the_input", "Emboss", "Emboss", (("Angle", 90.0), ("Width", 1.0), ("optype", "traditional")), "Emboss",
+         {"angle": 90.0, "width": 1.0, "emboss_type": "traditional", "edge_detector": "sobel", "edge_channels": "rgb"}, on("S", 1, lambda s: s),
+         "convention", "Emboss traditional at angle 90 on a vertical step: the slope along the angle is zero everywhere, so the picture comes back "
+         "unchanged; " + emboss_note, nb_inputs=("S",))
     case("emboss_traditional_response", "Emboss", "Emboss", (("Angle", 0.0), ("Width", 1.0)), "Emboss", {"angle": 0.0, "width": 1.0},
-         interior(1, lambda s: s), "convention", "Emboss traditional: the pixels at an angle and width",
-         unscored="the guide says Emboss 'offsets the original input using the Angle and Width controls' and gives no formula, "
-                  "shading origin or scale; tests check that the picture's relief is symmetric when the angle turns by 180 degrees "
-                  "and that angle and width act")
+         interior(1, lambda s: s), "convention", "Emboss traditional: the relief's scale at an angle and width",
+         unscored="the guide gives no formula, shading origin or scale for the relief; tests/test_2d_behaviour_filter_q.py checks that the "
+                  "relief turns over with the angle, grows with the width and sits on the steep side of a step")
     # ================================================================================================ the Transform group (step B)
     axis_note = ("positive translate x moves the picture right and positive translate y up the screen (the guide's Position page: "
                  "'Positive values move the image up or to the right'; Transform and Position share Nuke's axes). Rows count from the top "
@@ -860,6 +900,7 @@ def cases():
                          "scaled-down pixel's centre lies on the boundary between two source pixels) nor how the tile edges round off when the "
                          "size does not divide; tests/test_2d_behaviour_transform.py checks the layout (every tile is the same scaled picture), "
                          "the mirrors and the filters")
+    _uv_cases(Case, out)
     _draw_cases(Case, out)
     _roto_cases(Case, out)
     _rotopaint_cases(Case, out)
@@ -913,14 +954,103 @@ def cases():
     return out
 
 
+def _uv_cases(Case, out):
+    """STMap and IDistort (the Transform group, step Q). Both read a picture and a uv map or vector field, compared where every tap lies inside the
+    picture (the guide does not say what lies outside), at whole-pixel positions so the filter does not matter.
+
+    STMap page: 'The U and V values are the absolute position of the source pixel. The values are normalized to be between 0 and 1, where (0,0) is
+    the bottom left corner of the input image, and (1,1) is the top right corner.' IDistort page: 'The U and V values are offsets for where a pixel
+    will come from. For example, if pixel 51, 23 has a U and V value of -1, 5, the pixel's value will come from 50, 28 of the input channels'; the UV
+    offset 'is subtracted from the UV channels' and the UV scale 'multiplies the UV channels by this value'."""
+    stmap_page = TRANSFORM_GUIDE + "stmap.html"
+    idistort_page = TRANSFORM_GUIDE + "idistort.html"
+    h, w = 12, 16
+
+    def case(id, nuke, knobs, params, expected, source, statement, nuke_inputs, nb_inputs, unscored="", tolerance=0.0):
+        out.append(Case(id=id, nuke=nuke, nuke_class=nuke, nuke_knobs=knobs, nuke_inputs=nuke_inputs, nb_kind=nuke, nb_params=params, nb_inputs=nb_inputs,
+                        expected=expected, source=source, statement=statement, unscored=unscored, tolerance=tolerance))
+
+    def at(rows, cols, pick):
+        """A reference whose pixel (row, col) is `pick(src, row, col)` for the rows and columns given, valid there."""
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            ref = np.zeros(src.shape)
+            valid = np.zeros(src.shape, bool)
+            for y in rows:
+                for x in cols:
+                    ref[y, x] = pick(src, y, x)
+                    valid[y, x] = True
+            return ref, valid
+        return expected
+
+    def bilinear_swapped(fx):
+        """STMap with the u and v channels swapped on the identity map: pixel (row y, col x) reads the source at x' = v * w - 0.5 (v = 1 - (y + 0.5) / h) and
+        row y' = (1 - u) * h - 0.5 (u = (x + 0.5) / w), the plain bilinear mix of the four pixels around that position, compared where all four exist."""
+        src = fx["A"].astype(np.float64)
+        ref = np.zeros(src.shape)
+        valid = np.zeros(src.shape, bool)
+        for y in range(h):
+            for x in range(w):
+                sx = (1.0 - (y + 0.5) / h) * w - 0.5
+                sy = (1.0 - (x + 0.5) / w) * h - 0.5
+                x0, y0 = int(np.floor(sx)), int(np.floor(sy))
+                if 0 <= x0 and x0 + 1 < w and 0 <= y0 and y0 + 1 < h:
+                    fx_, fy_ = sx - x0, sy - y0
+                    ref[y, x] = ((1 - fx_) * (1 - fy_) * src[y0, x0] + fx_ * (1 - fy_) * src[y0, x0 + 1] + (1 - fx_) * fy_ * src[y0 + 1, x0] + fx_ * fy_ * src[y0 + 1, x0 + 1])
+                    valid[y, x] = True
+        return ref, valid
+
+    rounding = ("the map holds each pixel's centre in float32, so the position is whole only to about a millionth of a pixel and the filter mixes "
+                "neighbours by that much; the case allows 0.0001")
+    # ------------------------------------------------------------------------------------------------------------- STMap
+    case("stmap_identity_map_returns_the_source", "STMap", (("uv", "rgba.red rgba.green"),), {"filter": "bilinear", "uv_layer": ""},
+         at(range(h), range(w), lambda s, y, x: s[y, x]), "guide",
+         f"STMap with a map that holds every pixel's own position (u across, v from the bottom: ({stmap_page})) returns the source; {rounding}",
+         ("UV", "A"), ("A", "UV"), tolerance=1e-4)
+    case("stmap_constant_map_samples_that_point", "STMap", (("uv", "rgba.red rgba.green"),), {"filter": "bilinear", "uv_layer": ""},
+         at(range(h), range(w), lambda s, y, x: s[4, 5]), "guide",
+         f"STMap with a map that is the same at every pixel, the position of the centre of the pixel five across and four down from the top, fills the output with "
+         f"that source pixel ({stmap_page}); {rounding}", ("UC", "A"), ("A", "UC"), tolerance=1e-4)
+    case("stmap_u_and_v_channels_choose_what_is_read", "STMap", (("uv", "rgba.blue rgba.green"),), {"filter": "bilinear", "uv_layer": "", "u_channel": "B", "v_channel": "G"},
+         at(range(h), range(w), lambda s, y, x: s[y, x]), "guide",
+         f"STMap: 'UV channels: the two channels that are used to calculate the distortion': the map's blue holds a copy of u, so reading blue as u and green as v is "
+         f"the identity again; {rounding}", ("UV", "A"), ("A", "UV"), tolerance=1e-4)
+    case("stmap_swapped_channels_read_green_as_u_and_red_as_v", "STMap", (("uv", "rgba.green rgba.red"),),
+         {"filter": "bilinear", "uv_layer": "", "u_channel": "G", "v_channel": "R"}, bilinear_swapped, "guide",
+         f"STMap with green read as u and red as v on the identity map: each pixel takes the source at the position the guide's normalised u and v give "
+         f"(bilinear mix of the four pixels around it), where all four exist ({stmap_page})", ("UV", "A"), ("A", "UV"), tolerance=1e-4)
+    # ------------------------------------------------------------------------------------------------------------ IDistort
+    case("idistort_zero_vectors_return_the_source", "IDistort", (("uv", "rgba.red rgba.green"),), {"filter": "bilinear", "uv_layer": ""},
+         at(range(h), range(w), lambda s, y, x: s[y, x]), "guide",
+         f"IDistort with every vector zero: each pixel comes from where it is, so the source comes back ({idistort_page})", ("VZ",), ("A", "VZ"))
+    case("idistort_guide_example_u_minus_1_v_5", "IDistort", (("uv", "rgba.red rgba.green"),), {"filter": "bilinear", "uv_layer": ""},
+         at(range(5, h), range(1, w), lambda s, y, x: s[y - 5, x - 1]), "guide",
+         "IDistort with u -1 and v 5 everywhere: 'if pixel 51, 23 has a U and V value of -1, 5, the pixel's value will come from 50, 28 of the input channels', so a "
+         f"pixel comes from one to its left and five above it in Nuke's axes, which is five rows up the array ({idistort_page}); compared where the source exists",
+         ("VS",), ("A", "VS"))
+    case("idistort_uv_scale_multiplies_the_vectors", "IDistort", (("uv_scale", 2.0),), {"filter": "bilinear", "uv_layer": "", "uv_scale_x": 2.0, "uv_scale_y": 2.0},
+         at(range(2, h), range(0, w - 2), lambda s, y, x: s[y - 2, x + 2]), "guide",
+         f"IDistort UV scale 2 on the vector 1, 1: 'multiply the UV channels by this value', so the vector is 2, 2 and a pixel comes from two to its right and two rows up "
+         f"({idistort_page})", ("VT",), ("A", "VT"))
+    case("idistort_uv_offset_is_subtracted", "IDistort", (("uv_offset", 1.0),), {"filter": "bilinear", "uv_layer": "", "uv_offset_x": 1.0, "uv_offset_y": 1.0},
+         at(range(0, h - 1), range(1, w), lambda s, y, x: s[y + 1, x - 1]), "guide",
+         f"IDistort UV offset 1 on a zero field: 'this is subtracted from the UV channels', so the vector is -1, -1 and a pixel comes from one to its left and one row down "
+         f"({idistort_page})", ("VZ",), ("A", "VZ"))
+    case("idistort_u_and_v_channels_choose_what_is_read", "IDistort", (("uv", "rgba.green rgba.red"),),
+         {"filter": "bilinear", "uv_layer": "", "u_channel": "G", "v_channel": "R"},
+         at(range(0, h - 1), range(0, w - 5), lambda s, y, x: s[y + 1, x + 5]), "guide",
+         f"IDistort reading green as u (5) and red as v (-1) on the guide's field: a pixel comes from five to its right and one row down ({idistort_page})",
+         ("VS",), ("A", "VS"))
+
+
 def _draw_cases(Case, out):
     """Rectangle, Radial and Ramp (the Draw group), then Noise and Grid, Grain and Dither."""
     fmt = {"width": 16, "height": 12}
 
-    def case(id, nuke, nuke_class, nuke_knobs, nb_kind, nb_params, expected, source, statement, unscored="", nb_inputs=("A",)):
+    def case(id, nuke, nuke_class, nuke_knobs, nb_kind, nb_params, expected, source, statement, unscored="", nb_inputs=("A",), tolerance=0.0):
         out.append(Case(id=id, nuke=nuke, nuke_class=nuke_class, nuke_knobs=nuke_knobs, nuke_inputs=("A",), nb_kind=nb_kind,
                         nb_params={**fmt, **nb_params} if nb_params is not None else None, nb_inputs=nb_inputs, expected=expected,
-                        source=source, statement=statement, unscored=unscored))
+                        source=source, statement=statement, unscored=unscored, tolerance=tolerance))
 
     def drawn(make, only=None):
         """A reference: the shape `make(shape_like)` (premultiplied float64 RGBA) over the input, valid where `only(shape_like)` says."""
@@ -1081,6 +1211,15 @@ def _noise_grid_cases(Case, out, case):
     def noise_case(id, nuke_knobs, params, statement):
         case(id, "Noise", "Noise", nuke_knobs, "Noise", params, lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)),
              "convention", statement, unscored=noise_reason)
+    case("noise_opacity_zero_is_the_input", "Noise", "Noise", (("opacity", 0.0),), "Noise", {"opacity": 0.0, "size": 6.0, "octaves": 3},
+         lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), "guide",
+         f"Noise: opacity 'sets the noise opacity where 0 is equal to transparent, and 1 is equal to opaque' ({page}), so at 0 the input comes back unchanged")
+    case("noise_replace_coverage_stays_between_0_and_1", "Noise", "Noise", (("replace", True), ("color", 1.0)), "Noise",
+         {"replace": 1, "size": 6.0, "octaves": 3, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0},
+         lambda fx: (np.full(fx["A"].shape, 0.5), np.ones(fx["A"].shape, bool)), "convention",
+         "Noise with replace on and a white colour: the page speaks of the noise as a matte ('where there is no noise (the matte is black or empty) ... "
+         "where the noise is opaque (the matte is white or full)'), so every output value lies between 0 and 1 (a range case: the reference is 0.5 with a "
+         "tolerance of 0.5; the values inside the range are the unscored cases below)", tolerance=0.5)
     noise_case("noise_fbm_values", (("type", "fBm"),), {"type": "fBm", "size": 6.0, "octaves": 3},
                f"Noise fBm: 'runs noise() octave times at different scales to get random numbers between -1 and +1 and adds them up' ({page})")
     noise_case("noise_turbulence_values", (("type", "turbulence"),), {"type": "turbulence", "size": 6.0, "octaves": 3},

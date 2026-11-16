@@ -153,6 +153,28 @@ def _fixture_kernel3():
     return out
 
 
+def _fixtures_uv():
+    """The maps and vector fields of STMap and IDistort, each the size of the others.
+
+    UV: STMap's identity map, red u = (x + 0.5) / 16 and green v = 1 - (y + 0.5) / 12 (each pixel's own centre, v from the bottom), blue a copy of u, alpha 0.5.
+    UC: a constant map to the centre of pixel x 5, y 4 (from the top): the same four channels at every pixel.
+    VZ: IDistort's zero vector field (alpha 1).   VS: the constant vector u -1, v 5 of the guide's example, green copied to blue, alpha 0.5 (so that
+    the premultiplied box has something to divide by; every case leaves it off, which ignores the alpha).   VT: the constant vector u 1, v 1, alpha 1."""
+    uv = np.zeros((H, W, 4), np.float32)
+    for y in range(H):
+        for x in range(W):
+            uv[y, x] = ((x + 0.5) / W, 1.0 - (y + 0.5) / H, (x + 0.5) / W, 0.5)
+    uc = np.empty((H, W, 4), np.float32)
+    uc[:] = (5.5 / W, 1.0 - 4.5 / H, 5.5 / W, 0.5)
+    vz = np.zeros((H, W, 4), np.float32)
+    vz[..., 3] = 1.0
+    vs = np.empty((H, W, 4), np.float32)
+    vs[:] = (-1.0, 5.0, 5.0, 0.5)
+    vt = np.empty((H, W, 4), np.float32)
+    vt[:] = (1.0, 1.0, 0.0, 1.0)
+    return {"UV": uv, "UC": uc, "VZ": vz, "VS": vs, "VT": vt}
+
+
 def make_fixtures():
     a, b = _fixtures_ab()
     mask = np.zeros((H, W, 4), np.float32)
@@ -164,7 +186,7 @@ def make_fixtures():
     return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log(), "E": _fixture_edge(), "P": _fixture_point(),
             "K": _fixture_keyer(), "KS": np.concatenate([np.full((H, W, 3), KEY_SCREEN, np.float32), np.ones((H, W, 1), np.float32)], axis=2),
             "KI": _fixture_screen_island(KEY_SCREEN), "KB": _fixture_screen_island(KEY_BLUE_SCREEN),
-            "S": _fixture_step(), "W": _fixture_square(), "KF": _fixture_kernel3()}
+            "S": _fixture_step(), "W": _fixture_square(), "KF": _fixture_kernel3(), **_fixtures_uv()}
 
 
 # ---------------------------------------------------------------------------------------------------- Merge formulas

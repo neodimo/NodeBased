@@ -210,9 +210,18 @@ def load_split_table(path=SPLIT_JSON):
 
 
 # ---------------------------------------------------------------------------------------------------------------- acts
+# Nodes whose probe needs a particular picture on a particular input: STMap an identity map on its uv input, IDistort a vector field on it (the
+# default node refuses to run without one). Names are fixtures of tools/nuke_fidelity_cases.py, in input order and then optional inputs; the
+# remaining optional inputs (the mask) stay unwired.
+PROBE_SLOTS = {"STMap": ("A", "UV"), "IDistort": ("A", "VS")}
+
+
 def _inputs_for(kind, fx, size):
     from nodebased import core
     spec = core.SPECS[kind]
+    if kind in PROBE_SLOTS:
+        wanted = [fx[name] for name in PROBE_SLOTS[kind]]
+        return wanted + [None] * (len(spec["inputs"]) + len(spec.get("optional_inputs", [])) - len(wanted))
     images = [fx["A"], fx["B"], fx["C"]]
     slots = [images[i % len(images)] for i in range(len(spec["inputs"]))]
     slots += [None] * len(spec.get("optional_inputs", []))     # no mask, no optional input: the node's own behaviour
@@ -222,6 +231,8 @@ def _inputs_for(kind, fx, size):
 # Starting values the probe uses in place of a kind's defaults where the defaults put the effect outside the 16 x 12 fixture. Nuke's own defaults stay
 # the defaults the `defaults` component compares; only the probe's starting point moves.
 PROBE_BASE = {
+    # Lane 9 step Q (11/16): IDistort's blur scale scales the blur channel's values, so it acts only once a blur channel is named; the probe names the field's green.
+    "IDistort": {"blur": "rgba.green"},
     "MarkerRemoval": {"mode": "bilinear", "linearsearch": 1, "ctrlMask": "fixture.control"},
     "CopyRectangle": {"area_x": 3.0, "area_y": 2.0, "area_r": 11.0, "area_t": 9.0},     # Nuke's 512 389 1536 1167 lies off a 16 x 12 picture
     # Lane 2 step H (11/3): Flare's centre and radii, Glint's 50 pixel rays and Sparkles's 300 pixel rays all lie off a 16 x 12 picture.
@@ -282,7 +293,14 @@ def _base_params(kind, size):
 
 def _run(kind, params, slots):
     from nodebased.imaging import Evaluator
-    out = Evaluator._kernel(kind, params, slots)
+    try:
+        out = Evaluator._kernel(kind, params, slots)
+    except ValueError as exc:
+        if kind not in PROBE_SLOTS or not str(exc).startswith("No kernel for"):
+            raise
+        # STMap and IDistort work on Rasters and have no whole-array kernel: run them through the windowed one, the way the cases do.
+        from nodebased.raster import Raster
+        out = Evaluator._windowed_kernel(kind, params, [Raster.of(np.asarray(s, np.float32)) for s in slots if s is not None]).pixels
     if isinstance(out, tuple):
         out = out[0]
     arr = np.asarray(out, dtype=np.float64)

@@ -5090,7 +5090,9 @@ class Evaluator:
             uv_pixels = np.pad(uv.fit(source.data), ((grow, grow), (grow, grow), (0, 0)), mode="edge")
         u = np.nan_to_num(uv_pixels[..., u_index], nan=0.0, posinf=0.0, neginf=0.0)
         v = np.nan_to_num(uv_pixels[..., v_index], nan=0.0, posinf=0.0, neginf=0.0)
-        if kind == "STMap" and int(p.get("premultiplied", 0)):
+        from . import filterbehaviour
+        idistort_new = kind == "IDistort" and not filterbehaviour.is_legacy("IDistort", p, "legacy_idistort")     # the guide's IDistort (lane 9 step Q)
+        if (kind == "STMap" or idistort_new) and int(p.get("premultiplied", 0)):
             u, v = keymixknobs.unpremultiply_map(u, uv_pixels[..., 3]), keymixknobs.unpremultiply_map(v, uv_pixels[..., 3])
         if kind == "STMap":
             filtered = Evaluator._stmap(source, u, v, p, out)
@@ -5101,6 +5103,12 @@ class Evaluator:
                 filtered = keymixknobs.variable_box_blur(filtered, radius[..., 0] * float(p.get("blur_scale", 1.0)))
         elif kind == "IDistort":
             filtered = Evaluator._idistort(source, u, v, p, out)
+            blur_token = str(p.get("blur", "none")).strip()
+            if idistort_new and blur_token.lower() not in ("", "none"):
+                # "Values in this channel are added to the size of the sample area to add extra blur or diffusion": the channel times blur_scale is the
+                # per-pixel radius of a box blur of the distorted picture, as STMap's blur channel (older documents never blurred).
+                radius = _chrome.resolve_channel(blur_token, uv_pixels, _chrome._layer_getter(uv_in if uv_in is not None else source, out))
+                filtered = keymixknobs.variable_box_blur(filtered, radius[..., 0] * float(p.get("blur_scale", 1.0)))
         else:
             u, v = _vectorblurknobs.preprocess(u, v, p)      # uv offset, then blur uv
             if int(p.get("invert_uv", 0)):
@@ -5419,15 +5427,25 @@ class Evaluator:
 
     @staticmethod
     def _idistort(source, u, v, p, out):
-        """Relative pixel offsets: d = (uv + uv_offset) * uv_scale and out(p) = source(p - d), so a
-        positive u moves the picture right and a positive v moves it down (image y points down),
-        the same way a forward motion vector carries a pixel."""
-        dx = (u.astype(np.float64) + p["uv_offset_x"]) * p["uv_scale_x"]
-        dy = (v.astype(np.float64) + p["uv_offset_y"]) * p["uv_scale_y"]
+        """Relative pixel offsets, the guide's: d = (uv - uv_offset) * uv_scale, and a pixel comes from `d` away in Nuke's axes (x right, y up):
+        out(x, y) = source(x + dx, y + dy), so a positive u moves the picture left and a positive v moves it down. A document saved before
+        `legacy_idistort` read d = (uv + uv_offset) * uv_scale and out(p) = source(p - d) (a positive u moved the picture right)."""
+        from . import filterbehaviour
         gx = np.arange(out.width, dtype=np.float64)[None, :] + out.x
         gy = np.arange(out.height, dtype=np.float64)[:, None] + out.y
-        sx = (gx - dx - source.data.x).astype(np.float32)
-        sy = (gy - dy - source.data.y).astype(np.float32)
+        if filterbehaviour.is_legacy("IDistort", p, "legacy_idistort"):
+            dx = (u.astype(np.float64) + p["uv_offset_x"]) * p["uv_scale_x"]
+            dy = (v.astype(np.float64) + p["uv_offset_y"]) * p["uv_scale_y"]
+            sx = (gx - dx - source.data.x).astype(np.float32)
+            sy = (gy - dy - source.data.y).astype(np.float32)
+        else:
+            # The guide: "The U and V values are offsets for where a pixel will come from. For example, if pixel 51, 23 has a U and V value of
+            # -1, 5, the pixel's value will come from 50, 28 of the input channels" (Nuke's y runs up, the array's rows down), and the offset
+            # "is subtracted from the UV channels"; the scale multiplies them.
+            dx = (u.astype(np.float64) - p["uv_offset_x"]) * p["uv_scale_x"]
+            dy = (v.astype(np.float64) - p["uv_offset_y"]) * p["uv_scale_y"]
+            sx = (gx + dx - source.data.x).astype(np.float32)
+            sy = (gy - dy - source.data.y).astype(np.float32)
         return Evaluator._resample(source.pixels, sx, sy, p["filter"]).astype(np.float32)
 
     @staticmethod
@@ -7399,8 +7417,11 @@ class Evaluator:
         else:
             a = np.pad(rgb, 1, mode="edge")
             if method == "Prewitt":
-                gx = (a[:-2, 2:] + a[1:-1, 2:] + a[2:, 2:] - a[:-2, :-2] - a[1:-1, :-2] - a[2:, :-2]) / 3.0
-                gy = (a[2:, :-2] + a[2:, 1:-1] + a[2:, 2:] - a[:-2, :-2] - a[:-2, 1:-1] - a[:-2, 2:]) / 3.0
+                # The published Prewitt masks (1 1 1 / 0 0 0 / -1 -1 -1 and its turn), unscaled like the Sobel masks; a document saved before
+                # `legacy_edge_prewitt` divided them by 3 and keeps doing so.
+                scale = 3.0 if filterbehaviour.is_legacy("EdgeDetect", p, "legacy_edge_prewitt") else 1.0
+                gx = (a[:-2, 2:] + a[1:-1, 2:] + a[2:, 2:] - a[:-2, :-2] - a[1:-1, :-2] - a[2:, :-2]) / scale
+                gy = (a[2:, :-2] + a[2:, 1:-1] + a[2:, 2:] - a[:-2, :-2] - a[:-2, 1:-1] - a[:-2, 2:]) / scale
             else:
                 gx = a[:-2, 2:] + 2*a[1:-1, 2:] + a[2:, 2:] - a[:-2, :-2] - 2*a[1:-1, :-2] - a[2:, :-2]
                 gy = a[2:, :-2] + 2*a[2:, 1:-1] + a[2:, 2:] - a[:-2, :-2] - 2*a[:-2, 1:-1] - a[:-2, 2:]

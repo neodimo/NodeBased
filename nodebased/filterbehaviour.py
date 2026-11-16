@@ -32,12 +32,15 @@ LEGACY = {
     "Matrix": {"legacy_matrix_unclipped": 1},
     "Laplacian": {"legacy_laplacian": 1},
     "Convolve": {"legacy_convolve": 1},
+    "EdgeDetect": {"legacy_edge_prewitt": 1},
+    "IDistort": {"legacy_idistort": 1},
     "DropShadow": {"legacy_dropshadow_angle": 1},
     "DirBlur": {"legacy_dirblur_knobs": 1},
     "Bilateral": {"legacy_bilateral": 1},
 }
 NEW = {
-    "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
+    "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0, "legacy_edge_prewitt": 0},
+    "IDistort": {"legacy_idistort": 0},
     "Erode": {"legacy_erode_sign": 0},
     "Median": {"legacy_median_radius": 0},
     "Matrix": {"legacy_matrix_unclipped": 0},

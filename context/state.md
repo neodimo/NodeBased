@@ -27,6 +27,12 @@ Branch `openclaw/nb-2d-parity`, fast-forwarded to main 7a43a947 first. Details a
 overall 96.7 -> 96.7 (98.8 counting existing nodes). Kernels changed: Keylight's Intermediate Result view (legacy flag `older_intermediate_view`, on load via
 `behaviour2d.upgrade_params`, no schema bump) and ShuffleCopy's black/white sources (additive). Regenerated `docs/PARITY_2D_FIDELITY.md` and its bundled copy (the integrator
 rebuilds once on the stacked tree; Lane 9 regenerates it in parallel).
+## Lane 9 step Q (2:20 PM on 2026-11-16 PDT): pixel checks for nine more filter and transform nodes
+
+Nine nodes that had no scored pixel case now have one (97 -> 106 of 167 checked): Sharpen, Soften, Erode (filter), Convolve, EdgeDetect, Emboss, Noise, STMap and IDistort. Two kernels were
+corrected, each behind a legacy flag that a saved graph gets on load: `legacy_edge_prewitt` (Prewitt was divided by 3) and `legacy_idistort` (IDistort's x direction and offset sign; the
+new reading also honours Premultiplied and the blur channel). Details, scores and the open list are in TASKLOG.md; the cases are in `tools/nuke_fidelity_cases_filter.py`, the new
+fixtures in `tools/nuke_fidelity_cases.py` (`make_fixtures`: S, W, K, UV, UC, VZ, VS, VT).
 
 ## Lane 6 Fluids 17 step C (1:08 PM on 2026-11-12 PDT): persistent swirl in the up-res node, off by default
 

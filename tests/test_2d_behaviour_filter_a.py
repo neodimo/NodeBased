@@ -798,7 +798,7 @@ class EdgeDetectTests(unittest.TestCase):
 
     def test_an_older_document_draws_the_same(self):
         loaded = old_document("EdgeDetect", dict(edge_type="Prewitt", threshold=0.1),
-                              ("edge_blur_size", "edge_erode_size", "edge_blur_quality"))
+                              ("edge_blur_size", "edge_erode_size", "edge_blur_quality", "legacy_edge_prewitt"))   # step Q: older Prewitt was divided by three
         source = render(loaded, "src")
         np.testing.assert_array_equal(render(loaded, "n"), Evaluator._edge_detect(source, {"edge_type": "Prewitt", "threshold": 0.1}))
 

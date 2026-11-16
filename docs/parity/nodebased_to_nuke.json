@@ -2775,7 +2775,10 @@
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["edge_blur_size"], "nuke": ["blursize"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Blur size', scripting name `blursize`"},
     {"nodebased": ["edge_erode_size"], "nuke": ["erodesize"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Erode size', scripting name `erodesize`"},
-    {"nodebased": ["edge_blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Blur quality', scripting name `blurquality`"}
+    {"nodebased": ["edge_blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Blur quality', scripting name `blurquality`"},
+    {"nodebased": [], "nuke": ["output"], "kind": "unsupported", "reason": "the guide says only 'sets the output channel for the edge detect applied' (a channel menu behind an enable box, default none); NodeBased writes the response into the colour channels in place, and a chosen output layer needs channel routing the node does not have (lane 9 step Q)"},
+    {"nodebased": [], "nuke": ["maskedgedetect"], "kind": "unsupported", "reason": "the guide describes a mask channel for the edge-detect stage ('by default, the blur is limited to the non-black areas of this channel') apart from the node's own mask; NodeBased has the one node-wide mask channel and no separate mask for the stage, and the guide says nothing of how the two combine (lane 9 step Q)"},
+    {"nodebased": ["legacy_edge_prewitt"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the published Prewitt masks were used keep the Prewitt response divided by three; lane 9 step Q"}
    ]
   },
   "Emboss": {
@@ -2800,7 +2803,10 @@
     {"nodebased": [], "nuke": ["output"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
     {"nodebased": [], "nuke": ["erodesize"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
     {"nodebased": ["blur_size"], "nuke": ["blursize"], "kind": "renamed", "reason": "Blur size: the brightness is blurred this much before the slope is read (lane 9 finish)"},
-    {"nodebased": ["blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "Blur quality: the largest blur worked at full size (lane 9 finish)"}
+    {"nodebased": ["blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "Blur quality: the largest blur worked at full size (lane 9 finish)"},
+    {"nodebased": [], "nuke": ["maskedgedetect"], "kind": "unsupported", "reason": "the guide gives the edge-detect block, the output block and the PreBlur/PostErode block each a mask channel ('by default, the effect is limited to the non-black areas of this channel'); NodeBased has the one node-wide mask channel, and the guide says nothing of how the four combine (lane 9 step Q)"},
+    {"nodebased": [], "nuke": ["maskedgedetect#2"], "kind": "unsupported", "reason": "the second per-block mask channel of this page; see maskedgedetect (lane 9 step Q)"},
+    {"nodebased": [], "nuke": ["maskedgedetect#3"], "kind": "unsupported", "reason": "the third per-block mask channel of this page; see maskedgedetect (lane 9 step Q)"}
    ]
   },
   "BumpBoss": {
@@ -3793,7 +3799,8 @@
     {"nodebased": ["premultiplied"], "nuke": ["premultiplied"], "kind": "same"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": ["legacy_idistort"], "kind": "extra", "reason": "NodeBased-only: graphs saved before IDistort followed the guide keep the vector direction (a positive U moved the picture right) and the added offset; lane 9 step Q"}
    ],
    "skip_default": ["uv", "uv_scale", "uv_offset"]
   },
