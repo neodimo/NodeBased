@@ -1,5 +1,26 @@
 ## Lane 2 step P (2:30 PM on 2026-11-16 PDT): behaviour cases for ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove and Posterize
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:45 PM on 2026-11-16 PDT)
+
+`main` moved `a9fbb4f4` -> `d99bf9cc` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d99bf9cc` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1116-1507.log`, started 3:07 PM): **Ran 9938 tests in 1745.269 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step Q (Mon 11/16): behaviour checks for the filter and transform nodes that have none (Sharpen, Erode filter, Soften, Noise, Convolve, EdgeDetect, Emboss, STMap, IDistort).** Commits:
+  - `0e7ac6ec` Stack Lane 9 step Q on Lane 2 step P: Convolve's filter fixture is KF (Lane 2's keyer plate took K); audit report rebuilt on the stacked tree
+  - `11b7f602` 2D behaviour step Q parts 2 and 3: pixel cases for EdgeDetect, Emboss, Noise, STMap and IDistort; IDistort follows the guide's direction and offset (legacy_idistort keeps the old reading), Prewitt uses the published masks (legacy_edge_prewitt); STMap and IDistort get probe fixtures; the audit report is rebuilt
+  - `ffa0c698` 2D behaviour step Q part 1: scored pixel cases for Sharpen, Soften, Erode (filter) and Convolve on step, white-square and filter-image fixtures; the audit report is rebuilt
+  Diff: 15 files changed, 790 insertions(+), 96 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (3:05 PM on 2026-11-16 PDT)
 
 `main` moved `d495698b` -> `96ff4df6` (lane commits cherry-picked onto main in lane order) and then to this

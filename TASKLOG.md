@@ -1,3 +1,9 @@
+## 2026-11-16 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step Q (Mon 11/16): behaviour checks for the filter and transform nodes that have none (Sharpen, Erode filter, Soften, Noise, Convolve, EdgeDetect, Emboss, STMap, IDistort) (integrator tick)
+
+- **What was done:** `main` `a9fbb4f4` -> `d99bf9cc` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `d99bf9cc`: Ran 9938 tests in 1745.269 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-16 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step P (Mon 11/16): behaviour checks for the keyers and channel nodes that have none (ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove, Posterize) (integrator tick)
 
 - **What was done:** `main` `d495698b` -> `96ff4df6` plus this docs commit. Evidence and per-lane commit
