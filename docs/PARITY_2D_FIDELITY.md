@@ -112,7 +112,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Shuffle | `Shuffle` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (1/1) | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
-| 2 | ShuffleCopy | `ShuffleCopy` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (4/4) | - | 100 | - | 100 (5/5) | 100 | - | unmeasured |
+| 2 | ShuffleCopy | `ShuffleCopy` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (4/4) | - | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 3 | Copy | `Copy` | supported | 99.0 | 98.3 | 100 (10/10) | 100 (8/8) | 100 | 100 | 89 | 100 (8/8) | 100 | - | unmeasured |
 | 4 | ChannelMerge | `ChannelMerge` | supported | 95.7 | 94.2 | 100 (4/4) | 100 (4/4) | 67 | 100 | 83 | 100 (13/13) | 100 | - | unmeasured |
 | 5 | Remove | `Remove` | supported | 98.3 | 98.0 | 100 (4/4) | 100 (4/4) | 80 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
@@ -205,7 +205,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 6 | Primatte | - | missing | 0.0 | 0.0 | 0 (0/26) | - | - | 0 | 0 | - | - | - | no fixture |
 | 6 | Ultimatte | - | missing | 0.0 | 0.0 | 0 (0/60) | - | - | 0 | - | - | - | - | no fixture |
 | 7 | IBKColor | `IBKColor` | supported | 97.9 | 100.0 | 100 (6/6) | 100 (4/4) | 100 | 100 | - | 100 (2/2) | 78 | - | unmeasured |
-| 7 | IBKGizmo | `IBKGizmo` | supported | 96.7 | 95.2 | 93 (14/15) | 100 (9/9) | 86 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
+| 7 | IBKGizmo | `IBKGizmo` | supported | 96.7 | 95.2 | 93 (14/15) | 100 (9/9) | 86 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
 | 8 | Cryptomatte | `Cryptomatte` | partial | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
 | 8 | Encryptomatte | `Encryptomatte` | partial | 92.9 | 90.5 | 86 (3/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
@@ -796,12 +796,15 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `ibkgizmo_matte_from_screen_plate` | guide | pass | within tolerance | - |
 | `ibkgizmo_screen_subtracted_foreground` | guide | pass | within tolerance | - |
 | `ibkgizmo_mixed_edge_form` | convention | pass | within tolerance | - |
+| `ibkgizmo_red_weight_only` | convention | pass | within tolerance | - |
+| `ibkgizmo_blue_weight_only` | convention | pass | within tolerance | - |
 | `shufflecopy_default_passes_input_one` | guide | pass | within tolerance | - |
 | `shufflecopy_red_of_a_into_alpha` | guide | pass | within tolerance | - |
 | `shufflecopy_alpha_of_second_input` | guide | pass | within tolerance | - |
 | `shufflecopy_swap_inputs` | guide | pass | within tolerance | - |
 | `shufflecopy_mixed_routing` | guide | pass | within tolerance | - |
-| `shufflecopy_constant_source` | guide | not scored: NodeBased's ShuffleCopy routes only from the channels of its two inputs, with no black or white choice; Shuffle has them (cases above), so a constant needs a Shuffle behind it | - | - |
+| `shufflecopy_constant_black_and_white` | guide | pass | within tolerance | - |
+| `shufflecopy_solid_alpha` | guide | pass | within tolerance | - |
 | `shufflecopy_second_output_layer` | guide | not scored: the second layer is a named layer that rides on the picture and the array comparison reads the primary output only (tests/test_2d_fidelity_d_small.py and tests/test_tile_layers.py check the layer's routing) | - | - |
 | `remove_named_layer` | guide | pass | within tolerance | - |
 | `remove_two_named_layers` | guide | pass | within tolerance | - |

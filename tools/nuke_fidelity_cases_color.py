@@ -1746,9 +1746,9 @@ def _ibk_behaviour_cases():
         ref[..., :3] = np.where(cols["screen"][..., None], 0.0, ref[..., :3])
         return ref, valid | _valid_where(ref.shape, cols["screen"], cols["skin"], cols["grey"], channels=(0, 1, 2))
 
-    def gizmo_form(fx):
+    def gizmo_form(fx, rw=0.5, bw=0.5):
         k, plate = fx["K"].astype(np.float64), fx["KS"].astype(np.float64)
-        diff = lambda rgb: rgb[..., 1] - (0.5 * rgb[..., 0] + 0.5 * rgb[..., 2])
+        diff = lambda rgb: rgb[..., 1] - (rw * rgb[..., 0] + bw * rgb[..., 2])
         alpha = np.where(diff(plate) > 1e-4, np.clip(1.0 - diff(k) / np.maximum(diff(plate), 1e-4), 0.0, 1.0), 1.0)
         ref = k.copy()
         ref[..., 3] = alpha
@@ -1765,6 +1765,11 @@ def _ibk_behaviour_cases():
                     f"{gizmo}. The difference is the screen channel minus (red weight x red + blue/green weight x blue), both weights 0.5; the alpha is 1 - the foreground's difference over the plate's "
                     "(the half mix: 1 - 0.275 / 0.65 = 0.5769; the spill pixel: 0.9231), and the colour is the foreground less the plate by the transparent share (1 - alpha). "
                     "The published description gives the knob names and no formula, so this is the form the weights' names state, not a measured Nuke render"))
+    for case_id, rw, bw, what in (("ibkgizmo_red_weight_only", 1.0, 0.0, "red weight 1 and blue/green weight 0: the difference is green minus red, so the half mix (0.65 - 0.45 = 0.2 over the plate's 0.7) has an alpha of 0.7143"),
+                                  ("ibkgizmo_blue_weight_only", 0.0, 1.0, "red weight 0 and blue/green weight 1: the difference is green minus blue, so the half mix (0.65 - 0.3 = 0.35 over the plate's 0.6) has an alpha of 0.4167")):
+        out.append(Case(case_id, "IBKGizmo", "IBKGizmo", (("st", "C-green"), ("red_weight", rw), ("blue_green_weight", bw)), ins, "IBKGizmo",
+                        {"screen_type": "green", "red_weight": rw, "blue_green_weight": bw}, ("K", "KS"), (lambda fx, rw=rw, bw=bw: gizmo_form(fx, rw, bw)), "convention",
+                        f"{gizmo}. The two weights are the share of red and of blue in the difference the matte is taken from (their names; no page gives the formula): {what}"))
     return out
 
 
@@ -1777,6 +1782,9 @@ def _shuffle_copy_expected(routes):
         sources = {"in1": fx["A"].astype(np.float64), "in2": fx["B"].astype(np.float64)}
         ref = np.zeros(fx["A"].shape, np.float64)
         for index, route in enumerate(routes):
+            if route in ("0", "1"):
+                ref[..., index] = float(route)
+                continue
             layer, channel = route.split(".")
             ref[..., index] = sources[layer][..., "rgba".index(channel)]
         return ref, _all_valid(ref)
@@ -1796,8 +1804,9 @@ def _shuffle_copy_cases():
         _shuffle_copy_case("shufflecopy_swap_inputs", ("in2.r", "in2.g", "in2.b", "in2.a"), "every channel from input 2: the picture of input 1 is replaced"),
         _shuffle_copy_case("shufflecopy_mixed_routing", ("in2.b", "in1.a", "in2.r", "in1.g"), "each output takes a channel from either input in any order"),
     ]
-    out.append(_unscored_case("shufflecopy_constant_source", "ShuffleCopy", "ShuffleCopy", f"ShuffleCopy: a constant 0 or 1 as the source of a channel ({_SC_GUIDE})",
-                              "NodeBased's ShuffleCopy routes only from the channels of its two inputs, with no black or white choice; Shuffle has them (cases above), so a constant needs a Shuffle behind it"))
+    out.append(_shuffle_copy_case("shufflecopy_constant_black_and_white", ("in2.g", "0", "1", "in1.a"),
+                                  "a channel can take the constant black (0) or white (1) instead of a channel of an input: here green is black and blue is white"))
+    out.append(_shuffle_copy_case("shufflecopy_solid_alpha", ("in1.r", "in1.g", "in1.b", "1"), "white as the alpha source makes the picture solid"))
     out.append(_unscored_case("shufflecopy_second_output_layer", "ShuffleCopy", "ShuffleCopy", f"ShuffleCopy: the second output layer (out2, with its own routes) ({_SC_GUIDE})",
                               "the second layer is a named layer that rides on the picture and the array comparison reads the primary output only (tests/test_2d_fidelity_d_small.py and tests/test_tile_layers.py check the layer's routing)"))
     return out

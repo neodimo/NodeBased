@@ -2337,7 +2337,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
-           **{f"out{o}_{c}": [f"in{i}.{ch}" for i in (1, 2) for ch in "rgba"] for o in (1, 2) for c in "rgba"},
+           **{f"out{o}_{c}": [f"in{i}.{ch}" for i in (1, 2) for ch in "rgba"] + ["0", "1"] for o in (1, 2) for c in "rgba"},
            # Write output format. "Auto" reads the extension on the path rather than second-guessing
            # it, so renaming output.exr to output.png changes the writer and nothing else.
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),

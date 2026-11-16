@@ -1436,12 +1436,9 @@ class TileExecutor:
                     raise ValueError(f"ShuffleCopy: layer {name!r} is unavailable")
                 return artifact.layers[name]
             a, b = pick(first, params.get("layer1", "")), pick(second, params.get("layer2", ""))
+            from .smallnodes import shuffle_copy_channel
             def route(which):
-                channels=[]
-                for c in "rgba":
-                    source, component = params[f"out{which}_{c}"].split(".")
-                    arr = a if source == "in1" else b
-                    channels.append(arr[..., "rgba".index(component):"rgba".index(component)+1])
+                channels = [shuffle_copy_channel(params[f"out{which}_{c}"], a, b) for c in "rgba"]
                 return np.concatenate(channels, axis=-1).astype(np.float32)
             self._tile_out2 = route(2)
             return route(1)
@@ -1800,11 +1797,8 @@ def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
         def pick(artifact, name):
             return artifact.pixels if not name else artifact.layers[name]
         a, b = pick(first, params.get("layer1", "")), pick(second, params.get("layer2", ""))
-        channels=[]
-        for c in "rgba":
-            source, component = params[f"out2_{c}"].split(".")
-            arr = a if source == "in1" else b
-            channels.append(arr[..., "rgba".index(component):"rgba".index(component)+1])
+        from .smallnodes import shuffle_copy_channel
+        channels = [shuffle_copy_channel(params[f"out2_{c}"], a, b) for c in "rgba"]
         layers["out2"] = np.concatenate(channels, axis=-1).astype(np.float32)
     elif kind == "Encryptomatte" and not disabled:
         from . import cryptomatte

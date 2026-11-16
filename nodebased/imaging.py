@@ -4219,13 +4219,9 @@ class Evaluator:
                 raise ValueError("ShuffleCopy inputs must have matching formats in M0")
             first = Evaluator._layer_of(kind, first, p.get("layer1", ""))
             second = Evaluator._layer_of(kind, second, p.get("layer2", ""))
-            sources = {"in1": first, "in2": second}
+            from .smallnodes import shuffle_copy_channel
             def route(output):
-                channels = []
-                for channel in "rgba":
-                    source_name = p[f"out{output}_{channel}"]
-                    source, component = source_name.split(".")
-                    channels.append(sources[source].pixels[..., "rgba".index(component):"rgba".index(component)+1])
+                channels = [shuffle_copy_channel(p[f"out{output}_{channel}"], first.pixels, second.pixels) for channel in "rgba"]
                 return np.concatenate(channels, axis=2).astype(np.float32)
             out1, out2 = route(1), route(2)
             return Raster(out1, first.data, first.display, {"out2": Raster(out2, first.data, first.display)})

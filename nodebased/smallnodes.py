@@ -74,6 +74,17 @@ def remove_names(params):
     return names
 
 
+def shuffle_copy_channel(name, first, second):
+    """One output channel of ShuffleCopy as an (H, W, 1) array: `in1.r` to `in2.a` read that channel of input 1 or 2, and `0` and `1` are the constants black and white
+    (the shuffle matrix's black and white columns), sized like the first input."""
+    import numpy as np
+    if name in ("0", "1"):
+        return np.full(first.shape[:-1] + (1,), float(name), np.float32)
+    source, component = name.split(".")
+    index = "rgba".index(component)
+    return (first if source == "in1" else second)[..., index:index + 1]
+
+
 def remove_keeps(name, names, keep_mode):
     """True when the layer `name` stays after Remove."""
     hit = "all" in names or name in names
