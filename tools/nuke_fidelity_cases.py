@@ -130,6 +130,29 @@ def _fixture_screen_island(screen):
     return out
 
 
+def _fixture_step():
+    """S: a vertical step edge, rgb 0.2 on x 0 to 7 and 0.8 on x 8 to 15 (the same on every row), alpha 1 (flat regions either side of the edge)."""
+    out = np.ones((H, W, 4), np.float32)
+    out[:, :W // 2, :3] = 0.2
+    out[:, W // 2:, :3] = 0.8
+    return out
+
+
+def _fixture_square():
+    """W: a white square, every channel 1 on x 4 to 11 and y 3 to 8 (8 x 6), every channel 0 elsewhere."""
+    out = np.zeros((H, W, 4), np.float32)
+    out[3:9, 4:12, :] = 1.0
+    return out
+
+
+def _fixture_kernel3():
+    """KF: a filter image for Convolve, the size of the others: its alpha holds 1 2 1 / 2 4 2 / 1 2 1 (sum 16) on the three rows and columns
+    around the middle (row 6, column 8, the pixel Convolve takes as the filter's centre) and 0 elsewhere; the colour channels are 0."""
+    out = np.zeros((H, W, 4), np.float32)
+    out[H // 2 - 1:H // 2 + 2, W // 2 - 1:W // 2 + 2, 3] = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]], np.float32)
+    return out
+
+
 def make_fixtures():
     a, b = _fixtures_ab()
     mask = np.zeros((H, W, 4), np.float32)
@@ -140,7 +163,8 @@ def make_fixtures():
                 mask[y, x, c] = _MASK[(i // (c + 1) + c) % len(_MASK)]
     return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log(), "E": _fixture_edge(), "P": _fixture_point(),
             "K": _fixture_keyer(), "KS": np.concatenate([np.full((H, W, 3), KEY_SCREEN, np.float32), np.ones((H, W, 1), np.float32)], axis=2),
-            "KI": _fixture_screen_island(KEY_SCREEN), "KB": _fixture_screen_island(KEY_BLUE_SCREEN)}
+            "KI": _fixture_screen_island(KEY_SCREEN), "KB": _fixture_screen_island(KEY_BLUE_SCREEN),
+            "S": _fixture_step(), "W": _fixture_square(), "KF": _fixture_kernel3()}
 
 
 # ---------------------------------------------------------------------------------------------------- Merge formulas

@@ -287,6 +287,17 @@ def cases():
             return ref, _interior(src.shape, reach)
         return expected
 
+    def on(name, reach, fn, rgba=(0, 1, 2, 3), valid=None):
+        """Like `interior`, on the fixture `name`; `valid(src)` (a boolean array) replaces the interior mask when given."""
+        def expected(fx):
+            src = fx[name].astype(np.float64)
+            ref = src.copy()
+            computed = fn(src)
+            for c in rgba:
+                ref[..., c] = computed[..., c]
+            return ref, (_interior(src.shape, reach) if valid is None else valid(src))
+        return expected
+
     blur_note = ("the guide calls size 'the radius within which pixels are compared' and lists box among the filters, taken as the plain "
                  "average of the (2 * size + 1) x (2 * size + 1) pixels within that radius; edge pixels are not compared (the guide does not "
                  "say what lies past the edge)")
@@ -341,6 +352,40 @@ def cases():
                   "filter trades speed for quality, but not the response curve or the footprint; the direction facts are tested in "
                   "tests/test_2d_behaviour_filter_a.py")
 
+    erode_guide = ("Erode (filter) guide: 'Negative values cause brighter areas to expand into darker areas and positive values cause darker "
+                   "areas to expand into lighter areas', so on a white square a positive size shrinks the square and a negative size "
+                   "grows it. The guide states no footprint, so the edges are compared where every footprint that reaches size pixels "
+                   "along each axis agrees: an erosion of a rectangle is the same for them all; a dilation's four corners differ (square "
+                   "against rounded), so those corner blocks are left out")
+
+    def square_grown(by):
+        def fn(src):
+            ref = np.zeros_like(src)
+            y0, y1, x0, x1 = 3 - by, 8 + by, 4 - by, 11 + by
+            ref[max(y0, 0):y1 + 1, max(x0, 0):x1 + 1, :] = 1.0
+            return ref
+        return fn
+
+    def not_corners(n):
+        def valid(src):
+            ok = np.ones(src.shape, bool)
+            for ys in (slice(3 - n, 3), slice(9, 9 + n)):
+                for xs in (slice(4 - n, 4), slice(12, 12 + n)):
+                    ok[ys, xs, :] = False
+            return ok
+        return valid
+
+    for n in (1, 2):
+        case(f"erode_filter_positive_{n}_shrinks_the_square", "Erode (filter)", "FilterErode", (("size", float(n)), ("filter", "box"), ("channels", "all")),
+             "ErodeFilter", {"filter_size": float(n), "filter_type": "box", "channels": "all"}, on("W", n, square_grown(-n), valid=lambda src: np.ones(src.shape, bool)),
+             "guide", f"Erode (filter) size +{n} on a white square: every edge moves in by {n} pixels. " + erode_guide, nb_inputs=("W",))
+        case(f"erode_filter_negative_{n}_grows_the_square", "Erode (filter)", "FilterErode", (("size", float(-n)), ("filter", "box"), ("channels", "all")),
+             "ErodeFilter", {"filter_size": float(-n), "filter_type": "box", "channels": "all"}, on("W", 0, square_grown(n), valid=not_corners(n)),
+             "guide", f"Erode (filter) size -{n} on a white square: every edge moves out by {n} pixels. " + erode_guide, nb_inputs=("W",))
+    case("erode_filter_size_zero_is_identity", "Erode (filter)", "FilterErode", (("size", 0.0), ("filter", "box"), ("channels", "all")), "ErodeFilter",
+         {"filter_size": 0.0, "filter_type": "box", "channels": "all"}, on("A", 0, lambda s: s), "guide",
+         "Erode (filter) at size 0 filters nothing, so the picture is unchanged (the guide's text: 'values less than 1 increase the light pixels')")
+
     # ------------------------------------------------------------------------------------------------------ Median
     median_note = ("Median guide: pixels 'within the filter area, defined by the size control, are sorted into order and the median pixel "
                    "is output'; size 3 (the default) is the 3 x 3 area; an even or fractional size is not covered")
@@ -353,16 +398,42 @@ def cases():
          "Median: ignore top line leaves the top row of the filter box out of the sort (the median of the other six pixels at size 3)")
 
     # ---------------------------------------------------------------------------------------- Sharpen and Soften
-    laplacian_reason = ("the guide says only that Sharpen/Soften 'use Laplacian' (blur minus the original) 'to sharpen/soften specific "
-                        "channels' and gives amount, minimum and maximum no description, so the scale of amount, the sign convention and "
-                        "the range's role cannot be written down without guessing; tests/test_2d_behaviour_filter_a.py checks the "
-                        "behaviour that follows from the names (flat is unchanged, sharpen raises contrast, soften lowers it)")
-    for kind, nb_size, name in (("Sharpen", "sharpen_size", "sharpen"), ("Soften", "soften_size", "soften")):
-        case(f"{name}_amount_response", kind, kind, (("size", 1.0), ("filter", "box"), ("amount", 1.0)), kind,
-             {nb_size: 1.0, "kernel_filter": "box", "minimum": -1e6, "maximum": 1e6, "amount": 1.0} if kind == "Soften" else
-             {nb_size: 1.0, "kernel_filter": "box", "minimum": -1e6, "maximum": 1e6, "sharpen_amount": 1.0},
-             interior(1, lambda s: s + (s - box_mean(s, 1)) * (1 if kind == "Sharpen" else -1)), "convention",
-             f"{kind}: the unsharp-mask reading of 'uses Laplacian'", unscored=laplacian_reason)
+    laplacian_note = ("the guide says Sharpen and Soften 'use Laplacian' and the Laplacian page defines that as 'applies a blur, and then "
+                      "subtracts the original from the blurred input', so Soften adds amount times (blur - original) and Sharpen subtracts it "
+                      "(the unsharp mask, long-established as original + k * (original - blurred): Gonzalez and Woods, Digital Image "
+                      "Processing, 'unsharp masking and highboost filtering'); the guide gives amount no description, so the scale and sign "
+                      "are this reading's; box blur of size 1 is the plain 3 x 3 average (see the Blur cases); compared inside the picture, "
+                      "one pixel in from the edge")
+    wide = {"minimum": -1e6, "maximum": 1e6}
+    for amount in (0.5, 1.0, 2.0):
+        case(f"sharpen_unsharp_mask_amount_{amount}", "Sharpen", "Sharpen", (("size", 1.0), ("filter", "box"), ("amount", amount)), "Sharpen",
+             {"sharpen_size": 1.0, "kernel_filter": "box", "channels": "rgb", "sharpen_amount": amount, **wide},
+             on("A", 1, lambda s, a=amount: s + a * (s - box_mean(s, 1)), rgba=(0, 1, 2)), "convention",
+             f"Sharpen at amount {amount}: original + amount * (original - blur); " + laplacian_note, nb_inputs=("A",))
+        case(f"soften_amount_{amount}", "Soften", "Soften", (("size", 1.0), ("filter", "box"), ("amount", amount)), "Soften",
+             {"soften_size": 1.0, "kernel_filter": "box", "channels": "rgba", "amount": amount, **wide},
+             on("A", 1, lambda s, a=amount: s + a * (box_mean(s, 1) - s)), "convention",
+             f"Soften at amount {amount}: original + amount * (blur - original); " + laplacian_note)
+    case("sharpen_step_edge_overshoots", "Sharpen", "Sharpen", (("size", 1.0), ("filter", "box"), ("amount", 1.0)), "Sharpen",
+         {"sharpen_size": 1.0, "kernel_filter": "box", "channels": "rgb", "sharpen_amount": 1.0, **wide},
+         on("S", 1, lambda s: s + (s - box_mean(s, 1)), rgba=(0, 1, 2)), "convention",
+         "Sharpen on a step edge (0.2 to 0.8): the dark side next to the edge goes below 0.2 and the bright side above 0.8 (the "
+         "overshoot of an unsharp mask); " + laplacian_note, nb_inputs=("S",))
+    case("soften_step_edge_rounds_the_step", "Soften", "Soften", (("size", 1.0), ("filter", "box"), ("amount", 1.0)), "Soften",
+         {"soften_size": 1.0, "kernel_filter": "box", "channels": "rgba", "amount": 1.0, **wide},
+         on("S", 1, lambda s: box_mean(s, 1)), "convention",
+         "Soften at amount 1 on a step edge: the pixels either side of the edge move toward each other and never past (the blur); "
+         + laplacian_note, nb_inputs=("S",))
+    for kind, nb_amount, name in (("Sharpen", "sharpen_amount", "sharpen"), ("Soften", "amount", "soften")):
+        nb_size = "sharpen_size" if kind == "Sharpen" else "soften_size"
+        case(f"{name}_flat_region_unchanged", kind, kind, (("size", 1.0), ("filter", "box"), ("amount", 1.0)), kind,
+             {nb_size: 1.0, "kernel_filter": "box", nb_amount: 1.0, **wide},
+             on("S", 0, lambda s: s, valid=lambda src: np.broadcast_to(((np.arange(src.shape[1]) <= 6) | (np.arange(src.shape[1]) >= 9))[None, :, None], src.shape).copy()),
+             "convention", f"{kind} on the flat parts of a step picture (more than the filter's reach from the edge): a flat region has "
+             "no detail, so it comes back unchanged; " + laplacian_note, nb_inputs=("S",))
+        case(f"{name}_amount_zero_is_identity", kind, kind, (("size", 1.0), ("filter", "box"), ("amount", 0.0)), kind,
+             {nb_size: 1.0, "kernel_filter": "box", nb_amount: 0.0, **wide}, on("A", 0, lambda s: s), "convention",
+             f"{kind} at amount 0 adds none of the blur difference, so the picture is unchanged; " + laplacian_note)
 
     # ------------------------------------------------------------------------------------------------------- Glow
     glow_unscored = ("the guide describes size only as 'values less than 15 increase the dark pixels' (garbled) and does not say how the "
@@ -385,10 +456,26 @@ def cases():
          "Glow: effect only passes 'only the effect' downstream, so with no glow the colour channels are black (alpha is not glow)")
 
     # --------------------------------------------------------------------------------------------------- Convolve
-    case("convolve_filter_weights", "Convolve", "Convolve2", (("normalize", True),), "Convolve", None, interior(0, lambda s: s), "guide",
-         "Convolve: the new value is the sum of each neighbour times the filter pixel on it, the filter divided by its sum when normalize "
-         "is on", unscored="the shared fixtures carry no small filter image and the evaluator's single-kernel path has no filter input, so "
-                           "the case is run on a 3 x 3 filter in tests/test_2d_behaviour_filter_a.py", inexpressible="needs a filter input")
+    kern = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]], np.float64)
+    convolve_note = ("Convolve guide: 'the new value of each pixel is the sum of each neighbouring pixel times the filter pixel on it' and, with "
+                     "normalize on (its default), 'the filter is divided by its sum'; the filter here is an image whose alpha (the "
+                     "default filter channel) holds 1 2 1 / 2 4 2 / 1 2 1 around its middle and 0 elsewhere, a symmetric filter so that whether the weights are flipped does not "
+                     "matter; compared inside the picture, one pixel in from the edge")
+    for normalize in (True, False):
+        weights = kern / kern.sum() if normalize else kern
+        case(f"convolve_impulse_{'normalized' if normalize else 'raw'}", "Convolve", "Convolve2", (("normalize", normalize),), "Convolve",
+             {"normalize": int(normalize), "kernel_size": "3", "_windowed": True},
+             on("P", 1, lambda s, w=weights: correlate(s, w)), "guide",
+             f"Convolve with normalize {'on' if normalize else 'off'} on a single bright pixel: the filter appears around it"
+             f"{', divided by its sum' if normalize else ' as written'}. " + convolve_note, nuke_inputs=("P", "KF"), nb_inputs=("P", "KF"))
+    case("convolve_normalized_keeps_brightness", "Convolve", "Convolve2", (("normalize", True),), "Convolve",
+         {"normalize": 1, "kernel_size": "3", "_windowed": True}, on("S", 1, lambda s: correlate(s, kern / kern.sum())), "guide",
+         "Convolve normalized on a step edge: the flat parts either side keep their values and the step is smoothed. " + convolve_note,
+         nuke_inputs=("S", "KF"), nb_inputs=("S", "KF"))
+    case("convolve_orientation", "Convolve", "Convolve2", (), "Convolve", None, lambda fx: (fx["A"].astype(np.float64), np.zeros(fx["A"].shape, bool)),
+         "convention", "Convolve with an asymmetric filter: whether the weights are applied as written or flipped",
+         unscored="the guide's description does not say whether the filter is flipped (correlation) or not (convolution), so only a "
+                  "symmetric filter is scored", inexpressible="the orientation cannot be written from the guide", nuke_inputs=("A", "KF"), nb_inputs=("A", "KF"))
 
     # ---------------------------------------------------------------------------------------------------- Matrix
     edge_matrix = np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]], np.float64)
