@@ -19253,6 +19253,12 @@ class Window(QMainWindow):
                     image = QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0],
                                    QImage.Format.Format_RGBA8888).copy()
                     elapsed = (time.perf_counter() - start) * 1000
+                    # The display transform ran in the island above.  Keep the playback trace's
+                    # conversion/emit contract complete, with a zero-length CPU conversion stage.
+                    _trace_frame("convert_begin", request.generation)
+                    _trace_frame("convert_end", request.generation)
+                    _trace_mark("emit")
+                    _trace_frame("emit", request.generation)
                     self.signals.finished.emit((request, cancel), frame, image,
                                                f"{pixels.shape[1] * request.tier} × {pixels.shape[0] * request.tier}"
                                                f"  ·  {elapsed:.0f} ms{tile_detail}  ·  display-only", render_region)

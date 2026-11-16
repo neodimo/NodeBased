@@ -288,6 +288,16 @@ class PlaybackPipelineWindowTests(unittest.TestCase):
         self.assertGreater(summary["overlap_ms"], 10.0)
         self.assertAlmostEqual(summary["accounted_interval_ms"], summary["interval_ms"], delta=0.5)
 
+    def test_trace_accepts_an_on_card_display_conversion(self):
+        events = [(0.0, "worker", "request#1"), (0.001, "worker", "start#1"),
+                  (0.002, "worker", "eval_begin#1"), (0.010, "worker", "eval_end#1"),
+                  (0.010, "worker", "convert_begin#1"), (0.010, "worker", "convert_end#1"),
+                  (0.011, "worker", "emit#1"), (0.012, "Qt", "ready_begin#1"),
+                  (0.013, "Qt", "shown#1")]
+        rows = playback_trace.frame_timeline(events)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["stages_ms"]["display conversion"], 0.0)
+
 
 class RecordedTimelineTests(unittest.TestCase):
     """The committed 10/22 timelines (docs/PERFORMANCE.md, Lane 2 playback pipeline)."""
