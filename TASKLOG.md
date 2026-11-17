@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step R (Mon 11/16): Kronos and OFlow get Nuke's missing knobs, then Sampler, Histogram, HistEQ and ColorLookup's gaps, Lane 9 (2D behaviour B, Claude Sonnet 5.5) step S (Mon 11/16): ZDefocus's bokeh-shape knobs, then LensDistortion's layout and missing knobs, then Reconcile3D and PointsTo3D, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T1 (Mon 11/16): the Properties panel's knob widgets work like Nuke's, measured per widget type (integrator tick)
+
+- **What was done:** `main` `323f025a` -> `d970668f` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `d970668f`: Ran 10015 tests in 1695.977 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## Lane 10 step T1 (11:30 PM on 2026-11-16 PDT): Properties-panel knob widgets work like Nuke's, measured per widget type
 
 - **What was done:** new reference `docs/parity/nuke_knob_interactions.json` (40 behaviours from Foundry's Nuke 17.0 User Guide: Properties Panels, Using the Color Controls, Animating Parameters, Calling Channels; 30 documented with the guide's own sentence, 10 marked undocumented) and `docs/PANEL_INTERACTIONS.md`. `tools/nuke_panel_interactions.py` drives real panels with Qt key/mouse events; `tests/test_panel_interactions.py` asserts every passing behaviour and names the open gaps. The fidelity report has a new section "Panels that work like Nuke" (per-widget table, reported beside the score, not in its formula; overall score unchanged at 96.7).

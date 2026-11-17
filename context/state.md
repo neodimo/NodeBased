@@ -1,5 +1,43 @@
 ## Lane 10 step T1 (11/16 11:30 PM): panel interactions
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (12:35 AM on 2026-11-17 PDT)
+
+`main` moved `323f025a` -> `d970668f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `d970668f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-0005.log`, started 12:05 AM): **Ran 10015 tests in 1695.977 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step R (Mon 11/16): Kronos and OFlow get Nuke's missing knobs, then Sampler, Histogram, HistEQ and ColorLookup's gaps.** Commits:
+  - `a34a9138` 2D behaviour step R: Kronos and OFlow Reset button writes the clip's range into Input Range (paired); report regenerated (Kronos 93.7, OFlow 97.7)
+  - `22a7598c` 2D behaviour step R: scored Kronos Resampling cases on a given field (Bilinear, Lanczos4, Lanczos6); the stamped-plate runner accepts extra inputs; report regenerated
+  - `9035daad` Lane 2 step R: regenerated fidelity report (96.8), step notes
+  - `9d5e3248` 2D behaviour step R: Kronos and OFlow Resampling and luminance weights; Sampler Normalize X; Histogram and HistEQ mask strip; Sampler, Histogram and HistEQ probed
+  Diff: 21 files changed, 836 insertions(+), 73 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step S (Mon 11/16): ZDefocus's bokeh-shape knobs, then LensDistortion's layout and missing knobs, then Reconcile3D and PointsTo3D.** Commits:
+  - `8a0dbaef` 2D behaviour step S parts 2 and 3: Undistort's Properties panel follows the guide's order, labels, shared rows and check boxes; Reconcile3D and PointsTo3D labels and sections follow the guide, PointsTo3D points A, B and C default to the guide's values, Reconcile3D's picture knobs listed with the guide's reasons; audit report rebuilt (ZDefocus 98.7, LensDistortion 87.1, Reconcile3D 76.7, PointsTo3D 100.0; overall 96.8)
+  - `92a4ee74` 2D behaviour step S part 1: ZDefocus's bokeh-shape knobs (roundness, inner size, inner feather, inner brightness, aspect ratio for bladed; filter channel, use input channels, filter bounds, image filter, clamp image filter, legacy resize mode for image); bladed and image filters follow the guide, a bright point takes the filter's shape as drawn (legacy_zdefocus_filters keeps saved nodes bit for bit)
+  Diff: 15 files changed, 777 insertions(+), 120 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T1 (Mon 11/16): the Properties panel's knob widgets work like Nuke's, measured per widget type.** Commits:
+  - `68dc1578` Lane 10 step T1 notes: panel interactions, 28 of 30 documented behaviours
+  - `575e7000` Panel interactions: channel pickers and the mask/mix row from Nuke's Calling Channels page (28 of 30; per-channel layer boxes and the single-channel field are named gaps)
+  - `8a3b6704` Colour eye dropper: Ctrl+right-click in the viewer discards the samples, as Nuke's does; 27 of 27 documented behaviours
+  - `1cb1da02` Split knobs keep every channel's value when their fields are closed, as Nuke's channel selector does; 26 of 26 documented behaviours
+  - `500db1ac` Colour knobs work like Nuke's: the swatch arms an eye dropper (Ctrl+click samples, Ctrl+Shift+drag averages a region), a Pick button opens the picker; 25 of 26 documented behaviours
+  - `abae1535` Fidelity report: 'Panels that work like Nuke' per-widget table beside the score (22 of 26 documented behaviours)
+  - `f646687c` Knob widgets behave like Nuke's: formulas, digit stepping, Alt/middle-drag scrub, No animation keeps the frame value, Set key on all knobs, swatch drag-copy; interaction probes and tests
+  - `13025351` Panels that work like Nuke: reference of Nuke 17.0's documented knob-widget behaviours
+  Diff: 12 files changed, 1412 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Knob-widget behaviour against Nuke 17.0's User Guide: 28 of 30 documented behaviours pass (`docs/PANEL_INTERACTIONS.md`, report section "Panels that work like Nuke"). Open: channel layer check boxes and the single-channel field.
 
 ## Lane 9 step S (4:50 PM on 2026-11-16 PDT): ZDefocus's bokeh-shape knobs, LensDistortion's layout, Reconcile3D and PointsTo3D
