@@ -22,7 +22,7 @@ import time
 import uuid
 
 from PySide6.QtCore import Qt, QLineF, QUrl, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QVariantAnimation, QSize, QByteArray, QMimeData
-from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QBrush,
+from PySide6.QtGui import (QAction, QDrag, QColor, QCursor, QDesktopServices, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QBrush,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat, QValidator, QLinearGradient,
                            QConicalGradient, QRadialGradient, QTransform, QPixmapCache, QPicture, QFontMetricsF, QGuiApplication)
@@ -526,12 +526,145 @@ class RulerSlider(QSlider):
         painter = QStylePainter(self)
         painter.drawComplexControl(QStyle.ComplexControl.CC_Slider, option)
 
+_FORMULA_CHARS = re.compile(r"^[0-9eE.+\-*/%() \t]+$")
+
+
+def evaluate_field_formula(text):
+    """A number typed as arithmetic ("378/2") as Nuke's fields take it, or None. Only numbers, + - * / % ** and
+    brackets are read; anything else (names, calls) is left to the expression editor that "=" opens."""
+    import ast
+    import operator
+    text = (text or "").strip()
+    if not text or not _FORMULA_CHARS.match(text):
+        return None
+    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
+           ast.Mod: operator.mod, ast.Pow: operator.pow, ast.USub: operator.neg, ast.UAdd: operator.pos}
+
+    def walk(node):
+        if isinstance(node, ast.Expression):
+            return walk(node.body)
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            return float(node.value)
+        if isinstance(node, ast.BinOp) and type(node.op) in ops:
+            left, right = walk(node.left), walk(node.right)
+            if isinstance(node.op, ast.Pow) and abs(right) > 64:
+                raise ValueError("exponent too large")
+            return ops[type(node.op)](left, right)
+        if isinstance(node, ast.UnaryOp) and type(node.op) in ops:
+            return ops[type(node.op)](walk(node.operand))
+        raise ValueError("not arithmetic")
+
+    try:
+        value = walk(ast.parse(text, mode="eval"))
+    except (SyntaxError, ValueError, ZeroDivisionError, OverflowError, TypeError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+class KnobDoubleSpinBox(FittedDoubleSpinBox):
+    """A knob's number field, behaving as Nuke's (17.0 User Guide, "Properties Panels", Using Input Fields):
+
+    * a formula typed into it ("378/2") is worked out when the edit finishes;
+    * Up/Down and the mouse wheel change the digit just after the text cursor (before the 0 of 20.51
+      steps by ones), or the field's single step when no digit follows the cursor;
+    * Alt+left drag, or a middle drag (the virtual slider), scrubs the value; Shift drags faster and,
+      on the middle drag, Alt slower. The value commits once, when the button is released.
+    """
+
+    SCRUB_PER_PIXEL = 0.01
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._scrub = None   # (press x, value at press, button) while scrubbing
+        self.lineEdit().installEventFilter(self)
+
+    # -- formulas --------------------------------------------------------------------------
+    def validate(self, text, pos):
+        state, text_out, pos_out = super().validate(text, pos)
+        if state == QValidator.State.Acceptable:
+            return state, text_out, pos_out
+        bare = self._bare_text(text)
+        if _FORMULA_CHARS.match(bare or "x"):
+            if evaluate_field_formula(bare) is not None:
+                return QValidator.State.Acceptable, text, pos
+            return QValidator.State.Intermediate, text, pos
+        return state, text_out, pos_out
+
+    def valueFromText(self, text):
+        bare = self._bare_text(text)
+        try:
+            float(bare)
+        except ValueError:
+            value = evaluate_field_formula(bare)
+            if value is not None:
+                return max(self.minimum(), min(self.maximum(), value))
+        return super().valueFromText(text)
+
+    # -- digit under the cursor ---------------------------------------------------------------
+    def digit_step(self):
+        """The place value of the digit right after the cursor, or None when no digit follows it."""
+        edit = self.lineEdit()
+        text, cursor = edit.text(), edit.cursorPosition()
+        if edit.hasSelectedText() or cursor >= len(text) or not text[cursor].isdigit():
+            return None
+        dot = text.find(".")
+        if dot < 0:
+            dot = len(text)
+            while dot > 0 and not text[dot - 1].isdigit():
+                dot -= 1
+        if cursor < dot:
+            digits = sum(1 for ch in text[cursor + 1:dot] if ch.isdigit())
+            return 10.0 ** digits
+        digits = sum(1 for ch in text[dot + 1:cursor + 1] if ch.isdigit())
+        return 10.0 ** -digits
+
+    def stepBy(self, steps):
+        step = self.digit_step()
+        if step is None:
+            super().stepBy(steps)
+            return
+        edit = self.lineEdit()
+        from_end = len(edit.text()) - edit.cursorPosition()
+        self.setValue(self.value() + steps * step)
+        edit.deselect()
+        edit.setCursorPosition(max(0, len(edit.text()) - from_end))
+        self.editingFinished.emit()          # a step is a finished edit, one undo step, as Nuke's arrows are
+
+    # -- scrubbing -----------------------------------------------------------------------------
+    def _scrub_speed(self, modifiers, button):
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            return 10.0
+        if button == Qt.MouseButton.MiddleButton and modifiers & Qt.KeyboardModifier.AltModifier:
+            return 0.1
+        return 1.0
+
+    def eventFilter(self, watched, event):
+        if watched is self.lineEdit() and self.isEnabled():
+            kind = event.type()
+            if kind == QEvent.Type.MouseButtonPress and (
+                    event.button() == Qt.MouseButton.MiddleButton
+                    or (event.button() == Qt.MouseButton.LeftButton
+                        and event.modifiers() & Qt.KeyboardModifier.AltModifier)):
+                self._scrub = (event.position().x(), self.value(), event.button())
+                return True
+            if kind == QEvent.Type.MouseMove and self._scrub is not None:
+                press_x, start, button = self._scrub
+                delta = (event.position().x() - press_x) * self.SCRUB_PER_PIXEL
+                self.setValue(start + delta * self._scrub_speed(event.modifiers(), button))
+                return True
+            if kind == QEvent.Type.MouseButtonRelease and self._scrub is not None:
+                self._scrub = None
+                self.editingFinished.emit()
+                return True
+        return super().eventFilter(watched, event)
+
+
 class FloatSliderControl(QWidget):
     """A float spin box paired with a soft-range ruler slider."""
 
     def __init__(self, hard_range, soft_range, value, parent=None):
         super().__init__(parent)
-        self.spin = FittedDoubleSpinBox()
+        self.spin = KnobDoubleSpinBox()
         self.spin.setRange(*hard_range)
         self.spin.setDecimals(3)
         self.spin.setSingleStep(0.1)
@@ -604,13 +737,79 @@ class FloatSliderControl(QWidget):
         self.slider.setContextMenuPolicy(policy)
 
 
+SWATCH_MIME = "application/x-nodebased-color"
+
+
 class ClickableColorSwatch(QFrame):
+    """A colour knob's swatch. A click opens the picker. Dragging it onto another colour swatch copies the colour there,
+    as Nuke's swatches do (17.0 User Guide, Using the Color Controls): the panel hands in `color_getter` (the knob's
+    floats) and listens to `colorDropped`."""
     clicked = Signal()
+    colorDropped = Signal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.color_getter = None
+        self._press = None
+        self.setAcceptDrops(True)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit()
+            self._press = event.position()
+            event.accept()
+            return
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (self._press is not None and self.color_getter is not None and event.buttons() & Qt.MouseButton.LeftButton
+                and (event.position() - self._press).manhattanLength() >= QApplication.startDragDistance()):
+            self._press = None
+            drag = QDrag(self)
+            drag.setMimeData(self.color_mime(self.color_getter()))
+            drag.exec(Qt.DropAction.CopyAction)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._press is not None:
+            self._press = None
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    @staticmethod
+    def color_mime(values):
+        mime = QMimeData()
+        mime.setData(SWATCH_MIME, QByteArray(json.dumps([float(v) for v in values]).encode()))
+        return mime
+
+    @staticmethod
+    def color_from_mime(mime):
+        if not mime.hasFormat(SWATCH_MIME):
+            return None
+        try:
+            values = json.loads(bytes(mime.data(SWATCH_MIME)).decode())
+        except ValueError:
+            return None
+        if not isinstance(values, list) or not values or not all(isinstance(v, (int, float)) for v in values):
+            return None
+        return [float(v) for v in values]
+
+    def dragEnterEvent(self, event):
+        if event.source() is not self and self.color_from_mime(event.mimeData()) is not None:
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dropEvent(self, event):
+        values = self.color_from_mime(event.mimeData())
+        if values is None or event.source() is self:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.colorDropped.emit(values)
 
 
 class PropertiesColorWheel(QWidget):
@@ -14041,6 +14240,9 @@ class Window(QMainWindow):
             icon_button("close-knobs", "Close this node's properties",
                         lambda _=False, k=key: self.close_panel(k) if k in self.pinned_panels
                         else self.inspect(None), in_menu=True)
+            key_all = properties_menu.addAction("Set key on all knobs")
+            key_all.setObjectName("set-key-all-knobs")
+            key_all.triggered.connect(lambda _=False, k=key: self.set_key_on_all_knobs(k))
             properties_menu.addSeparator()
             collapse_action = properties_menu.addAction("Collapse or expand properties")
             collapse_action.triggered.connect(collapse.click)
@@ -14346,7 +14548,7 @@ class Window(QMainWindow):
                         control.setPlaceholderText("RGBA, or e.g. beauty / diffuse / Z")
                         control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
                 else:
-                    control = FittedSpinBox() if (type(value) is int or kind == "int") else FittedDoubleSpinBox()
+                    control = FittedSpinBox() if (type(value) is int or kind == "int") else KnobDoubleSpinBox()
                     control.setObjectName(f"{param}-field")
                     control.setRange(*( (2, 15) if node["type"] in ("GridWarp", "GridWarpTracker") and param in ("rows", "columns")
                                         else parameter_limits(node["type"], param)))
@@ -14371,7 +14573,7 @@ class Window(QMainWindow):
                         key, param, control, expression=expressions.get(param)))
 
             def numeric_field(param):
-                control = FittedDoubleSpinBox()
+                control = KnobDoubleSpinBox()
                 control.setObjectName(f"{param}-field")
                 control.setProperty("nodebased_node_id", key)
                 control.setProperty("nodebased_param", param)
@@ -14640,6 +14842,17 @@ class Window(QMainWindow):
                         self.open_color_picker(current, f"{self.graph_nodes()[k]['name']} · {label_text}", accept)
 
                     swatch.clicked.connect(pick_color)
+                    swatch.color_getter = (lambda k=key, params=group.params:
+                                           [float(self.graph_nodes()[k]["params"][p]) for p in params])
+
+                    def drop_color(values, k=key, params=group.params):
+                        # A colour dragged in from another swatch: the channels both knobs have, one undo step.
+                        knob = self.graph_nodes()[k]["params"]
+                        commands = [{"op": "set", "id": k, "param": p, "value": float(v)}
+                                    for p, v in zip(params, values) if float(v) != float(knob[p])]
+                        if commands:
+                            self.defer_command({"op": "batch", "commands": commands})
+                    swatch.colorDropped.connect(drop_color)
                     set_swatch()
                     form.addRow(group.label, WrappingRow([swatch, *color_fields], spacing=3))
                     continue
@@ -14667,7 +14880,7 @@ class Window(QMainWindow):
                     if split_now:
                         units = []
                         for index, channel in enumerate(split_names):
-                            field = FittedDoubleSpinBox()
+                            field = KnobDoubleSpinBox()
                             field.setObjectName(f"{param}-{channel}-field")
                             field.setProperty("nodebased_node_id", key)
                             field.setProperty("nodebased_param", param)
@@ -18137,6 +18350,31 @@ class Window(QMainWindow):
         """The curve for ``(node, param)``, or None when that parameter is not animated."""
         return (self.graph_document().get("animation") or {}).get("curves", {}).get(key, {}).get(param)
 
+    def set_key_on_all_knobs(self, key):
+        """Nuke's panel menu entry (17.0 User Guide, Animating Parameters): key every animatable number knob of the node at
+        the current frame, at the value it shows there. One batch command, so one undo step. Split, expression-driven and
+        non-number knobs are left alone."""
+        document = self.graph_document()
+        node = document["nodes"].get(key)
+        if node is None:
+            return False
+        frame = int(document["time"]["current"])
+        expressions = (document.get("expressions") or {}).get(key, {})
+        commands = []
+        for field in self.properties_dock.findChildren(QDoubleSpinBox):
+            if field.property("nodebased_node_id") != key:
+                continue
+            param = field.property("nodebased_param")
+            value = node["params"].get(param)
+            if (not param or param in expressions or isinstance(value, (list, bool, str))
+                    or any(c["param"] == param for c in commands)):
+                continue
+            commands.append({"op": "set_key", "id": key, "param": param, "frame": frame, "value": float(field.value())})
+        if not commands:
+            return False
+        self.defer_command({"op": "batch", "commands": commands})
+        return True
+
     def toggle_split(self, key, param, n, button):
         """The split button of a per-channel knob: one value becomes n equal entries, or the entries become one value. One command,
         so one undo step. Entries that differ collapse to the first one, after asking."""
@@ -18466,9 +18704,17 @@ class Window(QMainWindow):
             f"Next key (frame {later[0]})" if later else "Next key",
             lambda: self.set_time(current=later[0]))
         next_key.setEnabled(bool(later))
-        clear = menu.addAction("Clear animation",
-                               lambda: self.defer_command({"op": "clear_curve", "id": key,
-                                                           "param": param}))
+        def clear_animation():
+            # Nuke's No animation (17.0 User Guide, Animating Parameters): every key goes and the static value becomes the
+            # value the knob had on the current frame, so the image does not jump. One batch, one undo step.
+            commands = [{"op": "clear_curve", "id": key, "param": param}]
+            here = getattr(control, "value", None)
+            if callable(here) and not isinstance(self.graph_nodes()[key]["params"].get(param), (list, bool, str)):
+                commands.append({"op": "set", "id": key, "param": param, "value": float(here())})
+            self.defer_command(commands[0] if len(commands) == 1 else {"op": "batch", "commands": commands})
+
+        clear = menu.addAction("Clear animation", clear_animation)
+        clear.setObjectName("no-animation")
         clear.setEnabled(curve is not None)
         if curve is not None:
             menu.addSeparator()
