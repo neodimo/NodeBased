@@ -3,6 +3,18 @@
 - **What was done:** `main` `f9c91e91` -> `5e71c941` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `5e71c941`: Ran 10138 tests in 1897.809 s, OK (skipped=38), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
+## 2026-11-17 — Lane 11 step B4: the Transform group's worklist, CopyBBox's inputs, the decision list
+
+- **What was done:** CopyBBox's inputs carry Nuke's roles (A gives the bounding box, B the picture; bypass passes B);
+  schema 35 swaps the two connections of saved CopyBBox nodes, inside Groups too, so they render as before (tested bit for
+  bit). Transform rows, which lane 11 now owns (`LANE_OF_GROUP`): SplineWarp's `root_warp` is Nuke's global warp multiplier
+  (the old A/B switch is `warp_direction`, moved over on load), Tile's mirror boxes read "Mirror", STMap and IDistort put
+  channels first and IDistort's invert sits under its mask channel, IDistort's mask channel defaults to none, VectorCornerPin's
+  Bake Corners is paired with its baked-pins switch, SplineWarp and GridWarp `mix` and SplineWarp `output` defaults accepted
+  with reasons, Reformat's box pixel aspect marked unsupported (square pixels). Transform rows open 15 -> 3; overall 97.1 -> 97.3.
+  `docs/parity/review/DECISIONS.md` lists the product decisions by cost.
+- **Not done:** VectorCornerPin's Filter, Frame Distance and Blur Size (the warp has no filter choice and no vector blur yet).
+- **Schema:** bumped 34 -> 35 (CopyBBox migration); renumber if another lane lands a bump first.
 
 ## 2026-11-17 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step W1 (Tue 11/17): filter, transform and draw panels match Nuke's, from the review book's worklist, Lane 11 (Review book, Claude Opus 5.5) step B3 (Tue 11/17): behaviour cases and missing knobs for the Image, Merge, Metadata and Other nodes (integrator tick)
 

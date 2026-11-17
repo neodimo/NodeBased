@@ -106,6 +106,12 @@ Crop and Text boxes; Tracker and GridWarp probes.
 ## Lane 2 step W1 (11/17): panels in the guide's wording, order and defaults
 
 Done on `openclaw/nb-2d-parity`: see TASKLOG.md. Worklist 243 -> 128 open rows (60 + 27 of the rest are Ultimatte's and Primatte's knobs). Defaults that now follow the guide, each with a legacy value on older documents: `channels` all (Invert, Multiply, Add, Gamma, Clamp, Posterize), IBKGizmo C-blue and level 0, Vectorfield trilinear, ChromaKeyer's despill bias colour, Kronos and OFlow Vector Detail density. No schema bump.
+## Lane 11 step B4 (11/17 10:00 AM): Transform worklist, CopyBBox, decisions
+
+CopyBBox follows Nuke's input roles (schema 35 swaps saved connections). Lane 11 owns the Transform group's review rows from
+this step: open 15 -> 3 (left: VectorCornerPin's Filter, Frame Distance, Blur Size). SplineWarp's root warp is Nuke's
+multiplier. `docs/parity/review/DECISIONS.md` is DiMo's list of product decisions, sorted by fidelity cost. Overall 97.3.
+
 ## Lane 11 step B3 (11/17 3:00 AM): review book behaviour cases
 
 Every Image, Merge, Metadata and Other node the review book listed unchecked now has a behaviour case or a stated reason
