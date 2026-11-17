@@ -38,7 +38,7 @@ the stacked tip `d970668f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes
 Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
 real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
 
-Knob-widget behaviour against Nuke 17.0's User Guide: 28 of 30 documented behaviours pass (`docs/PANEL_INTERACTIONS.md`, report section "Panels that work like Nuke"). Open: channel layer check boxes and the single-channel field.
+Knob-widget behaviour against Nuke 17.0's User Guide: 31 of 31 documented behaviours pass after lane 10 step T2 (`docs/PANEL_INTERACTIONS.md`, report section "Panels that work like Nuke"): channel set and single-channel pickers (`nodebased/channelpicker.py`), one mask strip with Nuke's words on every node (`knobs.panel_layout`), Node tab in the guide's order.
 
 ## Lane 9 step S (4:50 PM on 2026-11-16 PDT): ZDefocus's bokeh-shape knobs, LensDistortion's layout, Reconcile3D and PointsTo3D
 
