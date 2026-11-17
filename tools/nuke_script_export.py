@@ -149,6 +149,7 @@ def input_plates(case, fixtures):
 
 def export(out_dir, nodes=None):
     """Write one folder per case whose inputs are still plates; returns (cases written, cases skipped with a reason)."""
+    import numpy as np
     from nodebased.media import write_exr
     from nuke_fidelity_cases import CASES, make_fixtures
     out_dir = Path(out_dir)
@@ -163,8 +164,17 @@ def export(out_dir, nodes=None):
             continue
         folder = out_dir / case.id
         folder.mkdir(parents=True, exist_ok=True)
+        depth = dict(zip(case.nuke_inputs, (case.nb_params or {}).get("_depth") or ()))
         for name, arr in plates.items():
-            write_exr(folder / f"{name}.exr", arr, bits="float", compression="none")
+            layers = None
+            if name in depth:
+                # A case's `_depth` (ZMerge) rides in the plate as depth.Z, the same values NodeBased's run gives the input.
+                src, channel, scale = depth[name]
+                z = np.zeros(fixtures[src].shape, np.float32)
+                z[..., :3] = fixtures[src][..., channel:channel + 1] * scale
+                z[..., 3] = 1.0
+                layers = {"depth": z}
+            write_exr(folder / f"{name}.exr", arr, bits="float", compression="none", layers=layers)
         (folder / f"{case.id}.nk").write_text(nk_script(case), encoding="utf-8")
         manifest.append({"id": case.id, "nuke": case.nuke, "nuke_class": case.nuke_class, "script": f"{case.id}/{case.id}.nk",
                          "render": f"{case.id}/{RENDER_NAME}", "unscored": case.unscored, "expressible": case.nb_params is not None})

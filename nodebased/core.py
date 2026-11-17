@@ -610,7 +610,7 @@ SPECS = {
     "Blend": {"inputs": ["in0", "in1"],
               "optional_inputs": [*[f"in{i}" for i in range(2, 16)], "mask"],
               "params": {**{f"weight{i}": 1.0 for i in range(16)}, "normalize": 1,
-                         "channels": "rgba", "mask_channel": "alpha", "fringe": 0, "inject": 0,
+                         "channels": "rgba", "mask_channel": "alpha", "fringe": 0, "inject": 0, "invert_mask": 0,
                          "mix": 1.0}},
     # CopyRectangle (step 5b): copies the `area` box (area_x, area_y = top-left, area_r, area_t =
     # right and bottom edge, canvas pixels, rows counted from the top like Crop) from A over B.
@@ -3200,6 +3200,9 @@ def upgrade_document(document):
                         # so the settings, corners and offsets take their defaults and render nothing differently.
                         for name in _ROTO_TRACKING_PARAMS:
                             params.setdefault(name, SPECS["Roto"]["params"][name])
+                    if isinstance(params, dict) and current.get("type") == "Blend":
+                        # Blend's invert beside the mask (lane 11 step B3) is additive: off renders as before.
+                        params.setdefault("invert_mask", 0)
                     if isinstance(params, dict) and current.get("type") == "RotoPaint":
                         # RotoPaint's Tracking tab is additive; saved strokes remain untouched.
                         for name in _ROTO_TRACKING_PARAMS:

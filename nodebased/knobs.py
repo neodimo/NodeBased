@@ -778,6 +778,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("normalize",)), KnobGroup("enum", ("channels",)),
         KnobGroup("enum", ("mask_channel",), label="Mask channel"),
         KnobGroup("bool", ("fringe",), label="Fringe"), KnobGroup("bool", ("inject",), label="Inject"),
+        KnobGroup("bool", ("invert_mask",), label="Invert"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "CopyRectangle": _groups(
         KnobGroup("enum", ("channels",)),
@@ -2832,7 +2833,7 @@ NUKE_LABELS.setdefault("SplineWarp", {})["boundary_bbox"] = "Bbox boundary curve
 NUKE_LAYOUT_LANE11 = {
     "Merge": ("operation", "sRGB", "screen_alpha", "merge_bbox", "metainput", "rangeinput", "Achannels", "Bchannels", "merge_output", "also_merge"),
     "Dissolve": ("channels", "which"),
-    "Blend": ("channels", *(f"weight{i}" for i in range(16)), "normalize", "mask_channel", "inject", "fringe"),
+    "Blend": ("channels", *(f"weight{i}" for i in range(16)), "normalize", "mask_channel", "inject", "invert_mask", "fringe"),
     "Premult": ("channels", "premult_by", "invert"),
     "Unpremult": ("channels", "premult_by", "invert"),
     "Keymix": ("channels", "maskChannelInput", "invert_mask", "mix", "merge_bbox"),
@@ -2844,7 +2845,7 @@ NUKE_LAYOUT_LANE11 = {
 }
 _CONTEXT_LABELS = {**{f"key{i}": f"Key {i}" for i in range(1, 5)}, **{f"value{i}": f"Value {i}" for i in range(1, 5)}}
 NUKE_LABELS.update({
-    "Blend": {"mask_channel": "Mask"},
+    "Blend": {"mask_channel": "Mask", "invert_mask": "Invert"},
     "Keymix": {"maskChannelInput": "Mask channel", "invert_mask": "Invert"},
     "ZMerge": {"depth_layer": "Z channel"},
     "ModifyMetaData": {"edits": "Metadata"},

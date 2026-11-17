@@ -38,6 +38,11 @@ Crop and Text boxes; Tracker and GridWarp probes.
 ## Lane 2 step W1 (11/17): panels in the guide's wording, order and defaults
 
 Done on `openclaw/nb-2d-parity`: see TASKLOG.md. Worklist 243 -> 128 open rows (60 + 27 of the rest are Ultimatte's and Primatte's knobs). Defaults that now follow the guide, each with a legacy value on older documents: `channels` all (Invert, Multiply, Add, Gamma, Clamp, Posterize), IBKGizmo C-blue and level 0, Vectorfield trilinear, ChromaKeyer's despill bias colour, Kronos and OFlow Vector Detail density. No schema bump.
+## Lane 11 step B3 (11/17 3:00 AM): review book behaviour cases
+
+Every Image, Merge, Metadata and Other node the review book listed unchecked now has a behaviour case or a stated reason
+(`tools/nuke_fidelity_cases_other.py`); Blend has Nuke's mask invert. Lane 11 worklist open 95 -> 62; what is left is knobs of
+nodes NodeBased does not have and Root's project settings. Overall fidelity 97.0.
 
 ## Lane 10 step T1 (11/16 11:30 PM): panel interactions
 

@@ -6313,6 +6313,11 @@ class Evaluator:
             blended = Evaluator._blend(layers, p)
             mask = inputs[16] if len(inputs) > 16 else None
             channel = p.get("mask_channel", "alpha")
+            if mask is not None and p.get("invert_mask"):
+                # Nuke's invert beside the mask: the matte is 1 - matte, for the mix and for inject (lane 11 step B3).
+                inverted = np.zeros(mask.shape[:2] + (4,), np.float32)
+                inverted[..., 3:4] = 1.0 - Evaluator._mask_matte(mask, channel)
+                mask, channel = inverted, "alpha"
             out = Evaluator._apply_mask_mix(layers[0][1], blended, mask=mask, mix=p.get("mix", 1.0),
                                             mask_channel=channel)
             if p.get("inject") and mask is not None:

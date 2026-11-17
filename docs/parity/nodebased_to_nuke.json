@@ -3443,6 +3443,7 @@
    ],
    "knobs": [
     {"nodebased": ["mask_channel"], "nuke": ["maskChannelInput"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'mask', scripting name `maskChannelInput`"},
+    {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["weight0"], "nuke": ["weight0"], "kind": "same"},
     {"nodebased": ["normalize"], "nuke": ["weight1"], "kind": "renamed", "reason": "the guide's table names the normalize checkbox weight1 (its label is 'normalize')"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
@@ -3464,7 +3465,8 @@
     {"nodebased": ["weight15"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["weight1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
-   ]
+   ],
+   "default_notes": {"maskChannelInput": "Nuke lists none and sets the mask channel to rgba.alpha itself when a mask is wired; NodeBased's mask channel acts only while the mask input is wired, so it starts at alpha, the value Nuke sets on connecting."}
   },
   "CopyRectangle": {
    "nodebased": "CopyRectangle",
