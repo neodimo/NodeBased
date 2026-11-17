@@ -2,7 +2,7 @@
 
 **Overall fidelity: 96.8 / 100** (167 nodes scored, rank-weighted; 98.8 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.7 (98.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.7 (98.8 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.9 (99.0 counting only the nodes NodeBased has).
 
@@ -36,7 +36,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 97.1 | 96.9 | 98.1 | 6 |
 | Draw | 98.5 | 98.1 | 98.4 | 17 |
-| Time | 99.6 | 98.2 | 99.5 | 13 |
+| Time | 99.6 | 98.5 | 99.6 | 13 |
 | Channel | 99.2 | 98.6 | 98.9 | 5 |
 | Color | 97.8 | 94.8 | 97.5 | 34 |
 | Filter | 97.1 | 92.8 | 96.6 | 32 |
@@ -101,8 +101,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | TimeBlur | `TimeBlur` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
 | 7 | TimeEcho | `TimeEcho` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
-| 8 | Kronos | `Kronos` | supported | 91.9 | 89.4 | 78 (20/26) | - | 100 | 100 | - | 100 (35/35) | 99 | - | unmeasured |
-| 8 | OFlow | `OFlow` | supported | 95.5 | 94.3 | 88 (18/21) | - | 100 | 100 | - | 100 (32/32) | 98 | - | unmeasured |
+| 8 | Kronos | `Kronos` | supported | 93.7 | 91.8 | 82 (21/26) | - | 100 | 100 | - | 100 (35/35) | 99 | - | unmeasured |
+| 8 | OFlow | `OFlow` | supported | 97.7 | 97.1 | 94 (19/21) | - | 100 | 100 | - | 100 (32/32) | 98 | - | unmeasured |
 | 8 | SmartVector | `SmartVector` | supported | 94.8 | 94.4 | 94 (10/11) | - | 90 | 100 | - | - | 96 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |

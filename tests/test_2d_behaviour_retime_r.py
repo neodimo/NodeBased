@@ -191,5 +191,36 @@ class PanelOrder(unittest.TestCase):
             self.assertEqual(names.index("weight_blue"), names.index("weight_green") + 1, kind)
 
 
+class ResetButton(unittest.TestCase):
+    """Reset (`resetInputRange`) writes the clip's first and last frame into Input Range, on both retimers, in one undo step."""
+
+    def test_the_range_is_the_clips_frames(self):
+        self.assertEqual(retimeknobs.reset_range({"time": {"first": 5, "last": 42}}), (5.0, 42.0))
+
+    def test_the_button_sets_the_input_range_in_one_step(self):
+        from PySide6.QtWidgets import QApplication, QPushButton
+        app = QApplication.instance() or QApplication([])
+        from nodebased.app import Window
+        window = Window()
+        try:
+            window.dispatcher.execute({"op": "time", "first": 3, "last": 27, "current": 3})
+            for kind in ("Kronos", "OFlow"):
+                key = f"reset_{kind}"
+                window.dispatcher.execute({"op": "create", "id": key, "type": kind, "pos": [0, 0]})
+                window.dispatcher.execute({"op": "set", "id": key, "param": "input_start", "value": 9.0})
+                window.dispatcher.execute({"op": "set", "id": key, "param": "input_end", "value": 12.0})
+                panel = window.build_node_panel(key)
+                button = panel.findChild(QPushButton, "retime-reset-input-range")
+                self.assertIsNotNone(button, kind)
+                button.click()
+                app.processEvents()
+                params = window.dispatcher.document["nodes"][key]["params"]
+                self.assertEqual((params["input_start"], params["input_end"]), (3.0, 27.0), kind)
+        finally:
+            window.saved_document = window.dispatcher.document
+            window.close()
+            app.processEvents()
+
+
 if __name__ == "__main__":
     unittest.main()

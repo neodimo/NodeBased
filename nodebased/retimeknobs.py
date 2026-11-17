@@ -161,6 +161,12 @@ def shutter_count(kind, params, method):
     return max(1, min(64, count))
 
 
+def reset_range(document):
+    """What Reset (`resetInputRange`, "a button that writes the source clip's frame range into Input Range") writes: the first and last frame of the clip. A
+    NodeBased graph limits every clip to the project's frames (the `time` edit sets them), so the clip's range is the project's."""
+    return float(document["time"]["first"]), float(document["time"]["last"])
+
+
 def luminance_weights(params):
     """The (red, green, blue) weights of the luminance the motion is estimated on: `weightRed`, `weightGreen`, `weightBlue` ("Weight Red/Green/Blue",
     Advanced > Tolerances). Guide default 0.3, 0.6, 0.1; a node saved before step R holds the Rec. 709 weights it always read."""

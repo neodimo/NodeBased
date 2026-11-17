@@ -14903,6 +14903,13 @@ class Window(QMainWindow):
                     button.setObjectName(name)
                     button.clicked.connect(lambda _checked=False, k=key, c=channels: self.colorlookup_set(k, c))
                     form.addRow(button)
+            if node["type"] in ("Kronos", "OFlow"):
+                # Nuke's Reset beside Input Range: write the clip's frame range into it, in one undo step.
+                reset_range_button = QPushButton("Reset")
+                reset_range_button.setObjectName("retime-reset-input-range")
+                reset_range_button.setToolTip("Set the input range to the first and last frame of the clip")
+                reset_range_button.clicked.connect(lambda _checked=False, k=key: self.retime_reset_range(k))
+                form.addRow(reset_range_button)
             if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
                 readout = QLabel("Analyze the configured frame range")
                 readout.setWordWrap(True)
@@ -20621,6 +20628,13 @@ class Window(QMainWindow):
             button.setObjectName(f"matchgrade-{name}")
             button.clicked.connect(lambda _checked=False, a=action: run(a))
             form.addRow(button)
+
+    def retime_reset_range(self, key):
+        """Kronos and OFlow's Reset: Input Range becomes the clip's first and last frame (nodebased/retimeknobs.py `reset_range`)."""
+        from . import retimeknobs
+        first, last = retimeknobs.reset_range(self.graph_document())
+        self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": "input_start", "value": first},
+                                                  {"op": "set", "id": key, "param": "input_end", "value": last}]})
 
     def colorlookup_set(self, key, channels):
         """Nuke's Set RGB, Set RGBA and Set A: add a point mapping source to target on the chosen channel curves, in one undo step."""
