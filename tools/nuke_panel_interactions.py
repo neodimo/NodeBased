@@ -35,6 +35,10 @@ class Bench:
     """One Window shared by every probe; each probe makes its own node."""
 
     def __init__(self):
+        import sys
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        import tests.isolation  # noqa: F401  (the probe window never reads or writes the artist's real Qt settings)
         from PySide6.QtWidgets import QApplication
         from nodebased.app import Window
         self.app = QApplication.instance() or QApplication([])
@@ -85,8 +89,12 @@ class Bench:
         return None
 
     def close(self):
+        from PySide6.QtCore import QEvent
+        self.settle(8)                   # let pending previews land before the window's executor shuts down
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
+        self.window.deleteLater()
+        self.app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.settle()
 
 

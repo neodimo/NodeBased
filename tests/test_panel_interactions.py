@@ -48,6 +48,14 @@ class ReferenceTests(unittest.TestCase):
         self.assertLessEqual(set(KNOWN_GAPS), documented)
 
 
+class ReportTests(unittest.TestCase):
+    def test_the_fidelity_report_carries_the_table_beside_the_score(self):
+        text = (ROOT / "docs" / "PARITY_2D_FIDELITY.md").read_text()
+        self.assertIn("## Panels that work like Nuke", text)
+        self.assertIn("| Widget | Passing / documented | Not yet like Nuke | Undocumented |", text)
+        self.assertIn("not part of its formula", text)
+
+
 class FormulaTests(unittest.TestCase):
     def test_arithmetic_is_worked_out_as_nuke_does(self):
         self.assertEqual(evaluate_field_formula("378/2"), 189.0)

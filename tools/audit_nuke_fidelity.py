@@ -703,6 +703,37 @@ def gap_text(u):
     return "; ".join(parts) if parts else "nothing missing that the guide lists"
 
 
+def panel_interactions_section(w):
+    """How the Properties panel's knob widgets *work* against Nuke's documented behaviour (lane 10, 2026-11-16). Reported
+    beside the score, never folded into it: tools/nuke_panel_interactions.py drives real panels offscreen."""
+    w("## Panels that work like Nuke")
+    w("")
+    try:
+        import nuke_panel_interactions as interactions
+        results = interactions.probe_all()
+    except Exception as exc:  # no Qt here: say so rather than print a number nobody measured
+        w(f"Not measured in this run ({type(exc).__name__}: {exc}). Run the audit with `QT_QPA_PLATFORM=offscreen`.")
+        w("")
+        return
+    rows = interactions.table(results)
+    passing = sum(r[1] for r in rows)
+    documented = sum(r[2] for r in rows)
+    undocumented = sum(len(r[4]) for r in rows)
+    w(f"**{passing} of {documented} documented knob-widget behaviours work as Nuke's do** ({undocumented} more listed as undocumented by the "
+      "guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); "
+      "`tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. "
+      "This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).")
+    w("")
+    w("| Widget | Passing / documented | Not yet like Nuke | Undocumented |")
+    w("|---|---|---|---|")
+    for widget, ok, total, failing, undoc in rows:
+        failing_text = ", ".join(f"`{b.split('.', 1)[1]}`" + (" (not probed)" if results[b]["result"] == "not probed" else "")
+                                 for b in failing) or "-"
+        undoc_text = ", ".join(f"`{b.split('.', 1)[1]}`" for b in undoc) or "-"
+        w(f"| {widget.replace('_', ' ')} | {ok} / {total} | {failing_text} | {undoc_text} |")
+    w("")
+
+
 def build_report(reference_dir=None):
     nuke_doc, map_doc = load_json(NUKE_JSON), load_json(MAP_JSON)
     units, skipped = build_units(nuke_doc, map_doc, reference_dir)
@@ -793,6 +824,7 @@ def build_report(reference_dir=None):
       f"{probed - acting} change nothing on the fixture (listed per node below). "
       f"Splits: {sum(1 for u in split_nodes if u['components']['splits'] == 1)} of the {len(split_nodes)} nodes with split knobs in the table split all of them.")
     w("")
+    panel_interactions_section(w)
     w("## Per node")
     w("")
     w("Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D status, fidelity, then the component fractions as percentages "

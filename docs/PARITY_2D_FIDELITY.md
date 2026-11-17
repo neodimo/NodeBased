@@ -50,6 +50,24 @@ Behaviour checked: 115 of the 167 scored nodes have at least one scored pixel ca
 
 Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
+## Panels that work like Nuke
+
+**22 of 26 documented knob-widget behaviours work as Nuke's do** (10 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+
+| Widget | Passing / documented | Not yet like Nuke | Undocumented |
+|---|---|---|---|
+| number | 8 / 8 | - | `typed_outside_slider_range` |
+| color | 4 / 7 | `swatch_eyedropper`, `ctrl_click_sample` (not probed), `region_average` (not probed) | - |
+| animation | 6 / 6 | - | `copy_paste`, `set_to_default` |
+| split | 2 / 3 | `close_keeps_values` | `collapsed_display` |
+| node tab | 2 / 2 | - | - |
+| enumeration | 0 / 0 | - | `pick` |
+| checkbox | 0 / 0 | - | `toggle` |
+| channel | 0 / 0 | - | `layer_menu` |
+| xy | 0 / 0 | - | `drag` |
+| file | 0 / 0 | - | `browse` |
+| mask mix | 0 / 0 | - | `row` |
+
 ## Per node
 
 Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D status, fidelity, then the component fractions as percentages (`knobs` with the count of Nuke knobs covered, `acts` with acting/probed knobs, `defaults`, `sockets`, `chrome`, `math` with passed/total cases, `unchecked` when no case exists, `layout`, `splits` with fully split/listed knobs) and the pixel-truth column. `Prev.` is the node under the previous formula.
