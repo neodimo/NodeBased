@@ -1,4 +1,4 @@
-{"counts": {"2": {"open": 117, "accepted": 35}, "9": {"open": 230, "accepted": 6}, "11": {"open": 62, "accepted": 22}},
+{"counts": {"2": {"open": 118, "accepted": 35}, "9": {"open": 230, "accepted": 6}, "11": {"open": 62, "accepted": 22}},
 "items": [
  {"group": "Filter", "kind": "default", "knob": "size", "lane": 9, "node": "Blur", "nodebased": "Blur", "nodebased_value": "8.0", "nuke": "0", "reason": "pairing note: NodeBased's box radius in pixels; Nuke's size is a width/height pair", "status": "open", "weight": 2.0},
  {"group": "Time", "kind": "widget type", "knob": "enable_path_mask", "lane": 2, "node": "TimeOffset", "nodebased": "TimeOffset", "nodebased_value": "bool", "nuke": "string", "reason": "", "status": "open", "weight": 2.0},
@@ -85,6 +85,7 @@
  {"group": "Filter", "kind": "default", "knob": "Samples", "lane": 9, "node": "DirBlur", "nodebased": "DirBlur", "nodebased_value": "0", "nuke": "1", "reason": "", "status": "open", "weight": 0.222222},
  {"group": "Filter", "kind": "default", "knob": "holdout", "lane": 9, "node": "DirBlur", "nodebased": "DirBlur", "nodebased_value": "off", "nuke": "none", "reason": "", "status": "open", "weight": 0.222222},
  {"group": "Filter", "kind": "order", "knob": "mix", "lane": 9, "node": "DirBlur", "nodebased": "DirBlur", "nodebased_value": "mix", "nuke": "mix", "reason": "", "status": "open", "weight": 0.222222},
+ {"group": "Color", "kind": "missing knob", "knob": "use_precomputed", "lane": 2, "node": "ColorLookup", "nodebased": "ColorLookup", "nodebased_value": "", "nuke": "use precomputed table", "reason": "no pairing in nodebased_to_nuke.json", "status": "open", "weight": 0.2},
  {"group": "Filter", "kind": "order", "knob": "size", "lane": 9, "node": "Erode (fast)", "nodebased": "Erode", "nodebased_value": "erode_size", "nuke": "size", "reason": "", "status": "open", "weight": 0.181818},
  {"group": "Color", "kind": "missing knob", "knob": "colorspace", "lane": 2, "node": "Exposure", "nodebased": "Exposure", "nodebased_value": "", "nuke": "colorspace", "reason": "no pairing in nodebased_to_nuke.json", "status": "open", "weight": 0.181818},
  {"group": "Other", "kind": "not laid out", "knob": "Script_directory", "lane": 11, "node": "Root", "nodebased": "", "nodebased_value": "settings.project.script_directory", "nuke": "Script Directory", "reason": "", "status": "open", "weight": 0.181818},
