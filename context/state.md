@@ -1,5 +1,25 @@
 ## Lane 2 step W2 (11/17 9:50 AM): the rest of the colour and time worklist, then behaviour cases
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:36 AM on 2026-11-17 PDT)
+
+`main` moved `f9c91e91` -> `5e71c941` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `5e71c941` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-1001.log`, started 10:01 AM): **Ran 10138 tests in 1897.809 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step W2 (Tue 11/17): the rest of the colour and time worklist, then behaviour cases where it lists none.** Commits:
+  - `60fc8516` Fidelity report and worklist rebuilt after rebasing onto main (lane 9 W1 and lane 11 B3)
+  - `c0c3a842` Colour and time panels, W2: ColorCorrect test and mix luminance, Retime warp curve, Exposure colorspace, Colorspace matrix readout, GenerateLUT 3dl file format, Histogram plot; MinColor and GenerateLUT cases; fidelity report rebuilt
+  Diff: 24 files changed, 1074 insertions(+), 303 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Branch `openclaw/nb-2d-parity`. Detail in the TASKLOG entry of the same name. New params with neutral load-time defaults: ColorCorrect `test`, `mix_luminance`; Retime `warp`;
 Exposure `exposure_colorspace`; GenerateLUT `lut_3dl_format` (a saved node keeps `autodesk lustre`, the header it always wrote). New modules: `nodebased/histogramplot.py`;
 `ocio_nodes.colorspace_matrix` (the Colorspace panel's color matrix output). Cases in `tools/nuke_fidelity_cases_color.py` (`_w2_cases`, `_mincolor_cases`) and `_time.py` (Retime warp).
