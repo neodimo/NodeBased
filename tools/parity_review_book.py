@@ -87,7 +87,7 @@ def fidelity_rows(path=FIDELITY_MD):
 def to_display(arr):
     """A float RGBA (or RGB) array as 8-bit RGB for the page: rgb clipped to 0..1 and given a 2.2 display gamma, over a
     dark checker where alpha is below one so a premultiplied hole reads as a hole."""
-    a = np.asarray(arr, np.float64)
+    a = np.nan_to_num(np.asarray(arr, np.float64), nan=0.0, posinf=1.0, neginf=0.0)
     if a.ndim == 2:
         a = np.repeat(a[..., None], 3, axis=2)
     rgb = np.clip(a[..., :3], 0.0, 1.0) ** (1 / 2.2)
@@ -123,10 +123,12 @@ def save_png(path, rgb8):
 def diff_image(a, b, valid=None):
     """Absolute difference, the worst channel per pixel, shown x10 in a heat ramp (black = equal, white = 0.1 or more)."""
     err = np.abs(np.asarray(a, np.float64) - np.asarray(b, np.float64))
+    # NaN (an expectation undefined on part of the plate, such as a power of a negative value) counts as fully different.
+    err = np.nan_to_num(err, nan=np.inf, posinf=np.inf)
     if valid is not None:
         err = np.where(valid, err, 0.0)
     worst = err.max(axis=2) if err.ndim == 3 else err
-    t = np.clip(worst * 10.0, 0.0, 1.0)
+    t = np.clip(np.nan_to_num(worst * 10.0, posinf=1.0), 0.0, 1.0)
     heat = np.stack([np.clip(t * 3, 0, 1), np.clip(t * 3 - 1, 0, 1), np.clip(t * 3 - 2, 0, 1)], axis=2)
     return (heat * 255 + 0.5).astype(np.uint8), float(err.max()) if err.size else 0.0
 
@@ -379,7 +381,9 @@ def alignment(nuke_node, pair, kind):
                     same = compare_default(params[first], k["default"], pair.get("value_map"))
                 except Exception:  # noqa: BLE001
                     same = None
-                if same is False:
+                if same is False and k["name"] in set(pair.get("skip_default", [])):
+                    row["reason"] = "the default differs; the audit skips it on purpose (skip_default in the pairing)"
+                elif same is False:
                     row["marks"].append("default")
         rows.append(row)
     return rows
@@ -560,7 +564,8 @@ def node_page(name, row, nuke_node, pair, kind, panels, align, case_infos, strip
         if r["status"] in ("missing", "unsupported", "panel"):
             nb = f"<i>{esc(r['status'])}</i>" + (f": {esc(r['reason'])}" if r["reason"] else "")
         else:
-            nb = f"<code>{esc(r['nodebased'])}</code> <span class=ns>({esc(r['status'])})</span>"
+            nb = f"<code>{esc(r['nodebased'])}</code> <span class=ns>({esc(r['status'])})</span>" + \
+                (f" <span class=ns>{esc(r['reason'])}</span>" if r["reason"] else "")
         out.append(f"<tr><td>{esc(r['tab'])}</td><td><code>{esc(r['name'])}</code></td><td>{esc(r['label'])}</td><td>{esc(r['type'])}</td>"
                    f"<td>{_fmt_default(r['default'])}</td><td>{nb}</td><td>{esc(r['nb_label'])}</td><td>{esc(r['nb_widget'])}</td>"
                    f"<td>{_fmt_default(r['nb_default'])}</td><td class=mark>{esc(' '.join(r['marks']))}</td></tr>")
@@ -671,7 +676,8 @@ def build(out_dir, nodes=None):
                                         encoding="utf-8")
             built[name] = {"page": page, "panels": [str(p) for _, p in panels], "cases": len(cases),
                            "marks": [(r["name"], r["marks"]) for r in align if r["marks"]],
-                           "nuke_verified": any(i["nuke"] and i["nuke"]["status"] == "pass" for i in infos)}
+                           "nuke_verified": any(i["nuke"] and i["nuke"]["status"] == "pass" for i in infos),
+                           "plates": [("review+fixture" if i.get("fixture_images") else i["plate"] or "none") for i in infos]}
     finally:
         renderer.close()
     seconds = time.time() - started
@@ -688,7 +694,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
     nodes = TEN if args.ten else (args.nodes.split(",") if args.nodes else None)
     res = build(args.out, nodes)
-    print(f"wrote {len(res['pages'])} pages and {res['index']} in {res['seconds']:.1f} s")
+    from collections import Counter
+    plates = Counter(p for info in res["pages"].values() for p in info["plates"])
+    print(f"wrote {len(res['pages'])} pages and {res['index']} in {res['seconds']:.1f} s; cases shown on: {dict(plates)}")
     return 0
 
 
