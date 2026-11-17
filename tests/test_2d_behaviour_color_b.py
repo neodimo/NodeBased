@@ -675,6 +675,8 @@ class HistEQBehaviourTests(unittest.TestCase):
         base = {"hist_eq_mode": "channels"}
         for nuke, params in KnobsActTests.paired("HistEQ"):
             with self.subTest(knob=nuke):
+                if nuke in ("maskChannelInput", "invert_mask"):
+                    continue            # the mask strip's rows (lane 2 step R); tests/test_2d_behaviour_analysis_r.py gates HistEQ with a mask and inverts it
                 self.assertEqual(nuke, "histeqbins")
                 a = render("HistEQ", dict(base, histeqbins=4096), source=self.skewed(64)).pixels
                 b = render("HistEQ", dict(base, histeqbins=4), source=self.skewed(64)).pixels

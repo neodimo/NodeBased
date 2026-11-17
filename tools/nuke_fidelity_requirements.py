@@ -213,7 +213,7 @@ def load_split_table(path=SPLIT_JSON):
 # Nodes whose probe needs a particular picture on a particular input: STMap an identity map on its uv input, IDistort a vector field on it (the
 # default node refuses to run without one). Names are fixtures of tools/nuke_fidelity_cases.py, in input order and then optional inputs; the
 # remaining optional inputs (the mask) stay unwired.
-PROBE_SLOTS = {"STMap": ("A", "UV"), "IDistort": ("A", "VS")}
+PROBE_SLOTS = {"STMap": ("A", "UV"), "IDistort": ("A", "VS"), "Histogram": ("A",), "HistEQ": ("A",)}
 
 
 def _inputs_for(kind, fx, size):
@@ -233,6 +233,11 @@ def _inputs_for(kind, fx, size):
 PROBE_BASE = {
     # Lane 9 step Q (11/16): IDistort's blur scale scales the blur channel's values, so it acts only once a blur channel is named; the probe names the field's green.
     "IDistort": {"blur": "rgba.green"},
+    # Lane 2 step R (11/16): the sampler's default line (0, 0) to (100, 100) lies partly off a 16 x 12 picture, where the samples clamp to its corner; a line
+    # inside the picture lets every knob show.
+    # HistEQ's 4096 entries give each of the fixture's 192 pixels a bin of its own, so more or fewer entries cannot show; 16 entries make the bin width matter.
+    "HistEQ": {"histeqbins": 16},
+    "Sampler": {"sample_x0": 1.0, "sample_y0": 1.0, "sample_x1": 14.0, "sample_y1": 9.0},
     "MarkerRemoval": {"mode": "bilinear", "linearsearch": 1, "ctrlMask": "fixture.control"},
     "CopyRectangle": {"area_x": 3.0, "area_y": 2.0, "area_r": 11.0, "area_t": 9.0},     # Nuke's 512 389 1536 1167 lies off a 16 x 12 picture
     # Lane 2 step H (11/3): Flare's centre and radii, Glint's 50 pixel rays and Sparkles's 300 pixel rays all lie off a 16 x 12 picture.
@@ -393,6 +398,31 @@ def probe_acts(kind, params, fx):
                 parts, names = signature(trial)
                 ref = signature(dict(base, **({"layers": "depth"} if kind == "Remove" and name in ("channels2", "channels3", "channels4") else {})))
                 if names != ref[1] or any(x.shape != y.shape or np.abs(x - y).max() > ACT_TOL for x, y in zip(parts, ref[0])):
+                    acts[name] = True
+                    break
+        _PROBES[key] = acts
+        return acts
+    if kind == "Sampler":
+        # Lane 2 step R (11/16): an analysis node. The image passes through whatever the knobs say; what a knob changes is the readout (the sampled
+        # line and its x axis). The signature is the passed-through picture, the line's values with the channels drawn, and its x values and captions.
+        from nodebased import core, samplerknobs
+        picture = np.asarray(fx["A"], np.float32)
+        base = dict(core.SPECS[kind]["params"], **probe_base(kind))
+
+        def signature(p):
+            passed = np.asarray(picture, np.float64)          # the Sampler hands its input on whole (imaging.py: `if kind in ("Sampler", "CurveTool"): return source`)
+            read = samplerknobs.readout(picture, p)
+            return [passed, np.asarray(read["values"], np.float64), np.asarray(read["x"], np.float64), np.asarray([len(read["channels"])], np.float64),
+                    np.asarray([ord(c) for c in "".join(read["labels"])], np.float64)]
+        reference = signature(base)
+        acts = {}
+        for name in params:
+            if name not in base:
+                continue
+            acts[name] = False
+            for value in probe_moves(kind, name, base[name]):
+                parts = signature(dict(base, **{name: value}))
+                if any(x.shape != y.shape or np.abs(x - y).max() > ACT_TOL for x, y in zip(parts, reference)):
                     acts[name] = True
                     break
         _PROBES[key] = acts

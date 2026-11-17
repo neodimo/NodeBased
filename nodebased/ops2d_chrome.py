@@ -78,6 +78,9 @@ FILTER_CHROME = {
     # ZSlice's kernel owns the legacy mask and mix when the chrome stays at defaults. The generic
     # strip removes the mask slot before the kernel only when an artist changes a chrome control.
     "ZSlice": ("all", True, False),
+    # Histogram (lane 2 step R) has the mask strip and (un)premult by (the guide lists maskChannelInput, inject, invert_mask, fringe, unpremult and
+    # invert_unpremult after its curves); HistEQ lists the mask channel and its invert. Neither has a `channels` knob in the guide's table.
+    "Histogram": (None, True, True), "HistEQ": (None, True, False),
 }
 # The kinds whose own kernel already reads `channels` (rgb / rgba / alpha). The wrapper leaves those three
 # values to the kernel and handles every other value (all, none, red, green, blue, a layer) itself.
@@ -317,6 +320,8 @@ def upgrade_nodes(nodes):
         added.update(drawfxbehaviour.upgrade_params(node.get("type")))         # Flare, Glint, Sparkles, ScannedGrain (lane 2 step H)
         from . import retimeknobs
         added.update(retimeknobs.upgrade_params(node.get("type")))             # Kronos and OFlow timing (lane 2 step J)
+        from . import samplerknobs
+        added.update(samplerknobs.upgrade_params(node.get("type")))            # Sampler's Normalize X (lane 2 step R)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)

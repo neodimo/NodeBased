@@ -723,7 +723,7 @@ LAYOUTS = {
         'In', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',
         'Red from (second)', 'Green from (second)', 'Blue from (second)', 'Alpha from (second)'
     ],
-    'HistEQ': ['Histogram entries', 'Equalise', 'Mix'],
+    'HistEQ': ['Histogram entries', 'Equalise', 'Mask channel', 'Invert mask', 'Inject mask', 'Mask fringe', 'Mix'],      # the mask strip joined it in lane 2 step R
     'MinColor': ['Channels', 'Modify', 'Target', 'Direction', 'Delta', 'Frame start', 'Frame end', 'Find', 'Box origin', 'Box size', 'Result R', 'Result G', 'Result B', 'Result A'],
     'ScreenKeyer': [
         'View', 'Unpremultiply result', 'Screen colour', 'Screen gain', 'Screen balance', 'Alpha bias colour', 'Despill bias colour', 'Use alpha bias for despill', 'Screen pre-blur', 'Clip black', 'Clip white', 'Clip rollback', 'Screen shrink/grow', 'Screen softness', 'Screen despot black', 'Screen despot white', 'Screen replace', 'Screen replace colour', 'Midtones at', 'Shadow gain', 'Midtone gain', 'Highlight gain', 'Source alpha', 'Inside replace', 'Inside replace colour', 'Crop x method', 'Crop y method', 'Crop edge colour', 'Crop left', 'Crop right', 'Crop bottom', 'Crop top', 'Inside component', 'Outside component', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Edge grade gain', 'Edge grade gamma', 'Edge grade saturation', 'Edge width', 'Older intermediate view', 'Mix'

@@ -473,7 +473,7 @@ SPECS = {
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0, **_behaviour2d.new_params("HistEQ")}},
     "MinColor": {"inputs": ["image"], "params": {"channels": "rgb", "modify": "all", "target": 0.095, "adjdir": "Up", "pixeldelta": 0.0, "frame_start": 1, "frame_end": 100, "mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
-    "Sampler": {"inputs": ["image"], "params": {"sample_channels": "rgb", "frame_start": 1, "frame_end": 100, "sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0, "sample_r": 0.0, "sample_g": 0.0, "sample_b": 0.0, "sample_a": 0.0}},
+    "Sampler": {"inputs": ["image"], "params": {"sample_channels": "rgb", "frame_start": 1, "frame_end": 100, "sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0, "sample_r": 0.0, "sample_g": 0.0, "sample_b": 0.0, "sample_a": 0.0, "normalize_x": 1}},
     # reference is optional so a baked (match_analyzed=1) node keeps working once Analyze has
     # measured and written grade_gain_*/grade_offset_*, exactly as Nuke's baked-knob workflow does.
     "MatchGrade": {"inputs": ["image"], "optional_inputs": ["reference", "mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "match_task": "Match Graded Source", "match_analysis": "Analyze Reference Frames",
@@ -918,10 +918,10 @@ SPECS = {
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask", "transf"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
-    "Kronos": {"inputs": ["image"], "optional_inputs": ["matte", "mosrc", "fgvecs", "bgvecs"], "params": {"speed": 1.0, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
+    "Kronos": {"inputs": ["image"], "optional_inputs": ["matte", "mosrc", "fgvecs", "bgvecs"], "params": {"speed": 0.5, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
               **_retimeknobs.new_params("Kronos")}},
     "OFlow": {"inputs": ["image"], "params": {"input_start": 1.0, "input_end": 100.0,
-              "output_start": 1.0, "timing": "speed", "speed": 1.0, "frame": 1.0,
+              "output_start": 1.0, "timing": "speed", "speed": 0.5, "frame": 1.0,
               "vector_detail": 4, "smoothness": 1.0, "shutter_samples": 1, "shutter_time": 0.0,
               "flow_backend": "auto", **_retimeknobs.new_params("OFlow")}},
     "VectorToMotion": {"inputs": ["image"], "params": {"forward_layer": "smartvector.forward",
@@ -2564,6 +2564,8 @@ LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_len
                "legacy_shutter": (0, 1), "auto_shutter_time": (0, 1), "flicker_compensation": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["retime_output"] = list(_retimeknobs.OUTPUTS)
+CHOICES["resample_type"] = list(_retimeknobs.RESAMPLES)
+LIMITS.update({"weight_red": (0.0, 1.0), "weight_green": (0.0, 1.0), "weight_blue": (0.0, 1.0), "normalize_x": (0, 1)})      # Kronos and OFlow luminance weights, Sampler Normalize X (step R)
 CHOICES.update(_behaviour2d.CHOICES)
 LIMITS.update(_hsvtoolknobs.LIMITS)      # HSVTool's per-range masks (nodebased/hsvtoolknobs.py)
 CHOICES.update(_hsvtoolknobs.CHOICES)

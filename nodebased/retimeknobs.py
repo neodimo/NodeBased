@@ -40,17 +40,24 @@ OUTPUTS = ("result", "matte", "foreground", "background")
 # Step N (11/3): Kronos's shutter knobs, matte and output, and the automatic shutter of both nodes.
 _KRONOS_STEP_N = {"shutter_time": 0.0, "auto_shutter_time": 0, "vector_detail": 4, "smoothness": 1.0, "motion_matte_channel": "None",
                   "retime_output": "result", "flicker_compensation": 0}
+# Step R (11/16): Resampling and the three luminance weights of both nodes. `resample_type` is the filter the motion warp samples with
+# (Bilinear is the guide's default and what every saved node used); the weights are the guide's 0.3, 0.6, 0.1 on a new node, and a node saved
+# before step R gets the Rec. 709 weights its estimator always read, so its pixels do not move.
+RESAMPLES = ("Bilinear", "Lanczos4", "Lanczos6")
+REC709 = (0.2126, 0.7152, 0.0722)
+_STEP_R_NEW = {"resample_type": "Bilinear", "weight_red": 0.3, "weight_green": 0.6, "weight_blue": 0.1}
+_STEP_R_OLD = {"resample_type": "Bilinear", "weight_red": REC709[0], "weight_green": REC709[1], "weight_blue": REC709[2]}
 NEW = {
-    "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 0, "timing": "speed",
-               SHUTTER_FLAG: 0, **_KRONOS_STEP_N},
-    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0},
+    "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 0.5, "retimed_channels": "all", FLAG: 0, "timing": "speed",
+               SHUTTER_FLAG: 0, **_KRONOS_STEP_N, **_STEP_R_NEW},
+    "OFlow": {"input_speed": 0.5, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_NEW},
 }
 # What a node saved before this step gets: Kronos's old rule, flagged. A missing flag reads as legacy. A Kronos saved before step N keeps the
 # shutter it had (the output speed wide, `shutter_time` unread); `legacy_shutter` says so.
 OLD = {
     "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 1, "timing": "speed", "frame": -1.0,
-               SHUTTER_FLAG: 1, **_KRONOS_STEP_N},
-    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0},
+               SHUTTER_FLAG: 1, **_KRONOS_STEP_N, **_STEP_R_OLD},
+    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_OLD},
 }
 
 
@@ -154,6 +161,46 @@ def shutter_count(kind, params, method):
     return max(1, min(64, count))
 
 
+def luminance_weights(params):
+    """The (red, green, blue) weights of the luminance the motion is estimated on: `weightRed`, `weightGreen`, `weightBlue` ("Weight Red/Green/Blue",
+    Advanced > Tolerances). Guide default 0.3, 0.6, 0.1; a node saved before step R holds the Rec. 709 weights it always read."""
+    return tuple(float(params.get(name, default)) for name, default in zip(("weight_red", "weight_green", "weight_blue"), REC709))
+
+
+def weighted_grey(image, weights):
+    """`image` as a grey picture whose every channel is `weights` dotted with its red, green and blue (alpha kept), so the estimator, which reads
+    Rec. 709 luminance (the weights sum to one), sees exactly the weighted luminance. Weights that already are Rec. 709 pass the picture through."""
+    import numpy as np
+    if tuple(round(w, 6) for w in weights) == tuple(round(w, 6) for w in REC709):
+        return image
+    a = np.asarray(image, np.float32)
+    grey = a[..., 0] * np.float32(weights[0]) + a[..., 1] * np.float32(weights[1]) + a[..., 2] * np.float32(weights[2])
+    out = a.copy()
+    out[..., 0] = out[..., 1] = out[..., 2] = grey
+    return out
+
+
+def warp_resampled(image, flow, resample="Bilinear"):
+    """`warp_by_flow` with the filter chosen by Resampling: Bilinear (the guide's default, the existing warp, bit for bit), Lanczos4 or Lanczos6 (the
+    separable windowed-sinc kernels `transformbehaviour` gives Transform and MotionBlur, weights normalised to sum to one so a flat area stays flat).
+    Lanczos has negative lobes, so a sharp edge rings and a bright edge overshoots; bilinear never does. The guide names the filters and gives no
+    weights, so the kernels are our reading (convention). Outside the picture is black, as in the bilinear warp."""
+    import numpy as np
+    from .flow_nodes import warp_by_flow
+    resample = next((name for name in RESAMPLES if name.lower() == str(resample).lower()), "Bilinear")
+    if resample == "Bilinear":
+        return warp_by_flow(image, flow)
+    from . import transformbehaviour
+    image = np.asarray(image, np.float32)
+    flow = np.asarray(flow, np.float32)
+    h, w = image.shape[:2]
+    yy, xx = np.mgrid[:h, :w].astype(np.float32)
+    x, y = xx - flow[..., 0], yy - flow[..., 1]
+    result = transformbehaviour.resample(image, x, y, resample.lower(), edge=True)
+    valid = (x >= 0) & (x <= w - 1) & (y >= 0) & (y <= h - 1)
+    return np.where(valid[..., None], result, 0).astype(np.float32)
+
+
 def estimation_gain(first, second):
     """`second` scaled per channel so its mean matches `first`'s: Flicker Compensation's reading, "takes into account variations in luminance and
     overall flickering", applied to the pictures the motion is estimated on (the retimed picture keeps its own brightness)."""
@@ -181,7 +228,9 @@ def retimed_picture(ap, bp, alpha, method, params, *, flow_backend, mosrc=None, 
     def estimate(first, second, backend):
         if int(params.get("flicker_compensation", 0)):
             second = estimation_gain(first, second)
-        return flow_pair(first, second, vector_detail=int(params.get("vector_detail", 4)), smoothness=float(params.get("smoothness", 1.0)), backend=backend)
+        weights = luminance_weights(params)
+        return flow_pair(weighted_grey(first, weights), weighted_grey(second, weights), vector_detail=int(params.get("vector_detail", 4)),
+                         smoothness=float(params.get("smoothness", 1.0)), backend=backend)
 
     def retime(xa, xb, flows):
         if sample_whole:
@@ -189,7 +238,8 @@ def retimed_picture(ap, bp, alpha, method, params, *, flow_backend, mosrc=None, 
         if method in ("frame", "blend"):
             return blend(xa, xb, alpha)
         fw, bw, occ = flows
-        wa, wb = warp_by_flow(xa, fw * alpha), warp_by_flow(xb, bw * (1 - alpha))
+        resample = str(params.get("resample_type", "Bilinear"))
+        wa, wb = warp_resampled(xa, fw * alpha, resample), warp_resampled(xb, bw * (1 - alpha), resample)
         out = wa * (1 - alpha) + wb * alpha
         out[occ] = wb[occ]
         return out

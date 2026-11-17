@@ -14992,6 +14992,13 @@ class Window(QMainWindow):
                                                   plot.height() - 4 - (float(v[channel]) - low) / (high - low) * (plot.height() - 8))
                                           for i, v in enumerate(values)]
                                 painter.drawPolyline(QPolygonF(points))
+                            # The x axis follows Normalize X (nodebased/samplerknobs.py): 0 to 1 along the line, or pixels from its start.
+                            from . import samplerknobs
+                            left_caption, right_caption = samplerknobs.axis_labels(
+                                (p["sample_x0"], p["sample_y0"]), (p["sample_x1"], p["sample_y1"]), bool(int(selected["params"].get("normalize_x", 1))))
+                            painter.setPen(QColor("#9a9aa4"))
+                            painter.drawText(QPointF(3, 11), "x " + left_caption)
+                            painter.drawText(QRectF(plot.width() - 83, 0, 80, 14), int(Qt.AlignmentFlag.AlignRight), right_caption)
                             painter.end()
                             label.setPixmap(plot)
                             label.setToolTip(f"{n} line samples · first RGB " + ", ".join(f"{v:.4f}" for v in values[0, :3]) + " · last RGB " + ", ".join(f"{v:.4f}" for v in values[-1, :3]))

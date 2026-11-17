@@ -1892,6 +1892,101 @@ def _posterize_cases():
     return out
 
 
+# ------------------------------------------------------------------------------------------------------ Kronos and OFlow (step R)
+def _retime_weight_cases():
+    """The luminance weights of Kronos and OFlow. A plate whose only moving channel is red (Noise moved 4 pixels a frame, then Shuffle keeping red and
+    sending 0 to green and blue), retimed half way (Output Speed 0.5, output frame 2). With Weight Red at its guide default (0.3) the luminance moves
+    and the estimator finds the motion, so the picture is frame 1 moved 2 pixels; with Weight Red 0 the luminance is flat, the estimated field reads
+    no motion, and the picture is the cross-dissolve of frame 1 and frame 2 (a ghost). The interior is compared, on red only."""
+    out = []
+    W, H, SHIFT, MARGIN = 96, 64, 4, (8, 16)
+
+    def base_noise(frame):
+        from nodebased.core import Dispatcher, empty_document
+        from nodebased.imaging import Evaluator
+        d = Dispatcher(empty_document())
+        d.execute({"op": "create", "id": "p", "type": "Noise", "params": {"width": W, "height": H, "size": 16, "octaves": 3}})
+        return np.asarray(Evaluator().evaluate_raster(dict(d.document, view="p"), target="p", frame=frame).pixels, dtype=np.float64)
+
+    def valid_red():
+        valid = np.zeros((H, W, 4), bool)
+        valid[MARGIN[0]:-MARGIN[0], MARGIN[1]:-MARGIN[1], 0] = True
+        return valid
+
+    def moved(fx):
+        base, ref = base_noise(1), np.zeros((H, W, 4))
+        ref[:, SHIFT // 2:] = base[:, :-(SHIFT // 2)]
+        return ref, valid_red()
+
+    def ghost(fx):
+        base, ref = base_noise(1), np.zeros((H, W, 4))
+        second = np.zeros((H, W, 4))
+        second[:, SHIFT:] = base[:, :-SHIFT]
+        return 0.5 * (base + second), valid_red()
+    plate = {"plate": {"type": "Noise", "params": {"size": 16, "octaves": 3}}, "size": (W, H), "time": (1, 8),
+             "chain": [("Transform", {"filter": "nearest"}, {"translate_x": ("linear", tuple((f, float(SHIFT * (f - 1))) for f in range(-5, 30)))}),
+                       ("Shuffle", {"green_from": "0", "blue_from": "0"})]}
+    for node, method_knob in (("Kronos", "interpolation"), ("OFlow", "method")):
+        low = node.lower()
+        page = f"https://learn.foundry.com/nuke/17.0/content/reference_guide/time_nodes/{low}.html"
+        note = (f"{node} ({page}): 'weightRed / weightGreen / weightBlue: the weights of the red, green and blue channels in the luminance the motion is "
+                "estimated on' (guide defaults 0.3, 0.6, 0.1). The plate moves only in red. Compared away from the edges (8 rows and 16 columns left out "
+                "each side), on red, with an absolute tolerance of 0.01 (the estimated field is not exact)")
+        for what, weight, expected, source, statement in (
+                ("default_weights_find_the_red_motion", 0.3, moved, "convention",
+                 f"{node} at the default weights (0.3, 0.6, 0.1) on a plate whose motion is in red alone shows the plate moved 2 pixels, half the 4 pixel "
+                 "translation"),
+                ("red_weight_zero_reads_no_motion", 0.0, ghost, "convention",
+                 f"{node} with Weight Red 0 on a plate whose motion is in red alone: the luminance the motion is estimated on is flat, the estimated field "
+                 "reads no motion, and the in-between picture is the cross-dissolve of the two frames (frame 1 and frame 1 moved 4 pixels)")):
+            params = {"interpolation": "motion", "timing": "speed", "speed": 0.5, "input_start": 1.0, "input_end": 8.0, "weight_red": weight}
+            if node == "OFlow":
+                params["output_start"] = 1.0
+            out.append(Case(id=f"{low}_{what}", nuke=node, nuke_class=node, nuke_knobs=((method_knob, "Motion"), ("timingOutputSpeed", 0.5), ("weightRed", weight)),
+                            nuke_inputs=("stamp",), nb_kind=node, nb_params=dict(params, _stamp=dict(plate, frame=2)), nb_inputs=(), expected=expected,
+                            source=source, statement=statement + ". " + note, tolerance=0.01))
+        out.append(Case(id=f"{low}_resampling_filters", nuke=node, nuke_class=node, nuke_knobs=((method_knob, "Motion"), ("resampleType", "Lanczos4")),
+                        nuke_inputs=("stamp",), nb_kind=node, nb_params={"interpolation": "motion", "resample_type": "Lanczos4", "_stamp": dict(plate, frame=2)},
+                        nb_inputs=(), expected=moved, source="convention",
+                        statement=(f"{node} Resampling Bilinear or Lanczos4 or Lanczos6 ({page}: 'resampleType'): the warp samples with the chosen filter; a "
+                                   "half-pixel retime of a step edge is bilinear without overshoot and Lanczos with it (tests/test_2d_behaviour_retime_r.py)"),
+                        unscored=("the guide names the filters and gives no weights, and a half-pixel move on a plate the estimator must measure cannot be "
+                                  "written down to a tolerance that tells the filters apart; the kernel comparison is asserted on a known field in "
+                                  "tests/test_2d_behaviour_retime_r.py"), tolerance=0.01))
+    return out
+
+
+# ------------------------------------------------------------------------------------------------------ Sampler and Histogram (step R)
+def _analysis_cases():
+    """Sampler and Histogram on the frame-stamped plate of the Time cases (a Constant whose red is the frame number, green 0.25, blue 0.5), shown at
+    frame 0.5 so every value is inside 0 to 1. The Sampler is an analysis node: it hands its picture on whole and its knobs change the readout, which
+    a pixel case cannot see (the readout is asserted in tests/test_2d_behaviour_analysis_r.py). The Histogram at its defaults is the identity inside
+    0 to 1 (input range 0 to 1, gamma 1, output range 0 to 1)."""
+    out = []
+
+    def plate(red):
+        def expected(fx):
+            ref = np.empty((12, 16, 4), np.float64)
+            ref[..., 0], ref[..., 1], ref[..., 2], ref[..., 3] = red, 0.25, 0.5, 1.0
+            return ref, np.ones((12, 16, 4), bool)
+        return expected
+    base = "https://learn.foundry.com/nuke/17.0/content/reference_guide/"
+    out.append(Case(id="sampler_passes_the_picture_through", nuke="Sampler", nuke_class="Sampler", nuke_knobs=(("sampler", (2.0, 2.0)),),
+                    nuke_inputs=("stamp",), nb_kind="Sampler", nb_params={"_stamp": {"frame": 0.5}}, nb_inputs=(), expected=plate(0.5), source="convention",
+                    statement=(f"Sampler ({base}other_nodes/sampler.html) samples a scanline into lookup curves and is not a picture operation: the picture it "
+                               "shows is its input's. A stamped plate at frame 0.5 comes out unchanged.")))
+    out.append(Case(id="histogram_defaults_are_the_identity", nuke="Histogram", nuke_class="Histogram", nuke_knobs=(),
+                    nuke_inputs=("stamp",), nb_kind="Histogram", nb_params={"_stamp": {"frame": 0.5}}, nb_inputs=(), expected=plate(0.5), source="convention",
+                    statement=(f"Histogram ({base}color_nodes/histogram.html): the input range 0 to 1, the output range 0 to 1 and a gamma of 1 leave a picture inside "
+                               "0 to 1 as it was.")))
+    out.append(Case(id="histogram_input_range_stretch", nuke="Histogram", nuke_class="Histogram", nuke_knobs=(("in", (0.2, 0.8, 1.0)),),
+                    nuke_inputs=("stamp",), nb_kind="Histogram", nb_params={"black": 0.2, "white": 0.8, "_stamp": {"frame": 0.5}}, nb_inputs=(), expected=None,
+                    source="convention", statement="Histogram with the input range 0.2 to 0.8 stretches it to 0 to 1",
+                    unscored=("the guide describes the knobs as the input range, gamma and output range of a histogram's curve and gives no formula for the "
+                              "stretch's rounding or its clamp, so the exact values are not written down")))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
@@ -1901,4 +1996,4 @@ def cases():
             + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
             + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases()
             + _chroma_keyer_behaviour_cases() + _screen_keyer_behaviour_cases() + _ibk_behaviour_cases() + _shuffle_copy_cases() + _remove_cases()
-            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases())
+            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases() + _retime_weight_cases() + _analysis_cases())
