@@ -114,9 +114,9 @@ def cases():
     # ---------------------------------------------------------------------------------------------------------- CopyBBox
     case("copybbox_keeps_the_b_stream_pixels", "CopyBBox", "CopyBBox", {}, same_as("B"), "guide",
          f"'Copies the bounding box from the A input onto the B stream' ({GUIDE}merge_nodes/copybbox.html): the pixels are B's. Both "
-         "fixtures cover the whole frame, so A's bounding box crops nothing. NodeBased's sockets run the other way round (its A is the "
-         "stream, its B gives the box), so the NodeBased side is wired with the stream on A.",
-         nuke_inputs=("A", "B"), nb_inputs=("B", "A"))
+         "fixtures cover the whole frame, so A's bounding box crops nothing. NodeBased's sockets carry Nuke's roles (schema 35), so both "
+         "sides are wired the same way.",
+         nuke_inputs=("A", "B"), nb_inputs=("A", "B"))
 
     # ------------------------------------------------------------------------------------------------------ ContactSheet
     cpage = f"{GUIDE}merge_nodes/contactsheet.html"

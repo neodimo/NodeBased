@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -617,8 +617,9 @@ SPECS = {
     "CopyRectangle": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                       "params": {"channels": "rgba", "area_x": 512.0, "area_y": 389.0, "area_r": 1536.0,
                                  "area_t": 1167.0, "softness": 0.0, "mix": 1.0}},
-    # CopyBBox adopts B's data window and keeps A's pixels wherever A has data. No knobs;
-    # bypass follows A, the image being copied onto.
+    # CopyBBox, as in Nuke: copies A's bounding box onto the B stream, so the output has B's
+    # pixels inside A's data window. No knobs; bypass passes B. (Before schema 35 the two inputs
+    # were named the other way round; the v34 -> v35 migration swaps saved connections.)
     "CopyBBox": {"inputs": ["A", "B"], "params": {}},
     # Position: Nuke's integer-pixel move, `translate` as two ints. Pixels and data window move
     # together, nothing is resampled.
@@ -1768,6 +1769,8 @@ def bypass_slot(node):
         # No B input: the first wired numbered input (in0 when none is wired).
         return next((slot for slot in SPECS[kind]["inputs"] + SPECS[kind]["optional_inputs"][:-1]
                      if inputs.get(slot) is not None), "in0")
+    if kind == "CopyBBox":
+        return "B"   # the stream the bounding box is copied onto, as in Nuke
     if kind in MERGE_LIKE_KINDS:
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     if kind in DRAW_KINDS:
@@ -3152,6 +3155,23 @@ def upgrade_document(document):
                 settings = payload.setdefault("tool_settings", {})
                 settings.setdefault("__global__", {}).setdefault("autokey", False)
         doc["version"] = 34
+    if isinstance(doc, dict) and doc.get("version") == 34:
+        # v34 -> v35: CopyBBox's inputs take Nuke's names (A supplies the bounding box, B the
+        # picture). Saved nodes had them the other way round, so their connections swap and they
+        # render exactly as before. Nested Groups too.
+        def _copybbox_inputs(scope):
+            for current in scope.values():
+                if not isinstance(current, dict):
+                    continue
+                inputs = current.get("inputs")
+                if current.get("type") == "CopyBBox" and isinstance(inputs, dict):
+                    picture, box = inputs.get("A"), inputs.get("B")
+                    inputs["A"], inputs["B"] = box, picture
+                graph = current.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _copybbox_inputs(graph["nodes"])
+        _copybbox_inputs(doc.get("nodes", {}))
+        doc["version"] = 35
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

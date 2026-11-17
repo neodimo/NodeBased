@@ -4284,10 +4284,10 @@ class Evaluator:
             layers += [None] * (16 - len(layers)) + [mask.fit(out) if mask is not None else None]
             return Raster(Evaluator._kernel(kind, p, layers, frame), out, display)
         if kind == "CopyBBox":
-            a, b = inputs[0], inputs[1]
-            if a.display != b.display:
+            box, picture = inputs[0], inputs[1]   # Nuke: A's bounding box onto the B stream
+            if box.display != picture.display:
                 raise ValueError("CopyBBox inputs must have matching display windows")
-            return Raster(a.fit(b.data), b.data, a.display, a.layers, a.meta)
+            return Raster(picture.fit(box.data), box.data, picture.display, picture.layers, picture.meta)
         if kind == "Merge" and (inputs[0] is None or inputs[1] is None):
             if inputs[0] is None:
                 return inputs[1]

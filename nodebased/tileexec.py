@@ -472,9 +472,9 @@ class TileExecutor:
         bounds_target = target
         target_node = document["nodes"].get(target)
         if target_node and target_node["type"] == "CopyBBox":
-            bounds_target = target_node["inputs"].get("A" if target_node["disabled"] else "B")
+            bounds_target = target_node["inputs"].get("B" if target_node["disabled"] else "A")
             if bounds_target is None:
-                raise ValueError("CopyBBox: connect input B to supply the output data window")
+                raise ValueError("CopyBBox: connect input A to supply the output data window")
         node_id = _first_generator(document, bounds_target, frame or 1)
         node = document["nodes"][node_id]
         if node["type"] != "Read":
@@ -1733,8 +1733,9 @@ class TileExecutor:
             aligned.append(_align_artifact_to(mask, buffered_region) if mask is not None else None)
             return imaging.Evaluator._kernel(kind, params, aligned, frame).astype(np.float32)
         if kind == "CopyBBox":
-            return (_align_artifact_to(inputs[0], buffered_region).astype(np.float32)
-                    if inputs[0] is not None else
+            # B's pixels (inputs[1]) inside A's data window, which is the output region here.
+            return (_align_artifact_to(inputs[1], buffered_region).astype(np.float32)
+                    if inputs[1] is not None else
                     np.zeros((buffered_region.height, buffered_region.width, 4), dtype=np.float32))
         if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle"):
             # Merge-family halo is zero, so buffered_region IS the output region. Both inputs need

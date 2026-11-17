@@ -1,12 +1,15 @@
-"""Nuke CopyBBox: pixels from A, output data window from B."""
+"""Nuke CopyBBox: copies A's bounding box onto the B stream (B's pixels, A's data window)."""
 import tempfile
 import unittest
 from pathlib import Path
 
+import copy
+import json
+
 import numpy as np
 import OpenImageIO as oiio
 
-from nodebased.core import Dispatcher
+from nodebased.core import SCHEMA_VERSION, Dispatcher, bypass_slot, upgrade_document, validate
 from nodebased.imaging import Evaluator
 from nodebased.raster import Region
 from nodebased.tileexec import TileExecutor
@@ -42,11 +45,13 @@ class CopyBBoxTests(unittest.TestCase):
         d.execute({"op": "create", "id": "a", "type": "Read", "params": {"path": str(a_path)}})
         d.execute({"op": "create", "id": "b", "type": "Read", "params": {"path": str(b_path)}})
         d.execute({"op": "create", "id": "copy", "type": "CopyBBox"})
-        d.execute({"op": "connect", "id": "copy", "input": "A", "source": "a"})
-        d.execute({"op": "connect", "id": "copy", "input": "B", "source": "b"})
+        # "a" holds the picture and "b" the larger window: in Nuke's roles the picture goes to B
+        # and the bounding box comes from A.
+        d.execute({"op": "connect", "id": "copy", "input": "B", "source": "a"})
+        d.execute({"op": "connect", "id": "copy", "input": "A", "source": "b"})
         return d.document, a_data, b_data, a_pixels
 
-    def test_copies_a_pixels_into_b_data_window_on_full_and_tile_paths(self):
+    def test_copies_a_bounding_box_onto_b_pixels_on_full_and_tile_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             document, a_data, b_data, a_pixels = self.graph(directory)
             full = Evaluator().evaluate_raster(document, "copy")
@@ -62,6 +67,35 @@ class CopyBBoxTests(unittest.TestCase):
             self.assertEqual(tiled.region.width, b_data.width)
             self.assertEqual(tiled.region.height, b_data.height)
             np.testing.assert_array_equal(tiled.pixels, full.pixels)
+
+    def test_bypass_passes_b_the_stream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document, a_data, _b_data, _a_pixels = self.graph(directory)
+            self.assertEqual(bypass_slot(document["nodes"]["copy"]), "B")
+            document["nodes"]["copy"]["disabled"] = True
+            out = Evaluator().evaluate_raster(document, "copy")
+            self.assertEqual(out.data, a_data)   # the picture on B, its own window
+
+    def test_document_saved_before_schema_35_renders_as_before(self):
+        # Before schema 35 the picture was wired to A and the window to B. The migration swaps
+        # the saved connections, inside Groups too, so the pixels and window stay bit for bit.
+        with tempfile.TemporaryDirectory() as directory:
+            document, _a_data, b_data, _a_pixels = self.graph(directory)
+            expected = Evaluator().evaluate_raster(document, "copy")
+            old = json.loads(json.dumps(document))
+            old["version"] = 34
+            old["nodes"]["copy"]["inputs"] = {"A": "a", "B": "b"}
+            group = copy.deepcopy(old["nodes"]["copy"])
+            old["nodes"]["grp"] = {"type": "Group", "graph": {"nodes": {"inner": group}}}
+            upgraded = upgrade_document(old)
+            self.assertEqual(upgraded["version"], SCHEMA_VERSION)
+            self.assertEqual(upgraded["nodes"]["copy"]["inputs"], {"A": "b", "B": "a"})
+            self.assertEqual(upgraded["nodes"]["grp"]["graph"]["nodes"]["inner"]["inputs"], {"A": "b", "B": "a"})
+            del upgraded["nodes"]["grp"]
+            validate(upgraded)
+            got = Evaluator().evaluate_raster(upgraded, "copy")
+            self.assertEqual(got.data, b_data)
+            np.testing.assert_array_equal(got.pixels, expected.pixels)
 
 
 if __name__ == "__main__":
