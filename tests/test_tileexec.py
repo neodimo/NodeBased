@@ -512,6 +512,112 @@ class PostReviewBlockerRegressionTests(unittest.TestCase):
             TileExecutor().compose(d.document, "m", tier=1)
 
 
+class ReadCanvasSizeTests(unittest.TestCase):
+    """A Read's canvas size comes from its file's header (`imaging.read_image_bounds`, as `canvas_region` reads it): the
+    Merge format check asks it of every Read before the first tile, and decoding the picture only to learn its size cost
+    more than the region render it was checking."""
+
+    LEGACY = {"offset_negative_display_window": False, "edge_pixels": "black"}   # none of Nuke's knobs moved
+
+    def setUp(self):
+        from nodebased import imaging
+        imaging._BOUNDS_MEMO.clear()
+
+    def _merge_document(self, path, width, height, params=None):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Read", "id": "r", "params": {"path": str(path), **(params or {})}})
+        d.execute({"op": "create", "type": "Constant", "id": "c",
+                   "params": {"width": width, "height": height, "alpha": 0.5}})
+        d.execute({"op": "create", "type": "Merge", "id": "m"})
+        d.execute({"op": "connect", "id": "m", "input": "A", "source": "c"})
+        d.execute({"op": "connect", "id": "m", "input": "B", "source": "r"})
+        return d
+
+    def _counting_decodes(self, refuse=False):
+        """Counts (or refuses) every decode of a Read's pixels while the block runs."""
+        import contextlib
+        from unittest import mock
+        from nodebased import imaging
+        calls = []
+        real = imaging.read_image_raster
+
+        def decode(*args, **kwargs):
+            calls.append(args)
+            if refuse:
+                raise AssertionError("the canvas size decoded the Read's pixels")
+            return real(*args, **kwargs)
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch("nodebased.imaging.read_image_raster", decode))
+        if refuse:
+            stack.enter_context(mock.patch("nodebased.media.read_media_raster", decode))
+        return stack, calls
+
+    def test_the_size_of_a_read_is_its_display_window_without_a_decode(self):
+        from nodebased.tileexec import _canvas_size_for_chain, _validate_merge_formats
+        with tempfile.TemporaryDirectory() as temp:
+            for name, writer in (("plate.exr", write_exr), ("plate.png", write_png)):
+                path = Path(temp) / name
+                writer(path, np.full((21, 37, 4), 0.25, np.float32))
+                d = self._merge_document(path, 37, 21, self.LEGACY)
+                expected = {tier: Evaluator().evaluate(d.document, "r", tier=tier).shape[1::-1] for tier in (1, 2, 4)}
+                stack, _calls = self._counting_decodes(refuse=True)
+                with stack:
+                    for tier, size in expected.items():
+                        with self.subTest(file=name, tier=tier):
+                            self.assertEqual(_canvas_size_for_chain(d.document, "r", 1, tier)[:2], tuple(size))
+                            _validate_merge_formats(d.document, ["m"], 1, tier)
+
+    def test_a_mismatched_read_still_fails_the_merge_check_without_a_decode(self):
+        from nodebased.tileexec import _validate_merge_formats
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "plate.exr"
+            write_exr(path, np.full((16, 16, 4), 0.25, np.float32))
+            d = self._merge_document(path, 32, 16, self.LEGACY)
+            stack, _calls = self._counting_decodes(refuse=True)
+            with stack, self.assertRaisesRegex(ValueError, "matching formats"):
+                _validate_merge_formats(d.document, ["m"], 1, 1)
+
+    def test_a_new_read_is_decoded_at_most_once_for_its_size(self):
+        """A new Read carries Nuke's defaults for edge pixels and negative display windows, which `read_image_bounds`
+        answers from the decoded picture and keeps against the file: the first size costs a decode, the rest none."""
+        from nodebased.tileexec import _canvas_size_for_chain, _validate_merge_formats
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "plate.exr"
+            write_exr(path, np.full((21, 37, 4), 0.25, np.float32))
+            d = self._merge_document(path, 37, 21)
+            expected = Evaluator().evaluate(d.document, "r", tier=2).shape[1::-1]
+            stack, calls = self._counting_decodes()
+            with stack:
+                for _ in range(3):
+                    self.assertEqual(_canvas_size_for_chain(d.document, "r", 1, 2)[:2], tuple(expected))
+                    _validate_merge_formats(d.document, ["m"], 1, 1)
+            self.assertLessEqual(len(calls), 1)
+
+    # (an oriented TIFF's turned size: tests/test_media.py, which writes the TIFF with OpenImageIO)
+
+    def test_a_tiled_merge_over_a_read_matches_the_reference(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "plate.exr"
+            pixels = np.random.default_rng(3).random((40, 72, 4), dtype=np.float32)
+            write_exr(path, pixels, bits="float")
+            for params in (self.LEGACY, None):
+                d = self._merge_document(path, 72, 40, params)
+                for tier in (1, 2):
+                    with self.subTest(legacy=bool(params), tier=tier):
+                        reference = Evaluator().evaluate(d.document, "m", tier=tier)
+                        tiled = TileExecutor(tile_edge=32).compose(d.document, "m", tier=tier)
+                        np.testing.assert_allclose(tiled.pixels, reference, atol=1e-5)
+
+    def test_a_read_format_knob_still_sizes_the_read(self):
+        """`read_format` moves the display window, so the size follows the decoded picture."""
+        from nodebased.tileexec import _canvas_size_for_chain
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "plate.exr"
+            write_exr(path, np.full((16, 16, 4), 0.25, np.float32))
+            d = self._merge_document(path, 16, 16, {**self.LEGACY, "read_format": "HD_720"})
+            reference = Evaluator().evaluate(d.document, "r", tier=1)
+            self.assertEqual(_canvas_size_for_chain(d.document, "r", 1, 1)[:2], reference.shape[1::-1])
+
 class MergeMaskTests(unittest.TestCase):
     """Merge's optional mask gates the merge per pixel, identically in both evaluators."""
 

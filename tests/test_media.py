@@ -128,6 +128,27 @@ class MediaTests(unittest.TestCase):
         self.dir = Path(self.temp.name)
         self.addCleanup(self.temp.cleanup)
 
+    def test_the_bounds_of_an_oriented_picture_are_turned_like_its_pixels(self):
+        """A TIFF whose Orientation turns it a quarter is read turned, so its header windows (and the tile
+        executor's canvas size, read from them) are turned too."""
+        from nodebased.tileexec import _canvas_size_for_chain
+        path = self.dir / 'turned.tif'
+        spec = oiio.ImageSpec(37, 21, 4, 'float')
+        spec.attribute('Orientation', 6)
+        out = oiio.ImageOutput.create(str(path))
+        self.assertTrue(out.open(str(path), spec))
+        out.write_image(np.full((21, 37, 4), 0.5, np.float32))
+        out.close()
+        self.assertEqual(read_media_raster(path).pixels.shape[:2], (37, 21))
+        data, display = media.read_media_bounds(path)
+        self.assertEqual((display.width, display.height), (21, 37))
+        self.assertEqual(data, display)
+        d = Dispatcher()
+        d.execute({'op': 'create', 'type': 'Read', 'id': 'r', 'params': {
+            'path': str(path), 'offset_negative_display_window': False, 'edge_pixels': 'black'}})
+        with patch.object(media, 'read_media_raster', side_effect=AssertionError('decoded')):
+            self.assertEqual(_canvas_size_for_chain(d.document, 'r', 1, 1)[:2], (21, 37))
+
     def test_exr_roundtrip_preserves_hdr_and_negative_values(self):
         path = self.dir / 'scene.exr'
         source = np.array([[[12.5, -0.4, 0.18, 1.0], [0.0, 0.0, 0.0, 0.0]]], np.float32)

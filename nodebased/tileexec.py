@@ -481,15 +481,7 @@ class TileExecutor:
             width, height = self.canvas_size(document, target, frame, tier)
             return TileRegion(0, 0, width, height, full_x=0, full_y=0,
                               full_width=width, full_height=height)
-        params = dict(node["params"])
-        params["frame"] = frame or 1
-        from . import readknobs
-        data, _display = imaging.read_image_bounds(
-            params.pop("path"), subimage=params.pop("subimage", 0),
-            frame_offset=params.pop("frame_offset", 0), missing=params.pop("missing", "error"),
-            frame=params.pop("frame"), **({key: params[key] for key in readknobs.KEYS if key in params}
-                                          | {key: params[key] for key in ("colorspace", "alpha_mode", "layer") if key in params}
-                                          if readknobs.active(params) else {}))
+        data, _display = _read_windows(node["params"], frame or 1)
         if int(tier) != 1:
             data = tiers.Region(data.x // int(tier), data.y // int(tier),
                                 (data.width + int(tier) - 1) // int(tier),
@@ -1958,6 +1950,19 @@ def _run_full_kernel_on_array(kind, params, inputs, frame):
     raise UnsupportedTile(f"{kind} has no tile-native full-kernel path")
 
 
+def _read_windows(params, frame):
+    """(data window, display window) of a Read at `frame`, from the file's header (no pixel decode). A Read
+    with any of Nuke's knobs changed answers from its decoded picture (`imaging.read_image_bounds`, memoised
+    there), since the knobs move the windows."""
+    from . import readknobs
+    knobs = ({key: params[key] for key in readknobs.KEYS if key in params}
+             | {key: params[key] for key in ("colorspace", "alpha_mode", "layer") if key in params}
+             if readknobs.active(params) else {})
+    return imaging.read_image_bounds(params.get("path"), subimage=params.get("subimage", 0),
+                                     frame_offset=params.get("frame_offset", 0),
+                                     missing=params.get("missing", "error"), frame=frame, **knobs)
+
+
 def _canvas_size_for_chain(document, target, frame, tier):
     """Walk back through EVALUATED ancestors to a generator and return (width, height, chain).
 
@@ -1989,12 +1994,13 @@ def _canvas_size_for_chain(document, target, frame, tier):
             params = tiers.scale_params(node["type"], node["params"], tier)
             return int(params["width"]), int(params["height"])
         if node["type"] == "Read":
-            params = dict(node["params"])
-            params["frame"] = frame
-            full = imaging.read_image(**params)
-            if int(tier) != 1:
-                full = Evaluator._decimate(full, int(tier))
-            return int(full.shape[1]), int(full.shape[0])
+            # The display window from the file's header, as `canvas_region` reads it: a Merge's
+            # format check (`_validate_merge_formats`) asks this of every Read before any tile is
+            # rendered, and decoding the whole picture only to learn its size cost more than the
+            # region render itself. A proxy tier is `Evaluator._decimate`'s ceil(n / tier).
+            _data, display = _read_windows(node["params"], frame)
+            tier = int(tier)
+            return -(-int(display.width) // tier), -(-int(display.height) // tier)
         if node["type"] == "ReadBundle":
             from .bundle import read_bundle_raster
             raster = read_bundle_raster(**node["params"], frame=frame)

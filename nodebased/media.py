@@ -656,8 +656,14 @@ def read_media_bounds(path, subimage=0):
         if not source.seek_subimage(subimage, 0):
             raise ValueError(f'No subimage/part {subimage} in this file')
         spec = source.spec()
+        width, height = spec.full_width or spec.width, spec.full_height or spec.height
+        orientation = spec.get_int_attribute('Orientation', 1) if Path(path).suffix.lower() != '.exr' else 1
+        if orientation != 1:
+            # `read_media_raster` flattens an oriented picture to its frame and turns it; 5 to 8 swap the axes.
+            square = Region(0, 0, height, width) if orientation in (5, 6, 7, 8) else Region(0, 0, width, height)
+            return square, square
         return (Region(spec.x - spec.full_x, spec.y - spec.full_y, spec.width, spec.height),
-                Region(0, 0, spec.full_width or spec.width, spec.full_height or spec.height))
+                Region(0, 0, width, height))
     finally:
         source.close()
 
