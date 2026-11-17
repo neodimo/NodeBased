@@ -887,7 +887,7 @@ PIXEL_UNIT_PARAMS = {
     "VectorDistort": ("blur_size",), "Inpaint": ("translate_x", "translate_y", "center_x", "center_y"),
     "MarkerRemoval": ("x_offset", "y_offset",),
     "VectorCornerPin": tuple(f"corner{i}_{axis}" for i in range(1, 5) for axis in ("x", "y")) + tuple(
-        f"{side}{i}_{axis}" for side in ("user", "to", "from") for i in range(1, 5) for axis in ("x", "y")),
+        f"{side}{i}_{axis}" for side in ("user", "to", "from") for i in range(1, 5) for axis in ("x", "y")) + ("blur_size",),
     "DropShadow": ("distance", "shadow_size", "shrink_expand"),
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
