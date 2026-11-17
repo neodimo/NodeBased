@@ -495,7 +495,7 @@ def _cases():
 CASES = _cases()
 # Behaviour cases from the 2D behaviour lanes (lanes 2 and 9), each in its own module.
 for _mod in ("nuke_fidelity_cases_color", "nuke_fidelity_cases_filter", "nuke_fidelity_cases_merge", "nuke_fidelity_cases_extra",
-             "nuke_fidelity_cases_time"):
+             "nuke_fidelity_cases_time", "nuke_fidelity_cases_other"):
     try:
         CASES += __import__(_mod).cases()
     except ModuleNotFoundError as _exc:
@@ -715,7 +715,29 @@ def run_nodebased(case, fx=None):
     knobs = dict(case.nb_params)
     windowed = knobs.pop("_windowed", False)
     data_window = knobs.pop("_data_window", None)
+    depth = knobs.pop("_depth", None)
+    frame = knobs.pop("_frame", None)
     params = dict(spec["params"], **knobs)
+    if depth is not None or frame is not None:
+        # `_depth`: one (fixture, channel, scale) per input, carried as that input's `depth` layer (depth.Z reads it); `_frame`: the
+        # frame the windowed kernel runs at, for nodes that read the time (lane 11 step B3).
+        from nodebased.raster import Raster
+        rasters = []
+        for i, slot in enumerate(slots):
+            if slot is None:
+                rasters.append(None)
+                continue
+            layers = None
+            if depth is not None and i < len(depth):
+                name, channel, scale = depth[i]
+                z = np.zeros(fx[name].shape, np.float32)
+                z[..., :3] = (fx[name][..., channel:channel + 1] * scale).astype(np.float32)
+                z[..., 3] = 1.0
+                layers = {"depth": Raster.of(z)}
+            raster = Raster.of(np.asarray(slot, np.float32))
+            rasters.append(Raster(raster.pixels, raster.data, raster.display, layers) if layers else raster)
+        made = Evaluator._windowed_kernel(case.nb_kind, params, rasters, frame=frame)
+        return np.asarray(made.fit(made.display) if made.data != made.display else made.pixels, dtype=np.float64)
     if not windowed and data_window is None:
         try:
             return np.asarray(Evaluator._kernel(case.nb_kind, params, slots), dtype=np.float64)
