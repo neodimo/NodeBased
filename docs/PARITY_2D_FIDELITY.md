@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 97.0 / 100** (167 nodes scored, rank-weighted; 99.0 counting only the nodes NodeBased has).
+**Overall fidelity: 97.2 / 100** (167 nodes scored, rank-weighted; 99.3 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.9 (98.9 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.1 (99.2 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.0 (99.1 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.3 (99.3 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -35,18 +35,18 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
 | Image | 97.6 | 97.2 | 98.1 | 6 |
-| Draw | 98.5 | 98.1 | 98.4 | 17 |
+| Draw | 99.0 | 98.4 | 98.8 | 17 |
 | Time | 99.7 | 98.9 | 99.6 | 13 |
 | Channel | 99.8 | 99.7 | 99.8 | 5 |
 | Color | 98.2 | 95.2 | 97.8 | 34 |
-| Filter | 97.2 | 93.1 | 96.8 | 32 |
+| Filter | 98.1 | 94.0 | 97.9 | 32 |
 | Keyer | 93.4 | 80.7 | 93.3 | 11 |
 | Merge | 99.8 | 99.5 | 99.7 | 12 |
-| Transform | 98.1 | 95.6 | 97.7 | 20 |
+| Transform | 98.8 | 96.1 | 98.5 | 20 |
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 81.5 | 45.2 | 81.5 | 12 |
 
-Behaviour checked: 117 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 118 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
@@ -109,22 +109,22 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Roto | `Roto` | supported | 98.3 | 98.0 | 96 (72/75) | - | 96 | 100 | 100 | 100 (36/36) | 100 | - | unmeasured |
-| 2 | Text | `Text` | supported | 98.3 | 98.2 | 98 (40/41) | - | 93 | 100 | 100 | - | 100 | - | no fixture |
-| 3 | Rectangle | `Rectangle` | supported | 98.6 | 98.7 | 100 (13/13) | - | 87 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
+| 1 | Roto | `Roto` | supported | 98.8 | 98.5 | 96 (72/75) | - | 100 | 100 | 100 | 100 (36/36) | 100 | - | unmeasured |
+| 2 | Text | `Text` | supported | 99.3 | 99.1 | 98 (40/41) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 3 | Rectangle | `Rectangle` | supported | 99.3 | 99.3 | 100 (13/13) | - | 93 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
-| 5 | Radial | `Radial` | supported | 98.7 | 98.8 | 100 (14/14) | - | 88 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
+| 5 | Radial | `Radial` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | Noise | `Noise` | supported | 99.7 | 99.6 | 100 (26/26) | - | 96 | 100 | 100 | 100 (2/2) | 100 | 100 (1/1) | unmeasured |
-| 7 | RotoPaint | `RotoPaint` | supported | 99.5 | 99.6 | 100 (88/88) | - | 96 | 100 | 100 | 100 (5/5) | 99 | - | unmeasured |
-| 8 | LightWrap | `LightWrap` | supported | 99.1 | 98.9 | 100 (27/27) | 100 (26/26) | 89 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 7 | RotoPaint | `RotoPaint` | supported | 99.9 | 100.0 | 100 (88/88) | - | 100 | 100 | 100 | 100 (5/5) | 99 | - | unmeasured |
+| 8 | LightWrap | `LightWrap` | supported | 100.0 | 100.0 | 100 (27/27) | 100 (26/26) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 9 | Grain | `Grain` | supported | 96.7 | 95.0 | 88 (13/14) | 100 (13/13) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (6/6) | - | - | unmeasured |
 | 10 | DustBust | `DustBust` | supported | 99.4 | 100.0 | 100 (5/5) | 100 (4/4) | 100 | 100 | - | 100 (1/1) | 93 | - | unmeasured |
-| 10 | MarkerRemoval | `MarkerRemoval` | supported | 95.8 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | - | 100 (1/1) | 56 | - | unmeasured |
+| 10 | MarkerRemoval | `MarkerRemoval` | supported | 96.2 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | - | 100 (1/1) | 60 | - | unmeasured |
 | 11 | Flare | `Flare` | supported | 95.5 | 93.7 | 87 (43/50) | 97 (24/25) | 98 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 | 11 | Glint | `Glint` | supported | 94.0 | 90.8 | 77 (10/13) | 100 (10/10) | 100 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
 | 11 | Sparkles | `Sparkles` | supported | 97.1 | 95.4 | 91 (28/32) | 100 (20/20) | 96 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
-| 12 | Dither | `Dither` | supported | 99.3 | 99.2 | 100 (4/4) | 100 (3/3) | 92 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 12 | Dither | `Dither` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 
 ### Time
@@ -199,25 +199,25 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Blur | `Blur` | supported | 99.2 | 99.0 | 100 (4/4) | 100 (3/3) | 90 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
-| 2 | Sharpen | `Sharpen` | supported | 98.8 | 98.5 | 100 (7/7) | 100 (5/5) | 85 | 100 | 100 | 100 (6/6) | 100 | 100 (1/1) | unmeasured |
+| 1 | Blur | `Blur` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
+| 2 | Sharpen | `Sharpen` | supported | 100.0 | 100.0 | 100 (7/7) | 100 (5/5) | 100 | 100 | 100 | 100 (6/6) | 100 | 100 (1/1) | unmeasured |
 | 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (5/5) | 100 | 100 (1/1) | unmeasured |
 | 4 | Median | `Median` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 5 | Glow | `Glow` | supported | 99.1 | 98.8 | 100 (11/11) | 100 (10/10) | 88 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
-| 6 | Soften | `Soften` | supported | 98.8 | 98.5 | 100 (7/7) | 100 (5/5) | 85 | 100 | 100 | 100 (6/6) | 100 | 100 (1/1) | unmeasured |
-| 7 | DropShadow | `DropShadow` | supported | 96.8 | 96.1 | 100 (9/9) | 100 (8/8) | 67 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
-| 8 | Defocus | `Defocus` | supported | 99.2 | 99.1 | 100 (5/5) | 100 (4/4) | 91 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 8 | ZDefocus | `ZDefocus` | supported | 98.7 | 98.8 | 100 (36/36) | - | 88 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
-| 9 | DirBlur | `DirBlur` | supported | 96.5 | 96.0 | 100 (12/12) | 100 (6/6) | 60 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
+| 5 | Glow | `Glow` | supported | 100.0 | 100.0 | 100 (11/11) | 100 (10/10) | 100 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
+| 6 | Soften | `Soften` | supported | 100.0 | 100.0 | 100 (7/7) | 100 (5/5) | 100 | 100 | 100 | 100 (6/6) | 100 | 100 (1/1) | unmeasured |
+| 7 | DropShadow | `DropShadow` | supported | 100.0 | 100.0 | 100 (9/9) | 100 (8/8) | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
+| 8 | Defocus | `Defocus` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (4/4) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
+| 8 | ZDefocus | `ZDefocus` | supported | 100.0 | 100.0 | 100 (36/36) | - | 100 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
+| 9 | DirBlur | `DirBlur` | supported | 100.0 | 100.0 | 100 (12/12) | 100 (6/6) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 10 | EdgeBlur | `EdgeBlur` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (4/4) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 10 | EdgeExtend | `EdgeExtend` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 11 | Erode (fast) | `Erode` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 12 | DegrainSimple | `DegrainSimple` | supported | 95.2 | 95.6 | 100 (3/3) | - | 67 | 100 | 100 | - | 100 | - | no fixture |
-| 12 | Denoise | `Denoise` | supported | 99.6 | 99.6 | 100 (37/37) | - | 97 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 13 | MotionBlur | `MotionBlur` | supported | 93.3 | 93.3 | 100 (6/6) | - | 60 | 100 | - | - | 100 | - | no fixture |
-| 13 | MotionBlur2D | `MotionBlur2D` | supported | 87.5 | 83.3 | 75 (3/4) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 13 | MotionBlur3D | `MotionBlur3D` | supported | 75.0 | 66.7 | 50 (3/6) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 13 | VectorBlur | `VectorBlur` | supported | 90.1 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 100 | - | no fixture |
+| 12 | DegrainSimple | `DegrainSimple` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 12 | Denoise | `Denoise` | supported | 100.0 | 100.0 | 100 (37/37) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
+| 13 | MotionBlur | `MotionBlur` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | - | 100 | - | unmeasured |
+| 13 | MotionBlur2D | `MotionBlur2D` | supported | 87.5 | 83.3 | 75 (3/4) | - | 100 | 100 | - | - | 100 | - | unmeasured |
+| 13 | MotionBlur3D | `MotionBlur3D` | supported | 75.0 | 66.7 | 50 (3/6) | - | 100 | 100 | - | - | 100 | - | unmeasured |
+| 13 | VectorBlur | `VectorBlur` | supported | 90.1 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 100 | - | unmeasured |
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 15 | Convolve | `Convolve` | supported | 98.8 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | 100 (3/3) | 89 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -225,11 +225,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 16 | EdgeDetect | `EdgeDetect` | supported | 90.5 | 85.5 | 64 (5/7) | 100 (4/4) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 16 | Emboss | `Emboss` | supported | 88.1 | 81.8 | 55 (7/13) | 100 (6/6) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 16 | Laplacian | `Laplacian` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 17 | Inpaint | `Inpaint` | supported | 98.7 | 98.8 | 100 (11/11) | - | 91 | 100 | 100 | - | 100 | - | no fixture |
-| 18 | GodRays | `GodRays` | supported | 98.9 | 98.8 | 100 (10/10) | 100 (10/10) | 88 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 18 | LevelSet | `LevelSet` | supported | 100.0 | 100.0 | 100 (8/8) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 17 | Inpaint | `Inpaint` | supported | 100.0 | 100.0 | 100 (11/11) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 18 | GodRays | `GodRays` | supported | 99.4 | 99.3 | 100 (10/10) | 100 (10/10) | 93 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
+| 18 | LevelSet | `LevelSet` | supported | 100.0 | 100.0 | 100 (8/8) | - | 100 | 100 | - | - | 100 | - | unmeasured |
 | 18 | VolumeRays | `VolumeRays` | supported | 80.5 | 65.3 | 48 (11/24) | 100 (11/11) | 100 | 100 | - | - | 100 | - | unmeasured |
-| 19 | ZSlice | `ZSlice` | supported | 98.0 | 98.1 | 100 (3/3) | - | 86 | 100 | 100 | - | 100 | - | no fixture |
+| 19 | ZSlice | `ZSlice` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 20 | Bokeh | - | supported | 0.0 | 0.0 | 0 (0/42) | - | - | 0 | - | - | - | - | no fixture |
 
 ### Keyer
@@ -271,26 +271,26 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Transform | `Transform` | supported | 99.8 | 100.0 | 100 (15/15) | 100 (10/10) | 100 | 100 | - | 100 (12/12) | 98 | 100 (1/1) | unmeasured |
-| 2 | Crop | `Crop` | supported | 97.6 | 97.1 | 100 (5/5) | 100 (2/2) | 75 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 3 | Tracker | `Tracker` | supported | 98.3 | 98.6 | 100 (54/54) | - | 86 | 100 | 100 | 100 (5/5) | 98 | - | unmeasured |
-| 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 5 | Reformat | `Reformat` | supported | 96.4 | 95.2 | 94 (15/16) | - | 85 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
+| 2 | Crop | `Crop` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (2/2) | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
+| 3 | Tracker | `Tracker` | supported | 99.8 | 100.0 | 100 (54/54) | - | 100 | 100 | 100 | 100 (5/5) | 98 | - | unmeasured |
+| 4 | PlanarTracker | `PlanarTracker` | supported | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
+| 5 | Reformat | `Reformat` | supported | 98.0 | 97.1 | 94 (15/16) | - | 100 | 100 | - | 100 (15/15) | 100 | 100 (1/1) | unmeasured |
 | 6 | CornerPin2D | `CornerPin` | supported | 99.8 | 100.0 | 100 (24/24) | - | 100 | 100 | - | 100 (7/7) | 98 | - | unmeasured |
 | 7 | Mirror | `Mirror` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
-| 8 | Stabilize | `Stabilize` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 8 | Stabilize | `Stabilize` | supported | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
 | 9 | Position | `Position` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 10 | AdjustBBox | `AdjustBBox` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 11 | BlackOutside | `BlackOutside` | supported | 100.0 | 100.0 | - | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
-| 12 | STMap | `STMap` | supported | 98.8 | 98.6 | 100 (6/6) | 100 (5/5) | 86 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
-| 13 | IDistort | `IDistort` | supported | 97.5 | 97.1 | 100 (8/8) | 100 (6/6) | 71 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
-| 14 | GridWarp | `GridWarp` | supported | 87.6 | 84.7 | 65 (22/34) | - | 88 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
-| 14 | SplineWarp | `SplineWarp` | supported | 89.5 | 89.5 | 88 (19/23) | - | 76 | 67 | 100 | 100 (3/3) | 94 | - | unmeasured |
+| 12 | STMap | `STMap` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (5/5) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
+| 13 | IDistort | `IDistort` | supported | 98.8 | 98.6 | 100 (8/8) | 100 (6/6) | 86 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
+| 14 | GridWarp | `GridWarp` | supported | 88.4 | 85.5 | 65 (22/34) | - | 96 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
+| 14 | SplineWarp | `SplineWarp` | supported | 90.8 | 90.6 | 88 (19/23) | - | 88 | 67 | 100 | 100 (3/3) | 94 | - | unmeasured |
 | 15 | Tile | `Tile` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
 | 16 | VectorCornerPin | `VectorCornerPin` | supported | 93.3 | 91.0 | 81 (13/17) | - | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
-| 16 | VectorDistort | `VectorDistort` | supported | 90.5 | 88.1 | 78 (5/6) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
-| 17 | PointsTo3D | `PointsTo3D` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 18 | Reconcile3D | `Reconcile3D` | supported | 76.7 | 68.9 | 53 (7/14) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 19 | TVIScale | `TVIScale` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
+| 16 | VectorDistort | `VectorDistort` | supported | 90.5 | 88.1 | 78 (5/6) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 17 | PointsTo3D | `PointsTo3D` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | 100 | - | - | 100 | - | unmeasured |
+| 18 | Reconcile3D | `Reconcile3D` | supported | 76.7 | 68.9 | 53 (7/14) | - | 100 | 100 | - | - | 100 | - | unmeasured |
+| 19 | TVIScale | `TVIScale` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 20 | LensDistortion | `Undistort` | supported | 87.1 | 82.7 | 63 (36/58) | - | 100 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
 
 ### Metadata
@@ -539,24 +539,24 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 10 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 11 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 12 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 13 | Roto (Draw #1) | `Roto` | 1.70 | 98.3 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
-| 14 | Write (Image #2) | `Write` | 1.48 | 97.0 | nothing missing that the guide lists |
-| 15 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 16 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
-| 17 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
-| 18 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
-| 19 | Text (Draw #2) | `Text` | 0.87 | 98.3 | 1 secondary knob missing: `group_animation` |
-| 20 | Blur (Filter #1) | `Blur` | 0.80 | 99.2 | nothing missing that the guide lists |
-| 21 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
-| 22 | Reformat (Transform #5) | `Reformat` | 0.72 | 96.4 | primary knobs missing: `box_pixel_aspect` |
-| 23 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
-| 24 | Sharpen (Filter #2) | `Sharpen` | 0.62 | 98.8 | nothing missing that the guide lists |
-| 25 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
-| 26 | Tracker (Transform #3) | `Tracker` | 0.56 | 98.3 | nothing missing that the guide lists |
-| 27 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
-| 28 | Rectangle (Draw #3) | `Rectangle` | 0.47 | 98.6 | nothing missing that the guide lists |
-| 29 | DropShadow (Filter #7) | `DropShadow` | 0.45 | 96.8 | nothing missing that the guide lists |
-| 30 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
+| 13 | Write (Image #2) | `Write` | 1.48 | 97.0 | nothing missing that the guide lists |
+| 14 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
+| 15 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
+| 16 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 17 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
+| 18 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
+| 19 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
+| 20 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
+| 21 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
+| 22 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
+| 23 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
+| 24 | Retime (Time #3) | `Retime` | 0.41 | 98.8 | 1 secondary knob missing: `warp` |
+| 25 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
+| 26 | Blend (Merge #8) | `Blend` | 0.40 | 96.8 | node chrome missing: mask invert |
+| 27 | Exposure (Color #11) | `Exposure` | 0.40 | 95.7 | primary knobs missing: `colorspace` |
+| 28 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
+| 29 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
+| 30 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
 
 ## Formula cases
 
@@ -1224,6 +1224,21 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `flare_shape` | guide | not scored: the guide describes the direction of the shape controls but gives no rasterization or edge equation | - | - |
 | `flare_asymmetry` | guide | not scored: the guide does not give the dark-section profile or exact angular width | - | - |
 | `flare_visibility` | guide | not scored: the guide does not state distance normalization or the channel blur kernel | - | - |
+| `degrainsimple_zero_amounts_remove_nothing` | convention | pass | within tolerance | - |
+| `text_draws_its_message` | guide | not scored: the guide lists the controls but not the font, hinting or glyph rasterisation Nuke uses, so a glyph's pixels cannot be written down without guessing; the box, justification, colour and message handling are tested in tests/test_2d_fidelity_b_draw.py | - | - |
+| `zslice_highlights_the_depth_slice` | guide | not scored: the page states neither the matte's edge profile nor how Field Width maps to the slice's two edges, only which way the slice moves with the controls | - | - |
+| `planartracker_follows_the_plane` | guide | not scored: the guide describes the tracking workflow, not the resampling the tracked transform gets; tracking on real plates is tested in the tracker modules | - | - |
+| `stabilize_negates_the_track` | guide | not scored: the result depends on a solved track and the guide does not give the filter or edge handling of the transform it applies | - | - |
+| `inpaint_fills_from_the_surroundings` | guide | not scored: the page states no fill algorithm, so no reference picture can be written without inventing one | - | - |
+| `pointsto3d_locates_a_point_by_parallax` | guide | not scored: the node's result is knob values (a 3D point), not pixels, and the page does not state the triangulation | - | - |
+| `reconcile3d_projects_a_point` | guide | not scored: the result is knob values, not pixels; the projection follows the camera model which the page does not spell out | - | - |
+| `tviscale_enlarges_the_picture` | guide | not scored: the guide does not give the solver's update rule, so the enlarged pixels cannot be written down without guessing; size, bounding box and mask handling are tested in tests/test_tviscale_fidelity.py | - | - |
+| `vectordistort_follows_the_vectors` | guide | not scored: the page states no filter or edge handling for the warp and the vector field must come from a solve | - | - |
+| `vectorblur_blurs_along_the_vectors` | guide | not scored: the page states neither the sample spacing nor the weighting along the vector | - | - |
+| `motionblur_blurs_by_the_vectors` | guide | not scored: the page states neither the shutter-to-vector scale nor the sample weighting | - | - |
+| `motionblur2d_outputs_the_transform_vectors` | guide | not scored: the page states no unit for the vectors it outputs, so their size cannot be written down without guessing | - | - |
+| `motionblur3d_outputs_the_camera_vectors` | guide | not scored: the page states no unit for the vectors and the camera's motion depends on a solved camera | - | - |
+| `levelset_outputs_the_distance` | guide | not scored: the page does not say which distance metric it uses or the sign inside and outside the threshold | - | - |
 | `switch_which_0` | guide | pass | within tolerance | - |
 | `switch_which_1` | guide | pass | within tolerance | - |
 | `switch_which_past_last` | convention | not scored: the guide says only that which = N shows input N and does not say what a value past the last input shows; NodeBased shows the last connected input (tests/test_2d_behaviour_merge.py), and no Foundry source to cite for Nuke's own answer was found | - | - |
@@ -1582,7 +1597,6 @@ Not probed, because a one-frame pixel probe cannot see them: acts across frames 
 
 Labels below are NodeBased's, then the guide's.
 
-- MarkerRemoval (`MarkerRemoval`): 5 of 6 paired knobs in Nuke's order
 
 ### Split knobs
 
