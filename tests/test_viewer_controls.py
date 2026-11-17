@@ -14,17 +14,6 @@ sys.path.insert(0, str(ROOT / "tools"))
 import nuke_viewer_controls as controls  # noqa: E402
 
 KNOWN_GAPS = {
-    "Transform.scale_x": "no left/right points on the jack that scale x alone",
-    "Transform.scale_y": "no top/bottom points on the jack that scale y alone",
-    "Transform.rotate_snap": "rotating does not snap to typical values",
-    "Transform.skew": "no skew bar",
-    "Transform.invert_handle": "no second handle when invert is on",
-    "Crop.box_edges": "Crop has no on-screen box",
-    "Text.box_move_resize": "Text has no on-screen box",
-    "Text.center_ctrl": "Text has no on-screen centre",
-    "Tracker.anchor": "not probed yet",
-    "GridWarp.grid_handles": "not probed yet",
-    "GridWarp.grid_transform": "not probed yet",
 }
 
 
@@ -58,6 +47,19 @@ class ProbeTests(unittest.TestCase):
     def test_transform_jack_translates_rotates_scales_and_moves_its_centre(self):
         for control in ("Transform.translate", "Transform.translate_shift", "Transform.center_ctrl",
                         "Transform.scale_uniform", "Transform.rotate"):
+            self.assertEqual(self.results[control]["result"], "pass", self.results[control]["detail"])
+
+    def test_jack_scales_one_axis_snaps_skews_and_shows_the_invert_handle(self):
+        for control in ("Transform.scale_x", "Transform.scale_y", "Transform.rotate_snap", "Transform.skew",
+                        "Transform.invert_handle"):
+            self.assertEqual(self.results[control]["result"], "pass", self.results[control]["detail"])
+
+    def test_crop_and_text_boxes(self):
+        for control in ("Crop.box_edges", "Text.box_move_resize", "Text.center_ctrl"):
+            self.assertEqual(self.results[control]["result"], "pass", self.results[control]["detail"])
+
+    def test_tracker_anchor_and_gridwarp_overlays(self):
+        for control in ("Tracker.anchor", "GridWarp.grid_handles", "GridWarp.grid_transform"):
             self.assertEqual(self.results[control]["result"], "pass", self.results[control]["detail"])
 
     def test_report_has_the_table(self):

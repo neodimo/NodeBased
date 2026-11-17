@@ -50,6 +50,13 @@ class Bench:
         dispatcher.execute({"op": "create", "id": "c", "type": "Constant", "pos": [0, 0]})
         dispatcher.execute({"op": "create", "id": "t", "type": "Transform", "pos": [150, 0]})
         dispatcher.execute({"op": "connect", "id": "t", "input": "image", "source": "c"})
+        dispatcher.execute({"op": "create", "id": "crop", "type": "Crop", "pos": [150, 120]})
+        dispatcher.execute({"op": "connect", "id": "crop", "input": "image", "source": "c"})
+        dispatcher.execute({"op": "create", "id": "text", "type": "Text", "pos": [300, 120]})
+        dispatcher.execute({"op": "create", "id": "tr", "type": "Tracker", "pos": [450, 120]})
+        dispatcher.execute({"op": "connect", "id": "tr", "input": "image", "source": "c"})
+        dispatcher.execute({"op": "create", "id": "gw", "type": "GridWarp", "pos": [600, 120]})
+        dispatcher.execute({"op": "connect", "id": "gw", "input": "image", "source": "c"})
         dispatcher.execute({"op": "view", "id": "t"})
         self.window = Window(dispatcher.document)
         self.window.resize(1400, 900)
@@ -65,6 +72,7 @@ class Bench:
 
     def reset(self, **params):
         """The Transform at its defaults (centre at 300, 250 so the jack sits inside the frame), no animation, no undo."""
+        self.focus("t")
         document = self.window.dispatcher.document
         values = dict(self.base, center_x=300.0, center_y=250.0, **params)
         for param, value in values.items():
@@ -76,8 +84,24 @@ class Bench:
         self.window.dispatcher.undo_stack.clear()
         self.settle()
 
-    def params(self):
-        return self.window.dispatcher.document["nodes"]["t"]["params"]
+    def params(self, key="t"):
+        return self.window.dispatcher.document["nodes"][key]["params"]
+
+    def focus(self, key, **params):
+        """View and select `key` alone (its handles show), set `params`, clear its animation and the undo stack."""
+        window = self.window
+        if window.dispatcher.document.get("view") != key:
+            window.command({"op": "view", "id": key})
+        for item_key, item in window.graph.items_by_id.items():
+            item.setSelected(item_key == key)
+        for param, value in params.items():
+            if window.dispatcher.document["nodes"][key]["params"].get(param) != value:
+                window.command({"op": "set", "id": key, "param": param, "value": value})
+        curves = (window.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {})
+        for param in list(curves):
+            window.command({"op": "clear_curve", "id": key, "param": param})
+        window.dispatcher.undo_stack.clear()
+        self.settle()
 
     def drag(self, start, end, modifiers=None):
         """Press at data point `start`, move to `end` in steps, release; modifiers held throughout."""
@@ -187,14 +211,237 @@ def _rotate(bench):
     return ok, f"a quarter turn on the rotate handle stored rotate {rotate:.2f}"
 
 
-PROBES["Transform.scale_x"] = lambda bench: (False, "the jack has no left/right points that scale x alone (scale_x)")
-PROBES["Transform.scale_y"] = lambda bench: (False, "the jack has no top/bottom points that scale y alone (scale_y)")
-PROBES["Transform.rotate_snap"] = lambda bench: (False, "rotating does not snap to typical values")
-PROBES["Transform.skew"] = lambda bench: (False, "the jack has no skew bar")
-PROBES["Transform.invert_handle"] = lambda bench: (False, "no second handle is drawn when invert is on")
-PROBES["Crop.box_edges"] = _missing("Crop")
-PROBES["Text.box_move_resize"] = _missing("Text")
-PROBES["Text.center_ctrl"] = _missing("Text")
+def _jack(bench):
+    from nodebased import handles2d
+    values = handles2d.flip_axes(bench.params(), handles2d.axes_flipped(bench.params()))
+    return bench.window.viewer._transform_overlay_geometry(values)
+
+
+def _axis_scale(bench, axis):
+    from nodebased import handles2d
+    bench.reset()
+    geometry = _jack(bench)
+    point = handles2d.edge_midpoints(geometry["corners"])[1 if axis == 0 else 2]
+    pivot = geometry["pivot"]
+    # drag the point twice as far from the pivot along its own axis, and sideways a little (which must not count)
+    end = (pivot[0] + 2 * (point[0] - pivot[0]) + (0 if axis == 0 else 15),
+           pivot[1] + 2 * (point[1] - pivot[1]) + (15 if axis == 0 else 0))
+    bench.drag(point, end)
+    scale = bench.params()["scale"]
+    ok = (isinstance(scale, list) and abs(scale[axis] - 2.0) < 0.02 and abs(scale[1 - axis] - 1.0) < 1e-9
+          and bench.undo_steps() == 1)
+    # a split scale keeps its handle: the corner then scales both factors together
+    if ok:
+        bench.window.dispatcher.undo_stack.clear()
+        corner = _jack(bench)["corners"][2]
+        bench.drag(corner, (pivot[0] + 1.5 * (corner[0] - pivot[0]), pivot[1] + 1.5 * (corner[1] - pivot[1])))
+        both = bench.params()["scale"]
+        ok = isinstance(both, list) and abs(both[axis] / both[1 - axis] - 2.0) < 0.05 and both[1 - axis] > 1.2
+        scale = f"{scale}, then the corner made {both}"
+    return ok, f"dragging the {'left/right' if axis == 0 else 'top/bottom'} point stored scale {scale}"
+
+
+@probe("Transform.scale_x")
+def _scale_x(bench):
+    return _axis_scale(bench, 0)
+
+
+@probe("Transform.scale_y")
+def _scale_y(bench):
+    return _axis_scale(bench, 1)
+
+
+@probe("Transform.rotate_snap")
+def _rotate_snap(bench):
+    import math
+    from PySide6.QtCore import Qt
+    results = []
+    for held in (None, Qt.KeyboardModifier.ShiftModifier):
+        bench.reset()
+        geometry = _jack(bench)
+        pivot, radius = geometry["pivot"], geometry["ring"]
+        angle = math.radians(88.5)      # a little short of a quarter turn
+        bench.drag((pivot[0] + radius, pivot[1]), (pivot[0] + radius * math.cos(angle), pivot[1] + radius * math.sin(angle)), held)
+        results.append(bench.params()["rotate"])
+    snapped, free = results
+    ok = abs(abs(snapped) - 90.0) < 1e-9 and abs(abs(free) - 88.5) < 0.3
+    return ok, f"a drag to 88.5 degrees stored {snapped:.2f}; with Shift {free:.2f}"
+
+
+@probe("Transform.skew")
+def _skew(bench):
+    bench.reset()
+    geometry = _jack(bench)
+    pivot, bar = geometry["pivot"], geometry["bar"]
+    height = pivot[1] - bar[1]
+    bench.drag(bar, (bar[0] + 0.25 * height, bar[1]))
+    skew = bench.params()["skew_x"]
+    shown = _jack(bench)["bar"]
+    follows = abs(shown[0] - (bar[0] + 0.25 * height)) < 0.05 * height
+    ok = abs(abs(skew) - 0.25) < 0.01 and bench.undo_steps() == 1 and follows
+    return ok, f"dragging the bar's top a quarter of its height sideways stored skew x {skew:.3f}; the bar follows {follows}"
+
+
+@probe("Transform.invert_handle")
+def _invert_handle(bench):
+    bench.reset()
+    off = _jack(bench)["invert"]
+    bench.reset(invert=1)
+    on = _jack(bench)["invert"]
+    bench.window.viewer.viewport().repaint()
+    bench.reset()
+    ok = off is None and on is not None
+    return ok, f"second handle without invert {off}, with invert at {on}"
+# -- Crop and Text: the on-screen box ------------------------------------------------------------------------------------------
+
+def _keyed_drag(bench, key, param, start, end, expected):
+    """Animate `param`, drag, and check the drag keyed the current frame in one undo step."""
+    frame = int(bench.window.dispatcher.document["time"]["current"])
+    value = bench.params(key)[param]
+    bench.window.command({"op": "set_key", "id": key, "param": param, "frame": frame, "value": value})
+    bench.window.command({"op": "set_key", "id": key, "param": param, "frame": frame + 10, "value": value})
+    bench.window.dispatcher.undo_stack.clear()
+    bench.drag(start, end)
+    curve = bench.window.node_curve(key, param) or {"keys": []}
+    keyed = any(k["frame"] == frame and abs(k["value"] - expected) < 0.5 for k in curve["keys"])
+    return keyed and bench.undo_steps() == 1
+
+
+@probe("Crop.box_edges")
+def _crop_edges(bench):
+    bench.focus("crop", x=100, y=80, width=600, height=300)
+    right = bench.drag((700, 230), (750, 260))           # the right edge: width only, the left side stays put
+    p = dict(bench.params("crop"))
+    edge = bool(right) and (p["x"], p["y"], p["width"], p["height"]) == (100, 80, 650, 300) and bench.undo_steps() == 1
+    bench.focus("crop", x=100, y=80, width=600, height=300)
+    bench.drag((100, 80), (130, 100))                     # the top-left corner: the opposite corner stays put
+    q = dict(bench.params("crop"))
+    corner = (q["x"], q["y"], q["width"], q["height"]) == (130, 100, 570, 280)
+    bench.focus("crop", x=100, y=80, width=600, height=300)
+    inside = bench.drag((400, 230), (450, 260))           # inside the box is not a control (only the edges are)
+    still = not inside and bench.params("crop")["x"] == 100
+    bench.focus("crop", x=100, y=80, width=600, height=300)
+    keyed = _keyed_drag(bench, "crop", "width", (700, 230), (740, 230), 640)
+    bench.focus("crop", x=0, y=0, width=960, height=540)
+    ok = edge and corner and still and keyed
+    return ok, (f"right edge stored {p['x']}, {p['y']}, {p['width']}, {p['height']}; corner {q['x']}, {q['y']}, "
+                f"{q['width']}, {q['height']}; inside left alone {still}; animated width keyed {keyed}")
+
+
+@probe("Text.box_move_resize")
+def _text_box(bench):
+    bench.focus("text", box_x=100.0, box_y=80.0, box_width=400.0, box_height=200.0)
+    bench.drag((300, 180), (340, 200))                    # inside: the box moves
+    p = dict(bench.params("text"))
+    moved = (p["box_x"], p["box_y"], p["box_width"], p["box_height"]) == (140.0, 100.0, 400.0, 200.0)
+    one = bench.undo_steps() == 1
+    bench.focus("text", box_x=100.0, box_y=80.0, box_width=400.0, box_height=200.0)
+    bench.drag((500, 280), (560, 300))                    # the bottom-right corner: resized
+    q = dict(bench.params("text"))
+    resized = (q["box_x"], q["box_y"], q["box_width"], q["box_height"]) == (100.0, 80.0, 460.0, 220.0)
+    bench.focus("text", box_x=100.0, box_y=80.0, box_width=400.0, box_height=200.0)
+    keyed = _keyed_drag(bench, "text", "box_x", (300, 180), (330, 180), 130.0)
+    bench.focus("text", box_x=40.0, box_y=40.0, box_width=880.0, box_height=460.0)
+    ok = moved and one and resized and keyed
+    return ok, (f"drag inside moved the box to {p['box_x']}, {p['box_y']}; corner resized it to {q['box_width']} by "
+                f"{q['box_height']}; animated box keyed {keyed}")
+
+
+@probe("Text.center_ctrl")
+def _text_center(bench):
+    from PySide6.QtCore import Qt
+    bench.focus("text", box_x=100.0, box_y=80.0, box_width=400.0, box_height=200.0, center_x=0.0, center_y=0.0)
+    bench.drag((300, 180), (330, 160), Qt.KeyboardModifier.ControlModifier)
+    p = dict(bench.params("text"))
+    ok = (p["center_x"], p["center_y"]) == (30.0, -20.0) and p["box_x"] == 100.0 and bench.undo_steps() == 1
+    bench.focus("text", box_x=40.0, box_y=40.0, box_width=880.0, box_height=460.0, center_x=0.0, center_y=0.0)
+    return ok, f"Ctrl-drag moved the centre to {p['center_x']}, {p['center_y']} and left the box at {p['box_x']}"
+
+
+# -- Tracker and GridWarp: controls NodeBased already drew, now measured ------------------------------------------------------
+
+@probe("Tracker.anchor")
+def _tracker_anchor(bench):
+    window = bench.window
+    bench.focus("tr")
+    before = len((window.dispatcher.document.get("node_data", {}).get("tr") or {}).get("tracks", []))
+    added = window.add_track_at_centre("tr")
+    bench.settle()
+    tracks = window.dispatcher.document["node_data"]["tr"]["tracks"]
+    track = tracks[-1]
+    one = bench.undo_steps() == 1
+    drawn = window.viewer.window._tracker_context() is not None
+    x, y = float(track["x"]), float(track["y"])
+    window.dispatcher.undo_stack.clear()
+    bench.drag((x, y), (x + 30, y + 20))                 # the new anchor is a handle: dragging it moves the track
+    from nodebased import shapes as shape_model
+    frame = int(window.dispatcher.document["time"]["current"])
+    moved = shape_model.resolve_tracks(window.dispatcher.document["node_data"]["tr"], frame)[-1]
+    follows = abs(moved["x"] - (x + 30)) < 0.5 and abs(moved["y"] - (y + 20)) < 0.5
+    ok = bool(added) and len(tracks) == before + 1 and one and drawn and follows
+    return ok, (f"add track placed track {len(tracks)} at {x:.0f}, {y:.0f} in one step {one}; dragging its anchor moved it to "
+                f"{moved['x']:.1f}, {moved['y']:.1f}")
+
+
+def _grid(bench):
+    context = bench.window.viewer._warp_context()
+    from nodebased import shapes as shape_model
+    frame = int(bench.window.dispatcher.document["time"]["current"])
+    return shape_model.resolve_warp_data("GridWarp", context[2], frame)
+
+
+@probe("GridWarp.grid_handles")
+def _gridwarp_handles(bench):
+    window = bench.window
+    bench.focus("gw")
+    grid = _grid(bench)
+    point = grid["destination"][2][2]
+    # source and destination share their points at first (which one a drag takes there is undocumented; NodeBased takes the
+    # source); one drag moves one grid's point and leaves the other's where it was
+    bench.drag((point[0], point[1]), (point[0] + 25, point[1] - 15))
+    after = _grid(bench)
+    moved_side = [side for side in ("source", "destination")
+                  if abs(after[side][2][2][0] - (point[0] + 25)) < 0.5 and abs(after[side][2][2][1] - (point[1] - 15)) < 0.5]
+    other = "destination" if moved_side == ["source"] else "source"
+    moved = after[moved_side[0]][2][2] if moved_side else after["destination"][2][2]
+    ok = len(moved_side) == 1 and after[other][2][2][:2] == point[:2] and bench.undo_steps() == 1
+    window.command({"op": "undo"})
+    bench.settle()
+    return ok, (f"the grid's lines and handles are drawn whenever the GridWarp is viewed and selected (Nuke's visible switch "
+                f"has no NodeBased counterpart); dragging a grid point moved the {moved_side} point to {moved[0]:.1f}, {moved[1]:.1f}")
+
+
+@probe("GridWarp.grid_transform")
+def _gridwarp_transform(bench):
+    import math
+    names = ("center_x", "center_y", "translate_x", "translate_y", "rotate", "scale")
+    reset = {f"source_grid_transform_{n}": v for n, v in zip(names, (300.0, 200.0, 0.0, 0.0, 0.0, 1.0))}
+    bench.focus("gw", **reset)
+    viewer = bench.window.viewer
+    p = lambda name: bench.params("gw")["source_grid_transform_" + name]
+    pivot = viewer._grid_jack()[3]["pivot"]
+    bench.drag(pivot, (pivot[0] + 40, pivot[1] - 30))         # the centre moves the whole grid
+    moved = (abs(p("translate_x") - 40) < 0.5 and abs(p("translate_y") - 30) < 0.5 and bench.undo_steps() == 1)
+    t = (p("translate_x"), p("translate_y"))
+    bench.focus("gw", **reset)
+    end = viewer._grid_jack()[3]["x"]
+    length = end[0] - pivot[0]
+    bench.drag(end, (pivot[0], pivot[1] - 2 * length))          # the x axis turned a quarter up and stretched twice as long
+    turned = abs(p("rotate") - 90) < 0.5 and abs(p("scale") - 2) < 0.02 and bench.undo_steps() == 1
+    r = (p("rotate"), p("scale"))
+    bench.focus("gw", **reset)
+    frame = int(bench.window.dispatcher.document["time"]["current"])
+    for f in (frame, frame + 10):
+        bench.window.command({"op": "set_key", "id": "gw", "param": "source_grid_transform_rotate", "frame": f, "value": 0.0})
+    bench.window.dispatcher.undo_stack.clear()
+    end = viewer._grid_jack()[3]["x"]
+    bench.drag(end, (pivot[0] + length * math.cos(math.radians(-30)), pivot[1] + length * math.sin(math.radians(-30))))
+    curve = bench.window.node_curve("gw", "source_grid_transform_rotate") or {"keys": []}
+    keyed = any(k["frame"] == frame and abs(k["value"] - 30) < 0.5 for k in curve["keys"]) and bench.undo_steps() == 1
+    bench.focus("gw", **{f"source_grid_transform_{n}": v for n, v in zip(names, (0.0, 0.0, 0.0, 0.0, 0.0, 1.0))})
+    ok = moved and turned and keyed
+    return ok, (f"dragging the overlay's centre stored translate {t[0]:.1f}, {t[1]:.1f}; turning its x axis stored rotate "
+                f"{r[0]:.1f}, scale {r[1]:.3f}; an animated rotate keyed {keyed}")
 
 
 def probe_all():

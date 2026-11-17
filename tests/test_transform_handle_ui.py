@@ -113,7 +113,7 @@ class TransformHandleTests(unittest.TestCase):
         corners = handles2d.box_corners(viewer.format_rect.width(), viewer.format_rect.height(), 0, 0, 0, 1, 300, 250)
         radius = 1.15 * np.hypot(corners[0][0] - pvt[0], corners[0][1] - pvt[1])
         start, target = self.scene_pos(pvt[0] + radius, pvt[1]), self.scene_pos(pvt[0], pvt[1] + radius)
-        self.drag(start, target)
+        self.drag(start, target, Qt.KeyboardModifier.ShiftModifier)   # Shift stops the snap to typical values (Nuke's jack)
         expected = handles2d.rotate_from_drag(0, pvt, viewer._transform_data_point(viewer.mapToScene(start)),
                                               viewer._transform_data_point(viewer.mapToScene(target)))
         self.assertAlmostEqual(self.window.dispatcher.document["nodes"]["t"]["params"]["rotate"], -expected, delta=.1)   # a new node turns counter-clockwise for a positive rotate

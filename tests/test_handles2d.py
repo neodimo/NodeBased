@@ -90,3 +90,48 @@ class Handles2dTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AxisSkewSnapBoxTests(unittest.TestCase):
+    """Lane 10 step T3 finish: the jack's one-axis scale, skew bar, rotate snap, and Crop's and Text's box geometry."""
+
+    def test_split_scale_and_skew_match_the_render_matrix(self):
+        import numpy as np
+        from nodebased import handles2d
+        from nodebased.imaging import Evaluator
+        p = {"translate_x": 12.0, "translate_y": -7.0, "rotate": 25.0, "scale": [1.5, 0.75], "skew_x": 0.2, "skew_y": -0.1,
+             "skew_order": "XY", "center_x": 40.0, "center_y": 30.0}
+        matrix = Evaluator._transform_forward_matrix(p)
+        for x, y in ((0, 0), (100, 0), (100, 60), (5, 77)):
+            expected = matrix @ np.array([x, y, 1.0])
+            got = handles2d.forward_point(x, y, p["translate_x"], p["translate_y"], p["rotate"], p["scale"],
+                                          p["center_x"], p["center_y"], skew_x=0.2, skew_y=-0.1, skew_order="XY")
+            self.assertAlmostEqual(got[0], expected[0], places=9)
+            self.assertAlmostEqual(got[1], expected[1], places=9)
+
+    def test_axis_scale_ignores_the_other_axis(self):
+        from nodebased import handles2d
+        self.assertAlmostEqual(handles2d.axis_scale_from_drag(1.0, (0, 0), 0.0, 0, (10, 0), (20, 50)), 2.0)
+        self.assertAlmostEqual(handles2d.axis_scale_from_drag(1.0, (0, 0), 90.0, 0, (0, 10), (40, 30)), 3.0)
+
+    def test_skew_bar_follows_the_pointer(self):
+        from nodebased import handles2d
+        skew = handles2d.skew_from_drag((0, 0), 0.0, (25, -100))
+        end = handles2d.skew_bar_end((0, 0), 0.0, skew, 100)
+        self.assertAlmostEqual(end[0] / -end[1], 0.25)
+
+    def test_rotate_snaps_near_typical_values_only(self):
+        from nodebased import handles2d
+        self.assertEqual(handles2d.snap_rotate(88.5), 90.0)
+        self.assertEqual(handles2d.snap_rotate(-44.0), -45.0)
+        self.assertEqual(handles2d.snap_rotate(80.0), 80.0)
+
+    def test_box_hit_and_drag(self):
+        from nodebased import handles2d
+        self.assertEqual(handles2d.box_hit((100, 50), 0, 0, 100, 100, 5), "e")
+        self.assertEqual(handles2d.box_hit((0, 0), 0, 0, 100, 100, 5), "nw")
+        self.assertEqual(handles2d.box_hit((50, 50), 0, 0, 100, 100, 5), "body")
+        self.assertIsNone(handles2d.box_hit((50, 50), 0, 0, 100, 100, 5, body=False))
+        self.assertEqual(handles2d.box_drag((0, 0, 100, 100), "nw", 30, 20), (30, 20, 70, 80))
+        self.assertEqual(handles2d.box_drag((0, 0, 100, 100), "w", 150, 0), (99, 0, 1, 100))
+        self.assertEqual(handles2d.box_drag((0, 0, 100, 100), "body", 5, 6), (5, 6, 100, 100))

@@ -2236,6 +2236,8 @@ class Viewer(PanZoomView):
         self.paint_selected_item_index = None
         self.dustbust_preset = False
         self.transform_drag = None
+        self.box_drag = None             # Crop's or Text's on-screen box being dragged
+        self.grid_jack_drag = None       # GridWarp's grid transformation overlay being dragged
         self.analysis_drag = None
         self.flare_drag = None
         self.tracker_picking = False
@@ -3174,8 +3176,9 @@ class Viewer(PanZoomView):
         key = graph.selected_id()
         document = self.window.dispatcher.document
         node = document["nodes"].get(key) if key else None
-        if node is None or node["type"] != "Transform" or isinstance(node["params"].get("scale"), (list, tuple)):
-            return None      # a split scale has no single handle
+        if node is None or node["type"] != "Transform" or (node["params"].get("scale_mode", "uniform") == "xy"
+                                                            and not isinstance(node["params"].get("scale"), (list, tuple))):
+            return None      # the older scale X, Y form has no handle; one value or two (Nuke's split scale) has
         view_key = document.get("view")
         if view_key is None:
             return None
@@ -3190,6 +3193,110 @@ class Viewer(PanZoomView):
             seen.add(current)
             stack.extend(nodes[current]["inputs"].values())
         return None
+
+    def _box_context(self):
+        """The selected Crop or Text when its on-screen box can be drawn: selected, and viewed directly or through a downstream
+        node, so the box's data coordinates line up with the picture (as for the Transform jack)."""
+        graph = getattr(self.window, "graph", None)
+        if graph is None or self.format_rect is None:
+            return None
+        key = graph.selected_id()
+        document = self.window.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] not in handles2d.BOX_NODES:
+            return None
+        view_key = document.get("view")
+        nodes = document["nodes"]
+        stack, seen = [view_key], set()
+        while stack:
+            current = stack.pop()
+            if current is None or current in seen or current not in nodes:
+                continue
+            if current == key:
+                return key, node
+            seen.add(current)
+            stack.extend(nodes[current]["inputs"].values())
+        return None
+
+    def _box_values(self):
+        """(key, type, values at the current frame with any live drag applied) for the selected Crop or Text, or None."""
+        context = self._box_context()
+        if context is None:
+            return None
+        key, node = context
+        values = self._analysis_params(key)
+        drag = self.box_drag
+        if drag is not None and drag["key"] == key:
+            sx, sy = self._transform_data_point(drag["start"])
+            cx, cy = self._transform_data_point(drag["scene"])
+            original = drag["original"]
+            if drag["part"] == "center":
+                values["center_x"] = float(original["center_x"]) + cx - sx
+                values["center_y"] = float(original["center_y"]) + cy - sy
+            else:
+                names = handles2d.BOX_NODES[node["type"]]
+                box = handles2d.box_drag(tuple(float(original[n]) for n in names), drag["part"], cx - sx, cy - sy)
+                for name, value in zip(names, box):
+                    values[name] = int(round(value)) if isinstance(original[name], int) else float(value)
+        return key, node["type"], values
+
+    def _grid_jack(self, drag=None):
+        """GridWarp's transformation overlay (Nuke 17.0 Reference Guide, GridWarp: "you can drag on an axis on the
+        transformation overlay in the Viewer"): (key, prefix, values, geometry) for the grid transform in force, the source
+        transform when it drives both grids (use source transform) and the destination's otherwise; None when not shown.
+        Geometry is screen convention: the pivot, and the ends of its x and y axes. The knobs count y and the angle upwards
+        (`warpknobs.transform_points`)."""
+        context = self._warp_context()
+        if context is None or context[1]["type"] != "GridWarp":
+            return None
+        key, node = context[0], context[1]
+        prefix = "source_grid_transform_" if int(node["params"].get("use_source_transform", 1)) else "destination_grid_transform_"
+        values = {name: self._analysis_params(key)[prefix + name] for name in ("translate_x", "translate_y", "rotate", "scale",
+                                                                                "center_x", "center_y")}
+        if drag is not None:
+            start, current = self._transform_data_point(drag["start"]), self._transform_data_point(drag["scene"])
+            original = drag["original"]
+            if drag["part"] == "pivot":
+                values["translate_x"] = original["translate_x"] + current[0] - start[0]
+                values["translate_y"] = original["translate_y"] - (current[1] - start[1])
+            else:
+                pivot = drag["pivot"]
+                a0 = math.atan2(start[1] - pivot[1], start[0] - pivot[0])
+                a1 = math.atan2(current[1] - pivot[1], current[0] - pivot[0])
+                values["rotate"] = original["rotate"] - math.degrees(a1 - a0)
+                values["scale"] = handles2d.scale_from_drag(original["scale"], pivot, start, current)
+        pivot = (values["center_x"] + values["translate_x"], values["center_y"] - values["translate_y"])
+        length = 80.0 / max(abs(self.view_zoom()), 0.05) * max(float(values["scale"]), 0.05)
+        angle = math.radians(-values["rotate"])
+        x_end = (pivot[0] + length * math.cos(angle), pivot[1] + length * math.sin(angle))
+        y_end = (pivot[0] + length * math.sin(angle), pivot[1] - length * math.cos(angle))
+        return key, prefix, values, {"pivot": pivot, "x": x_end, "y": y_end}
+
+    def _draw_grid_jack(self, painter):
+        jack = self._grid_jack(self.grid_jack_drag)
+        if jack is None:
+            return
+        geometry = jack[3]
+        radius = 5.0 / max(abs(self.view_zoom()), 0.05)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(QColor("#c9e26a"), 2)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        pivot = self._transform_scene_point(*geometry["pivot"])
+        for end in ("x", "y"):
+            point = self._transform_scene_point(*geometry[end])
+            painter.drawLine(pivot, point)
+            painter.setBrush(QColor("#202127"))
+            painter.drawRect(QRectF(point.x() - radius, point.y() - radius, radius * 2, radius * 2))
+        painter.setBrush(QColor("#c9e26a"))
+        painter.drawEllipse(pivot, radius, radius)
+        painter.restore()
+
+    def _box_center(self, values):
+        """Text's centre of rotation and scaling in data coordinates: an offset from the box's centre."""
+        return (float(values["box_x"]) + float(values["box_width"]) / 2 + float(values.get("center_x", 0.0)),
+                float(values["box_y"]) + float(values["box_height"]) / 2 + float(values.get("center_y", 0.0)))
 
     def _flare_context(self):
         """Selected Flare over its own output or a downstream viewer target."""
@@ -3427,15 +3534,49 @@ class Viewer(PanZoomView):
         elif drag["kind"] == "rotate":
             values["rotate"] = handles2d.rotate_from_drag(
                 original["rotate"], drag["pivot"], start, current)
+            if not drag.get("free"):           # "snaps to typical values. To prevent the snapping, press Shift while dragging."
+                values["rotate"] = handles2d.snap_rotate(values["rotate"])
         elif drag["kind"] == "scale":
-            values["scale"] = handles2d.scale_from_drag(
-                original["scale"], drag["pivot"], start, current)
+            if isinstance(original["scale"], (list, tuple)):
+                sx, sy = handles2d.scale_pair(original["scale"])
+                factor = handles2d.scale_from_drag(1.0, drag["pivot"], start, current)
+                values["scale"] = [sx * factor, sy * factor]
+            else:
+                values["scale"] = handles2d.scale_from_drag(
+                    original["scale"], drag["pivot"], start, current)
+        elif drag["kind"] in ("scale_x", "scale_y"):
+            # Nuke 17.0 User Guide, Transforming in 2D: "The top and bottom points scale on y; the left and right points, on x."
+            axis = 0 if drag["kind"] == "scale_x" else 1
+            pair = list(handles2d.scale_pair(original["scale"]))
+            pair[axis] = handles2d.axis_scale_from_drag(pair[axis], drag["pivot"], values["rotate"], axis, start, current)
+            values["scale"] = pair
+        elif drag["kind"] == "skew":
+            values["skew_x"] = max(-10.0, min(10.0, handles2d.skew_from_drag(drag["pivot"], values["rotate"], current)))
         return values
+
+    def _transform_overlay_geometry(self, values):
+        """Screen-convention geometry of the jack for `values`: corners, pivot, ring radius, skew bar top, invert handle (or None)."""
+        w, h = self.format_rect.width(), self.format_rect.height()
+        skew = {"skew_x": values.get("skew_x", 0.0), "skew_y": values.get("skew_y", 0.0),
+                "skew_order": values.get("skew_order", "XY")}
+        corners = handles2d.box_corners(w, h, values["translate_x"], values["translate_y"], values["rotate"],
+                                        values["scale"], values["center_x"], values["center_y"], **skew)
+        pivot = handles2d.pivot_point(values["translate_x"], values["translate_y"], values["center_x"], values["center_y"])
+        ring = 1.15 * math.hypot(corners[0][0] - pivot[0], corners[0][1] - pivot[1])
+        bar = handles2d.skew_bar_end(pivot, values["rotate"], values.get("skew_x", 0.0), 0.5 * ring)
+        zoom = max(abs(self.view_zoom()), 0.05)
+        # Nuke 17.0 Reference Guide, Transform: with invert checked "a small transform handle appears next to the standard
+        # transform handle in the Viewer".
+        invert = (pivot[0] + 28.0 / zoom, pivot[1] + 28.0 / zoom) if int(values.get("invert", 0)) else None
+        return {"corners": corners, "pivot": pivot, "ring": ring, "bar": bar, "invert": invert}
 
     def _transform_commands(self, key, values):
         frame = int(self.window.dispatcher.document["time"]["current"])
         commands = []
         for param, value in values.items():
+            if isinstance(value, (list, tuple)):       # a split scale: both factors in one set
+                commands.append({"op": "set", "id": key, "param": param, "value": [float(v) for v in value]})
+                continue
             if self.window.node_curve(key, param) is not None:
                 commands.append({"op": "set_key", "id": key, "param": param, "frame": frame,
                                  "value": value if isinstance(value, int) else float(value)})
@@ -3461,6 +3602,10 @@ class Viewer(PanZoomView):
         for index, track in enumerate(tracks):
             x, y = track["x"], track["y"]
             pattern, search = (float(radius) for radius in trackerknobs.track_radii(node["params"], raw_tracks[index]))
+            # The anchor's centre moves the track (Nuke's anchor), even zoomed out where the pattern box's edges come within the
+            # grab radius of it: near the centre the point wins, further out the edges still resize the boxes.
+            if math.hypot(point[0]-x, point[1]-y) <= max(0.5 * pattern, 4.0 / zoom):
+                return {"kind": "point", "index": index}
             if abs(abs(point[0]-x)-pattern) <= hit_radius and abs(point[1]-y) <= pattern+hit_radius:
                 return {"kind": "pattern", "center": (x, y), "index": index}
             if abs(abs(point[1]-y)-pattern) <= hit_radius and abs(point[0]-x) <= pattern+hit_radius:
@@ -5146,7 +5291,7 @@ class Viewer(PanZoomView):
             self.viewport().update()
             event.accept(); return
         if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
-                                                  or self.transform_drag is not None or self.analysis_drag is not None or self.flare_drag is not None or self.warp_drawing
+                                                  or self.transform_drag is not None or self.box_drag is not None or self.grid_jack_drag is not None or self.analysis_drag is not None or self.flare_drag is not None or self.warp_drawing
                                                   or self.warp_drag is not None or self.tracker_drag is not None):
             if self.roto_drawing or self.roto_drag is not None:
                 self.cancel_roto_edit()
@@ -5158,6 +5303,8 @@ class Viewer(PanZoomView):
                 if node is not None:
                     self.window.preview_knobs(key, node["params"])
             self.transform_drag = None
+            self.box_drag = None
+            self.grid_jack_drag = None
             self.analysis_drag = None
             self.flare_drag = None
             self.tracker_drag = None
@@ -5431,6 +5578,30 @@ class Viewer(PanZoomView):
             self.flare_drag = None
             self.unsetCursor()
             self.viewport().update()
+            return True
+        if button == Qt.MouseButton.LeftButton and self.grid_jack_drag is not None:
+            drag = self.grid_jack_drag
+            drag["scene"] = scene_pos
+            drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
+            jack = self._grid_jack(drag) if drag["moved"] else None
+            if jack is not None:
+                key, prefix, values, _ = jack
+                self.window.command({"op": "batch", "commands": self._transform_commands(
+                    key, {prefix + name: values[name] for name in drag["touched"]})})
+            self.grid_jack_drag = None
+            self.unsetCursor()
+            return True
+        if button == Qt.MouseButton.LeftButton and self.box_drag is not None:
+            drag = self.box_drag
+            drag["scene"] = scene_pos
+            drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
+            box = self._box_values() if drag["moved"] else None
+            if box is not None:
+                key, _, values = box
+                self.window.command({"op": "batch", "commands": self._transform_commands(
+                    key, {name: values[name] for name in drag["original"]})})
+            self.box_drag = None
+            self.unsetCursor()
             return True
         if button == Qt.MouseButton.LeftButton and self.transform_drag is not None:
             drag = self.transform_drag
@@ -6120,6 +6291,7 @@ class Viewer(PanZoomView):
                 painter.drawEllipse(point, radius, radius)
             painter.restore()
         self._draw_warp_overlay(painter)
+        self._draw_grid_jack(painter)
         self._draw_tracker_overlay(painter)
         self._draw_planar_overlay(painter)
         self._draw_survey_overlay(painter)
@@ -6128,12 +6300,8 @@ class Viewer(PanZoomView):
             _, node = transform_context
             values = self._transform_values(screen=True)
             if values is not None:
-                w, h = self.format_rect.width(), self.format_rect.height()
-                corners = handles2d.box_corners(w, h, values["translate_x"], values["translate_y"],
-                                                values["rotate"], values["scale"], values["center_x"], values["center_y"])
-                pivot = handles2d.pivot_point(values["translate_x"], values["translate_y"],
-                                               values["center_x"], values["center_y"])
-                radius = 1.15 * math.hypot(corners[0][0] - pivot[0], corners[0][1] - pivot[1])
+                geometry = self._transform_overlay_geometry(values)
+                corners, pivot, radius = geometry["corners"], geometry["pivot"], geometry["ring"]
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 pen = QPen(QColor("#c9e26a"), 2)
@@ -6155,14 +6323,26 @@ class Viewer(PanZoomView):
                     point = self._transform_scene_point(x, y)
                     painter.drawRect(QRectF(point.x() - handle_radius, point.y() - handle_radius,
                                              handle_radius * 2, handle_radius * 2))
+                # The skew bar: "drag the vertical bar of the transformation overlay" (Transforming in 2D).
+                bar_scene = self._transform_scene_point(*geometry["bar"])
+                painter.drawLine(pivot_scene, bar_scene)
+                painter.drawEllipse(bar_scene, handle_radius, handle_radius)
                 painter.setBrush(QColor("#c9e26a"))
                 painter.drawEllipse(pivot_scene, handle_radius, handle_radius)
+                if geometry["invert"] is not None:
+                    small = self._transform_scene_point(*geometry["invert"])
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawEllipse(small, handle_radius * 1.6, handle_radius * 1.6)
+                    painter.drawLine(QPointF(small.x() - handle_radius * 2.4, small.y()), QPointF(small.x() + handle_radius * 2.4, small.y()))
+                    painter.drawLine(QPointF(small.x(), small.y() - handle_radius * 2.4), QPointF(small.x(), small.y() + handle_radius * 2.4))
                 painter.restore()
                 if self.transform_drag is not None:
                     kind = self.transform_drag["kind"]
                     label = (f"tx {values['translate_x']:.1f}  ty {values['translate_y']:.1f}" if kind == "translate" else
                              f"pivot {values['center_x']:.1f}, {values['center_y']:.1f}" if kind == "pivot" else
                              f"rotate {values['rotate']:.2f}°" if kind == "rotate" else
+                             f"skew x {values.get('skew_x', 0.0):.3f}" if kind == "skew" else
+                             f"scale {values['scale']}" if kind in ("scale_x", "scale_y") else
                              f"scale {values['scale']:.4f}")
                     painter.save()
                     painter.resetTransform()
@@ -6170,6 +6350,27 @@ class Viewer(PanZoomView):
                     painter.setPen(QColor("#c9e26a"))
                     painter.drawText(point.x() + 12, point.y() - 12, label)
                     painter.restore()
+        box = self._box_values()
+        if box is not None:
+            _, kind, values = box
+            x, y, w, h = (float(values[n]) for n in handles2d.BOX_NODES[kind])
+            zoom = max(abs(self.view_zoom()), 0.05)
+            grip = 4.0 / zoom
+            painter.save()
+            pen = QPen(QColor("#c9e26a"), 1.5)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(QRectF(self._transform_scene_point(x, y), self._transform_scene_point(x + w, y + h)).normalized())
+            painter.setBrush(QColor("#202127"))
+            for gx, gy in handles2d.box_grips(x, y, w, h).values():
+                point = self._transform_scene_point(gx, gy)
+                painter.drawRect(QRectF(point.x() - grip, point.y() - grip, grip * 2, grip * 2))
+            if kind == "Text":
+                centre = self._transform_scene_point(*self._box_center(values))
+                painter.drawLine(QPointF(centre.x() - grip * 2.5, centre.y()), QPointF(centre.x() + grip * 2.5, centre.y()))
+                painter.drawLine(QPointF(centre.x(), centre.y() - grip * 2.5), QPointF(centre.x(), centre.y() + grip * 2.5))
+            painter.restore()
         analysis_context = self._analysis_context()
         if analysis_context is not None:
             key, node = analysis_context
@@ -6529,6 +6730,20 @@ class Viewer(PanZoomView):
                 self.warp_drag = hit
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 return True
+            jack = self._grid_jack()
+            if jack is not None:       # grid points come first; the overlay takes what they leave
+                key, prefix, values, geometry = jack
+                point = self._transform_data_point(scene_pos)
+                radius = 12.0 / max(abs(self.view_zoom()), 0.05)
+                part = next((name for name in ("pivot", "x", "y")
+                             if math.hypot(point[0] - geometry[name][0], point[1] - geometry[name][1]) <= radius), None)
+                if part is not None:
+                    touched = ("translate_x", "translate_y") if part == "pivot" else ("rotate", "scale")
+                    self.grid_jack_drag = {"key": key, "prefix": prefix, "part": part, "start": scene_pos, "scene": scene_pos,
+                                           "moved": False, "pivot": geometry["pivot"],
+                                           "original": {name: float(values[name]) for name in values}, "touched": touched}
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                    return True
         if button == Qt.MouseButton.LeftButton and self._paint_context() is not None:
             self._paint_sample(scene_pos, pressure, start=True)
             return True
@@ -6564,24 +6779,45 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     return True
         if button == Qt.MouseButton.LeftButton:
+            box = self._box_values()
+            if box is not None:
+                key, kind, values = box
+                point = self._transform_data_point(scene_pos)
+                radius = 10.0 / max(abs(self.view_zoom()), 0.05)
+                part = None
+                if kind == "Text" and modifiers & Qt.KeyboardModifier.ControlModifier:
+                    part = "center"            # "You can also move it using Ctrl/Cmd +drag."
+                else:
+                    part = handles2d.box_hit(point, *(float(values[n]) for n in handles2d.BOX_NODES[kind]), radius,
+                                             body=kind == "Text")   # Crop: "by dragging its edges"; Text's box also moves
+                if part is not None:
+                    touched = ("center_x", "center_y") if part == "center" else handles2d.BOX_NODES[kind]
+                    self.box_drag = {"key": key, "part": part, "start": scene_pos, "scene": scene_pos, "moved": False,
+                                     "original": {name: values[name] for name in touched}}
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                    return True
+        if button == Qt.MouseButton.LeftButton:
             context = self._transform_context()
             if context is not None:
                 key, node = context
                 p = handles2d.flip_axes(node["params"], handles2d.axes_flipped(node["params"]))   # the handles draw y down
-                w, h = self.format_rect.width(), self.format_rect.height()
-                corners = handles2d.box_corners(w, h, p["translate_x"], p["translate_y"], p["rotate"],
-                                                p["scale"], p["center_x"], p["center_y"])
-                pivot = handles2d.pivot_point(p["translate_x"], p["translate_y"], p["center_x"], p["center_y"])
+                geometry = self._transform_overlay_geometry(p)
+                corners, pivot = geometry["corners"], geometry["pivot"]
                 point = self._transform_data_point(scene_pos)
                 hit_radius = 12.0 / max(abs(self.view_zoom()), 0.05)
                 kind = None
-                if any(math.hypot(point[0] - x, point[1] - y) <= hit_radius for x, y in corners):
+                near = lambda x, y: math.hypot(point[0] - x, point[1] - y) <= hit_radius
+                midpoints = handles2d.edge_midpoints(corners)
+                if any(near(x, y) for x, y in corners):
                     kind = "scale"
-                elif any(math.hypot(point[0] - x, point[1] - y) <= hit_radius
-                         for x, y in handles2d.edge_midpoints(corners)):
-                    kind = "scale"
+                elif near(*midpoints[1]) or near(*midpoints[3]):
+                    kind = "scale_x"           # "the left and right points, on x"
+                elif near(*midpoints[0]) or near(*midpoints[2]):
+                    kind = "scale_y"           # "The top and bottom points scale on y"
+                elif near(*geometry["bar"]):
+                    kind = "skew"
                 else:
-                    ring_radius = 1.15 * math.hypot(corners[0][0] - pivot[0], corners[0][1] - pivot[1])
+                    ring_radius = geometry["ring"]
                     distance = math.hypot(point[0] - pivot[0], point[1] - pivot[1])
                     if abs(distance - ring_radius) < 10.0 / max(abs(self.view_zoom()), 0.05):
                         kind = "rotate"
@@ -6593,11 +6829,13 @@ class Viewer(PanZoomView):
                 if kind is not None:
                     touched = {"translate": ("translate_x", "translate_y"),
                                "pivot": ("center_x", "center_y", "translate_x", "translate_y"),
-                               "rotate": ("rotate",), "scale": ("scale",)}[kind]
+                               "rotate": ("rotate",), "scale": ("scale",), "scale_x": ("scale",), "scale_y": ("scale",),
+                               "skew": ("skew_x",)}[kind]
                     self.transform_drag = {"kind": kind, "key": key, "start": scene_pos, "scene": scene_pos,
                                            "moved": False, "pivot": pivot,
                                            # "Shift+drag to constrain the translation to x or y" (same page)
                                            "constrain": kind == "translate" and bool(modifiers & Qt.KeyboardModifier.ShiftModifier),
+                                           "free": bool(modifiers & Qt.KeyboardModifier.ShiftModifier),
                                            "original": {param: node["params"][param] for param in touched}}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     return True
@@ -6736,7 +6974,19 @@ class Viewer(PanZoomView):
                 names = analysisregion.region_params(context[1]["type"])
                 self.window.preview_knobs(self.analysis_drag["key"], {name: values[name] for name in names})
             self.viewport().update(); return True
+        if self.grid_jack_drag is not None:
+            self.grid_jack_drag["scene"] = scene_pos
+            self.grid_jack_drag["moved"] = (scene_pos - self.grid_jack_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            return True
+        if self.box_drag is not None:
+            self.box_drag["scene"] = scene_pos
+            self.box_drag["moved"] = (scene_pos - self.box_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            return True
         if self.transform_drag is not None:
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:   # Shift pressed while dragging stops the rotate snap
+                self.transform_drag["free"] = True
             self.transform_drag["scene"] = scene_pos
             self.transform_drag["moved"] = (scene_pos - self.transform_drag["start"]).manhattanLength() > 2
             self.viewport().update()
