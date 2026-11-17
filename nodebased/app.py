@@ -14455,6 +14455,20 @@ class Window(QMainWindow):
                     "OCIODisplay": {"display", "view", "look"},
                     "OCIOLookTransform": {"src", "dst", "look"},
                 }
+                if param in channelpicker.ENUM_SINGLE_CHANNEL.get(node["type"], ()):
+                    # Copy's and ChannelMerge's channel menus: Nuke's single-channel knob, stored as the old enum word.
+                    choices = list(CHOICES[param])
+                    control = channelpicker.SingleChannelPicker(
+                        param, channelpicker.enum_to_channel(value), [channelpicker.enum_to_channel(c) for c in choices])
+                    def _store(new, k=key, p=param, w=control, options=choices):
+                        word = channelpicker.channel_to_enum(new, options)
+                        if word is None:      # a channel the menu does not offer: show the stored one again
+                            w.set_value(channelpicker.enum_to_channel(self.graph_nodes()[k]["params"][p]))
+                        elif word != self.graph_nodes()[k]["params"][p]:
+                            self.defer_command({"op": "set", "id": k, "param": p, "value": word})
+                    control.changed.connect(_store)
+                    form.addRow(label or param.replace("_", " ").title(), control)
+                    return
                 if ops2d_chrome.is_open_choice(node["type"], param) and (
                         param in channelpicker.CHANNEL_SET_PARAMS or param in channelpicker.SINGLE_CHANNEL_PARAMS):
                     # Nuke's channel knobs (Calling Channels, Nuke 17.0 User Guide): a channel set is a layer menu with

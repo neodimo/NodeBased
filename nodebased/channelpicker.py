@@ -34,6 +34,34 @@ CHANNEL_SET_PARAMS = frozenset({"channels", "output", "Achannels", "Bchannels", 
 SINGLE_CHANNEL_PARAMS = frozenset({"maskChannelInput", "unpremult", "premult", "premult_by", "width_channel",
                                    "blur_channel", "filter_channel", "ctrlMask"})
 
+# Enum knobs that hold one channel (DiMo 11/17, lane 10 step T3): Copy's from/to pairs and ChannelMerge's A, B and
+# output menus are Nuke single-channel knobs (Copy and ChannelMerge, Nuke 17.0 Reference Guide). NodeBased stores
+# them as short enum words (`A.r`, `B.a`, `R`, `none`), so documents keep their values; the panel shows them through
+# the single-channel widget as layer and channel (`A` + `red`, `rgba` + `red`) and stores the enum word back.
+ENUM_SINGLE_CHANNEL = {"Copy": frozenset({"copy_red", "copy_green", "copy_blue", "copy_alpha"}),
+                       "ChannelMerge": frozenset({"a_channel", "b_channel", "out_channel"})}
+_LETTERS = {"r": "red", "g": "green", "b": "blue", "a": "alpha"}
+_OUTPUT = {"R": "red", "G": "green", "B": "blue", "A": "alpha"}
+
+
+def enum_to_channel(word):
+    """A stored enum word -> the channel the widget shows: `A.r` -> `A.red`, `R` -> `rgba.red`, `none` -> `none`."""
+    text = str(word or "").strip()
+    if text in _OUTPUT:
+        return f"rgba.{_OUTPUT[text]}"
+    if "." in text:
+        layer, letter = text.split(".", 1)
+        return f"{layer}.{_LETTERS.get(letter, letter)}"
+    return text or "none"
+
+
+def channel_to_enum(text, choices):
+    """The widget's `layer.channel` back to the enum word among `choices`, or None when it names none of them."""
+    for word in choices:
+        if enum_to_channel(word) == str(text).strip():
+            return word
+    return None
+
 
 def _rgba_name(token):
     word = token.strip().lower()

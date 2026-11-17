@@ -124,6 +124,46 @@ class WidgetTests(unittest.TestCase):
             APP.processEvents()
             self.assertEqual(self.window.dispatcher.document["nodes"][key]["params"], before)
 
+    def test_copy_and_channelmerge_menus_are_single_channel_knobs(self):
+        """Copy's from/to pairs and ChannelMerge's A, B and output menus show as Nuke's layer + channel knob; the
+        enum words a document holds load unchanged and a pick stores the enum word back (lane 10, step T3)."""
+        from PySide6.QtWidgets import QComboBox, QWidget
+        key, panel = self.node("Copy", {"copy_alpha": "A.r"})
+        before = dict(self.window.dispatcher.document["nodes"][key]["params"])
+        for param in ("copy_red", "copy_green", "copy_blue", "copy_alpha"):
+            self.assertIsNotNone(panel.findChild(QWidget, f"{param}-single-channel"))
+        self.assertEqual(panel.findChild(QComboBox, "copy_alpha-choice").currentText(), "A")
+        self.assertEqual(panel.findChild(QComboBox, "copy_alpha-channel").currentText(), "red")
+        self.assertEqual(panel.findChild(QComboBox, "copy_red-choice").currentText(), "none")
+        APP.processEvents()
+        self.assertEqual(self.window.dispatcher.document["nodes"][key]["params"], before)
+        channel = panel.findChild(QComboBox, "copy_alpha-channel")
+        channel.setCurrentIndex(channel.findText("blue"))
+        channel.activated.emit(channel.currentIndex())
+        APP.processEvents()
+        self.assertEqual(self.window.dispatcher.document["nodes"][key]["params"]["copy_alpha"], "A.b")
+        key, panel = self.node("ChannelMerge")
+        before = dict(self.window.dispatcher.document["nodes"][key]["params"])
+        for param, layer, name in (("a_channel", "A", "alpha"), ("b_channel", "B", "alpha"), ("out_channel", "rgba", "alpha")):
+            with self.subTest(param=param):
+                self.assertIsNotNone(panel.findChild(QWidget, f"{param}-single-channel"))
+                self.assertEqual(panel.findChild(QComboBox, f"{param}-choice").currentText(), layer)
+                self.assertEqual(panel.findChild(QComboBox, f"{param}-channel").currentText(), name)
+        APP.processEvents()
+        self.assertEqual(self.window.dispatcher.document["nodes"][key]["params"], before)
+        channel = panel.findChild(QComboBox, "out_channel-channel")
+        channel.setCurrentIndex(channel.findText("green"))
+        channel.activated.emit(channel.currentIndex())
+        APP.processEvents()
+        self.assertEqual(self.window.dispatcher.document["nodes"][key]["params"]["out_channel"], "G")
+
+    def test_enum_channel_words_round_trip(self):
+        from nodebased.core import CHOICES
+        for param in ("copy_red", "a_channel", "b_channel", "out_channel"):
+            for word in CHOICES[param]:
+                self.assertEqual(cp.channel_to_enum(cp.enum_to_channel(word), CHOICES[param]), word)
+        self.assertIsNone(cp.channel_to_enum("depth.Z", CHOICES["a_channel"]))
+
     def test_every_open_choice_channel_param_is_classified(self):
         """No channel knob falls back to the old one-menu widget by accident: each open-choice name is a set,
         a single channel, or one of the named exceptions."""
