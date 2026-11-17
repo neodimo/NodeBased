@@ -64,6 +64,71 @@ class ReviewBookTests(unittest.TestCase):
         self.assertEqual(rows[0]["nodebased"], "radius")
 
 
+    def test_pages_carry_a_worklist_badge_and_the_index_counts_lanes(self):
+        index = (self.out / "index.html").read_text(encoding="utf-8")
+        self.assertIn("<h2>Worklist</h2>", index)
+        for name, info in self.result["pages"].items():
+            text = (self.out / info["page"]).read_text(encoding="utf-8")
+            badge = "clean" if info["open"] == 0 else f"{info['open']} open"
+            self.assertIn(badge, text.split("</h1>")[0], name)
+
+
+class WorklistTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.items = book.worklist()
+
+    def test_items_go_to_the_lane_that_owns_the_group_and_are_sorted_by_weight(self):
+        self.assertTrue(self.items)
+        for i in self.items:
+            if i["kind"] != "widget behaviour":
+                self.assertEqual(i["lane"], book.LANE_OF_GROUP.get(i["group"], 11), i)
+        open_w = [i["weight"] for i in self.items if i["status"] == "open"]
+        self.assertEqual(open_w, sorted(open_w, reverse=True))
+
+    def test_a_skipped_default_is_accepted_with_its_reason(self):
+        acc = [i for i in self.items if i["status"] == "accepted"]
+        self.assertTrue(acc)
+        self.assertTrue(all(i["reason"] for i in acc))
+        multiply = [i for i in acc if i["node"] == "Multiply" and i["knob"] == "value"]
+        for i in multiply:
+            self.assertIn("Nuke's own default is 1", i["reason"])
+
+    def test_an_open_default_shows_both_values_and_the_pairing_note(self):
+        blur = [i for i in self.items if i["node"] == "Blur" and i["knob"] == "size" and i["kind"] == "default"]
+        if blur:  # lane 9 may have closed it
+            self.assertEqual(blur[0]["lane"], 9)
+            self.assertIn("radius", blur[0]["reason"])
+
+    def test_markdown_and_json_agree_on_the_counts(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            md, js = Path(tmp) / "W.md", Path(tmp) / "w.json"
+            book.write_worklist(self.items, md, js)
+            data = json.loads(js.read_text(encoding="utf-8"))
+            self.assertEqual(len(data["items"]), len(self.items))
+            text = md.read_text(encoding="utf-8")
+            for lane, c in book.lane_counts(self.items).items():
+                self.assertEqual(data["counts"][str(lane)], c)
+                self.assertRegex(text, rf"\| {lane} \| [^|]+ \| {c['open']} \| {c['accepted']} \|")
+
+    def test_the_committed_worklist_is_current(self):
+        committed = book.WORKLIST_MD.read_text(encoding="utf-8")
+        self.assertEqual(committed, book.worklist_markdown(self.items),
+                         "run python tools/parity_review_book.py --worklist")
+
+    def test_failing_behaviours_go_to_lane_10(self):
+        fake = {"nodes": {"Blur": [{"knob": "size", "interaction": "drag scrubs", "status": "fail"},
+                                    {"knob": "filter", "interaction": "wheel", "status": "pass"}, {"knob": "x"}]}}
+        self.assertEqual([b["status"] for b in book.node_behaviours("Blur", fake)], ["failing", "passing", "undocumented"])
+        import json
+        pairs = json.loads(book.MAP_JSON.read_text(encoding="utf-8"))["pairs"]
+        nodes = json.loads(book.NUKE_JSON.read_text(encoding="utf-8"))["nodes"]
+        items = book.node_items("Blur", {"group": "Filter"}, nodes["Blur"], pairs["Blur"], 1.0, fake)
+        beh = [i for i in items if i["kind"] == "widget behaviour"]
+        self.assertEqual([(i["lane"], i["knob"]) for i in beh], [(10, "size")])
+
+
 class NukeRenderColumnTests(unittest.TestCase):
     def test_a_nuke_render_adds_the_column_and_counts_as_verified(self):
         from nodebased.media import write_exr

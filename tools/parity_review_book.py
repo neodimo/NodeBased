@@ -310,7 +310,7 @@ def _norm_label(text):
     return re.sub(r"[^a-z0-9]+", "", str(text or "").lower())
 
 
-def alignment(nuke_node, pair, kind):
+def alignment(nuke_node, pair, kind, name=""):
     """One row per Nuke knob: the NodeBased pairing and its mismatch marks."""
     from audit_nuke_fidelity import _widget_kind, compare_default
     from nodebased import core
@@ -378,15 +378,41 @@ def alignment(nuke_node, pair, kind):
             if first in params and len(nb) == 1 and k["type"] not in ("unknown",):
                 row["nb_default"] = params[first]
                 try:
-                    same = compare_default(params[first], k["default"], pair.get("value_map"))
+                    same = compare_default(params[first], k["default"], (pair.get("value_map") or {}).get(k["name"]))
                 except Exception:  # noqa: BLE001
                     same = None
                 if same is False and k["name"] in set(pair.get("skip_default", [])):
-                    row["reason"] = "the default differs; the audit skips it on purpose (skip_default in the pairing)"
+                    row["accepted"] = accepted_reason(name or nuke_node.get("name", ""), k["name"], pair, e)
+                    row["reason"] = "the default differs on purpose: " + row["accepted"]
                 elif same is False:
                     row["marks"].append("default")
+                    if e.get("reason"):
+                        row["reason"] = "pairing note: " + e["reason"]
         rows.append(row)
     return rows
+
+
+_AUDIT_NOTES = None
+
+
+def accepted_reason(node, knob, pair, entry):
+    """Why the pairing accepts a default difference (skip_default): the audit report's note naming the knob, else the
+    pairing's own reasons, else the bare fact."""
+    global _AUDIT_NOTES
+    if _AUDIT_NOTES is None:
+        try:
+            import audit_nuke_fidelity as audit
+            _AUDIT_NOTES = [str(n) for n in getattr(audit, "AMBIGUITIES", []) or []]
+        except Exception:  # noqa: BLE001 - notes are a courtesy
+            _AUDIT_NOTES = []
+    for note in _AUDIT_NOTES:
+        if f"`{knob.split('#')[0]}`" in note and node and note.startswith(node.split(" ")[0]):
+            return note.replace("`", "")
+    if entry and entry.get("reason"):
+        return entry["reason"]
+    if pair.get("reason"):
+        return pair["reason"]
+    return "skip_default in nodebased_to_nuke.json: the pairing compares this knob's default on purpose no further"
 
 
 def _lis_indices(seq):
@@ -535,10 +561,10 @@ def _fmt_default(v):
     return "" if v == "" or v is None else esc(json.dumps(v) if not isinstance(v, str) else v)
 
 
-def node_page(name, row, nuke_node, pair, kind, panels, align, case_infos, strip, strip_note, interactions):
+def node_page(name, row, nuke_node, pair, kind, panels, align, case_infos, strip, strip_note, interactions, items=None):
     rel = lambda p: os.path.basename(str(p))  # noqa: E731 - images sit beside the page
     out = [f"<!doctype html><meta charset=utf-8><title>{esc(name)} review</title><style>{CSS}</style>",
-           f"<p><a href='index.html'>&larr; index</a></p><h1>{esc(name)} <small>({esc(row.get('group', ''))})</small></h1>",
+           f"<p><a href='index.html'>&larr; index</a></p><h1>{esc(name)} <small>({esc(row.get('group', ''))})</small> {_badge(items)}</h1>",
            f"<p>NodeBased node <code>{esc(kind)}</code>. Fidelity {esc(row.get('fidelity', '?'))}; behaviour cases {esc(row.get('math', '?'))}. "
            f"Nuke 17.0 Reference Guide: <a href='{esc(nuke_node.get('page', GUIDE_HOME))}'>{esc(nuke_node.get('guide_title', name))}</a>.</p>",
            "<h2>1. Does the panel look like Nuke's?</h2><div class=cols><div><h3>Nuke (Reference Guide knob table)</h3>"]
@@ -573,8 +599,16 @@ def node_page(name, row, nuke_node, pair, kind, panels, align, case_infos, strip
     if interactions is None:
         out.append("<p class=ns>docs/parity/nuke_knob_interactions.json is not on main yet (lane 10 adds it); this section fills in when it is.</p>")
     else:
-        items = interactions.get(name) or interactions.get("nodes", {}).get(name) or []
-        out.append("<pre>" + esc(json.dumps(items, indent=1)[:4000]) + "</pre>" if items else "<p class=ns>No entries for this node.</p>")
+        behaviours = node_behaviours(name, interactions)
+        if not behaviours:
+            out.append("<p class=ns>No entries for this node.</p>")
+        else:
+            out.append("<table><tr><th>knob</th><th>behaviour</th><th>status</th><th>Nuke</th><th>NodeBased</th></tr>")
+            for b in behaviours:
+                cls = "pass" if b["status"] == "passing" else "fail" if b["status"] == "failing" else "ns"
+                out.append(f"<tr><td><code>{esc(b['knob'])}</code></td><td>{esc(b['what'])}</td><td class={cls}>{esc(b['status'])}</td>"
+                           f"<td>{esc(_short(b['expected']))}</td><td>{esc(_short(b['observed']))}</td></tr>")
+            out.append("</table>")
     out.append("<h2>2. Does it compute what Nuke computes?</h2>")
     if not case_infos:
         out.append("<p class=ns>The audit has no behaviour case for this node.</p>")
@@ -620,24 +654,206 @@ def node_page(name, row, nuke_node, pair, kind, panels, align, case_infos, strip
     return "\n".join(out) + "\n"
 
 
-def index_page(entries, built, seconds):
+def _badge(items):
+    if items is None:
+        return ""
+    n = sum(1 for i in items if i["status"] == "open")
+    return "<span class=pass>clean</span>" if n == 0 else f"<span class=fail>{n} open</span>"
+
+
+def index_page(entries, built, seconds, items=None):
     out = [f"<!doctype html><meta charset=utf-8><title>NodeBased Nuke parity review book</title><style>{CSS}</style>",
            "<h1>NodeBased: Nuke parity review book</h1>",
            f"<p>{len(built)} node pages, built in {seconds:.0f} s. Nodes verified against Nuke's own pixels: "
-           f"{sum(1 for b in built.values() if b['nuke_verified'])} (renders read from docs/parity/nuke_renders/).</p>"]
+           f"{sum(1 for b in built.values() if b['nuke_verified'])} (renders read from docs/parity/nuke_renders/). "
+           f"Clean pages (no open worklist item): {sum(1 for b in built.values() if b.get('open') == 0)}.</p>"]
+    if items is not None:
+        out.append("<h2>Worklist</h2><p>Open and accepted items per lane on these pages (docs/parity/review/WORKLIST.md lists "
+                   "every node): </p><table><tr><th>lane</th><th>open</th><th>accepted</th></tr>")
+        for lane, c in lane_counts(items).items():
+            out.append(f"<tr><td>{lane}</td><td>{c['open']}</td><td>{c['accepted']}</td></tr>")
+        out.append("</table>")
+        beh = [b for b in built.values() if b.get("behaviours")]
+        if beh:
+            from collections import Counter
+            tally = Counter(s for b in beh for s in b["behaviours"])
+            out.append(f"<p>Per-widget behaviours: {tally.get('passing', 0)} passing, {tally.get('failing', 0)} failing, "
+                       f"{tally.get('undocumented', 0)} undocumented.</p>")
     groups = {}
     for name, row in entries.items():
         groups.setdefault(row["group"], []).append((row["rank"], name, row))
     for group, items in groups.items():
         out.append(f"<h2>{esc(group)}</h2><table><tr><th>rank</th><th>Nuke node</th><th>NodeBased</th><th>fidelity</th>"
-                   "<th>behaviour cases</th><th>verified against Nuke</th></tr>")
+                   "<th>behaviour cases</th><th>verified against Nuke</th><th>worklist</th></tr>")
         for rank, name, row in sorted(items):
             b = built.get(name)
             link = f"<a href='{esc(b['page'])}'>{esc(name)}</a>" if b else esc(name)
             out.append(f"<tr><td>{rank}</td><td>{link}</td><td><code>{esc(row['nodebased'])}</code></td><td>{esc(row['fidelity'])}</td>"
-                       f"<td>{esc(row['math'])}</td><td>{'yes' if b and b['nuke_verified'] else ''}</td></tr>")
+                       f"<td>{esc(row['math'])}</td><td>{'yes' if b and b['nuke_verified'] else ''}</td>"
+                       f"<td>{_badge(b['items']) if b and 'items' in b else ''}</td></tr>")
         out.append("</table>")
     return "\n".join(out) + "\n"
+
+
+# -------------------------------------------------------------------------------------------------------------- worklist
+WORKLIST_MD = ROOT / "docs" / "parity" / "review" / "WORKLIST.md"
+WORKLIST_JSON = ROOT / "docs" / "parity" / "review" / "worklist.json"
+# Who owns a node's panel and behaviour, by its group (lanes of November 2026). Widget behaviour items go to lane 10.
+LANE_OF_GROUP = {"Color": 2, "Keyer": 2, "Channel": 2, "Time": 2, "Filter": 9, "Transform": 9, "Draw": 9,
+                 "Image": 11, "Merge": 11, "Metadata": 11, "Other": 11}
+WIDGET_LANE = 10
+_MARK_KIND = {"default": "default", "label": "label", "widget": "widget type", "order": "order", "not laid out": "not laid out"}
+
+
+def node_weights():
+    """{nuke node: rank weight} the way the audit weights a node: 1 / rank, shared among the nodes of one row."""
+    import audit_nuke_fidelity as audit
+    pairs = load_json(MAP_JSON)["pairs"]
+    out = {}
+    for group, rank, cell, status in audit.doc_rows():
+        if status == "n/a":
+            continue
+        names = [n for n in audit.names_of(cell) if n != "LightMixer"]
+        members = [n for n in names if audit.pair_key(group, n) in pairs] or names
+        for n in names:
+            out.setdefault(n, (1.0 / rank) / len(members))
+    return out
+
+
+def _short(v):
+    if v is None or v == "":
+        return ""
+    text = v if isinstance(v, str) else json.dumps(v)
+    return text if len(text) <= 60 else text[:57] + "..."
+
+
+def node_items(name, row, nuke_node, pair, weight, interactions=None, case_results=None):
+    """Every mismatch the node's page marks, one dict each (open or accepted)."""
+    group = row.get("group") or nuke_node.get("group") or "Other"
+    lane = LANE_OF_GROUP.get(group, 11)
+    kind = pair.get("nodebased") or ""
+    items = []
+
+    def add(what, knob, nuke_value, nb_value, primary, status="open", reason="", item_lane=None):
+        items.append({"node": name, "group": group, "nodebased": kind, "lane": item_lane or lane, "kind": what, "knob": knob,
+                      "nuke": _short(nuke_value), "nodebased_value": _short(nb_value), "status": status, "reason": reason,
+                      "weight": round(weight * (2 if primary else 1), 6)})
+
+    for r in alignment(nuke_node, pair, kind, name):
+        if r["status"] == "missing":
+            add("missing knob", r["name"], r["label"], "", r["primary"], reason=r["reason"])
+            continue
+        if r.get("accepted"):
+            add("default", r["name"], r["default"], r["nb_default"], r["primary"], status="accepted", reason=r["accepted"])
+        for m in r["marks"]:
+            nuke_value = {"default": r["default"], "label": r["label"], "widget": r["type"]}.get(m, r["label"])
+            nb_value = {"default": r["nb_default"], "label": r["nb_label"], "widget": r["nb_widget"]}.get(m, r["nodebased"])
+            add(_MARK_KIND.get(m, m), r["name"], nuke_value, nb_value, r["primary"],
+                reason=r["reason"] if m == "default" else "")
+    if case_results is not None:
+        if not case_results:
+            add("missing case", "", "a behaviour case from the guide", "none", True, reason="the audit has no behaviour case for this node")
+        for res in case_results:
+            if res["status"] in ("fail", "error"):
+                add("failing case", res["id"], "pass", f"{res['status']} (max error {res.get('max_abs_error')})", True,
+                    reason=(res.get("note") or "")[:120])
+    for b in node_behaviours(name, interactions):
+        if b["status"] == "failing":
+            add("widget behaviour", b["knob"], b["expected"], b["observed"], True, reason=b["what"], item_lane=WIDGET_LANE)
+    return items
+
+
+def node_behaviours(name, interactions):
+    """[{knob, what, status passing|failing|undocumented, expected, observed}] from lane 10's interactions file."""
+    if not interactions:
+        return []
+    entries = interactions.get("nodes", {}).get(name) if isinstance(interactions.get("nodes"), dict) else interactions.get(name)
+    out = []
+    for e in entries or []:
+        if not isinstance(e, dict):
+            continue
+        raw = str(e.get("status") or e.get("result") or "").lower()
+        status = "passing" if raw in ("pass", "passing", "ok") else "failing" if raw in ("fail", "failing", "differs") else "undocumented"
+        out.append({"knob": e.get("knob") or e.get("widget") or "", "what": e.get("interaction") or e.get("behaviour") or e.get("name") or "",
+                    "status": status, "expected": e.get("nuke") or e.get("expected") or "", "observed": e.get("nodebased") or e.get("observed") or ""})
+    return out
+
+
+def worklist(nodes=None, with_cases=True):
+    """Every mismatch the book marks, across the scored nodes, sorted by weight (heaviest first)."""
+    nuke_doc, map_doc = load_json(NUKE_JSON), load_json(MAP_JSON)
+    rows = fidelity_rows()
+    weights = node_weights()
+    interactions = load_json(INTERACTIONS_JSON) if INTERACTIONS_JSON.exists() else None
+    items = []
+    for name in (list(nodes) if nodes else list(rows)):
+        pair, nuke_node = map_doc["pairs"].get(name), nuke_doc["nodes"].get(name)
+        if pair is None or nuke_node is None:
+            continue
+        results = None
+        if with_cases:
+            import audit_nuke_fidelity as audit
+            from nuke_fidelity_cases import cases_for
+            results = [audit.run_case(c) for c in cases_for(name)]
+        items += node_items(name, rows.get(name, {}), nuke_node, pair, weights.get(name, 0.0), interactions, results)
+    items.sort(key=lambda i: (i["status"] != "open", -i["weight"], i["node"], i["kind"], i["knob"]))
+    return items
+
+
+def lane_counts(items):
+    """{lane: {"open": n, "accepted": n}}"""
+    out = {}
+    for i in items:
+        c = out.setdefault(i["lane"], {"open": 0, "accepted": 0})
+        c[i["status"]] = c.get(i["status"], 0) + 1
+    return dict(sorted(out.items()))
+
+
+def worklist_markdown(items):
+    counts = lane_counts(items)
+    owner = {2: "Color, Keyer, Channel, Time", 9: "Filter, Transform, Draw", 10: "shared widget behaviour",
+             11: "Image, Merge, Metadata, Other"}
+    kinds = {}
+    for i in items:
+        if i["status"] == "open":
+            kinds.setdefault(i["lane"], {}).setdefault(i["kind"], 0)
+            kinds[i["lane"]][i["kind"]] += 1
+    w = ["# Nuke parity worklist", "",
+         "Generated by `python tools/parity_review_book.py --worklist` from the review book's marks: every default, label, "
+         "widget type, order, missing knob, failing or missing behaviour case and failing widget behaviour, one row each, "
+         "sorted by the node's rank weight (the audit's 1 / rank; a main-tab knob counts twice). The full list with "
+         "values is `worklist.json` beside this file. A default difference the pairing accepts on purpose (`skip_default`) "
+         "is listed as accepted with its reason and is not work.", "",
+         "| Lane | Owns | Open | Accepted | Open by kind |", "|---|---|---|---|---|"]
+    for lane, c in counts.items():
+        by = ", ".join(f"{k} {n}" for k, n in sorted(kinds.get(lane, {}).items(), key=lambda kv: -kv[1]))
+        w.append(f"| {lane} | {owner.get(lane, '')} | {c['open']} | {c['accepted']} | {by} |")
+    w += ["", "Missing knobs are counted above; the lists below leave them to `worklist.json` and show the panel and "
+          "behaviour items, heaviest first (up to 40 per lane).", ""]
+    for lane in counts:
+        rows = [i for i in items if i["lane"] == lane and i["status"] == "open" and i["kind"] != "missing knob"]
+        w += [f"## Lane {lane} ({owner.get(lane, '')})", ""]
+        if not rows:
+            w += ["No open panel or behaviour items.", ""]
+            continue
+        w += ["| Weight | Node | Kind | Knob | Nuke | NodeBased |", "|---|---|---|---|---|---|"]
+        for i in rows[:40]:
+            w.append(f"| {i['weight']:.3f} | {i['node']} | {i['kind']} | `{i['knob']}` | {i['nuke']} | {i['nodebased_value']} |".replace("``", ""))
+        if len(rows) > 40:
+            w.append(f"\n{len(rows) - 40} more in worklist.json.")
+        w.append("")
+    acc = [i for i in items if i["status"] == "accepted"]
+    w += ["## Accepted default differences", "", "| Node | Knob | Nuke | NodeBased | Why |", "|---|---|---|---|---|"]
+    for i in acc:
+        w.append(f"| {i['node']} | `{i['knob']}` | {i['nuke']} | {i['nodebased_value']} | {i['reason'].replace('|', '/')} |")
+    return "\n".join(w) + "\n"
+
+
+def write_worklist(items, md_path=WORKLIST_MD, json_path=WORKLIST_JSON):
+    Path(md_path).write_text(worklist_markdown(items), encoding="utf-8")
+    counts = json.dumps({str(k): v for k, v in lane_counts(items).items()})
+    body = ",\n".join(" " + json.dumps(i, sort_keys=True) for i in items)
+    Path(json_path).write_text(f'{{"counts": {counts},\n"items": [\n{body}\n]}}\n', encoding="utf-8")
 
 
 # ----------------------------------------------------------------------------------------------------------------- build
@@ -653,7 +869,8 @@ def build(out_dir, nodes=None):
     small = make_fixtures()
     names = list(nodes) if nodes else list(rows)
     renderer = PanelRenderer()
-    built = {}
+    built, all_items = {}, []
+    weights = node_weights()
     try:
         for name in names:
             row = rows.get(name, {"group": nuke_doc["nodes"].get(name, {}).get("group", "Other"), "rank": 0, "nodebased": "",
@@ -666,23 +883,27 @@ def build(out_dir, nodes=None):
             stem = slug(name)
             from nodebased import core
             panels = renderer.render(kind, out_dir, stem) if kind in core.SPECS else []
-            align = alignment(nuke_node, pair, kind)
+            align = alignment(nuke_node, pair, kind, name)
             cases = cases_for(name)
             big = review_fixtures(row["group"], small)
             infos = [case_images(c, row["group"], small, big, out_dir, stem) for c in cases]
             strip, note = knob_strip(kind, nuke_node, pair, cases, row["group"], big, out_dir, stem)
             page = f"{stem}.html"
-            (out_dir / page).write_text(node_page(name, row, nuke_node, pair, kind, panels, align, infos, strip, note, interactions),
+            items = node_items(name, row, nuke_node, pair, weights.get(name, 0.0), interactions, [i["audit"] for i in infos])
+            all_items += items
+            (out_dir / page).write_text(node_page(name, row, nuke_node, pair, kind, panels, align, infos, strip, note, interactions, items),
                                         encoding="utf-8")
             built[name] = {"page": page, "panels": [str(p) for _, p in panels], "cases": len(cases),
                            "marks": [(r["name"], r["marks"]) for r in align if r["marks"]],
                            "nuke_verified": any(i["nuke"] and i["nuke"]["status"] == "pass" for i in infos),
-                           "plates": [("review+fixture" if i.get("fixture_images") else i["plate"] or "none") for i in infos]}
+                           "plates": [("review+fixture" if i.get("fixture_images") else i["plate"] or "none") for i in infos],
+                           "items": items, "open": sum(1 for i in items if i["status"] == "open"),
+                           "behaviours": [b["status"] for b in node_behaviours(name, interactions)]}
     finally:
         renderer.close()
     seconds = time.time() - started
     index = out_dir / "index.html"
-    index.write_text(index_page(rows, built, seconds), encoding="utf-8")
+    index.write_text(index_page(rows, built, seconds, all_items), encoding="utf-8")
     return {"pages": built, "seconds": seconds, "index": index}
 
 
@@ -691,7 +912,14 @@ def main(argv=None):
     ap.add_argument("--out", default=str(ROOT / "docs" / "parity" / "review" / "out"))
     ap.add_argument("--nodes", help="comma-separated Nuke node names (default: every scored node)")
     ap.add_argument("--ten", action="store_true", help="the ten high-use nodes: " + ", ".join(TEN))
+    ap.add_argument("--worklist", action="store_true", help="write docs/parity/review/WORKLIST.md and worklist.json and stop")
     args = ap.parse_args(argv)
+    if args.worklist:
+        items = worklist(args.nodes.split(",") if args.nodes else None)
+        if not args.nodes:
+            write_worklist(items)
+        print("worklist:", {k: v for k, v in lane_counts(items).items()})
+        return 0
     nodes = TEN if args.ten else (args.nodes.split(",") if args.nodes else None)
     res = build(args.out, nodes)
     from collections import Counter

@@ -66,3 +66,14 @@ So far every expectation is what Nuke's guide states. With Nuke you can render t
 
 These scripts have not yet been opened in Nuke. Before trusting a whole folder, render one Merge case and check by eye
 that input 0 is B and input 1 is A, and that the colours match the plates.
+
+## The worklist
+
+    python tools/parity_review_book.py --worklist
+
+writes `WORKLIST.md` and `worklist.json` beside this file (both committed): every mismatch the book marks (default,
+label, widget type, order, knob not laid out, missing knob, failing or missing behaviour case, failing widget
+behaviour), one row each, with the node, its group, the lane that owns it, Nuke's value and NodeBased's, sorted by the
+node's rank weight. A default the pairing skips on purpose (`skip_default`) is listed as accepted with its reason.
+The book's index counts the open and accepted items per lane, and a node page with no open item carries a "clean"
+badge. `tests/test_parity_review_book.py` fails when the committed `WORKLIST.md` is out of date: rerun the command.
