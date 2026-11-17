@@ -1,3 +1,9 @@
+## Lane 9 step S (4:50 PM on 2026-11-16 PDT): ZDefocus's bokeh-shape knobs, LensDistortion's layout, Reconcile3D and PointsTo3D
+
+ZDefocus 91.2 -> 98.7, LensDistortion 83.0 -> 87.1, Reconcile3D 73.1 -> 76.7, PointsTo3D 84.4 -> 100.0; Filter 97.1 -> 97.2, Transform 97.7 -> 98.1; overall 96.7 -> 96.8; knobs that
+change no pixels still 1; behaviour checked still 113 of 167. New legacy flag `legacy_zdefocus_filters` (set on load for saved nodes, no schema bump). Evidence, kernels changed, what is not
+built and why: the top of TASKLOG.md. Open: LensDistortion grid detection and solve, Reconcile3D picture output, ZDefocus's remaining default differences.
+
 ## Lane 2 step R (11:16 PM on 2026-11-16 PDT): Kronos and OFlow Resampling and weights; Sampler, Histogram, HistEQ knobs and rows
 
 Branch `openclaw/nb-2d-parity`, main at `8f9f209e` (0.58.0) plus this step. New: `nodebased/samplerknobs.py`, `tests/test_2d_behaviour_retime_r.py`, `tests/test_2d_behaviour_analysis_r.py`. Changed: `nodebased/retimeknobs.py`, `core.py`, `knobs.py`, `ops2d_chrome.py`, `app.py`, `tools/nuke_fidelity_cases_color.py`, `tools/nuke_fidelity_requirements.py`, the mapping, `docs/PARITY_2D.md` and the fidelity report (with their bundled copies). No schema bump: saved nodes take the new params from `upgrade_nodes`. See TASKLOG.md for the numbers and what is open.

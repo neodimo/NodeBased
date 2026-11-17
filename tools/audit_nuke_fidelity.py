@@ -424,6 +424,12 @@ _COUNT_KNOBS |= {(kind, "global_motionblur") for kind in ("Roto", "RotoPaint")}
 _COUNT_KNOBS |= {(kind, knob) for kind in ("Roto", "RotoPaint") for knob in ("motionblur", "lifetime_start", "lifetime_end")}
 # Lane 2 step P (11/16): Posterize's Colors is a count of levels (default 16), a whole number in Nuke as the other count knobs are, which the guide's number cannot say.
 _COUNT_KNOBS |= {("Posterize", "Colors")}
+# Lane 9 step S (11/16): PointsTo3D's point ref times are frame numbers (a track sample sits on a whole frame), so they are whole-number fields.
+_COUNT_KNOBS |= {("PointsTo3D", "ref_timeA"), ("PointsTo3D", "ref_timeB"), ("PointsTo3D", "ref_timeC")}
+# ZDefocus's use_input_channels is a check box ("when enabled, the same channels are used for both the filter and image inputs"), although the
+# guide's table types it as a channel set (lane 9 step S). LensDistortion's distort in fisheye space is a check box whose default the guide writes
+# as 'enabled (if a fisheye Projection Model is selected)'.
+_BOOL_KNOBS = {("ZDefocus", "use_input_channels"), ("Undistort", "distortInFisheyeSpace")}
 _FLOAT_KNOBS = {("IBKGizmo", "level"), ("Kronos", "timingFrame2"), ("OFlow", "timingFrame2")}
 # Knobs whose Nuke widget the guide's default cannot tell: IBKColor's Size (a pixel size, default 10) and multi ("patch black", default 0, which
 # the gizmo may show as a check box or a number). Left unmeasured and counted as such, as the rule asks.
@@ -520,6 +526,8 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
             continue
         if read and name in _READ_KNOB_TYPES:
             nuke_kind = _READ_KNOB_TYPES[name]
+        elif (node_type, name) in _BOOL_KNOBS:
+            nuke_kind = "bool"
         elif nuke_kind == "string" and str(knob.get("default")).strip().lower() in ("on", "off"):
             nuke_kind = "bool"      # the guide writes a checkbox's default as on or off
         elif nuke_kind == "number":
@@ -536,7 +544,7 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
         # Empty `panel` pairs classified NOT_PIXEL (for example Tracker's viewer
         # presentation controls) count as paired controls, while having no node widget
         # whose type can be measured here.
-        if not params and req.not_pixel_reason(node_type, name) and not viewer:
+        if not params and req.not_pixel_reason(key or node_type, name) and not viewer:
             continue
         actual = ([_READ_NODE_WIDGETS[p] for p in params if p in _READ_NODE_WIDGETS] if read
                   else [_VIEWER_WIDGETS[name]] if viewer and name in _VIEWER_WIDGETS

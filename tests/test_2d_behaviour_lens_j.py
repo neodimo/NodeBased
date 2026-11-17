@@ -333,9 +333,10 @@ class LayoutTests(unittest.TestCase):
     def test_main_tab_order_follows_the_guide(self):
         from nodebased.knobs import KNOB_LAYOUT
         order = [g.label for g in KNOB_LAYOUT["Undistort"]]
+        # Lane 9 step S: the panel follows the guide's labels and order: the fisheye and beam splitter blocks come before the distortion block.
         wanted = ["Model Preset", "Lens Type", "Squeeze", "Denominator s", "Centre", "Mode", "Use Fisheye", "Filter", "BBox", "Output Format",
-                  "Distortion Scaling", "Distortion Type", "Order", "Exponent", "Direction", "Normalisation", "Distort in Fisheye Space",
-                  "Numerator s"]
+                  "Distortion Scaling", "Projection Model", "Focal Length", "Sensor Size x,y", "Enable", "Bending", "Type", "Order", "Exponent",
+                  "Normalisation", "Distort in Fisheye Space", "Equation x", "Numerator s"]
         positions = [order.index(label) for label in wanted]
         self.assertEqual(positions, sorted(positions))
 

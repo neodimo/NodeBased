@@ -496,7 +496,7 @@ SPECS = {
     "ZDefocus": {"inputs": ["image"], "optional_inputs": ["depth", "kernel", "mask"],
                   "params": {"depth_layer": "depth", "focal_plane": 1.0, "depth_of_field": 1.0,
                              "max_size": 20.0, "depth_math": "depth", "bokeh_shape": "disc",
-                             "blade_count": 6, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("ZDefocus")}},
+                             "blade_count": 5, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("ZDefocus")}},
     "ZMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                "params": {"depth_layer": "depth.Z", "backwards": False, "alpha_channel": "rgba.alpha",
                           "depth_math": "depth", "smoothing": 0.0, "mix": 1.0}},
@@ -1181,8 +1181,8 @@ SPECS = {
     "PointsTo3D": {"inputs": ["camera"], "optional_inputs": ["object", "img"], "params": {
         **_track3dknobs.POINTS_NEW,
         "frame0": 1, "frame1": 2, "frame2": 3,
-        "track_x0": 0.0, "track_y0": 0.0, "track_x1": 0.0, "track_y1": 0.0,
-        "track_x2": 0.0, "track_y2": 0.0, "track_count": 3,
+        "track_x0": 50.0, "track_y0": 0.0, "track_x1": 100.0, "track_y1": 0.0,      # the guide's defaults for points A, B and C
+        "track_x2": 150.0, "track_y2": 0.0, "track_count": 3,
         "image_width": 1920, "image_height": 1080, "min_ray_angle": 1.0,
         **_XFORM}},
     "Reconcile3D": {"inputs": ["camera"], "optional_inputs": ["point", "img"], "params": {
