@@ -1,5 +1,35 @@
 ## Lane 10 step T1 (11/16 11:30 PM): panel interactions
 
+## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5), Lane 11 (Review book, Claude Opus 5.5) (2:35 AM on 2026-11-17 PDT)
+
+`main` moved `308d3439` -> `1e177041` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `1e177041` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-0156.log`, started 1:56 AM): **Ran 10038 tests in 1777.933 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T2 (Tue 11/17): Nuke's channel pickers, and one mask strip for every node.** Commits:
+  - `9f3334f7` Lane 10 step T2 notes: channel pickers, one mask strip, Node tab; 31 of 31 documented behaviours
+  - `a4dc84ba` Node tab in the order of Nuke's Properties Panels page (label; font with bold, italic, size and text colour on one row; hide input; cached; disable; dope sheet; bookmark; postage stamp; static frame; lifetime range); fidelity report 31 of 31 documented behaviours
+  - `a53d541e` One mask strip for every node: Nuke's words and order (mask, inject, invert, fringe; (un)premult by, invert; mix), drawn on Nuke's rows by one shared builder with the mask's on/off box; closes 25 worklist label and order rows for lane 2, 44 for lane 9, 8 for lane 11
+  - `84573d34` Channel pickers like Nuke's: a channels knob is a layer menu with one check box per channel (and a right-most single-channel field at none); a single-channel knob is a layer menu and a channel menu side by side; 30 of 30 documented behaviours
+  Diff: 15 files changed, 802 insertions(+), 107 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+- **Lane 11 (Review book, Claude Opus 5.5), step B2 (Tue 11/17): the review book's mismatch worklist, then fix the Image, Merge, Metadata and Other panels it shows.** Commits:
+  - `6f0e17c2` Fidelity report rebuilt on main after the stacked merge of steps R, S and T1 (overall 96.9)
+  - `4f067d14` Review book worklist: list only the knobs the audit counts (rows without a scripting name, Python callbacks, file-format and GPU options keep their marks on the pages), so a node's clean badge follows its score
+  - `660d26aa` Image, Merge, Metadata and Other panels in Nuke's order and wording (lane 11 step B2 part 2): Merge's and Dissolve's mask strip (mask, inject, invert, fringe) in Nuke's order, Blend, Premult, Unpremult and Keymix in the guide's order, ZMerge's Z channel, ModifyMetaData's Metadata, CopyMetaData's Within, Precomp's Reload and Enable, CurveTool's and BurnIn's background labels, Read's and Write's Context key and value under a Context heading, Write's frame range on one row; Write's EXR compression, bit depth and first part read as Nuke's names; BurnIn's Hiero text slots and font, Write's create directories and ContactSheet's frame range recorded as defaults kept on purpose with their reasons; the book follows the audit on uncounted knobs, composite Read rows and repeated knob names
+  - `195ea883` Review book worklist: the committed WORKLIST.md is a snapshot; its freshness is not a suite test, since every lane's panel edit would fail it
+  - `0b427479` Review book worklist: every mismatch the book marks, one row each, with its owning lane, Nuke's and NodeBased's values and the node's rank weight (WORKLIST.md and worklist.json); skipped defaults listed as accepted with their reason; lane counts in the index and a clean badge on pages with no open item (lane 11 step B2 part 1)
+  Diff: 11 files changed, 1333 insertions(+), 50 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #11.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (12:35 AM on 2026-11-17 PDT)
 
 `main` moved `323f025a` -> `d970668f` (lane commits cherry-picked onto main in lane order) and then to this

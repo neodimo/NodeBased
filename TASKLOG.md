@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T2 (Tue 11/17): Nuke's channel pickers, and one mask strip for every node, Lane 11 (Review book, Claude Opus 5.5) step B2 (Tue 11/17): the review book's mismatch worklist, then fix the Image, Merge, Metadata and Other panels it shows (integrator tick)
+
+- **What was done:** `main` `308d3439` -> `1e177041` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `1e177041`: Ran 10038 tests in 1777.933 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step R (Mon 11/16): Kronos and OFlow get Nuke's missing knobs, then Sampler, Histogram, HistEQ and ColorLookup's gaps, Lane 9 (2D behaviour B, Claude Sonnet 5.5) step S (Mon 11/16): ZDefocus's bokeh-shape knobs, then LensDistortion's layout and missing knobs, then Reconcile3D and PointsTo3D, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T1 (Mon 11/16): the Properties panel's knob widgets work like Nuke's, measured per widget type (integrator tick)
 
 - **What was done:** `main` `323f025a` -> `d970668f` plus this docs commit. Evidence and per-lane commit
