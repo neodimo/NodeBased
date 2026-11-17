@@ -180,9 +180,11 @@ class ChromaKeyerSecondaryTests(unittest.TestCase):
 
     def test_the_custom_despill_bias_is_used_only_when_enabled(self):
         spilled = np.array([[[0.6, 0.9, 0.2, 1.0]]], np.float32)
-        by_red = float(self.out(spilled, despill=1, despill_bias=0.0, override_despill_bias=1)[1])
+        # The single-number bias is the older form (lane 2 step W1 made Nuke's colour the default; a saved node keeps
+        # legacy_despill_bias 1 and this number), so the scalar case runs with the legacy switch on.
+        by_red = float(self.out(spilled, despill=1, despill_bias=0.0, override_despill_bias=1, legacy_despill_bias=1)[1])
         self.assertAlmostEqual(by_red, 0.6, places=6)
-        self.assertAlmostEqual(float(self.out(spilled, despill=1, despill_bias=0.0, override_despill_bias=0)[1]), 0.4, places=6)  # 0.5 of each
+        self.assertAlmostEqual(float(self.out(spilled, despill=1, despill_bias=0.0, override_despill_bias=0, legacy_despill_bias=1)[1]), 0.4, places=6)  # 0.5 of each
 
     def replaced(self, mode, **knobs):
         """A pixel at chroma 0.5 (matte 0.5) whose matte chroma gain lifts to 0.75: delta = 0.25."""

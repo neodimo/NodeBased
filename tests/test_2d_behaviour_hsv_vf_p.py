@@ -93,8 +93,14 @@ class RangeMaskTests(unittest.TestCase):
 
 class HsvLayoutTests(unittest.TestCase):
     def test_masks_follow_their_range_in_the_panel(self):
-        assert_in_order(self, "HSVTool", ["Hue rotation", "HMask", "Invert hue mask", "Force saturation", "SMask", "Invert saturation mask",
-                                          "Force brightness", "BMask", "Invert brightness mask", "Output to alpha", "Invert output matte"])
+        # Lane 2 step W1 (11/17): the guide labels all four invert boxes "invert mask" and the force boxes "Force Value",
+        # so the boxes are found by position: each mask channel follows its range's controls and its invert box follows it.
+        assert_in_order(self, "HSVTool", ["Hue rotation", "HMask", "Saturation range", "SMask", "Brightness range", "BMask", "Output", "Mix"])
+        from tests.test_2d_behaviour_knobs_color import main_labels
+        labels = main_labels("HSVTool")
+        for mask in ("HMask", "SMask", "BMask"):
+            self.assertEqual(labels[labels.index(mask) + 1], "Invert mask", f"{mask} is not followed by its invert box: {labels}")
+        self.assertEqual(labels[labels.index("Output") + 1], "Invert mask", f"Output is not followed by its invert box: {labels}")
 
 
 # --------------------------------------------------------------------------------------------------------------------- Vectorfield

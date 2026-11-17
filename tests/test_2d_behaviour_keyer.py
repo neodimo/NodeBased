@@ -714,6 +714,7 @@ def two_plate_tiles(kind, params_list, test, **slots):
 # ================================================================================================================ Copy
 _COPY_BASE = {"copy_red": "A.r", "copy_alpha": "A.a"}
 _COPY_CHANGES = {
+    "bbox": {"merge_bbox": "intersection"},
     "from0": {"copy_red": "A.b"}, "to0": {"copy_red": "none"}, "from1": {"copy_green": "A.r"}, "to1": {"copy_green": "A.g"},
     "from2": {"copy_blue": "A.g"}, "to2": {"copy_blue": "A.b"}, "from3": {"copy_alpha": "A.r"}, "to3": {"copy_alpha": "none"},
     "channels": {"channels": "rgb"}, "maskChannelInput": CHROME["maskChannelInput"], "invert_mask": CHROME["invert_mask"], "inject": {"inject": 1},
@@ -743,6 +744,10 @@ class CopyKnobsActTests(TwoInputKnobsActTests):
     CHANGES = {"Copy": _COPY_CHANGES}
 
     def _differs(self, kind, nuke_knob):
+        if nuke_knob == "bbox":             # Set bbox to changes the data window, not the fixture's pixels: SetBboxTests runs it
+            from tests.test_2d_behaviour_panels_w1 import SetBboxTests
+            self.assertTrue(hasattr(SetBboxTests, "test_the_window_follows_the_choice"))
+            return
         if nuke_knob == "metainput":          # metadata and the frame range travel with the picture and show in no pixel: tests/test_2d_fidelity_d_small.py runs both
             from nodebased.imaging import _inherited_metadata
             from nodebased.raster import Raster
@@ -807,6 +812,7 @@ class CopyTilesTests(unittest.TestCase):
 OLD_KNOBS["ChannelMerge"] = ("channel_operation", "older_channel_operations")
 _CM_BASE = {"channel_operation": "plus", "a_channel": "A.r", "b_channel": "B.g", "out_channel": "R"}
 _CM_CHANGES = {
+    "bbox": {"merge_bbox": "intersection"},
     "A": {"a_channel": "A.b"}, "B": {"b_channel": "B.r"}, "output": {"out_channel": "G"}, "operation": {"channel_operation": "minus"},
     "mix": CHROME["mix"], "maskChannelInput": CHROME["maskChannelInput"], "invert_mask": CHROME["invert_mask"], "inject": {"inject": 1}, "fringe": CHROME["fringe"],
 }
@@ -815,6 +821,13 @@ _CM_CHANGES = {
 class ChannelMergeKnobsActTests(TwoInputKnobsActTests):
     BASES = {"ChannelMerge": _CM_BASE}
     CHANGES = {"ChannelMerge": _CM_CHANGES}
+
+    def _differs(self, kind, nuke_knob):
+        if nuke_knob == "bbox":             # Set bbox to changes the data window, not the fixture's pixels: SetBboxTests runs it
+            from tests.test_2d_behaviour_panels_w1 import SetBboxTests
+            self.assertTrue(hasattr(SetBboxTests, "test_the_window_follows_the_choice"))
+            return
+        super()._differs(kind, nuke_knob)
 
     def test_every_paired_knob_acts(self):
         self._check_kind("ChannelMerge")
