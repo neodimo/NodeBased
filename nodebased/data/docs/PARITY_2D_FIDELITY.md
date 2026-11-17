@@ -554,7 +554,7 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 25 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
 | 26 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
 | 27 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
-| 28 | SplineWarp (Transform #14) | `SplineWarp` | 0.33 | 90.8 | 4 secondary knobs missing: `transform_matrix`, `boundary_curverez`, `previewrez`, `rbf`; sockets missing: `B` |
+| 28 | SplineWarp (Transform #14) | `SplineWarp` | 0.32 | 91.1 | 4 secondary knobs missing: `transform_matrix`, `boundary_curverez`, `previewrez`, `rbf`; sockets missing: `B` |
 | 29 | Expression (Color #17) | `Expression` | 0.31 | 94.7 | nothing missing that the guide lists |
 | 30 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 0.30 | 99.4 | nothing missing that the guide lists |
 
