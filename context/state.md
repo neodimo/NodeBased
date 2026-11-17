@@ -1,5 +1,26 @@
 ## Lane 2 step P (2:30 PM on 2026-11-16 PDT): behaviour cases for ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove and Posterize
 
+## Continuous mode merge: Lane 11 (Review book, Claude Opus 5.5) (11:55 PM on 2026-11-16 PDT)
+
+`main` moved `8f9f209e` -> `33275022` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `33275022` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1116-2315.log`, started 11:15 PM): **Ran 9948 tests in 1849.087 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 11 (Review book, Claude Opus 5.5), step B1 (Mon 11/16): the Nuke review book, one page per node, and Nuke scripts for every case.** Commits:
+  - `004c1e97` Review book: respect the pairing's accepted default differences, show NaN expectations as fully different, and report which plate each case is shown on
+  - `13d07d2b` Export every still-plate fidelity case as a Nuke .nk script with Nuke's knob names; the review book reads Nuke's renders back (lane 11 step B1 part 3)
+  - `34aacb93` Nuke parity review book: one page per node with the guide's knob table, NodeBased's real panel, the knob alignment and every behaviour case on readable plates (lane 11 step B1 parts 1 and 2)
+  Diff: 5 files changed, 1152 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #11.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:45 PM on 2026-11-16 PDT)
 
 `main` moved `a9fbb4f4` -> `d99bf9cc` (lane commits cherry-picked onto main in lane order) and then to this

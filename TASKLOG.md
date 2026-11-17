@@ -1,3 +1,9 @@
+## 2026-11-16 — continuous mode merge: Lane 11 (Review book, Claude Opus 5.5) step B1 (Mon 11/16): the Nuke review book, one page per node, and Nuke scripts for every case (integrator tick)
+
+- **What was done:** `main` `8f9f209e` -> `33275022` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `33275022`: Ran 9948 tests in 1849.087 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-16 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step Q (Mon 11/16): behaviour checks for the filter and transform nodes that have none (Sharpen, Erode filter, Soften, Noise, Convolve, EdgeDetect, Emboss, STMap, IDistort) (integrator tick)
 
 - **What was done:** `main` `a9fbb4f4` -> `d99bf9cc` plus this docs commit. Evidence and per-lane commit
