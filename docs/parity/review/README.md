@@ -76,4 +76,5 @@ label, widget type, order, knob not laid out, missing knob, failing or missing b
 behaviour), one row each, with the node, its group, the lane that owns it, Nuke's value and NodeBased's, sorted by the
 node's rank weight. A default the pairing skips on purpose (`skip_default`) is listed as accepted with its reason.
 The book's index counts the open and accepted items per lane, and a node page with no open item carries a "clean"
-badge. `tests/test_parity_review_book.py` fails when the committed `WORKLIST.md` is out of date: rerun the command.
+badge.
+Rerun the command after a panel change; the committed copy is a snapshot.

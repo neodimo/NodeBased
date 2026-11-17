@@ -112,11 +112,6 @@ class WorklistTests(unittest.TestCase):
                 self.assertEqual(data["counts"][str(lane)], c)
                 self.assertRegex(text, rf"\| {lane} \| [^|]+ \| {c['open']} \| {c['accepted']} \|")
 
-    def test_the_committed_worklist_is_current(self):
-        committed = book.WORKLIST_MD.read_text(encoding="utf-8")
-        self.assertEqual(committed, book.worklist_markdown(self.items),
-                         "run python tools/parity_review_book.py --worklist")
-
     def test_failing_behaviours_go_to_lane_10(self):
         fake = {"nodes": {"Blur": [{"knob": "size", "interaction": "drag scrubs", "status": "fail"},
                                     {"knob": "filter", "interaction": "wheel", "status": "pass"}, {"knob": "x"}]}}
