@@ -1,3 +1,31 @@
+# NodeBased 0.58.0 — Keyers and filters checked
+
+## What changed since 0.57.0
+
+- **Sixteen more 2D nodes are checked pixel by pixel against Nuke's documented behaviour.** ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove and Posterize (32 checks), and Sharpen, Soften, Erode (filter), Convolve, EdgeDetect, Emboss, Noise, STMap and IDistort (38 checks), all passing. Overall fidelity stays 96.7; Keyer 93.3, Channel 99.2, Filter 97.1, Transform 97.7.
+- **IDistort now moves the picture the way the guide describes.** It was pushing the wrong way along x and adding its offset where the guide subtracts it. Its Premultiplied and blur-channel knobs now work. Saved graphs keep the old reading.
+- **EdgeDetect's Prewitt is now full strength** (it was a third of its true size beside Sobel). Saved graphs draw as before.
+- **Keylight's Intermediate Result shows the original picture with the screen matte**, as the guide says. Saved graphs keep the despilled view.
+- **ShuffleCopy can send black or white into a channel**, on the processor and the graphics card. Posterize's Colors knob is a whole number.
+- **GPU playback (experimental, off by default):** with `NODEBASED_DISPLAY_ONLY_PLAY=1`, cropped or enlarged display windows are converted for display on the graphics card and agree with the processor picture within one 8-bit code value. The 0.57.0 playback buffer (`NODEBASED_PLAYOUT`) is removed.
+
+## Known limits
+
+- The display-only playback switch stays off: on the RTX it raises the frame rate (10.5 to 13-14.6 fps) but the slowest frames get worse (p95 101 ms to 205-213 ms). On the Radeon it reaches 24.2 fps (p95 45.7 ms).
+- Some keyer mattes are not scored where no source gives a formula: Posterize between 0 and 1, IBK fill, ChromaKeyer gain. EdgeDetect's simple detector, Convolve's flip direction, Emboss's relief scale, Erode (filter) at fractional sizes and the noise values themselves are not scored either.
+- Posterize and Remove default to different channels from Nuke.
+- The carried fluid swirl (0.57.0) does not yet make the smoke curl, and a 128-sample fluid frame still takes more than 0.75 s.
+- Still no comparison with a real Nuke render; pixel truth stays unmeasured until the reference pack (`tools/make_nuke_reference_pack.py`) is run in Nuke.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0 (big-endian, the default, is unaffected).
+- LensDistortion's polynomial, fisheye and beam-splitter models and its grid solve stay unsupported.
+
+## Moved to 0.59.0
+
+- Behaviour checks for the remaining 2D nodes, and measuring them against real Nuke renders.
+- Posterize and Remove default channels, IBKColor's darks and lights as colours, and a Simple entry for EdgeDetect.
+- GPU playback: profile the processor ColorCorrect boundary and the playback cache before deciding a default.
+- Smoke that curls, and faster 128-sample fluid frames.
+
 # NodeBased 0.57.0 — Swirl that lasts
 
 ## What changed since 0.56.0
