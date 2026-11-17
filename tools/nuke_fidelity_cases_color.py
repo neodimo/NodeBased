@@ -1945,14 +1945,70 @@ def _retime_weight_cases():
             out.append(Case(id=f"{low}_{what}", nuke=node, nuke_class=node, nuke_knobs=((method_knob, "Motion"), ("timingOutputSpeed", 0.5), ("weightRed", weight)),
                             nuke_inputs=("stamp",), nb_kind=node, nb_params=dict(params, _stamp=dict(plate, frame=2)), nb_inputs=(), expected=expected,
                             source=source, statement=statement + ". " + note, tolerance=0.01))
-        out.append(Case(id=f"{low}_resampling_filters", nuke=node, nuke_class=node, nuke_knobs=((method_knob, "Motion"), ("resampleType", "Lanczos4")),
-                        nuke_inputs=("stamp",), nb_kind=node, nb_params={"interpolation": "motion", "resample_type": "Lanczos4", "_stamp": dict(plate, frame=2)},
-                        nb_inputs=(), expected=moved, source="convention",
-                        statement=(f"{node} Resampling Bilinear or Lanczos4 or Lanczos6 ({page}: 'resampleType'): the warp samples with the chosen filter; a "
-                                   "half-pixel retime of a step edge is bilinear without overshoot and Lanczos with it (tests/test_2d_behaviour_retime_r.py)"),
-                        unscored=("the guide names the filters and gives no weights, and a half-pixel move on a plate the estimator must measure cannot be "
-                                  "written down to a tolerance that tells the filters apart; the kernel comparison is asserted on a known field in "
-                                  "tests/test_2d_behaviour_retime_r.py"), tolerance=0.01))
+        if node == "OFlow":
+            out.append(Case(id="oflow_resampling_filters", nuke=node, nuke_class=node, nuke_knobs=((method_knob, "Motion"), ("resampleType", "Lanczos4")),
+                            nuke_inputs=("stamp",), nb_kind=node, nb_params={"interpolation": "motion", "resample_type": "Lanczos4", "_stamp": dict(plate, frame=2)},
+                            nb_inputs=(), expected=moved, source="convention",
+                            statement=(f"{node} Resampling Bilinear, Lanczos4 or Lanczos6 ({page}: 'resampleType'): the warp samples with the chosen filter"),
+                            unscored=("OFlow has no FgVecs input, so the motion must be estimated and a half-pixel move on an estimated field cannot be written down "
+                                      "to a tolerance that tells the filters apart; Kronos's cases below give each filter's values on a given field, and "
+                                      "tests/test_2d_behaviour_retime_r.py asserts the shared warp"), tolerance=0.01))
+    out.extend(_resampling_cases())
+    return out
+
+
+# ------------------------------------------------------------------------------------------------------ Kronos Resampling on a given field (step R)
+def _resampling_cases():
+    """Kronos's Resampling (`resampleType`) on a given field. A hard step (1 for x < 8, 0 for x >= 8, a Rectangle) is retimed half way between frames
+    (Output Speed 0.5, output frame 2) with FgVecs of (1, 0) wired, so frame a moves half a pixel right and frame b half a pixel left, and the picture is their
+    mean. Each moved copy is the step sampled at a half-pixel position by the chosen filter: Bilinear mixes the two pixels at the edge (0.75 and 0.25 in the
+    result, no overshoot); Lanczos4 and Lanczos6 sample with the windowed sinc L(x) = sinc(x) sinc(x / a), a = 2 and 3, the tap weights divided by their
+    sum, which rings (the bright side reads above 1, the dark side below 0). The kernels are a convention (the guide names the filters and gives no weights);
+    the expected values come from the formula written out here, not from NodeBased's kernel. Columns 3 to 12 are compared, on red, green and blue."""
+    out = []
+    W, H = 16, 12
+    page = "https://learn.foundry.com/nuke/17.0/content/reference_guide/time_nodes/kronos.html"
+
+    def lanczos(x, a):
+        x = np.asarray(x, np.float64)
+        return np.where(np.abs(x) < a, np.sinc(x) * np.sinc(x / a), 0.0)
+
+    def sample(profile, position, name):
+        """`profile` (a 1-D array) at the fractional `position`: bilinear, or the normalised Lanczos of radius a."""
+        x0 = int(np.floor(position))
+        frac = position - x0
+        if name == "Bilinear":
+            return (1 - frac) * profile[min(max(x0, 0), len(profile) - 1)] + frac * profile[min(max(x0 + 1, 0), len(profile) - 1)]
+        a = 2 if name == "Lanczos4" else 3
+        taps = np.arange(1 - a, a + 1)
+        weights = lanczos(frac - taps, a)
+        weights = weights / weights.sum()
+        return float(sum(w * profile[min(max(x0 + t, 0), len(profile) - 1)] for w, t in zip(weights, taps)))
+
+    def reference(name):
+        def expected(fx):
+            profile = (np.arange(W) < 8).astype(np.float64)
+            row = np.array([0.5 * sample(profile, x - 0.5, name) + 0.5 * sample(profile, x + 0.5, name) for x in range(W)])
+            ref = np.zeros((H, W, 4))
+            ref[..., :3] = row[None, :, None]
+            valid = np.zeros((H, W, 4), bool)
+            valid[:, 3:13, :3] = True
+            return ref, valid
+        return expected
+    stamp = {"plate": {"type": "Rectangle", "params": {"box_x": 0.0, "box_y": 0.0, "box_width": 8.0, "box_height": 12.0}}, "time": (1, 8), "frame": 2,
+             "inputs": {"fgvecs": ("Constant", {"red": 1.0, "green": 0.0, "blue": 0.0, "alpha": 1.0})}}
+    for name in ("Bilinear", "Lanczos4", "Lanczos6"):
+        out.append(Case(id=f"kronos_resampling_{name.lower()}_half_pixel_step", nuke="Kronos", nuke_class="Kronos",
+                        nuke_knobs=(("interpolation", "Motion"), ("timingOutputSpeed", 0.5), ("resampleType", name)), nuke_inputs=("stamp",), nb_kind="Kronos",
+                        nb_params={"interpolation": "motion", "timing": "speed", "speed": 0.5, "input_start": 1.0, "input_end": 8.0, "resample_type": name,
+                                   "_stamp": dict(stamp)},
+                        nb_inputs=(), expected=reference(name), source="convention",
+                        statement=(f"Kronos ({page}) Resampling {name}: a hard step retimed half way with FgVecs (1, 0) is the mean of the step moved half a pixel each "
+                                   f"way, each copy sampled by {name}"
+                                   + (" (bilinear: 0.75 and 0.25 either side of the edge, never above 1 or below 0)" if name == "Bilinear" else
+                                      " (the windowed sinc rings: above 1 on the bright side of the edge and below 0 on the dark side)")
+                                   + ". The kernel is a convention (the guide names the filters and gives no weights); the expected values are written out in "
+                                   "tools/nuke_fidelity_cases_color.py from L(x) = sinc(x) sinc(x / a), a = 2 and 3, normalised"), tolerance=1e-4))
     return out
 
 

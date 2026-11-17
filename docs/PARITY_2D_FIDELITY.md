@@ -101,7 +101,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | TimeBlur | `TimeBlur` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
 | 7 | TimeEcho | `TimeEcho` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
-| 8 | Kronos | `Kronos` | supported | 91.9 | 89.4 | 78 (20/26) | - | 100 | 100 | - | 100 (32/32) | 99 | - | unmeasured |
+| 8 | Kronos | `Kronos` | supported | 91.9 | 89.4 | 78 (20/26) | - | 100 | 100 | - | 100 (35/35) | 99 | - | unmeasured |
 | 8 | OFlow | `OFlow` | supported | 95.5 | 94.3 | 88 (18/21) | - | 100 | 100 | - | 100 (32/32) | 98 | - | unmeasured |
 | 8 | SmartVector | `SmartVector` | supported | 94.8 | 94.4 | 94 (10/11) | - | 90 | 100 | - | - | 96 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
@@ -866,10 +866,12 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `ocio_file_invert` | convention | pass | within tolerance | - |
 | `kronos_default_weights_find_the_red_motion` | convention | pass | within tolerance | - |
 | `kronos_red_weight_zero_reads_no_motion` | convention | pass | within tolerance | - |
-| `kronos_resampling_filters` | convention | not scored: the guide names the filters and gives no weights, and a half-pixel move on a plate the estimator must measure cannot be written down to a tolerance that tells the filters apart; the kernel comparison is asserted on a known field in tests/test_2d_behaviour_retime_r.py | - | - |
 | `oflow_default_weights_find_the_red_motion` | convention | pass | within tolerance | - |
 | `oflow_red_weight_zero_reads_no_motion` | convention | pass | within tolerance | - |
-| `oflow_resampling_filters` | convention | not scored: the guide names the filters and gives no weights, and a half-pixel move on a plate the estimator must measure cannot be written down to a tolerance that tells the filters apart; the kernel comparison is asserted on a known field in tests/test_2d_behaviour_retime_r.py | - | - |
+| `oflow_resampling_filters` | convention | not scored: OFlow has no FgVecs input, so the motion must be estimated and a half-pixel move on an estimated field cannot be written down to a tolerance that tells the filters apart; Kronos's cases below give each filter's values on a given field, and tests/test_2d_behaviour_retime_r.py asserts the shared warp | - | - |
+| `kronos_resampling_bilinear_half_pixel_step` | convention | pass | within tolerance | - |
+| `kronos_resampling_lanczos4_half_pixel_step` | convention | pass | within tolerance | - |
+| `kronos_resampling_lanczos6_half_pixel_step` | convention | pass | within tolerance | - |
 | `sampler_passes_the_picture_through` | convention | pass | within tolerance | - |
 | `histogram_defaults_are_the_identity` | convention | pass | within tolerance | - |
 | `histogram_input_range_stretch` | convention | not scored: the guide describes the knobs as the input range, gamma and output range of a histogram's curve and gives no formula for the stretch's rounding or its clamp, so the exact values are not written down | - | - |

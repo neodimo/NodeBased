@@ -578,6 +578,7 @@ def _run_stamped_document(case):
     A chain step may carry a third item, its own curves in the same form. `time` (first, last) sets the project's frame range, `green_scale`
     keys the plate's green to the frame times that number (so a channel the node leaves alone tells the current frame from the retimed one; alpha is
     left at 1 because the Constant premultiplies),
+    and `inputs` ({slot: (kind, params)}: a generator wired to an extra input of the node, Kronos's `fgvecs` a Constant whose red and green are the vector in pixels per frame),
     and `plate` ({"type", "params"}, size in `size`) replaces the stamped Constant with a generator that has real picture content, for the
     cases that need motion. The array returned is the node's picture at the fixture's size (or at `size` when given)."""
     from nodebased.core import Dispatcher, empty_document
@@ -623,6 +624,9 @@ def _run_stamped_document(case):
             d.execute({"op": "connect", "id": "n", "input": f"clip{index}", "source": chain(f"p{index}", round(0.2 + 0.1 * index, 6), steps)})
     else:
         d.execute({"op": "connect", "id": "n", "input": "image", "source": chain("p", 0.5, stamp.get("chain", ()))})
+    for slot, (kind, params) in stamp.get("inputs", {}).items():       # extra inputs of the node under test (Kronos's fgvecs): a generator each, at the picture's size
+        d.execute({"op": "create", "id": f"in_{slot}", "type": kind, "params": {"width": width, "height": height, **params}})
+        d.execute({"op": "connect", "id": "n", "input": slot, "source": f"in_{slot}"})
     for param, (interpolation, keys) in stamp.get("curves", {}).items():
         d.execute({"op": "set_curve", "id": "n", "param": param,
                    "curve": {"interpolation": interpolation, "keys": [{"frame": int(f), "value": float(v)} for f, v in keys]}})
