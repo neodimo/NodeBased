@@ -95,12 +95,16 @@ class TimeRowTests(unittest.TestCase):
     def test_in_after_out_is_refused_and_reverts(self):
         w = self.open_window()
         revision = w.dispatcher.revision
+        # Record every status message: a background frame evaluation can replace the refusal message
+        # ("Evaluating frame 5…") before the assertion reads the bar, which failed two full suites on 11/17.
+        shown = []
+        w.statusBar().messageChanged.connect(shown.append)
         self.type_into(w.frame_first, "60")
         after = time_state(w)
         self.assertEqual((after["first"], after["last"], after["current"]), (1, 48, 5))
         self.assertEqual(w.frame_first.value(), 1, "the field reverts")
         self.assertEqual(w.dispatcher.revision, revision)
-        self.assertIn("In 60", w.statusBar().currentMessage())
+        self.assertTrue(any("In 60" in m for m in shown + [w.statusBar().currentMessage()]), shown)
 
     def test_out_before_in_is_refused_and_reverts(self):
         w = self.open_window()
@@ -108,11 +112,13 @@ class TimeRowTests(unittest.TestCase):
         # The move to frame 12 starts a render whose "Evaluating frame 12…" status would overwrite the refusal
         # message under suite load; let it finish first (red in the 11/11 4 AM full suite, green alone).
         self.assertTrue(wait_until(lambda: not w.busy and not w.preview_queue._items))
+        shown = []
+        w.statusBar().messageChanged.connect(shown.append)
         self.type_into(w.frame_last, "3")
         after = time_state(w)
         self.assertEqual((after["first"], after["last"]), (10, 48))
         self.assertEqual(w.frame_last.value(), 48)
-        self.assertIn("Out 3", w.statusBar().currentMessage())
+        self.assertTrue(any("Out 3" in m for m in shown + [w.statusBar().currentMessage()]), shown)
 
     def test_a_range_edit_is_one_undo_step(self):
         w = self.open_window()
