@@ -2498,7 +2498,9 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
-   ]
+   ],
+   "skip_default": ["z_channel"],
+   "default_notes": {"z_channel": "NodeBased names the depth layer (depth) and leaves the channel to the layer's own Z; the guide's depth.Z reads the same channel"}
   },
   "DirBlur": {
    "nodebased": "DirBlur",
@@ -3680,7 +3682,8 @@
     {"nodebased": [], "nuke": ["keyframe_size"], "kind": "panel", "reason": "viewer display only; https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/tracker.html"},
     {"nodebased": [], "nuke": ["max_number_of_keyframe_tracks_to_display"], "kind": "panel", "reason": "viewer display only; https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/tracker.html"}
    ],
-   "skip_default": ["channels", "smoothT", "smoothR", "smoothS", "translate", "center", "skew_order"]
+   "skip_default": ["channels", "smoothT", "smoothR", "smoothS", "translate", "center", "skew_order", "livelink_transform", "show_error_on_track_links", "transform"],
+   "default_notes": {"livelink_transform": "a new NodeBased Tracker's picture follows its tracks straight away (live link on, mode match_move), which is what the node and its overlay have always done; Nuke starts with the link off", "show_error_on_track_links": "NodeBased colours the track paths by their error, which the overlay has always done; the guide starts with it off", "transform": "NodeBased's older name for the same control; its choices are none, match_move and the guide's modes, with match_move as the starting mode so a new node moves its picture"}
   },
   "PlanarTracker": {
    "nodebased": "PlanarTracker",

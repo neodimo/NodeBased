@@ -72,11 +72,11 @@ OUTPUTS = ("result", "focal plane setup", "layer setup", "filter shape setup")
 POINT_DEFAULT = (200.0, 200.0)
 NEW = {"legacy_zdefocus_focus": 0, "zdefocus_output": "result", "show_image": 1, "fill_foreground": 1, "focal_x": POINT_DEFAULT[0],
        "focal_y": POINT_DEFAULT[1], "blur_dof": 1, "autoLayerSpacing": 1, "nLayers": 20, "layerCurve": 1.0,
-       "shape": 1.0, "aspect": 1.0, "catadioptric": 0, "catadioptric_size": 0.3, "bloom": 0, "bloom_threshold": 0.8, "bloom_gain": 2.0, "bloom_gamma": 0,
+       "shape": 0.0, "aspect": 1.0, "catadioptric": 0, "catadioptric_size": 0.3, "bloom": 0, "bloom_threshold": 0.8, "bloom_gain": 2.0, "bloom_gamma": 0,
        "legacy_zdefocus_filters": 0, "roundness": 0.2, "inner_size": 0.8, "inner_feather": 1.0, "inner_brightness": 0.8,
        "legacy_resize_mode": 0, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape", "image_filter": "cubic",
        "clamp_image_filter": 0}
-UPGRADE = {**NEW, "legacy_zdefocus_focus": 1, "legacy_zdefocus_filters": 1}
+UPGRADE = {**NEW, "shape": 1.0, "legacy_zdefocus_focus": 1, "legacy_zdefocus_filters": 1}
 LIMITS = {"legacy_zdefocus_focus": (0, 1), "show_image": (0, 1), "fill_foreground": (0, 1), "focal_x": (-100000.0, 100000.0),
           "focal_y": (-100000.0, 100000.0), "blur_dof": (0, 1), "autoLayerSpacing": (0, 1), "nLayers": (1, MAX_LAYERS),
           "layerCurve": (-5.0, 5.0), "shape": (0.0, 1.0), "catadioptric": (0, 1), "catadioptric_size": (0.0, 1.0), "bloom": (0, 1),

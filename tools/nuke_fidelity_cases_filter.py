@@ -951,6 +951,7 @@ def cases():
     ):
         node = "Sparkles" if cid.startswith("sparkles_") else "Flare"
         case(cid, node, node, nuke_knobs, node, nb_params, None, "guide", statement, unscored=reason)
+    _panel_step_cases(Case, case)
     return out
 
 
@@ -2423,3 +2424,61 @@ def _lens_cases(Case, out):
          {"num": (0.04, 0.0), "den": (0.02, 0.0)},
          "Order and Exponent describe 'the radial distortion's rational polynomial function', numerator first",
          unscored="the guide states only the denominator's equation; the numerator's form (1 + n0 r^2 + n1 r^4 over the denominator) is read from the Order and Exponent text")
+
+
+def _panel_step_cases(Case, case):
+    """Lane 9 step W1 (the review book's missing-case rows). One case per node whose page states what the node does but not the arithmetic:
+    each is reported `not scored` with the reason; DegrainSimple's zero amounts are scored because a removal of nothing is the identity."""
+    def identity(fx):
+        src = fx["A"].astype(np.float64)
+        return src.copy(), np.ones(src.shape, bool)
+
+    case("degrainsimple_zero_amounts_remove_nothing", "DegrainSimple", "DegrainSimple", (("rVal", 0.0), ("gVal", 0.0), ("bVal", 0.0)),
+         "DegrainSimple", {"red_amount": 0.0, "green_amount": 0.0, "blue_amount": 0.0}, identity, "convention",
+         "DegrainSimple: each blur slider is 'the amount of grain to remove' from its channel, so zero everywhere removes none and the picture is unchanged "
+         "(the page: nuke_nodes.json DegrainSimple; the form is the convention that a zero amount is a no-op)")
+    for cid, nuke, kind, statement, reason in (
+        ("text_draws_its_message", "Text", "Text", "Text draws its message in the chosen font and size into the box, justified as set",
+         "the guide lists the controls but not the font, hinting or glyph rasterisation Nuke uses, so a glyph's pixels cannot be written down without guessing; "
+         "the box, justification, colour and message handling are tested in tests/test_2d_fidelity_b_draw.py"),
+        ("zslice_highlights_the_depth_slice", "ZSlice", "ZSlice",
+         "ZSlice highlights the part of the image whose depth lies within Field Width of Center of Slice (high values are closer to the camera)",
+         "the page states neither the matte's edge profile nor how Field Width maps to the slice's two edges, only which way the slice moves with the controls"),
+        ("planartracker_follows_the_plane", "PlanarTracker", "PlanarTracker",
+         "PlanarTracker follows a planar surface through the sequence and applies its transform to the picture",
+         "the guide describes the tracking workflow, not the resampling the tracked transform gets; tracking on real plates is tested in the tracker modules"),
+        ("stabilize_negates_the_track", "Stabilize", "Stabilize",
+         "Stabilize2D applies the tracking data in inverse form, negating the unwanted translation, rotation and scale",
+         "the result depends on a solved track and the guide does not give the filter or edge handling of the transform it applies"),
+        ("inpaint_fills_from_the_surroundings", "Inpaint", "Inpaint",
+         "Inpaint fills the area marked in the alpha channel (or the Matte input) from the surrounding pixels",
+         "the page states no fill algorithm, so no reference picture can be written without inventing one"),
+        ("pointsto3d_locates_a_point_by_parallax", "PointsTo3D", "PointsTo3D",
+         "PointsTo3D calculates the 3D location of a 2D point from the parallax between two or three tracked points seen by a tracked camera",
+         "the node's result is knob values (a 3D point), not pixels, and the page does not state the triangulation"),
+        ("reconcile3d_projects_a_point", "Reconcile3D", "Reconcile3D",
+         "Reconcile3D projects a 3D point through the camera and puts the screen position in XY output",
+         "the result is knob values, not pixels; the projection follows the camera model which the page does not spell out"),
+        ("tviscale_enlarges_the_picture", "TVIScale", "TVIScale",
+         "TVIScale enlarges the picture to twice its size by total variation inpainting",
+         "the guide does not give the solver's update rule, so the enlarged pixels cannot be written down without guessing; size, bounding box and mask handling are tested in tests/test_tviscale_fidelity.py"),
+        ("vectordistort_follows_the_vectors", "VectorDistort", "VectorDistort",
+         "VectorDistort warps the source along the SmartVector field from a reference frame",
+         "the page states no filter or edge handling for the warp and the vector field must come from a solve"),
+        ("vectorblur_blurs_along_the_vectors", "VectorBlur", "VectorBlur",
+         "VectorBlur blurs each pixel along its UV motion vector",
+         "the page states neither the sample spacing nor the weighting along the vector"),
+        ("motionblur_blurs_by_the_vectors", "MotionBlur", "MotionBlur",
+         "MotionBlur blurs the source along the foreground and background vectors, mixed by the matte",
+         "the page states neither the shutter-to-vector scale nor the sample weighting"),
+        ("motionblur2d_outputs_the_transform_vectors", "MotionBlur2D", "MotionBlur2D",
+         "MotionBlur2D collates the motion of its 2D transf input into UV vectors for a VectorBlur node; it does not blur by itself",
+         "the page states no unit for the vectors it outputs, so their size cannot be written down without guessing"),
+        ("motionblur3d_outputs_the_camera_vectors", "MotionBlur3D", "MotionBlur3D",
+         "MotionBlur3D does the same for camera moves instead of 2D transforms",
+         "the page states no unit for the vectors and the camera's motion depends on a solved camera"),
+        ("levelset_outputs_the_distance", "LevelSet", "LevelSet",
+         "LevelSet outputs the distance from each pixel to the nearest pixel of the input channel that has the threshold value",
+         "the page does not say which distance metric it uses or the sign inside and outside the threshold"),
+    ):
+        case(cid, nuke, nuke, (), kind, {}, None, "guide", statement, unscored=reason)

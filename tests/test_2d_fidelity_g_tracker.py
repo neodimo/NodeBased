@@ -68,7 +68,7 @@ class MatchingTests(unittest.TestCase):
         p = SPECS["Tracker"]["params"]
         self.assertEqual((p["pretrack_filter"], p["clamp_footage"], p["max_error"], p["grab_behavior"], p["grab_error_above"]),
                          ("median", 1, 0.2, "if error above", 0.05))
-        self.assertEqual((p["adjust_for_luminance_changes"], p["predict_track"], p["snap_to_markers"]), (1, 0, 0))
+        self.assertEqual((p["adjust_for_luminance_changes"], p["predict_track"], p["snap_to_markers"]), (0, 0, 0))     # off as the guide has it since lane 9 step W1
         self.assertEqual((p["mode"], p["livelink_transform"]), ("match_move", 1))
 
     def test_the_filters_do_what_their_names_say(self):

@@ -494,8 +494,8 @@ SPECS = {
     "DegrainSimple": {"inputs": ["image"], "optional_inputs": ["mask"],
                        "params": {"red_amount": 1.0, "green_amount": 1.0, "blue_amount": 1.0, "mix": 1.0}},
     "ZDefocus": {"inputs": ["image"], "optional_inputs": ["depth", "kernel", "mask"],
-                  "params": {"depth_layer": "depth", "focal_plane": 1.0, "depth_of_field": 1.0,
-                             "max_size": 20.0, "depth_math": "depth", "bokeh_shape": "disc",
+                  "params": {"depth_layer": "depth", "focal_plane": 0.0, "depth_of_field": 0.0,
+                             "max_size": 50.0, "depth_math": "depth", "bokeh_shape": "disc",
                              "blade_count": 5, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("ZDefocus")}},
     "ZMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                "params": {"depth_layer": "depth.Z", "backwards": False, "alpha_channel": "rgba.alpha",
@@ -880,7 +880,7 @@ SPECS = {
                            "apply_rotate": 1, "apply_scale": 1, "smoothing": 0,
                            "pattern_radius": 8, "search_radius": 24,
                            "adaptive_update": 0, "tracking_channels": "luminance",
-                           "filter": "bilinear", "mix": 1.0, **_trackerknobs.new_params("Tracker")}},
+                           "filter": "cubic", "mix": 1.0, **_trackerknobs.new_params("Tracker")}},
     # Stabilize uses the same tracked similarity fit as Tracker with the inverse transform fixed
     # on, and its own smoothing control in place of Tracker's mode switch.
     # PlanarTracker is an analysis tap: Lucas–Kanade flow and robust fitting write four
@@ -1868,7 +1868,7 @@ LIMITS = {"input_number": (1, 64), "enabled": (0, 1), "splat_write_overwrite": (
           "filter_size": (-500.0, 500.0), "threshold": (0.0, 100.0),
           "laplacian_size": (0.0, 500.0), "legacy_edge_prewitt": (0, 1), "legacy_idistort": (0, 1), "edge_blur_size": (0.0, 500.0), "edge_erode_size": (-500.0, 500.0), "edge_blur_quality": (1.0, 1000.0), "use_input_channels": (0, 1), "legacy_convolve": (0, 1), "legacy_erode_sign": (0, 1), "legacy_median_radius": (0, 1), "legacy_matrix_unclipped": (0, 1), "legacy_laplacian": (0, 1), "legacy_dropshadow_angle": (0, 1), "legacy_dirblur_knobs": (0, 1), "legacy_bilateral": (0, 1), "legacy_vectorcornerpin": (0, 1), "use_baked": (0, 1), "positional_sigma": (0.00001, 10.0), "legacy_transform_edges": (0, 1), "legacy_shutter_window": (0, 1), "legacy_blur_samples": (0, 1), "legacy_transform_axes": (0, 1), "legacy_reformat_layout": (0, 1), "legacy_mirror_window": (0, 1), "legacy_position": (0, 1), "legacy_adjustbbox": (0, 1), "box_fixed": (0, 1),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
-          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
+          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.0, 1000000.0), "depth_of_field": (0.0, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "edgeblur_tint": (0.0, 100.0), "edgeblur_brightness": (0.0, 100.0),
           "legacy_godrays": (0, 1), "rays_translate_x": (-1000000.0, 1000000.0), "rays_translate_y": (-1000000.0, 1000000.0), "rays_rotate": (-100000.0, 100000.0),
           "rays_scale": (0.001, 1000.0), "rays_skew": (-100.0, 100.0), "rays_from_color": (-1000.0, 1000.0), "rays_to_color": (-1000.0, 1000.0),

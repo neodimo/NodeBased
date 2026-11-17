@@ -24,7 +24,7 @@ from tests.test_2d_behaviour_filter_a import differs, evaluator_pixels, old_docu
 
 
 def zd(pixels, depth, **knobs_):
-    params = {**SPECS["ZDefocus"]["params"], **knobs_}
+    params = {**SPECS["ZDefocus"]["params"], "shape": 1.0, **knobs_}      # the disc: the guide's default shape is 0 since lane 9 step W1
     return np.asarray(Evaluator._zdefocus(np.asarray(pixels, np.float32), np.asarray(depth, np.float32), params), np.float64)
 
 

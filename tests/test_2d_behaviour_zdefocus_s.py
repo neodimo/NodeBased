@@ -32,7 +32,7 @@ def point(n=N):
 
 def spread(kernel=None, size=10.0, **knobs_):
     """A point on a plane at depth 3 (focus plane 1), blurred 6.67 pixels -> the layer of 7: the filter as a float64 picture."""
-    params = {**SPECS["ZDefocus"]["params"], "zdefocus_math": "depth", "focal_plane": 1.0, "depth_of_field": 0.0, "blur_dof": 0, "size": size,
+    params = {**SPECS["ZDefocus"]["params"], "shape": 1.0, "zdefocus_math": "depth", "focal_plane": 1.0, "depth_of_field": 0.0, "blur_dof": 0, "size": size,
               "max_size": 7.0, **knobs_}
     return np.asarray(Evaluator._zdefocus(point(), np.full((N, N), 3.0, np.float32), params, kernel), np.float64)
 

@@ -100,6 +100,7 @@ class RotoPaintTrackingTests(unittest.TestCase):
                             "params": {"width": 256, "height": 256, "red": 0.5, "green": 0.5, "blue": 0.5}})
         dispatcher.execute({"op": "create", "id": "paint", "type": "RotoPaint"})
         dispatcher.execute({"op": "connect", "id": "paint", "input": "image", "source": "plate"})
+        dispatcher.execute({"op": "set", "id": "paint", "param": "adjust_for_luminance_changes", "value": 1})   # the plate brightens: Nuke's default is off
         item = stroke(points=[{"x": x, "y": y, "pressure": 1.0}
                               for x, y in ((100, 100), (180, 100), (180, 180), (100, 180))])
         dispatcher.execute({"op": "set_paint_items", "id": "paint", "items": [item]})
