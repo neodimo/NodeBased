@@ -374,6 +374,25 @@ def _region(bench):
     return ok, f"Ctrl+Shift+drag over the whole ramp gave red {sampled:.4f} (frame mean {expected})"
 
 
+@probe("color.discard_sample")
+def _discard(bench):
+    from PySide6.QtCore import QPointF, Qt
+    target, frame = _ramp_and_target(bench)
+    if frame is None:
+        return False, "the ramp never reached the viewer"
+    before = [float(bench.params(target)[p]) for p in ("red", "green", "blue")]
+    _viewer_press(bench, 40.5, 4.5, Qt.KeyboardModifier.ControlModifier)
+    sampled = float(bench.params(target)["red"])
+    viewer = bench.window.viewer
+    viewer.hit_press(QPointF(10, 10), Qt.MouseButton.RightButton, Qt.KeyboardModifier.ControlModifier)
+    bench.settle()
+    after = [float(bench.params(target)[p]) for p in ("red", "green", "blue")]
+    still_on = _armed(bench)
+    viewer.knob_sampling = None
+    ok = sampled != before[0] and after == before and still_on
+    return ok, f"sampled red {sampled:g}; Ctrl+right-click put back {after} (was {before}), eye dropper still on {still_on}"
+
+
 @probe("color.picker_button")
 def _picker_button(bench):
     from nodebased.colorpicker import HueSaturationWheel

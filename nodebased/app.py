@@ -2248,7 +2248,7 @@ class Viewer(PanZoomView):
         self.survey_picking = None   # the CameraSolve3D node whose Survey a click adds a pick to
         self.zdefocus_picking = None
         self.color_sampling = None     # a colour picker's eyedropper: called with the linear pixel clicked
-        self.knob_sampling = None      # a colour knob's eye dropper, armed from its swatch: ((node, params), callback)
+        self.knob_sampling = None      # a colour knob's eye dropper, armed from its swatch: ((node, params), callback, values when armed)
         self.knob_sample_region = None  # scene point where a Ctrl+Shift region sample started
         self.focus_picking = None   # the Camera3D node whose focus distance a click sets
         # A/B compare. The wipe geometry is display state only (not in the document): the split
@@ -6230,6 +6230,13 @@ class Viewer(PanZoomView):
     def hit_press(self, scene_pos, button, modifiers, pressure=1.0):
         """A press at a scene point. True when a handle, pick or drag took it; the Viewer and the direct
         picture both call this, so a click lands on the same handle on either surface."""
+        if (button == Qt.MouseButton.RightButton and self.knob_sampling is not None
+                and modifiers & Qt.KeyboardModifier.ControlModifier):
+            # "You can discard sampled pixels by Ctrl/Cmd+right-clicking in the Viewer": the knob goes back to the
+            # colour it held when the eye dropper was turned on, and the eye dropper stays on.
+            self.knob_sample_region = None
+            self.knob_sampling[1](list(self.knob_sampling[2]))
+            return True
         if (button == Qt.MouseButton.LeftButton and self.knob_sampling is not None
                 and modifiers & Qt.KeyboardModifier.ControlModifier):
             # A colour knob's eye dropper, armed from its swatch (Nuke 17.0 User Guide, Using the Color Controls):
@@ -14912,7 +14919,8 @@ class Window(QMainWindow):
                                             for p, v in zip(params, rgba) if float(v) != float(knob[p])]
                                 if commands:
                                     self.defer_command({"op": "batch", "commands": commands})
-                            self.viewer.knob_sampling = (t, sampled)
+                            original = [float(self.graph_nodes()[t[0]]["params"][p]) for p in t[1]]
+                            self.viewer.knob_sampling = (t, sampled, original)
                             self.viewer.setCursor(Qt.CursorShape.CrossCursor)
                         show_armed(self.viewer.knob_sampling is not None)
                     swatch.clicked.connect(toggle_eyedropper)

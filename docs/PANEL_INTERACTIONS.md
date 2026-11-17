@@ -40,7 +40,8 @@ Other fixes in the same step:
 - The panel menu gained "Set key on all knobs" (one undo step).
 - A colour knob's swatch now works as Nuke's: a click turns on the eye dropper (the swatch gets an accent border), Ctrl+click
   in the viewer samples one linear pixel into the knob, Ctrl+Shift+drag samples the average of a region, and a second
-  click on the swatch turns it off. A plain click in the viewer still does what it always did. The "Pick" button beside
+  click on the swatch turns it off. Ctrl+right-click in the viewer discards the samples and puts back the colour the
+  knob had when the eye dropper was turned on. A plain click in the viewer still does what it always did. The "Pick" button beside
   the swatch opens the colour picker (wheel, RGB, HSV and TMI sliders), which the swatch used to open.
 - A colour swatch dragged onto another colour swatch copies the colour (one undo step).
 - Closing a split knob's channel fields keeps every channel's value, as the guide says ("click the channel selector

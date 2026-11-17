@@ -32,6 +32,8 @@
      "nuke": "With the eye dropper on, Ctrl/Cmd+click in the Viewer samples one pixel into the knob.", "quote": "Ctrl/Cmd+click to sample a color value"},
     {"id": "color.region_average", "widget": "color", "status": "documented", "source": "color",
      "nuke": "Ctrl/Cmd+Shift+drag samples a region; the knob takes the average colour of the region.", "quote": "You can sample a region instead of just a single pixel by also pressing Shift+drag ... Nuke calculates the average color of the region."},
+    {"id": "color.discard_sample", "widget": "color", "status": "documented", "source": "color",
+     "nuke": "With the eye dropper on, Ctrl/Cmd+right-click in the Viewer discards the sampled pixels.", "quote": "You can discard sampled pixels by Ctrl/Cmd+right-clicking in the Viewer."},
     {"id": "color.picker_button", "widget": "color", "status": "documented", "source": "color",
      "nuke": "The colour picker button shows colour sliders and a wheel (in the panel or in a floating window).", "quote": "The color picker button can be used to display and make color selections."},
     {"id": "color.slider_modes", "widget": "color", "status": "documented", "source": "color",
