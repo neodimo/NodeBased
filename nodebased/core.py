@@ -730,7 +730,7 @@ SPECS = {
                             "tvi_a": 0.0001, "legacy_scale": 0}},
     "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
-                              "vector_scale": 0.0, "vector_offset": -0.5, "vector_method": "forward",
+                              "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
                               "vector_sampling": "source", "vector_alpha": "none", "max_length": 100.0,
                               "samples": 0, "mix": 1.0, "invert_uv": 0, "vector_output": "result", **_vectorblurknobs.NEW}},
     # Shuffle's `layer` (step 5c) names one of the input's named layers (Raster.layers); empty or

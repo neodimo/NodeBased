@@ -361,7 +361,7 @@ class GlintTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Glint")]
-        self.assertEqual(labels[:14], ["Channels", "No. of rays", "Length", "Aspect ratio", "Odd ray length", "Rotation", "From color", "To color", "Steps", "Max", "Effect only", "w",
+        self.assertEqual(labels[:14], ["Channels", "No. of rays", "Length", "Aspect ratio", "Odd ray length", "Rotation", "From color", "To color", "Steps", "Max", "Effect only", "W channel",
                                        "Tolerance", "Gamma"])
         self.assertEqual(labels[-1], "Mix")
 

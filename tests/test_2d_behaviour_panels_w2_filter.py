@@ -132,7 +132,10 @@ class DustBustEnableTests(unittest.TestCase):
 class VectorBlurDefaultTests(unittest.TestCase):
     def test_a_new_node_starts_as_the_guide_lists(self):
         params = SPECS["VectorBlur"]["params"]
-        self.assertEqual((params["vector_scale"], params["vector_offset"], params["uv_layer"]), (0.0, -0.5, ""))
+        # Gonzo 11/17: the guide table's motion amount 0 / offset -0.5 are recorded as default_notes and kept at 1 / 0
+        # until a Nuke render confirms them (0 would make a new VectorBlur blur nothing).
+        self.assertEqual((params["vector_scale"], params["vector_offset"], params["uv_layer"]), (1.0, 0.0, ""))
+        self.assertIn("scale", json.load(open(os.path.join(ROOT, "docs", "parity", "nodebased_to_nuke.json"), encoding="utf-8"))["pairs"]["VectorBlur"]["default_notes"])
 
     def test_the_pairing_reads_an_empty_uv_layer_as_none(self):
         with open(os.path.join(ROOT, "docs", "parity", "nodebased_to_nuke.json"), encoding="utf-8") as handle:
@@ -146,10 +149,10 @@ class VectorBlurDefaultTests(unittest.TestCase):
         g.add("n", "VectorBlur", dict(uv_layer="rgba", **params), image="plate", uv="vec")
         return g
 
-    def test_a_new_node_does_nothing_until_the_motion_amount_is_set(self):
-        g = self.vectors()
-        np.testing.assert_array_equal(render(g.doc, "n"), render(g.doc, "plate"))
-        self.assertTrue(differs(render(self.vectors(vector_scale=1.0).doc, "n"), render(g.doc, "plate")))
+    def test_motion_amount_zero_does_nothing_and_the_default_blurs(self):
+        still = self.vectors(vector_scale=0.0)
+        np.testing.assert_array_equal(render(still.doc, "n"), render(still.doc, "plate"))
+        self.assertTrue(differs(render(self.vectors().doc, "n"), render(still.doc, "plate")))
 
     def test_a_node_saved_at_motion_amount_one_keeps_blurring(self):
         g = self.vectors(vector_scale=1.0, vector_offset=0.0)

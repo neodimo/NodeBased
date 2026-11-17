@@ -648,7 +648,7 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("glint_steps",), label="Steps", help="The number of steps a ray is made of; more steps on shorter rays are smoother."),
         KnobGroup("bool", ("glint_max",), label="Max", help="Use the brightest of the steps at each pixel; off adds the steps up."),
         KnobGroup("bool", ("glint_effect_only",), label="Effect only", help="Output only the rays, without the original picture."),
-        KnobGroup("enum", ("glint_w_channel",), label="w", help="Only highlights inside this channel's matte make rays; the rays may reach outside it."),
+        KnobGroup("enum", ("glint_w_channel",), label="W channel", help="Only highlights inside this channel's matte make rays; the rays may reach outside it."),
         KnobGroup("float", ("tolerance",), help="How bright a highlight must be to make rays: only what is above it does."),
         KnobGroup("float", ("glint_gamma",), label="Gamma", help="A gamma correction on the highlights that make rays, before the star is made."),
         KnobGroup("bool", ("legacy_glint",), label="Legacy glint",

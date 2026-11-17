@@ -2779,7 +2779,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
-   "skip_default": ["channels"],
+   "skip_default": ["channels", "scale", "offset"],
+   "default_notes": {"scale": "Kept at 1 on purpose: the guide's table reads motion amount 0, which would make a new VectorBlur blur nothing, and changing it would change saved projects; to be checked against a Nuke render", "offset": "Kept at 0 with the motion amount above; the guide's table reads -0.5 (a centred shutter); to be checked against a Nuke render"},
    "value_map": {"uv": {"": "none"}}
   },
   "Bilateral": {
