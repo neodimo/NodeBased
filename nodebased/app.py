@@ -44,6 +44,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import projectsettings as _projectsettings
+from . import channelpicker
 from . import radialcommands
 from . import graphlook
 from . import gpu3d
@@ -14443,6 +14444,19 @@ class Window(QMainWindow):
                     "OCIODisplay": {"display", "view", "look"},
                     "OCIOLookTransform": {"src", "dst", "look"},
                 }
+                if ops2d_chrome.is_open_choice(node["type"], param) and (
+                        param in channelpicker.CHANNEL_SET_PARAMS or param in channelpicker.SINGLE_CHANNEL_PARAMS):
+                    # Nuke's channel knobs (Calling Channels, Nuke 17.0 User Guide): a channel set is a layer menu with
+                    # one check box per channel; a single channel is a layer menu and a channel menu side by side.
+                    if param in channelpicker.CHANNEL_SET_PARAMS:
+                        control = channelpicker.ChannelSetPicker(param, value, list(ops2d_chrome.suggestions(param)))
+                    else:
+                        control = channelpicker.SingleChannelPicker(param, value, list(ops2d_chrome.suggestions(param)))
+                    control.changed.connect(
+                        lambda new, k=key, p=param: new != self.graph_nodes()[k]["params"][p]
+                        and self.defer_command({"op": "set", "id": k, "param": p, "value": new}))
+                    form.addRow(label or param.replace("_", " ").title(), control)
+                    return
                 if ops2d_chrome.is_open_choice(node["type"], param):
                     # Nuke's channel pickers: a listed word, or the name of a layer or channel the image carries.
                     choices = list(ops2d_chrome.suggestions(param))

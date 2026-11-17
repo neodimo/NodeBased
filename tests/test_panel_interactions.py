@@ -20,10 +20,7 @@ import nuke_panel_interactions as interactions  # noqa: E402
 
 from nodebased.app import evaluate_field_formula  # noqa: E402
 
-KNOWN_GAPS = {
-    "channel.layer_check_boxes": "the channels knob is one menu; a layer's channels have no check boxes to leave one out",
-    "channel.single_channel": "with channels set to none there is no right-most channel field to pick one channel",
-}
+KNOWN_GAPS = {}
 
 
 class ReferenceTests(unittest.TestCase):

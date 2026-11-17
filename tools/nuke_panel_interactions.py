@@ -623,21 +623,36 @@ def _node_disable(bench):
 @probe("channel.layer_check_boxes")
 def _layer_boxes(bench):
     from PySide6.QtWidgets import QCheckBox
-    bench.node("Grade", {"channels": "rgba"})
+    key = bench.node("Grade", {"channels": "rgba"})
     # A per-channel box is named after the knob and the channel (channels-red-box and so on).
     boxes = [b for b in bench.window.properties_dock.findChildren(QCheckBox)
              if b.objectName().startswith("channels-") and b.window() is bench.window and not b.isHidden()]
-    return len(boxes) >= 3, f"{len(boxes)} per-channel check boxes for the channels knob"
+    green = bench.child("channels-green-box", QCheckBox)
+    if green is None:
+        return False, f"{len(boxes)} per-channel check boxes for the channels knob"
+    green.click()
+    bench.settle()
+    stored = bench.params(key)["channels"]
+    bench.show(key)
+    shown = {name: bench.child(f"channels-{name}-box", QCheckBox).isChecked() for name in ("red", "green", "blue", "alpha")}
+    ok = len(boxes) == 4 and stored == "rgba.red rgba.blue rgba.alpha" and shown == {"red": True, "green": False, "blue": True, "alpha": True}
+    return ok, f"{len(boxes)} boxes for rgba; unticking green stores {stored!r}, the rebuilt panel ticks {shown}"
 
 
 @probe("channel.single_channel")
 def _single_channel(bench):
     from PySide6.QtWidgets import QComboBox
-    bench.node("Grade", {"channels": "none"})
-    combos = [c for c in bench.window.properties_dock.findChildren(QComboBox)
-              if c.objectName().startswith("channels") and c.window() is bench.window and not c.isHidden()]
-    extra = [c for c in combos if c.objectName() != "channels-choice"]
-    return bool(extra), f"channel fields beside the channels menu: {[c.objectName() for c in combos]}"
+    key = bench.node("Grade", {"channels": "none"})
+    field = bench.child("channels-single", QComboBox)
+    if field is None:
+        return False, "no right-most channel field beside the channels menu at none"
+    field.activated.emit(field.findText("rgba.alpha"))
+    bench.settle()
+    stored = bench.params(key)["channels"]
+    bench.show(key)
+    menu, again = bench.child("channels-choice", QComboBox), bench.child("channels-single", QComboBox)
+    ok = stored == "rgba.alpha" and menu.currentText() == "none" and again is not None and again.currentText() == "rgba.alpha"
+    return ok, f"picking alpha in the right-most field stores {stored!r}; the panel shows {menu.currentText()!r} and {again.currentText() if again else None!r}"
 
 
 @probe("mask_mix.controls")
