@@ -319,6 +319,8 @@ def upgrade_nodes(nodes):
         added.update(lensdistortion.upgrade_params(node.get("type")))         # Undistort and Redistort (lane 9 step J)
         from . import warpknobs
         added.update(warpknobs.upgrade_params(node.get("type")))              # GridWarp and SplineWarp (lane 9 step H)
+        if node.get("type") == "SplineWarp":
+            warpknobs.upgrade_root_warp(params)                                # root warp is Nuke's multiplier (lane 11 step B4)
         from . import drawfxbehaviour
         added.update(drawfxbehaviour.upgrade_params(node.get("type")))         # Flare, Glint, Sparkles, ScannedGrain (lane 2 step H)
         from . import retimeknobs

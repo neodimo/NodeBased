@@ -15,6 +15,8 @@ edge keeps its slot):
 SplineWarp:
 
 * `premultiply` (Nuke's `premultiply input`): the colour is multiplied by the alpha before it is warped.
+* `root_warp` (Nuke's global warp multiplier, 0 to 1, default 1; lane 11 step B4) multiplies `layer_warp` and `pair_warp`. The A/B
+  direction a saved node kept in `root_warp` is now `warp_direction` (B warps from the destination curves back to the source curves).
 * `layer_warp` and `pair_warp` (both 0 to 1, default 1): how far each pair of curves carries the picture from its source curve towards
   its destination curve; the two multiply, so 0 on either gives the input back. NodeBased has one layer and applies the amount to every
   pair; per-pair amounts would live in the pair's payload entry, which the schema keeps to name, source and destination.
@@ -42,21 +44,21 @@ GRIDWARP = {"grid_output": "source warped", "warp": 1.0, "background": "on src",
             **{f"destination_grid_transform_{key}": value for key, value in _GRID_TRANSFORM.items()},
             "render_res": 10}
 SPLINEWARP = {"premultiply": 0, "outputMask": "mask_splinwarp.a", "crop_to_format": 1, "boundary_bbox": 1,
-              "layer_warp": 1.0, "pair_warp": 1.0,
+              "layer_warp": 1.0, "pair_warp": 1.0, "warp_direction": "A",
               "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0,
               "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "center_x": 0.0, "center_y": 0.0}
 # A saved SplineWarp had no mask layer and no crop, so it keeps both off.
 SPLINEWARP_SAVED = {**SPLINEWARP, "outputMask": "none", "crop_to_format": 0}
 LIMITS = {"background_mix": (0.0, 1.0), "warp": (0.0, 10.0), "use_source_transform": (0, 1),
           "premultiply": (0, 1), "crop_to_format": (0, 1), "boundary_bbox": (0, 1),
-          "layer_warp": (0.0, 1.0), "pair_warp": (0.0, 1.0), "render_res": (1.0, 100.0),
+          "layer_warp": (0.0, 1.0), "pair_warp": (0.0, 1.0), "root_warp": (0.0, 1.0), "render_res": (1.0, 100.0),
           **{f"{grid}_grid_transform_{name}": bounds
              for grid in ("source", "destination")
              for name, bounds in (("translate_x", (-1000000.0, 1000000.0)), ("translate_y", (-1000000.0, 1000000.0)),
                                   ("rotate", (-360.0, 360.0)), ("scale", (-1000.0, 1000.0)),
                                   ("skew_x", (-1000.0, 1000.0)), ("skew_y", (-1000.0, 1000.0)),
                                   ("center_x", (-1000000.0, 1000000.0)), ("center_y", (-1000000.0, 1000000.0)))}}
-CHOICES = {"grid_output": GRID_OUTPUTS, "background": BACKGROUNDS, "skew_order": ("XY", "YX"),
+CHOICES = {"warp_direction": ("A", "B"), "grid_output": GRID_OUTPUTS, "background": BACKGROUNDS, "skew_order": ("XY", "YX"),
            "source_grid_transform_skew_order": ("XY", "YX"),
            "destination_grid_transform_skew_order": ("XY", "YX")}
 OPEN_CHOICES = ("outputMask",)
@@ -70,6 +72,15 @@ def upgrade_params(kind):
     return dict({"GridWarp": GRIDWARP, "SplineWarp": SPLINEWARP_SAVED}.get(kind, {}))
 
 
+def upgrade_root_warp(params):
+    """A SplineWarp saved before lane 11 step B4 used `root_warp` for the direction (A: source curves to destination curves, B: back).
+    Nuke's root warp is the global warp multiplier, so the direction moves to `warp_direction` and the multiplier starts at 1, which
+    renders the saved node exactly as before."""
+    if isinstance(params, dict) and isinstance(params.get("root_warp"), str):
+        params.setdefault("warp_direction", params["root_warp"] if params["root_warp"] in ("A", "B") else "A")
+        params["root_warp"] = 1.0
+
+
 def premultiplied(pixels):
     """The colour multiplied by the alpha (the alpha as it is)."""
     out = np.array(pixels, np.float32, copy=True)
@@ -78,8 +89,8 @@ def premultiplied(pixels):
 
 
 def amount(p):
-    """How far SplineWarp carries the picture along each pair, 0 to 1."""
-    return float(np.clip(float(p.get("layer_warp", 1.0)) * float(p.get("pair_warp", 1.0)), 0.0, 1.0))
+    """How far SplineWarp carries the picture along each pair, 0 to 1: root warp (Nuke's global multiplier) times layer and pair warp."""
+    return float(np.clip(float(p.get("root_warp", 1.0)) * float(p.get("layer_warp", 1.0)) * float(p.get("pair_warp", 1.0)), 0.0, 1.0))
 
 
 def scaled_destination(source, destination, factor):

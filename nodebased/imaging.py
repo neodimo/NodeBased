@@ -5337,7 +5337,7 @@ class Evaluator:
             src = np.concatenate(src_parts) if src_parts else np.zeros((0, 2), np.float64)
             dst = np.concatenate(dst_parts) if dst_parts else np.zeros((0, 2), np.float64)
             sigma = max(1.0, min(source.display.width, source.display.height) / 8.0)
-        if p.get("root_warp", "A") == "B":
+        if p.get("warp_direction", "A") == "B":
             src, dst = dst, src
         if kind == "SplineWarp":
             src = warps_knobs.transform_points(src, p)

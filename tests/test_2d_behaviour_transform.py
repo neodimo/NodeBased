@@ -889,7 +889,7 @@ class TileTests(unittest.TestCase):
         return np.asarray(windowed("Tile", pixels, **{"filter": "bilinear", **knobs_}).pixels, np.float64)
 
     def test_the_tab_is_nukes(self):
-        self.assertEqual(labels("Tile"), ["Rows", "Mirror alternate rows", "Columns", "Mirror alternate columns", "Filter"])
+        self.assertEqual(labels("Tile"), ["Rows", "Mirror", "Columns", "Mirror", "Filter"])   # the guide labels both check boxes "mirror"
         self.assertEqual((SPECS["Tile"]["params"]["rows"], SPECS["Tile"]["params"]["columns"], SPECS["Tile"]["params"]["filter"]),
                          (1, 1, "cubic"))
 

@@ -916,8 +916,8 @@ KNOB_LAYOUT = {
                        "Off is Nuke's: the stored colour is converted, and (un)premult by does the dividing when you want it."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     # Nuke's Tile tab: rows, its mirror, columns, its mirror, filter (Nuke labels both mirrors "mirror"; these name the row or column).
-    "Tile": _groups(KnobGroup("int", ("rows",), label="Rows"), KnobGroup("bool", ("mirror_y",), label="Mirror alternate rows"),
-                    KnobGroup("int", ("columns",), label="Columns"), KnobGroup("bool", ("mirror_x",), label="Mirror alternate columns"),
+    "Tile": _groups(KnobGroup("int", ("rows",), label="Rows"), KnobGroup("bool", ("mirror_y",), label="Mirror", help="Mirror alternate rows."),
+                    KnobGroup("int", ("columns",), label="Columns"), KnobGroup("bool", ("mirror_x",), label="Mirror", help="Mirror alternate columns."),
                     KnobGroup("enum", ("filter",), label="Filter"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Histogram": _groups(KnobGroup("float", ("black",)), KnobGroup("float", ("white",)), KnobGroup("float", ("gamma",)), KnobGroup("float", ("black_out",)), KnobGroup("float", ("white_out",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "HistEQ": _groups(KnobGroup("int", ("histeqbins",), label="Histogram entries", help="How many bins the histogram holds; more bins follow the picture more closely."), KnobGroup("enum", ("hist_eq_mode",), label="Equalise"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
@@ -1161,9 +1161,9 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("lens_preset",), label="Lens preset", section="Lens"),
         *_lens_knobs(section="Lens"), KnobGroup("enum", ("lens_backend",), label="Backend")),
     "STMap": _groups(
+        KnobGroup("string", ("channels",), label="Channels"),
         KnobGroup("string", ("uv_layer",), label="UV layer"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
-        KnobGroup("string", ("channels",), label="Channels"),
         KnobGroup("enum", ("blur_channel",), label="Blur channel", help="A channel of the map; its value times the blur scale is the box radius in pixels."),
         KnobGroup("float", ("blur_scale",), label="Blur scale"),
         KnobGroup("string", ("maskChannelInput",), label="Mask channel"), KnobGroup("bool", ("invert_mask",), label="Invert mask"),
@@ -1171,6 +1171,7 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("filter",)), KnobGroup("enum", ("uv_outside",), label="Outside"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "IDistort": _groups(
+        KnobGroup("enum", ("channels",)),
         KnobGroup("string", ("uv_layer",), label="UV layer"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
         KnobGroup("xy", ("uv_offset_x", "uv_offset_y"), label="UV offset"),
@@ -1180,12 +1181,15 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("premultiplied",), label="Premultiplied"), KnobGroup("enum", ("filter",)),
         KnobGroup("bool", ("legacy_idistort",), label="Legacy direction",
                   help="Read the vectors the older way: a positive U moves the picture right and the offset is added. Set on graphs saved before IDistort followed the guide, where U and V say where a pixel comes from and the offset is subtracted."),
-        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "SplineWarp": _groups(
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
         KnobGroup("int", ("curve_resolution",), label="Curve resolution"),
         KnobGroup("enum", ("bbox",), label="Bounding box"),
-        KnobGroup("enum", ("root_warp",), label="Root warp"),
+        KnobGroup("float_slider", ("root_warp",), label="Root warp", soft_range=(0, 1),
+                  help="The global warp multiplier: 0 gives the input back, 1 the full warp. It multiplies layer warp and pair warp."),
+        KnobGroup("enum", ("warp_direction",), label="Warp direction",
+                  help="A carries the picture from the source curves to the destination curves; B the other way."),
         KnobGroup("float_slider", ("layer_warp",), label="Layer warp", soft_range=(0, 1)),
         KnobGroup("float_slider", ("pair_warp",), label="Pair warp", soft_range=(0, 1)),
         KnobGroup("bool", ("premultiply",), label="Premultiply input"),
@@ -1560,8 +1564,8 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("fade_frames",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "VectorCornerPin": _groups(KnobGroup("int", ("reference_frame",)),
         *[KnobGroup("xy", (f"user{i}_x", f"user{i}_y"), label=f"User{i} xy", help="Where the pin sits at the reference frame; the vectors move it from there." if i == 1 else None) for i in range(1, 5)],
-        *[KnobGroup("xy", (f"to{i}_x", f"to{i}_y"), label=f"To{i} xy", help="The baked pin at the current frame; used while Use baked pins is on." if i == 1 else None) for i in range(1, 5)],
-        KnobGroup("bool", ("use_baked",), label="Use baked pins", help="Take the To pins instead of the pins the vectors give."),
+        *[KnobGroup("xy", (f"to{i}_x", f"to{i}_y"), label=f"To{i} xy", help="The baked pin at the current frame; used while Bake corners is on." if i == 1 else None) for i in range(1, 5)],
+        KnobGroup("bool", ("use_baked",), label="Bake corners", help="Use the baked To pins instead of the pins the vectors give (what Nuke's Bake Corners button leaves behind)."),
         *[KnobGroup("xy", (f"from{i}_x", f"from{i}_y"), label=f"From{i} xy", help="The corner of the source the pin takes: 1 bottom left, 2 bottom right, 3 top right, 4 top left." if i == 1 else None) for i in range(1, 5)],
         KnobGroup("enum", ("output_mode",), label="Output", help="The warped picture, or the st-map of the warp from the reference frame to this one (or the inverse)."),
         KnobGroup("bool", ("legacy_vectorcornerpin",), label="Legacy corners", help="Use the four corner points below as both the source quad and the pins' start, and require a SmartVector, as graphs saved before the VectorCornerPin page was followed do."),
@@ -2864,6 +2868,9 @@ NUKE_LAYOUT_LANE11 = {
     "CopyMetaData": ("merge_mode",),
     "Read": ("path",),
     "Write": ("channels",),
+    # Transform group (lane 11 from step B4): the guide's order, invert directly under the mask channel.
+    "IDistort": ("channels", "uv_layer", "u_channel", "v_channel", "uv_offset_x", "uv_scale_x", "blur", "blur_scale",
+                 "maskChannel", "invert_mask", "premultiplied", "filter"),
 }
 _CONTEXT_LABELS = {**{f"key{i}": f"Key {i}" for i in range(1, 5)}, **{f"value{i}": f"Value {i}" for i in range(1, 5)}}
 NUKE_LABELS.update({

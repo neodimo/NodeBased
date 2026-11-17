@@ -373,7 +373,9 @@ def alignment(nuke_node, pair, kind, name=""):
                 if len(nb) == 1 and _norm_label(g.label) not in (_norm_label(k["label"]), _norm_label(k["name"].split("#")[0])) \
                         and _norm_label(k["label"]) not in ("na", ""):
                     row["marks"].append("label")
-                ok_widgets = _WIDGETS.get(k["type"])
+                # The audit's own corrections of the guide's type column (a check box the guide types as text) apply here too.
+                from audit_nuke_fidelity import _BOOL_KNOBS
+                ok_widgets = _WIDGETS.get("bool" if (kind, k["name"]) in _BOOL_KNOBS else k["type"])
                 base = (row["nb_widget"] or "").split(" ")[0]
                 if ok_widgets and base not in ok_widgets:
                     row["marks"].append("widget")
@@ -708,7 +710,8 @@ def index_page(entries, built, seconds, items=None):
 WORKLIST_MD = ROOT / "docs" / "parity" / "review" / "WORKLIST.md"
 WORKLIST_JSON = ROOT / "docs" / "parity" / "review" / "worklist.json"
 # Who owns a node's panel and behaviour, by its group (lanes of November 2026). Widget behaviour items go to lane 10.
-LANE_OF_GROUP = {"Color": 2, "Keyer": 2, "Channel": 2, "Time": 2, "Filter": 9, "Transform": 9, "Draw": 9,
+# The Transform group moved from lane 9 to lane 11 on 11/17 (lane 11 step B4), lane 9 keeping Filter and Draw.
+LANE_OF_GROUP = {"Color": 2, "Keyer": 2, "Channel": 2, "Time": 2, "Filter": 9, "Transform": 11, "Draw": 9,
                  "Image": 11, "Merge": 11, "Metadata": 11, "Other": 11}
 WIDGET_LANE = 10
 _MARK_KIND = {"default": "default", "label": "label", "widget": "widget type", "order": "order", "not laid out": "not laid out"}
@@ -822,8 +825,8 @@ def lane_counts(items):
 
 def worklist_markdown(items):
     counts = lane_counts(items)
-    owner = {2: "Color, Keyer, Channel, Time", 9: "Filter, Transform, Draw", 10: "shared widget behaviour",
-             11: "Image, Merge, Metadata, Other"}
+    owner = {2: "Color, Keyer, Channel, Time", 9: "Filter, Draw", 10: "shared widget behaviour",
+             11: "Image, Merge, Metadata, Other, Transform"}
     kinds = {}
     for i in items:
         if i["status"] == "open":
