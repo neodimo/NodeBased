@@ -14,3 +14,6 @@ uv.lock
 # Generated test footage. Reproduce with tools/make_noise_sequence.py instead of
 # committing it: even at half float this is gigabytes of regenerable noise.
 noise_test_4k.*.exr
+
+# The Nuke parity review book is build output (tools/parity_review_book.py)
+docs/parity/review/out/
