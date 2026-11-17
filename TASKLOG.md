@@ -1,3 +1,17 @@
+## 2026-11-17 — Lane 10 step T3 (partial): Viewer on-screen controls measured against Nuke
+
+- **What was done:** Copy's four from/to menus and ChannelMerge's A, B and output menus use the single-channel widget
+  (layer + channel) and store the same enum words, so documents load unchanged (tests in tests/test_channel_pickers.py).
+  New reference `docs/parity/nuke_viewer_controls.json` (Nuke 17.0 User Guide "Transforming in 2D", Reference Guide node
+  pages), probes `tools/nuke_viewer_controls.py`, tests `tests/test_viewer_controls.py`, and the report table "On-screen
+  controls that work like Nuke" in docs/PARITY_2D_FIDELITY.md (bundled copy identical; review worklist regenerated).
+  Fixed: Transform Ctrl-drag on the centre moves the pivot (Ctrl+Shift still works); Shift-drag keeps translate on one axis.
+  Measured: 3 of 16 documented controls before, 5 after. Fidelity score unchanged (table is beside it).
+- **Not done:** jack scale-x/y points, rotate snapping, skew bar, invert handle; Crop and Text on-screen boxes; probes for
+  the Tracker anchor and GridWarp grids (listed as "not probed"). CornerPin, Reformat, Radial, Ramp, Rectangle, Position and
+  Flare controls are undocumented on the pages read.
+- **Next owner:** Gonzo (finish step), file `tools/nuke_viewer_controls.py` KNOWN_GAPS in `tests/test_viewer_controls.py`.
+
 ## Lane 2 step W1 (Tue 11/17): colour, keying, channel and time panels match Nuke's, from the review book's worklist
 
 - **What was done (evidence):** worklist rows for lane 2 went 243 open -> 126 open (`tools/parity_review_book.py --worklist` from lane 11's branch, counted the same way; the 126 are 95 missing knobs, 16 labels, 12 widget types, 2 order, 1 default; 60 of the missing knobs are Ultimatte's and 27 Primatte's, commercial keyers NodeBased has no node for (PARITY_2D.md Keyer #6)). 42 lane-2 nodes had an open row at the start, 18 have one now (16 without the two keyers). Skipped on purpose as the brief says: the mask strip and the channel-picker widget rows (lane 10).

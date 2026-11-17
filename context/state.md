@@ -1,3 +1,10 @@
+## Lane 10 step T3 (11/17 3:40 AM): Viewer on-screen controls, partial
+
+Copy and ChannelMerge channel menus use the single-channel widget. On-screen controls are measured against Nuke in
+`docs/parity/nuke_viewer_controls.json` / `tools/nuke_viewer_controls.py`: 5 of 16 documented controls pass (Transform
+translate, Shift axis lock, Ctrl pivot, uniform scale, rotate). Open: jack scale-x/y, rotate snap, skew, invert handle;
+Crop and Text boxes; Tracker and GridWarp probes.
+
 ## Lane 2 step W1 (11/17): panels in the guide's wording, order and defaults
 
 Done on `openclaw/nb-2d-parity`: see TASKLOG.md. Worklist 243 -> 128 open rows (60 + 27 of the rest are Ultimatte's and Primatte's knobs). Defaults that now follow the guide, each with a legacy value on older documents: `channels` all (Invert, Multiply, Add, Gamma, Clamp, Posterize), IBKGizmo C-blue and level 0, Vectorfield trilinear, ChromaKeyer's despill bias colour, Kronos and OFlow Vector Detail density. No schema bump.
