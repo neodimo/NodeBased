@@ -31,7 +31,8 @@ class KnobGroup:
     section: str | None = None     # a heading shown above the first knob of a run that shares it
     help: str | None = None        # one plain sentence shown under the knob and as its tooltip
     channels: str | None = None    # a "split" knob: its split set, "rgba" (r g b a) or "wh" (w h), as in core.SPLIT_CHANNELS
-    captions: tuple[str, ...] | None = None    # an "xy" row's field captions when they are not x, y, z (a Keyer's A B C D)
+    captions: tuple[str, ...] | None = None    # an "xy" row's field captions when they are not x, y, z (a Keyer's A B C D); a "row"
+                                               # knob's per-member labels (the mask row's inject, invert, fringe), "" for none
     members: tuple[str, ...] | None = None     # a "row" group: the widget kind of each param (int, float, enum, bool, string), side by side on one row;
                                                # a "split" group: "bool" for each check box param that sits beside the split knob (Clamp's clamp_min)
     stored: str | None = None      # a control whose widget differs from how the param is stored (see storedknobs.py): the document keeps its text
@@ -54,8 +55,8 @@ class KnobGroup:
             from .storedknobs import STORED_KINDS
             if STORED_KINDS.get(self.stored) != self.kind or len(self.params) != 1:
                 raise ValueError(f"a stored-as-text knob names one param and the widget kind it is stored for: {STORED_KINDS}")
-        if self.captions is not None and (self.kind not in ("xy", "xyz") or len(self.captions) != len(self.params)):
-            raise ValueError("captions go with an xy row and name each of its fields")
+        if self.captions is not None and (self.kind not in ("xy", "xyz", "row") or len(self.captions) != len(self.params)):
+            raise ValueError("captions go with an xy row or a row knob and name each of its fields")
         if self.label is None:
             object.__setattr__(self, "label", _default_label(self.params))
 
@@ -2868,3 +2869,85 @@ def _merge_rows():
 
 
 _merge_rows()
+
+
+# The mask strip (lane 10, step T2, 11/17): one shared builder for every node that has it. Nuke draws the strip as one row, the
+# mask channel picker followed by its inject, invert and fringe check boxes each carrying its own name, then (un)premult by
+# with its invert box on a second row, and mix on its own (Calling Channels, Nuke 17.0 User Guide: "select the channel you want
+# to use from the mask dropdown menu ... check inject ... check the invert box ... adjusting the mix slider"; the knob order is
+# docs/parity/nuke_nodes.json's mask, inject, invert, fringe, (un)premult by, invert, mix). The rows go where the node's layout
+# already put the strip's first knob, so each lane's order (lane 11's Keymix: channels, mask, invert, mix, bbox) is kept.
+# Every param stays one param, so documents load and render as before.
+MASK_ROW = ("maskChannelInput", "inject", "invert_mask", "fringe")
+PREMULT_ROW = ("unpremult", "invert_unpremult")
+_ROW_MEMBERS = {"maskChannelInput": "string", "inject": "bool", "invert_mask": "bool", "fringe": "bool",
+                "unpremult": "string", "invert_unpremult": "bool"}
+
+
+def mask_strip_rows(kind, groups):
+    """`groups` with the mask strip's single knobs gathered into Nuke's mask row and (un)premult row. A row takes the strip knobs
+    that sit together from its first knob on (a node that put its own knob between them, CrossTalk's xt fringe, keeps it there);
+    a strip knob left on its own reads with Nuke's word instead of the chrome's longer one."""
+    groups = list(groups)
+    own = NUKE_LABELS.get(kind, {})
+    for names in (MASK_ROW, PREMULT_ROW):
+        at = next((i for i, g in enumerate(groups) if g.params == (names[0],) and g.kind != "legacy"), None)
+        if at is None:
+            continue
+        taken = [names[0]]
+        j = at + 1
+        while j < len(groups) and len(groups[j].params) == 1 and groups[j].params[0] in names[1:] \
+                and groups[j].params[0] not in taken and groups[j].kind == _ROW_MEMBERS[groups[j].params[0]]:
+            taken.append(groups[j].params[0])
+            j += 1
+        if len(taken) < 2:
+            continue
+        present = [name for name in names if name in taken]
+        first = groups[at]
+        label = own.get(names[0]) or (first.label if first.label not in (_CHROME_LABELS[names[0]], None) else _STRIP_LABELS[names[0]])
+        worded = {g.params[0]: g.label for g in groups[at:j]}
+        captions = ("", *(worded[name] for name in present[1:]))
+        row = KnobGroup("row", tuple(present), label=label, members=tuple(_ROW_MEMBERS[name] for name in present),
+                        captions=captions, section=first.section, help=first.help)
+        groups[at:j] = [row]
+    return groups
+
+
+# The labels the shared chrome first gave the strip (_chrome_layout); the strip reads with Nuke's words instead.
+_CHROME_LABELS = {"maskChannelInput": "Mask channel", "inject": "Inject mask", "invert_mask": "Invert mask", "fringe": "Mask fringe",
+                  "unpremult": "Unpremult by", "invert_unpremult": "Invert unpremult"}
+
+
+# Nodes whose reference-guide page words a strip knob differently from the common mask / inject / invert / fringe
+# (docs/parity/nuke_nodes.json: Keymix's and STMap's knob is `maskChannel`, "mask channel"; HistEQ's invert is "invert mask").
+GUIDE_STRIP_WORDS = {"Keymix": {"maskChannelInput": "Mask channel"}, "STMap": {"maskChannelInput": "Mask channel"},
+                     "HistEQ": {"invert_mask": "Invert mask"}}
+
+
+def _mask_strip_words():
+    """Every node's strip knobs read with Nuke's words in the layout the audit and the lanes' tests read; the knobs stay one
+    entry each there, and the panel draws them on Nuke's rows through panel_layout."""
+    for kind, groups in KNOB_LAYOUT.items():
+        own = NUKE_LABELS.get(kind, {})
+        guide = GUIDE_STRIP_WORDS.get(kind, {})
+        groups = [dataclasses.replace(g, label=guide.get(g.params[0], _STRIP_LABELS[g.params[0]]))
+                  if len(g.params) == 1 and g.params[0] in _ROW_MEMBERS and g.label == _CHROME_LABELS[g.params[0]]
+                  and g.params[0] not in own else g for g in groups]
+        # A run of strip knobs that sit together is put in Nuke's order (mask, inject, invert, fringe; (un)premult by, invert).
+        for names in (MASK_ROW, PREMULT_ROW):
+            at = next((i for i, g in enumerate(groups) if g.params == (names[0],)), None)
+            if at is None:
+                continue
+            j = at + 1
+            while j < len(groups) and len(groups[j].params) == 1 and groups[j].params[0] in names[1:]:
+                j += 1
+            groups[at:j] = sorted(groups[at:j], key=lambda g: names.index(g.params[0]))
+        KNOB_LAYOUT[kind] = groups
+
+
+_mask_strip_words()
+
+
+def panel_layout(node_type):
+    """The groups the Properties panel draws: knob_layout with the mask strip gathered onto Nuke's rows (one shared builder)."""
+    return mask_strip_rows(node_type, knob_layout(node_type))

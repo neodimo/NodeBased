@@ -134,7 +134,7 @@ from . import tracker as tracker_model
 from . import trackerknobs
 from . import planar as planar_model
 from .agentpanel import AgentPanel
-from .knobs import knob_layout, slider_range
+from .knobs import knob_layout, panel_layout as strip_rows_layout, slider_range
 from . import materialpreview
 from .curveeditor import CurveEditorDialog
 from .viewport3d import Viewport3D
@@ -14701,7 +14701,7 @@ class Window(QMainWindow):
                     boxes.append(box)
                 return boxes
 
-            for group in knob_layout(node["type"]):
+            for group in strip_rows_layout(node["type"]):
                 if node["type"] == "Read" and group.params and group.params[0] in readknobs.FORMAT_DEFAULTS:
                     if readknobs.options_tab(node["params"].get("path", "")) != {
                             "offset_negative_display_window": "EXR Options", "noprefix": "EXR Options",
@@ -14823,7 +14823,7 @@ class Window(QMainWindow):
                 if group.kind == "row":
                     # Knobs the guide gives one label share a row (Nuke: Transform's shutter offset and custom offset), each in its own widget.
                     units = []
-                    for param, member in zip(group.params, group.members):
+                    for param, member, caption in zip(group.params, group.members, group.captions or ("",) * len(group.params)):
                         member_value = node["params"][param]
                         if member == "int":
                             field = FittedSpinBox()
@@ -14838,7 +14838,7 @@ class Window(QMainWindow):
                         elif member == "float":
                             unit = self.animatable_row(key, param, numeric_field(param))
                         elif member == "bool":
-                            unit = QCheckBox()
+                            unit = QCheckBox(caption)       # the mask row's inject, invert and fringe boxes carry their names, as in Nuke
                             unit.setObjectName(f"{param}-switch")
                             unit.setChecked(bool(member_value))
                             unit.toggled.connect(lambda checked, k=key, p=param: self.defer_command(

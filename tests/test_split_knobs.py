@@ -724,7 +724,7 @@ LAYOUTS = {
         'In', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',
         'Red from (second)', 'Green from (second)', 'Blue from (second)', 'Alpha from (second)'
     ],
-    'HistEQ': ['Histogram entries', 'Equalise', 'Mask channel', 'Invert mask', 'Inject mask', 'Mask fringe', 'Mix'],      # the mask strip joined it in lane 2 step R
+    'HistEQ': ['Histogram entries', 'Equalise', 'Mask', 'Inject', 'Invert mask', 'Fringe', 'Mix'],      # the mask strip joined it in lane 2 step R; Nuke's words and order (lane 10 step T2)
     'MinColor': ['Channels', 'Modify', 'Target', 'Direction', 'Delta', 'Frame start', 'Frame end', 'Find', 'Box origin', 'Box size', 'Result R', 'Result G', 'Result B', 'Result A'],
     'ScreenKeyer': [
         'View', 'Unpremultiply result', 'Screen colour', 'Screen gain', 'Screen balance', 'Alpha bias colour', 'Despill bias colour', 'Use alpha bias for despill', 'Screen pre-blur', 'Clip black', 'Clip white', 'Clip rollback', 'Screen shrink/grow', 'Screen softness', 'Screen despot black', 'Screen despot white', 'Screen replace', 'Screen replace colour', 'Midtones at', 'Shadow gain', 'Midtone gain', 'Highlight gain', 'Source alpha', 'Inside replace', 'Inside replace colour', 'Crop x method', 'Crop y method', 'Crop edge colour', 'Crop left', 'Crop right', 'Crop bottom', 'Crop top', 'Inside component', 'Outside component', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Edge grade gain', 'Edge grade gamma', 'Edge grade saturation', 'Edge width', 'Older intermediate view', 'Mix'
@@ -795,7 +795,7 @@ class LayoutTests(unittest.TestCase):
     def test_the_panel_lists_the_labels_in_that_order(self):
         from nodebased.app import Window
         from PySide6.QtCore import QPoint
-        from PySide6.QtWidgets import QLabel
+        from PySide6.QtWidgets import QCheckBox, QLabel
         window = Window()
         try:
             window.show()
@@ -804,8 +804,11 @@ class LayoutTests(unittest.TestCase):
                 panel = window.build_node_panel(f"n_{kind}")
                 window.set_properties_widget(panel)
                 APP.processEvents()
-                shown = [text for _y, text in sorted((label.mapTo(panel, QPoint(0, 0)).y(), label.text())
-                                                     for label in panel.findChildren(QLabel) if label.isVisibleTo(panel) and label.text())]
+                # Labels down the panel, and the names on the mask row's check boxes (lane 10 step T2) along their row.
+                widgets = [w for w in (*panel.findChildren(QLabel), *panel.findChildren(QCheckBox))
+                           if w.isVisibleTo(panel) and w.text() and w.window() is not None]
+                shown = [text for _row, _x, text in sorted(
+                    (w.mapTo(panel, QPoint(0, w.height() // 2)).y() // 12, w.mapTo(panel, QPoint(0, 0)).x(), w.text()) for w in widgets)]
                 remaining = iter(shown)
                 with self.subTest(kind=kind):
                     for expected in LAYOUTS[kind]:
