@@ -205,3 +205,41 @@ class NukeScriptExportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Lane11PanelTests(unittest.TestCase):
+    """Step B2 part 2: the Image, Merge, Metadata and Other panels the worklist found out of Nuke's order or wording."""
+
+    CLEAN = ("Merge", "Dissolve", "Blend", "Premult", "Unpremult", "KeyMix", "ZMerge", "ModifyMetaData", "CopyMetaData",
+             "Precomp", "CurveTool", "CopyRectangle")
+
+    def test_no_label_order_or_widget_marks_left_on_these_nodes(self):
+        import json
+        pairs = json.loads(book.MAP_JSON.read_text(encoding="utf-8"))["pairs"]
+        nodes = json.loads(book.NUKE_JSON.read_text(encoding="utf-8"))["nodes"]
+        for name in self.CLEAN:
+            with self.subTest(node=name):
+                rows = book.alignment(nodes[name], pairs[name], pairs[name]["nodebased"], name)
+                marks = [(r["name"], m) for r in rows for m in r["marks"] if m in ("label", "order", "widget")]
+                self.assertEqual(marks, [])
+
+    def test_merge_mask_strip_reads_as_nukes(self):
+        from nodebased.knobs import knob_layout
+        shown = [(g.params[0], g.label) for g in knob_layout("Merge")]
+        self.assertEqual(shown[-5:], [("maskChannelInput", "Mask"), ("inject", "Inject"), ("invert_mask", "Invert"),
+                                      ("fringe", "Fringe"), ("mix", "Mix")])
+
+    def test_read_and_write_context_knobs_sit_under_a_context_heading(self):
+        from nodebased.knobs import knob_layout
+        for kind in ("Read", "Write"):
+            groups = {g.params[0]: g for g in knob_layout(kind)}
+            self.assertEqual(groups["key1"].section, "Context", kind)
+            self.assertEqual([groups[f"key{i}"].label for i in range(1, 5)], [f"Key {i}" for i in range(1, 5)])
+            self.assertEqual(groups["value4"].label, "Value 4")
+
+    def test_burnin_hiero_defaults_are_accepted_with_their_reason(self):
+        items = book.worklist(["BurnIn"], with_cases=False)
+        acc = {i["knob"]: i["reason"] for i in items if i["status"] == "accepted"}
+        self.assertIn("burnIn_topLeft", acc)
+        self.assertIn("Hiero", acc["burnIn_topLeft"])
+        self.assertFalse([i for i in items if i["status"] == "open" and i["kind"] == "default"])

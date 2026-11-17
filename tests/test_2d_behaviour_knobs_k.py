@@ -408,13 +408,13 @@ class TimeAndMetadataLayoutTests(unittest.TestCase):
     EXPECTED = {
         "AddTimeCode": ["Startcode", "FPS", "Get FPS from metadata", "Start Frame", "Use start frame", "Drop frame"],
         "BurnIn": ["Color", "Opacity", "X padding", "Y padding", "Font", "Text scale", "Top Left", "Top middle", "Top Right", "Bottom Left",
-                   "Bottom middle", "Bottom Right", "Background bar", "Bar colour", "Bar opacity", "Bar X border", "Bar Y border"],
-        "CurveTool": ["Curve type", "AutoCrop color", "AutoCrop tolerance", "Frames for base average", "Channels", "Box X", "Crop X", "Average R", "Average G",
-                      "Average B", "Average A", "Max X", "Maximum luminance pixel value", "Min X", "Minimum luminance pixel value"],
+                   "Bottom middle", "Bottom Right", "Enable", "Bar colour", "Opacity", "X-border", "Y-border"],  # the Background tab's wording (lane 11 step B2)
+        "CurveTool": ["Curve type", "AutoCrop color", "Intensity range", "Frames for base average", "Channels", "Box X", "Crop X", "Average R", "Average G",
+                      "Average B", "Average A", "Max X", "Maximum Luminence Pixel Value", "Min X", "Minimum Luminence Pixel Value"],  # the guide's spelling
         "AppendClip": ["Fade in", "Fade out", "Dissolve", "First Frame", "Take metadata from first clip"],
         "TimeBlur": ["Divisions", "Shutter", "Shutter offset"],     # the offset menu and its custom value share one row (panel sweep S4)
         "ContactSheet": ["Resolution", "Rows/columns", "Gap", "Center", "Row Order", "Column Order", "Split Inputs", "Frame range"],
-        "Precomp": ["File", "Reload count", "Read file for output", "Missing frames", "Reload file count", "Output node", "Use output node"],
+        "Precomp": ["File", "Reload", "Read file for output", "Missing frames", "Reload", "Output node", "Enable"],
     }
 
     def test_each_node_opens_with_the_guides_knobs_in_the_guides_order(self):

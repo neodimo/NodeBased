@@ -256,7 +256,8 @@
     {"nodebased": [], "nuke": ["mxf_codec_profile_knob"], "kind": "unsupported", "reason": "NodeBased's Write writes EXR, PNG, TIFF, JPEG and DPX (core.WRITE_FILE_TYPES); MOV and MXF files have no writer, so the codec and colour metadata of their tabs has nothing to act on (tests/test_2d_behaviour_write.py)"},
     {"nodebased": [], "nuke": ["mxf_tape_id_knob"], "kind": "unsupported", "reason": "NodeBased's Write writes EXR, PNG, TIFF, JPEG and DPX (core.WRITE_FILE_TYPES); MOV and MXF files have no writer, so the codec and colour metadata of their tabs has nothing to act on (tests/test_2d_behaviour_write.py)"}
    ],
-   "value_map": {"file": {"": "none"}, "proxy": {"": "none"}, "frame": {"": "none"}, "key1": {"": "none"}, "key2": {"": "none"}, "key3": {"": "none"}, "key4": {"": "none"}, "value1": {"": "none"}, "value2": {"": "none"}, "value3": {"": "none"}, "value4": {"": "none"}, "file_type": {"Auto": "none"}}
+   "value_map": {"file": {"": "none"}, "proxy": {"": "none"}, "frame": {"": "none"}, "key1": {"": "none"}, "key2": {"": "none"}, "key3": {"": "none"}, "key4": {"": "none"}, "value1": {"": "none"}, "value2": {"": "none"}, "value3": {"": "none"}, "value4": {"": "none"}, "file_type": {"Auto": "none"}, "compression": {"zips": "Zip (1 scanline)"}, "datatype#2": {"half": "16 bit half", "float": "32 bit float"}, "first_part": {"": "none"}},
+   "default_notes": {"create_directories": "Kept on on purpose (2D behaviour step M): a render into a new folder makes the folder rather than failing; the guide lists off."}
   },
   "Viewer": {
    "nodebased": "Viewer",
@@ -3490,7 +3491,8 @@
     {"nodebased": ["endframe"], "nuke": ["endframe"], "kind": "same"},
     {"nodebased": ["labels"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["fit"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
-   ]
+   ],
+   "default_notes": {"startframe": "Kept at 1 on purpose (2D behaviour step P): they act only with Split inputs on, where a frame before the first would read nothing; the guide lists -1.", "endframe": "Kept at 1 on purpose (2D behaviour step P): they act only with Split inputs on, where a frame before the first would read nothing; the guide lists -1."}
   },
   "TimeDissolve": {
    "nodebased": "TimeDissolve",
@@ -4280,7 +4282,8 @@
     {"nodebased": ["bar_y_border"], "nuke": ["burnIn_backgroundYBorder"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'y-border', scripting name `burnIn_backgroundYBorder`"},
     {"nodebased": ["bar_fit"], "kind": "extra", "reason": "NodeBased-only: draws the background as a box around each text slot, as Nuke does, instead of a full-width bar"}
    ],
-   "skip_default": ["burnIn_xpadding", "burnIn_yPadding", "burnIn_textScale", "burnIn_topMiddle", "burnIn_bottomMiddle", "burnIn_backgroundXBorder", "burnIn_backgroundYBorder", "burnIn_backgroundColor"]
+   "skip_default": ["burnIn_xpadding", "burnIn_yPadding", "burnIn_textScale", "burnIn_topMiddle", "burnIn_bottomMiddle", "burnIn_backgroundXBorder", "burnIn_backgroundYBorder", "burnIn_backgroundColor"],
+   "default_notes": {"burnIn_topLeft": "Nuke's BurnIn defaults read Hiero's own metadata (hiero/clip, hiero/shot, hiero/track, hiero/sequence/timecode), which a comp outside Hiero does not carry; NodeBased starts with the file name, the frame and the timecode a Read does carry, and the font the bundled renderer has.", "burnIn_topRight": "Nuke's BurnIn defaults read Hiero's own metadata (hiero/clip, hiero/shot, hiero/track, hiero/sequence/timecode), which a comp outside Hiero does not carry; NodeBased starts with the file name, the frame and the timecode a Read does carry, and the font the bundled renderer has.", "burnIn_bottomLeft": "Nuke's BurnIn defaults read Hiero's own metadata (hiero/clip, hiero/shot, hiero/track, hiero/sequence/timecode), which a comp outside Hiero does not carry; NodeBased starts with the file name, the frame and the timecode a Read does carry, and the font the bundled renderer has.", "burnIn_bottomRight": "Nuke's BurnIn defaults read Hiero's own metadata (hiero/clip, hiero/shot, hiero/track, hiero/sequence/timecode), which a comp outside Hiero does not carry; NodeBased starts with the file name, the frame and the timecode a Read does carry, and the font the bundled renderer has.", "fontfamily": "Nuke's default font, Utopia, is a font Nuke ships; NodeBased has no copy of it and starts with the renderer's own default font."}
   },
   "LiveGroup": {
    "nodebased": null,

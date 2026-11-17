@@ -2770,8 +2770,41 @@ NUKE_LABELS.setdefault("GridWarp", {})["bbox"] = "Set bbox to"
 NUKE_LABELS.setdefault("SplineWarp", {})["boundary_bbox"] = "Bbox boundary curve"
 
 
+# Lane 11 step B2 (11/17): the Image, Merge, Metadata and Other panels the review book's worklist still found out of Nuke's
+# order or wording (docs/parity/review/WORKLIST.md). Labels only and order only: every param stays, so documents load and
+# render as before. Write's per-format knobs keep their place under File type (the guide lists them under a stray tab).
+NUKE_LAYOUT_LANE11 = {
+    "Merge": ("operation", "sRGB", "screen_alpha", "merge_bbox", "metainput", "rangeinput", "Achannels", "Bchannels", "merge_output", "also_merge"),
+    "Dissolve": ("channels", "which"),
+    "Blend": ("channels", *(f"weight{i}" for i in range(16)), "normalize", "mask_channel", "inject", "fringe"),
+    "Premult": ("channels", "premult_by", "invert"),
+    "Unpremult": ("channels", "premult_by", "invert"),
+    "Keymix": ("channels", "maskChannelInput", "invert_mask", "mix", "merge_bbox"),
+    "ZMerge": ("depth_layer",),
+    "ModifyMetaData": ("edits",),
+    "CopyMetaData": ("merge_mode",),
+    "Read": ("path",),
+    "Write": ("channels",),
+}
+_CONTEXT_LABELS = {**{f"key{i}": f"Key {i}" for i in range(1, 5)}, **{f"value{i}": f"Value {i}" for i in range(1, 5)}}
+NUKE_LABELS.update({
+    "Blend": {"mask_channel": "Mask"},
+    "Keymix": {"maskChannelInput": "Mask channel", "invert_mask": "Invert"},
+    "ZMerge": {"depth_layer": "Z channel"},
+    "ModifyMetaData": {"edits": "Metadata"},
+    "CopyMetaData": {"keys_mode": "Within", "image_keys_mode": "Within"},
+    "Read": dict(_CONTEXT_LABELS),
+    "Write": dict(_CONTEXT_LABELS),
+})
+NUKE_LABELS.setdefault("Precomp", {}).update({"reload": "Reload", "reload_write": "Reload", "use_output": "Enable"})
+NUKE_LABELS.setdefault("CurveTool", {}).update({"autocrop_tolerance": "Intensity range", "max_value": "Maximum Luminence Pixel Value",
+                                                "min_value": "Minimum Luminence Pixel Value"})
+NUKE_LABELS.setdefault("BurnIn", {}).update({"bar": "Enable", "bar_opacity": "Opacity", "bar_x_border": "X-border", "bar_y_border": "Y-border"})
+NUKE_SECTIONS.update({"Read": {"key1": "Context"}, "Write": {"key1": "Context"}, "BurnIn": {"bar": "Background"}})
+
+
 def _nuke_layouts():
-    for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9, **NUKE_LAYOUT_LANE2F, **NUKE_LAYOUT_LANE2K}.items():
+    for kind, wanted in {**NUKE_LAYOUT, **NUKE_LAYOUT_LANE9, **NUKE_LAYOUT_LANE2F, **NUKE_LAYOUT_LANE2K, **NUKE_LAYOUT_LANE11}.items():
         groups = [group for group in KNOB_LAYOUT[kind] if group.kind != "legacy"]
         legacy = [group for group in KNOB_LAYOUT[kind] if group.kind == "legacy"]
         by_first = {group.params[0]: group for group in groups}
@@ -2826,6 +2859,7 @@ ROW_GROUPS = {
                KnobGroup("row", ("output_range_start", "output_range_start_lock", "output_range_end", "output_range_end_lock"), label="Output range",
                          members=("int", "bool", "int", "bool"))),
     "Constant": (KnobGroup("row", ("first", "last"), label="Frame range", members=("int", "int")),),
+    "Write": (KnobGroup("row", ("first", "last"), label="Frame range", members=("int", "int")),),  # lane 11 step B2
     # Panel sweep S2 (11/4)
     "Tracker": (KnobGroup("row", ("shutter_offset", "custom_offset"), label="Shutter offset", members=("enum", "float")),),
     "TimeClip": (KnobGroup("row", ("first", "before", "last", "after"), label="Frame range", members=("int", "enum", "int", "enum")),

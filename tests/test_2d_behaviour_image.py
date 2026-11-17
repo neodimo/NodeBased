@@ -28,7 +28,7 @@ READ = [("path", "File"), ("localizationPolicy", "Localization Policy"), ("read_
         ("premultiplied", "Premultiplied"), ("raw", "Raw Data"), ("auto_alpha", "Auto Alpha")]
 WRITE = [("channels", "Channels"), ("path", "File"), ("proxy", "Proxy"), ("frame_mode", "Frame mode"), ("frame_expr", "Frame"),
          ("colorspace", "Output transform"), ("premultiplied", "Premultiplied"), ("raw", "Raw data"), ("views", "Views"), ("file_type", "File type")]
-WRITE_AFTER_FORMAT = [("create_directories", "Create directories"), ("render_order", "Render order"), ("first", "First frame"), ("last", "Last frame"),
+WRITE_AFTER_FORMAT = [("create_directories", "Create directories"), ("render_order", "Render order"), ("first", "Frame range"), ("last", "Frame range"),
                       ("use_limit", "Limit to range"), ("reading", "Read file"), ("on_error", "Missing frames"), ("reload", "Reload"),
                       ("read_all_lines", "Read all lines")]
 CONSTANT = [("channels", "Channels"), ("red", "Color"), ("width", "Width"), ("height", "Height"), ("first", "Frame range"), ("last", "Frame range")]  # one shared row, as in Nuke

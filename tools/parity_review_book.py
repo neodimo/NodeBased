@@ -304,6 +304,9 @@ class PanelRenderer:
 _WIDGETS = {"number": {"float", "float_slider", "int", "split", "row", "xy", "color"}, "bool": {"bool"},
             "string": {"string", "file_read", "file_write", "multiline", "enum"}, "enum": {"enum"},
             "channels": {"string", "enum"}, "number_list": {"xy", "xyz", "color", "split", "curve", "row"}}
+# Composite rows that hold a Nuke row's several knobs in one widget (Read's frame range: first, before, last, after).
+for _kinds in _WIDGETS.values():
+    _kinds.update({"read_frame_range", "read_frame", "read_orig_range"})
 
 
 def _norm_label(text):
@@ -366,7 +369,7 @@ def alignment(nuke_node, pair, kind, name=""):
                     row["nb_widget"] += f" (row: {', '.join(g.params)})"
                 if seq[i] is not None and i not in in_order:
                     row["marks"].append("order")
-                if len(nb) == 1 and _norm_label(g.label) not in (_norm_label(k["label"]), _norm_label(k["name"])) \
+                if len(nb) == 1 and _norm_label(g.label) not in (_norm_label(k["label"]), _norm_label(k["name"].split("#")[0])) \
                         and _norm_label(k["label"]) not in ("na", ""):
                     row["marks"].append("label")
                 ok_widgets = _WIDGETS.get(k["type"])
@@ -381,7 +384,10 @@ def alignment(nuke_node, pair, kind, name=""):
                     same = compare_default(params[first], k["default"], (pair.get("value_map") or {}).get(k["name"]))
                 except Exception:  # noqa: BLE001
                     same = None
-                if same is False and k["name"] in set(pair.get("skip_default", [])):
+                counted = k.get("counted", True) or str(k.get("role", "")).startswith("chrome:")
+                if same is False and not counted:
+                    row["reason"] = "the default differs on a knob the audit does not count (" + str(k.get("reason") or k.get("role")) + ")"
+                elif same is False and (k["name"] in set(pair.get("skip_default", [])) or k["name"] in (pair.get("default_notes") or {})):
                     row["accepted"] = accepted_reason(name or nuke_node.get("name", ""), k["name"], pair, e)
                     row["reason"] = "the default differs on purpose: " + row["accepted"]
                 elif same is False:
@@ -408,6 +414,8 @@ def accepted_reason(node, knob, pair, entry):
     for note in _AUDIT_NOTES:
         if f"`{knob.split('#')[0]}`" in note and node and note.startswith(node.split(" ")[0]):
             return note.replace("`", "")
+    if (pair.get("default_notes") or {}).get(knob):
+        return pair["default_notes"][knob]
     if entry and entry.get("reason"):
         return entry["reason"]
     if pair.get("reason"):
