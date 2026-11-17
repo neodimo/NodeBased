@@ -7887,23 +7887,26 @@ class Evaluator:
                     return zdefocusknobs.setup_view(image, zdefocusknobs.setup_colours(sides, level), p)
         h, w = depth.shape
 
+        image_cache = {}
+
         def shape(r, yy, xx, radius):
             """The filter at size r on the (yy, xx) grid: the disc, the bladed polygon or the wired kernel image."""
             if p.get("bokeh_shape") == "image":
                 if kernel is None:
                     raise ValueError("ZDefocus image bokeh requires a wired kernel input")
-                source_kernel = np.asarray(kernel, dtype=np.float32)
-                if source_kernel.ndim == 3: source_kernel = source_kernel[..., 3] if source_kernel.shape[2] > 3 else source_kernel[..., 0]
-                kh, kw = source_kernel.shape[:2]
-                ky = np.minimum(kh - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kh - 1)).astype(int)))
-                kx = np.minimum(kw - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kw - 1)).astype(int)))
-                grid = source_kernel[np.ix_(ky, kx)]
-                return grid > 0, grid
+                if image_cache.get("radius") != radius:
+                    image_cache.update(radius=radius, grid=zdefocusknobs.image_grid(kernel, radius, p))
+                grid, inside = image_cache["grid"]
+                return inside, grid
             if modern:
                 ax, ay = zdefocusknobs.aspect_axes(p)
                 sx, sy = xx / ax, yy / ay                            # the filter squeezed on one axis (aspect ratio)
             else:
                 sx, sy = xx, yy
+            if p.get("bokeh_shape") == "blades" and r > 0 and modern and zdefocusknobs.new_filters(p):
+                disk, weights = zdefocusknobs.bladed(sy, sx, r, p)
+                disk = zdefocusknobs.hollow(disk, sy, sx, r, p)
+                return disk, weights * disk
             if p.get("bokeh_shape") == "blades" and r > 0:
                 theta = np.arctan2(sy, sx) - math.radians(float(p.get("blade_rotation", 0.0)))
                 sector = (theta + math.pi / int(p.get("blade_count", 6))) % (2 * math.pi / int(p.get("blade_count", 6))) - math.pi / int(p.get("blade_count", 6))
@@ -7937,8 +7940,12 @@ class Evaluator:
                 if not np.any(visible): visible[radius, radius] = True
                 samples = pad_img[y:y + 2 * radius + 1, x:x + 2 * radius + 1]
                 if p.get("bokeh_shape") == "image" and kernel is not None:
-                    weights = kernel_grid * visible
-                    out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
+                    if kernel_grid.ndim == 3:                  # use input channels: each of the image's channels by the filter's own
+                        weights = kernel_grid * visible[..., None]
+                        out[y, x] = np.sum(samples * weights, axis=(0, 1)) / np.maximum(weights.sum(axis=(0, 1)), 1e-20)
+                    else:
+                        weights = kernel_grid * visible
+                        out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
                 elif kernel_grid is not None:
                     weights = kernel_grid * visible              # filter shape: a Gaussian dissolved into the disc
                     out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)

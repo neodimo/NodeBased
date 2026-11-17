@@ -153,6 +153,23 @@ def _fixture_kernel3():
     return out
 
 
+def _fixtures_zdefocus():
+    """ZP, ZD and ZK for ZDefocus's bokeh shape (lane 9 step S). ZP: transparent black with one white pixel, rgba 1, in the middle (x 8, y 6), so
+    a blurred ZP is the filter itself. ZD: a depth plane, 3 in every channel, behind a focus plane at 1. ZK: a filter image the size of the
+    others whose pixels are 0 but for a 3 x 3 block round the middle (rows 5 to 7, columns 7 to 9): alpha 1 2 1 / 2 4 2 / 1 2 1, red 1 on the
+    left column of the block, green 1 on its top row, blue 1 at its middle pixel."""
+    point = np.zeros((H, W, 4), np.float32)
+    point[H // 2, W // 2, :] = 1.0
+    depth = np.full((H, W, 4), 3.0, np.float32)
+    kernel = np.zeros((H, W, 4), np.float32)
+    y0, x0 = H // 2 - 1, W // 2 - 1
+    kernel[y0:y0 + 3, x0:x0 + 3, 3] = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]], np.float32)
+    kernel[y0:y0 + 3, x0, 0] = 1.0
+    kernel[y0, x0:x0 + 3, 1] = 1.0
+    kernel[y0 + 1, x0 + 1, 2] = 1.0
+    return {"ZP": point, "ZD": depth, "ZK": kernel}
+
+
 def _fixtures_uv():
     """The maps and vector fields of STMap and IDistort, each the size of the others.
 
@@ -186,7 +203,7 @@ def make_fixtures():
     return {"A": a, "B": b, "mask": mask, "C": _fixture_colours(), "L": _fixture_log(), "E": _fixture_edge(), "P": _fixture_point(),
             "K": _fixture_keyer(), "KS": np.concatenate([np.full((H, W, 3), KEY_SCREEN, np.float32), np.ones((H, W, 1), np.float32)], axis=2),
             "KI": _fixture_screen_island(KEY_SCREEN), "KB": _fixture_screen_island(KEY_BLUE_SCREEN),
-            "S": _fixture_step(), "W": _fixture_square(), "KF": _fixture_kernel3(), **_fixtures_uv()}
+            "S": _fixture_step(), "W": _fixture_square(), "KF": _fixture_kernel3(), **_fixtures_uv(), **_fixtures_zdefocus()}
 
 
 # ---------------------------------------------------------------------------------------------------- Merge formulas

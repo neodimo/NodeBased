@@ -1382,6 +1382,112 @@ def _defocus_cases(Case, out):
                   "tests/test_2d_behaviour_draw.py: direct blur grows with depth to the maximum, -direct reverses the order, a larger maximum "
                   "allows more blur, the focus plane stays sharp, and the filter choices change the pixels")
 
+    # ---- ZDefocus's bokeh shape (lane 9 step S): a bright point on a plane behind the focus plane, so the blurred point is the filter itself.
+    # Focus plane 1, depth 3, size 6, maximum 6: the blur is 6 * |3 - 1| / 3 = 4 pixels, and 4 is one of the automatic layers, so the filter is 4 across
+    # each way. The point sits in the middle (x 8, y 6) of the 16 x 12 frame: the whole filter is inside it, and everything is compared.
+    bokeh = {"zdefocus_math": "depth", "legacy_zdefocus": 0, "legacy_zdefocus_focus": 0, "legacy_zdefocus_filters": 0, "focal_plane": 1.0,
+             "depth_of_field": 0.0, "blur_dof": 0, "size": 6.0, "max_size": 6.0, "bokeh_shape": "blades", "blade_count": 4, "roundness": 1.0,
+             "inner_size": 0.5, "inner_feather": 0.5, "inner_brightness": 1.0, "catadioptric": 0, "fill_foreground": 1}
+    bokeh_nuke = (("math", "depth"), ("center", 1.0), ("dof", 0.0), ("blur_dof", False), ("size", 6.0), ("max_size", 6.0), ("filter_type", "bladed"))
+    bokeh_inputs = ("ZP", "ZD")
+    mid_y, mid_x = 6, 8
+    reach = 4
+    offsets = [(dy, dx) for dy in range(-reach, reach + 1) for dx in range(-reach, reach + 1)]
+
+    def filter_of(weight):
+        """A reference: the point spread by the filter whose weight at offset (dy, dx) from the middle is `weight(dy, dx)`, as the plain
+        weighted average of the point over the filter (the point alone in a black frame, so the output is the filter, summing to 1)."""
+        def expected(fx):
+            ref = np.zeros(fx["ZP"].shape, np.float64)
+            total = sum(max(0.0, weight(dy, dx)) for dy, dx in offsets)
+            for dy, dx in offsets:
+                ref[mid_y + dy, mid_x + dx, :] = max(0.0, weight(dy, dx)) / total
+            return ref, np.ones(ref.shape, bool)
+        return expected
+
+    def zbokeh(id, extra_nuke, extra_nb, weight, source, statement, unscored="", nb_inputs=bokeh_inputs, nuke_knobs=None):
+        case(id, "ZDefocus", (nuke_knobs if nuke_knobs is not None else bokeh_nuke) + extra_nuke, {**bokeh, **extra_nb}, filter_of(weight), source, statement,
+             unscored=unscored, nb_inputs=nb_inputs)
+    page = FILTER_GUIDE + "zdefocus.html"
+    inner_note = (f"({page}): the page gives the inner polygon's size 'as a percentage of the outer polygon' and its brightness as 'where 0 is equal to black "
+                  "and 1 to white'; the outer polygon is made a circle (roundness 1) so the weights can be written down: a filter 4 pixels in radius")
+    zbokeh("zdefocus_bladed_roundness_one_is_a_disc", (("roundness", 1.0), ("inner_brightness", 1.0)), {}, lambda dy, dx: float(dx * dx + dy * dy <= 16), "convention",
+           "ZDefocus bladed: roundness 1 rounds the polygon's sides all the way into the circle through its corners, so the filter is the flat disc "
+           "of the blur size (the page says only that 'zero is equal to no rounding'; the full rounding as a circle is the usual reading)")
+    zbokeh("zdefocus_bladed_four_blades_roundness_zero_is_a_square", (("blades", 4), ("roundness", 0.0), ("inner_brightness", 1.0)),
+           {"roundness": 0.0}, lambda dy, dx: float(abs(dx) <= 2 and abs(dy) <= 2), "convention",
+           f"ZDefocus bladed: with 4 blades and roundness 0 'no rounding' the filter is a square ('a value of 4 a square', {page}); its corners lie on the "
+           "circle of the blur size (4 pixels), so its half-width is 4 / sqrt(2) = 2.83 pixels and it covers the pixels within 2 of the middle "
+           "(the page does not say how big a polygon is for a given size)")
+    zbokeh("zdefocus_bladed_inner_brightness_zero_leaves_a_ring", (("inner_size", 0.5), ("inner_brightness", 0.0), ("inner_feather", 0.5)),
+           {"inner_brightness": 0.0}, lambda dy, dx: float(2 <= math.hypot(dx, dy) <= 4), "guide",
+           f"ZDefocus bladed: inner brightness 0 makes the inner polygon black {inner_note}: with inner size 0.5 the middle 2 pixels are black "
+           "and the ring from 2 to 4 pixels is white")
+    zbokeh("zdefocus_bladed_inner_brightness_scales_the_inner_polygon", (("inner_size", 0.5), ("inner_brightness", 0.5), ("inner_feather", 0.5)),
+           {"inner_brightness": 0.5}, lambda dy, dx: 0.5 if math.hypot(dx, dy) < 2 else float(math.hypot(dx, dy) <= 4), "guide",
+           f"ZDefocus bladed: inner brightness 0.5 is half the white {inner_note}: the middle 2 pixels weigh half the ring")
+    zbokeh("zdefocus_bladed_inner_size_sets_the_hole", (("inner_size", 0.75), ("inner_brightness", 0.0), ("inner_feather", 0.5)),
+           {"inner_size": 0.75, "inner_brightness": 0.0}, lambda dy, dx: float(3 <= math.hypot(dx, dy) <= 4), "guide",
+           f"ZDefocus bladed: inner size 0.75 {inner_note}: the black middle reaches 3 of the 4 pixels")
+    zbokeh("zdefocus_bladed_inner_feather_above_half_feathers_outward", (("inner_size", 0.5), ("inner_brightness", 0.0), ("inner_feather", 1.0)),
+           {"inner_brightness": 0.0, "inner_feather": 1.0}, lambda dy, dx: (math.hypot(dx, dy) / 2.0 - 1.0) if 2 <= math.hypot(dx, dy) <= 4 else 0.0, "convention",
+           f"ZDefocus bladed: inner feather above 0.5 feathers 'outward' ({page}): the inner polygon keeps its edge (black out to 2 pixels) and the ring "
+           "beyond it ramps up from black at the edge to white at the rim; the page gives no ramp shape, so a straight line in the distance is used")
+    zbokeh("zdefocus_bladed_inner_feather_below_half_feathers_inward", (("inner_size", 0.5), ("inner_brightness", 0.0), ("inner_feather", 0.0)),
+           {"inner_brightness": 0.0, "inner_feather": 0.0}, lambda dy, dx: (math.hypot(dx, dy) / 2.0) if math.hypot(dx, dy) < 2 else float(math.hypot(dx, dy) <= 4), "convention",
+           f"ZDefocus bladed: inner feather below 0.5 feathers 'inward' ({page}): the ring keeps its edge at 2 pixels and the inner polygon ramps up "
+           "from black in the middle to white at that edge; a straight line in the distance, as the page gives no shape")
+    zbokeh("zdefocus_bladed_aspect_ratio_above_one_squeezes_y", (("aspect#2", 2.0), ("inner_brightness", 1.0)), {"aspect": 2.0, "inner_brightness": 1.0},
+           lambda dy, dx: float((dx / 4.0) ** 2 + (dy / 2.0) ** 2 <= 1.0 + 1e-9), "guide",
+           f"ZDefocus bladed: aspect ratio 2 'values larger than 1 squeeze it on the y axis' ({page}): the circle of 4 pixels becomes an ellipse "
+           "4 across and 2 up")
+    zbokeh("zdefocus_bladed_aspect_ratio_below_one_squeezes_x", (("aspect#2", 0.5), ("inner_brightness", 1.0)), {"aspect": 0.5, "inner_brightness": 1.0},
+           lambda dy, dx: float((dx / 2.0) ** 2 + (dy / 4.0) ** 2 <= 1.0 + 1e-9), "guide",
+           f"ZDefocus bladed: aspect ratio 0.5 'values less than 1 squeeze the filter on the x axis' ({page}): an ellipse 2 across and 4 up")
+    # The image filter: ZK's block is 3 x 3 pixels, so Impulse (every pixel of the resized filter carries an original value) at 9 x 9 repeats each
+    # pixel 3 times each way. The channels read are alpha 1 2 1 / 2 4 2 / 1 2 1, red the left column, green the top row, blue the middle.
+    block = {"alpha": np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]], float), "red": np.array([[1, 0, 0]] * 3, float),
+             "green": np.array([[1, 1, 1], [0, 0, 0], [0, 0, 0]], float), "blue": np.array([[0, 0, 0], [0, 1, 0], [0, 0, 0]], float)}
+    image_nb = {**bokeh, "bokeh_shape": "image", "image_filter": "impulse", "filter_channel": "rgba.alpha", "use_input_channels": 0, "clamp_image_filter": 0}
+    image_nuke = bokeh_nuke[:-1] + (("filter_type", "image"), ("image_filter", "Impulse"))
+
+    def image_filter_of(channels):
+        """The point spread by ZK's block, each 3 x 3 pixel a 3 x 3 square of the resized filter; `channels` the (image channel -> block name) read."""
+        def expected(fx):
+            ref = np.zeros(fx["ZP"].shape, np.float64)
+            for c, name in channels.items():
+                plane = np.kron(block[name], np.ones((3, 3)))
+                ref[mid_y - 4:mid_y + 5, mid_x - 4:mid_x + 5, c] = plane / plane.sum()
+            return ref, np.ones(ref.shape, bool)
+        return expected
+    zimage_inputs = ("ZP", "ZD", "ZK")
+    shape_note = (f"({page}): the filter input is 'used as the blur kernel'; its pixels sit in a 3 x 3 block, and with Impulse, 'remapped pixels carry "
+                  "their original values', the 4-pixel blur resizes it to 9 x 9 so each pixel is a 3 x 3 square")
+    case("zdefocus_image_filter_impulse_carries_the_original_values", "ZDefocus", image_nuke + (("filter_channel", "rgba.alpha"),), image_nb,
+         image_filter_of({c: "alpha" for c in range(4)}), "guide", f"ZDefocus image filter, Impulse, alpha channel {shape_note}", nb_inputs=zimage_inputs)
+    case("zdefocus_filter_channel_picks_the_plane_read", "ZDefocus", image_nuke + (("filter_channel", "rgba.green"),), {**image_nb, "filter_channel": "rgba.green"},
+         image_filter_of({c: "green" for c in range(4)}), "guide",
+         f"ZDefocus filter channel: 'the channel to use as the convolution matrix from the filter input' ({page}): the green plane (the top row of the "
+         "block), whichever channel is blurred", nb_inputs=zimage_inputs)
+    case("zdefocus_use_input_channels_pairs_each_channel_with_its_own_plane", "ZDefocus", image_nuke + (("use_input_channels", True),),
+         {**image_nb, "use_input_channels": 1}, image_filter_of({0: "red", 1: "green", 2: "blue", 3: "alpha"}), "guide",
+         f"ZDefocus use input channels: 'the same channels are used for both the filter and image inputs' ({page}): red is blurred by the filter's red, "
+         "green by its green, blue by its blue and alpha by its alpha", nb_inputs=zimage_inputs)
+    case("zdefocus_legacy_resize_filter_bounds_shape_crops_to_the_filter", "ZDefocus", image_nuke + (("legacy_resize_mode", True), ("filter_bounds", "shape")),
+         {**image_nb, "legacy_resize_mode": 1, "filter_bounds": "shape"}, image_filter_of({c: "alpha" for c in range(4)}), "guide",
+         f"ZDefocus filter bounds shape (legacy resize mode on): 'the filter input's bounding box ... the center of the filter is the center of the bounding "
+         f"box' ({page}): the box round the 3 x 3 block is what is resized, so the picture is the same as with the block alone; the legacy resize takes "
+         "nearest pixels by position rather than by pixel centre, so the edge pixels weigh a little differently",
+         unscored="legacy resize mode resamples by the older nearest-pixel rule, whose 9 x 9 grid of a 3 x 3 block is not symmetric (rows 0-3 take the first "
+                  "pixel); the page does not say what the legacy rule was, so only the bounding box is stated (tests/test_2d_behaviour_zdefocus_s.py)",
+         nb_inputs=zimage_inputs)
+    case("zdefocus_image_filter_sharpening_and_smoothing", "ZDefocus", image_nuke[:-1] + (("image_filter", "Rifman"), ("clamp_image_filter", False)),
+         {**image_nb, "image_filter": "rifman"}, image_filter_of({c: "alpha" for c in range(4)}), "guide",
+         f"ZDefocus image filter: Cubic, Keys, Simon, Rifman, Mitchell and Parzen resample the filter with more or less smoothing and sharpening ({page})",
+         unscored="the page draws each filter's curve and states no weights, so the resized filter cannot be written down without guessing; what it does "
+                  "state (Impulse keeps the original values, the sharpening filters have negative lobes that clamp image filter removes, Parzen smooths "
+                  "most) is tested in tests/test_2d_behaviour_zdefocus_s.py", nb_inputs=zimage_inputs)
+
     page = FILTER_GUIDE + "edgeextend.html"
     straight = {"legacy_edge_extend": 0, "source_premultiplied": 0, "premultiply": 0, "erode": 0.0, "extend_size": 2.0, "extend_threshold": 0.5}
 
