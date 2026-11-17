@@ -1,8 +1,8 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 97.3 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
+**Overall fidelity: 97.4 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.3 (99.3 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.3 (99.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
 Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.4 (99.5 counting only the nodes NodeBased has).
 
@@ -35,11 +35,11 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
 | Image | 98.2 | 97.9 | 98.6 | 6 |
-| Draw | 99.0 | 98.4 | 98.8 | 17 |
+| Draw | 99.0 | 98.8 | 98.9 | 17 |
 | Time | 99.8 | 99.0 | 99.8 | 13 |
 | Channel | 99.8 | 99.7 | 99.8 | 5 |
 | Color | 98.6 | 95.8 | 98.6 | 34 |
-| Filter | 98.1 | 94.0 | 97.9 | 32 |
+| Filter | 98.1 | 94.1 | 97.9 | 32 |
 | Keyer | 93.4 | 80.7 | 93.3 | 11 |
 | Merge | 99.9 | 99.7 | 99.9 | 13 |
 | Transform | 98.8 | 96.1 | 98.5 | 20 |
@@ -48,7 +48,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 Behaviour checked: 136 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 448 of the 449 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Panels that work like Nuke
 
@@ -119,10 +119,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | LightWrap | `LightWrap` | supported | 100.0 | 100.0 | 100 (27/27) | 100 (26/26) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 9 | Grain | `Grain` | supported | 96.7 | 95.0 | 88 (13/14) | 100 (13/13) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 9 | ScannedGrain | `ScannedGrain` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (6/6) | - | - | unmeasured |
-| 10 | DustBust | `DustBust` | supported | 99.4 | 100.0 | 100 (5/5) | 100 (4/4) | 100 | 100 | - | 100 (1/1) | 93 | - | unmeasured |
+| 10 | DustBust | `DustBust` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (4/4) | 100 | 100 | - | 100 (2/2) | 100 | - | unmeasured |
 | 10 | MarkerRemoval | `MarkerRemoval` | supported | 96.2 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | - | 100 (1/1) | 60 | - | unmeasured |
 | 11 | Flare | `Flare` | supported | 95.5 | 93.7 | 87 (43/50) | 97 (24/25) | 98 | 100 | - | 100 (7/7) | 100 | - | unmeasured |
-| 11 | Glint | `Glint` | supported | 94.0 | 90.8 | 77 (10/13) | 100 (10/10) | 100 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
+| 11 | Glint | `Glint` | supported | 100.0 | 100.0 | 100 (13/13) | 100 (13/13) | 100 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
 | 11 | Sparkles | `Sparkles` | supported | 97.1 | 95.4 | 91 (28/32) | 100 (20/20) | 96 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 12 | Dither | `Dither` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
@@ -217,9 +217,9 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 13 | MotionBlur | `MotionBlur` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | - | 100 | - | unmeasured |
 | 13 | MotionBlur2D | `MotionBlur2D` | supported | 87.5 | 83.3 | 75 (3/4) | - | 100 | 100 | - | - | 100 | - | unmeasured |
 | 13 | MotionBlur3D | `MotionBlur3D` | supported | 75.0 | 66.7 | 50 (3/6) | - | 100 | 100 | - | - | 100 | - | unmeasured |
-| 13 | VectorBlur | `VectorBlur` | supported | 90.1 | 88.4 | 82 (13/15) | - | 83 | 100 | 100 | - | 100 | - | unmeasured |
+| 13 | VectorBlur | `VectorBlur` | supported | 92.4 | 90.6 | 82 (13/15) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 15 | Convolve | `Convolve` | supported | 98.8 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | 100 (3/3) | 89 | - | unmeasured |
+| 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 16 | BumpBoss | `BumpBoss` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 16 | EdgeDetect | `EdgeDetect` | supported | 90.5 | 85.5 | 64 (5/7) | 100 (4/4) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
@@ -347,10 +347,10 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | LightWrap | — | 100.0% (26/26) | 1 |
 | Grain | — | 100.0% (13/13) | 1 |
 | ScannedGrain | — | — | 1 |
-| DustBust | — | 80.0% (4/5) | 0 |
+| DustBust | — | 100.0% (5/5) | 0 |
 | MarkerRemoval | 0.0% (0/2) | 40.0% (2/5) | 1 |
 | Flare | 100.0% (14/14) | 100.0% (42/42) | 7 |
-| Glint | — | 100.0% (10/10) | 0 |
+| Glint | — | 100.0% (12/12) | 1 |
 | Sparkles | — | 100.0% (27/27) | 1 |
 | Dither | — | 100.0% (4/4) | 0 |
 | Grid | — | 100.0% (12/12) | 2 |
@@ -427,7 +427,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | MotionBlur3D | 100.0% (2/2) | 100.0% (3/3) | 0 |
 | VectorBlur | — | 100.0% (12/12) | 2 |
 | Bilateral | — | 100.0% (5/5) | 1 |
-| Convolve | — | 66.7% (2/3) | 2 |
+| Convolve | — | 100.0% (3/3) | 2 |
 | Matrix | — | 100.0% (1/1) | 1 |
 | BumpBoss | — | 100.0% (6/6) | 0 |
 | EdgeDetect | — | 100.0% (4/4) | 1 |
@@ -519,7 +519,7 @@ Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on o
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
 **Lowest shared-row scores:** MarkerRemoval (0.0%); Root (0.0%); Write (50.0%); RotoPaint (98.1%); BurnIn (100.0%).
-**Lowest widget-type scores:** Expression (0.0%); IBKColor (33.3%); MarkerRemoval (40.0%); Convolve (66.7%); DustBust (80.0%).
+**Lowest widget-type scores:** Expression (0.0%); IBKColor (33.3%); MarkerRemoval (40.0%); MatchGrade (81.2%); SplineWarp (81.2%).
 
 ## The 30 largest gaps
 
@@ -616,6 +616,7 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `exposure_stops_blackpoint` | convention | pass | within tolerance | - |
 | `markerremoval_radial_disc` | convention | pass | within tolerance | - |
 | `dustbust_temporal_disc` | convention | pass | within tolerance | - |
+| `dustbust_enable_half` | guide | pass | within tolerance | - |
 | `cc_master_chain` | convention | pass | within tolerance | - |
 | `cc_gamma_true_power` | convention | pass | within tolerance | - |
 | `cc_saturation_zero` | convention | pass | within tolerance | - |
