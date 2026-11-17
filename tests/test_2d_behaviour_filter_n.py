@@ -409,9 +409,11 @@ class DenoiseTabsOnTheNodeTests(unittest.TestCase):
         order = ["Preserve edges", "Enable", "Frame blending", "Frames to blend", "Lock noise analysis", "Analysis region x", "Analysis frame",
                  "Analysis file", "Process high frequencies", "High gain", "Process medium frequencies", "Medium gain", "Process low frequencies",
                  "Low gain", "Process very low frequencies", "Very low gain", "Luminance gain", "Chrominance gain", "Profile curve", "Tune profile",
-                 "Profile low gain", "Profile mid gain", "Profile high gain", "Profile frame"]
-        positions = [names.index(label) for label in order]
-        self.assertEqual(positions, sorted(positions))
+                 "Low gain", "Mid gain", "High gain", "Profile frame"]
+        at = -1                                                  # "Low gain" and "High gain" are the guide's label twice: take each in turn
+        for label in order:
+            self.assertIn(label, names[at + 1:], label)
+            at = names.index(label, at + 1)
         kept, total = layout_order("Denoise")[0]
         self.assertEqual(kept, total)
 

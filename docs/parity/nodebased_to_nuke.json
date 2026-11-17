@@ -956,6 +956,9 @@
     {"nodebased": ["glint_steps"], "nuke": ["steps"], "kind": "renamed", "reason": "same control under another name; `steps` is a global name other nodes use"},
     {"nodebased": ["glint_max"], "nuke": ["max"], "kind": "renamed", "reason": "same control under another name; `max` is a global name other nodes use"},
     {"nodebased": ["glint_effect_only"], "nuke": ["effect_only"], "kind": "renamed", "reason": "same control under another name"},
+    {"nodebased": ["glint_aspect"], "nuke": ["aspect"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'aspect ratio'"},
+    {"nodebased": ["glint_w_channel"], "nuke": ["w_channel"], "kind": "renamed", "reason": "the channel whose matte says which highlights are glint sources"},
+    {"nodebased": ["glint_gamma"], "nuke": ["gamma"], "kind": "renamed", "reason": "a gamma on the highlights before the star is made"},
     {"nodebased": ["tolerance"], "nuke": ["tolerance"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
@@ -2776,7 +2779,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ],
-   "skip_default": ["channels"]
+   "skip_default": ["channels"],
+   "value_map": {"uv": {"": "none"}}
   },
   "Bilateral": {
    "nodebased": "Bilateral",

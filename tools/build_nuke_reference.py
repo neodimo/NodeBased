@@ -170,7 +170,13 @@ def short_tab(tab):
     return re.split(r"\s+(?:\(|-\s|–\s)", tab)[0].strip()
 
 
+# Knobs whose name ends in "channels" but that are check boxes in the guide (the guide's text: "When enabled, ...").
+BOOL_CHANNELS_NAMED = {"use_input_channels"}
+
+
 def knob_type(name, ui, default, choices):
+    if name in BOOL_CHANNELS_NAMED and isinstance(default, bool):
+        return "bool"
     if name == "channels" or ui.lower().endswith("channels"):
         return "channels"
     if isinstance(default, bool):

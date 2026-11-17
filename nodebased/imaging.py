@@ -6070,14 +6070,18 @@ class Evaluator:
             control = shifted
             return marker_removal(src, control, p.get("mode", "bilinear"), p.get("linearsearch", 100))
         if kind == "DustBust":
-            if not p.get("enable", 1):
+            amount = min(1.0, max(0.0, float(p.get("enable", 1))))  # Nuke's enable is the effect's intensity, 0 to 1
+            if amount <= 0.0:
                 return inputs[0].copy()
             from .ops2d_dustbust import dustbust
             source = inputs[1] if len(inputs) > 1 and inputs[1] is not None else inputs[0]
             result = dustbust(inputs[0], source, p.get("spots", []), frame or 0,
                               p.get("frame_offset", 1), p.get("edge_hardness", .5),
                               bool(p.get("view_source", 0)), p.get("maskchannel", "none"))
-            return result[0] if isinstance(result, tuple) else result
+            result = result[0] if isinstance(result, tuple) else result
+            if amount < 1.0:
+                result = (inputs[0] + (result - inputs[0]) * np.float32(amount)).astype(np.float32)
+            return result
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace"):
             from .ocio_nodes import transform
             filtered = transform(kind, p, inputs[0])

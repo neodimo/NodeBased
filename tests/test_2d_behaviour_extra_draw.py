@@ -361,7 +361,8 @@ class GlintTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Glint")]
-        self.assertEqual(labels[:11], ["Channels", "No. of rays", "Length", "Odd ray length", "Rotation", "From color", "To color", "Steps", "Max", "Effect only", "Tolerance"])
+        self.assertEqual(labels[:14], ["Channels", "No. of rays", "Length", "Aspect ratio", "Odd ray length", "Rotation", "From color", "To color", "Steps", "Max", "Effect only", "w",
+                                       "Tolerance", "Gamma"])
         self.assertEqual(labels[-1], "Mix")
 
 
@@ -535,7 +536,7 @@ class SparklesTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("Sparkles")]
-        self.assertEqual(labels[:28], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Anamorphic", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random thickness", "Sparkle falloff", "Ray falloff", "Seed", "Brightness", "Color", "Chroma shift", "Chroma spread", "Mask", "Mask blur", "Broken rays", "% ray affected", "Break start", "Random start", "Breaks", "Random breaks", "Sparks (direction clip)", "Direction", "Open angle"])
+        self.assertEqual(labels[:28], ["Sparkle type", "Triangle shapes", "Position xy", "Size", "Anamorphic", "Rotation", "Relative rotation", "Rays Nb", "Thickness", "Random", "Sparkle falloff", "Ray falloff", "Seed", "Brightness", "Color", "Chroma shift", "Chroma spread", "Mask", "Mask blur", "Broken rays", "% ray affected", "Break start", "Random", "Breaks", "Random", "Sparks (direction clip)", "Direction", "Open angle"])
         self.assertEqual(labels[-1], "Mix")
 
 
@@ -655,7 +656,7 @@ class RegistryTests(unittest.TestCase):
                 with self.subTest(kind=kind, param=name):
                     self.assertIn(name, SPECS[kind]["params"])
                     self.assertIn(name, laid_out)
-                    if name in ("spark_mode", "vismask", "vis_mask"):
+                    if name in ("spark_mode", "vismask", "vis_mask", "glint_w_channel"):
                         self.assertIn(name, core.CHOICES)
                     elif name != "fullGrain":
                         self.assertIn(name, LIMITS)

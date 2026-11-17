@@ -50,7 +50,8 @@ _FLARE_MULTI = {"mult_num": 1, "mult_seed": 0, "mult_offset": 1.0, "mult_offset_
                 "mult_brightness": 0.0, "mult_brightness_seed": 75021, "mult_visibility": 0.0, "mult_visibility_seed": 68995,
                 "mult_flattening": 0.0, "mult_flattening_seed": 45203, "mult_rotate": 0.0, "mult_rotate_seed": 49429}
 _FLARE_NEW.update(_FLARE_MULTI)
-_GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.0, "glint_steps": 5, "glint_max": 1, "glint_effect_only": 0}
+_GLINT_NEW = {"glint_oddlen": 1.0, "glint_from_color": 1.0, "glint_to_color": 0.0, "glint_steps": 5, "glint_max": 1, "glint_effect_only": 0,
+              "glint_aspect": 1.0, "glint_gamma": 1.0, "glint_w_channel": "none"}
 _SPARKLES_NEW = {"spark_x": 480.0, "spark_y": 270.0, "spark_size": 300.0, "spark_rotation": 0.0, "spark_ray_nb": 50, "spark_thick": 0.2,
                  "spark_falloff": 0.05, "spark_ray_falloff": 2.0, "spark_brightness": 1.0, "spark_color": 1.0, "spark_chroma_shift": 0.0,
                  "spark_chroma_spread": 0.0, "vismask": "none", "vismask_size": 4.0,
@@ -83,7 +84,7 @@ LIMITS = {**{flag: (0, 1) for flag in FLAGS.values()},
           "mult_brightness": (0.0, 10.0), "mult_brightness_seed": (-1000000, 1000000), "mult_visibility": (0.0, 10.0), "mult_visibility_seed": (-1000000, 1000000),
           "mult_flattening": (0.0, 2.0), "mult_flattening_seed": (-1000000, 1000000), "mult_rotate": (-360.0, 360.0), "mult_rotate_seed": (-1000000, 1000000),
           "glint_oddlen": (0.0, 100.0), "glint_from_color": (-1000.0, 1000.0), "glint_to_color": (-1000.0, 1000.0), "glint_steps": (1, 256), "glint_max": (0, 1),
-          "glint_effect_only": (0, 1),
+          "glint_effect_only": (0, 1), "glint_aspect": (0.01, 100.0), "glint_gamma": (0.01, 100.0),
           "spark_x": (-1000000.0, 1000000.0), "spark_y": (-1000000.0, 1000000.0), "spark_size": (0.0, 1000000.0), "spark_rotation": (-360.0, 360.0),
           "spark_ray_nb": (0, 2000), "spark_thick": (0.0, 1000.0), "spark_ray_falloff": (0.0, 100.0), "spark_brightness": (0.0, 1000.0),
           "spark_color": (-1000.0, 1000.0), "spark_triangle_think": (0, 1), "spark_relative_rotation": (0, 1), "spark_random_thick": (0, 1),
@@ -262,6 +263,12 @@ def glint(image, p):
     h, w = image.shape[:2]
     rgb = image[..., :3].astype(np.float64)
     highlight = np.maximum(rgb - float(p.get("tolerance", 0.5)), 0.0)
+    gamma = float(p.get("glint_gamma", 1.0))
+    if gamma != 1.0:
+        highlight = np.power(highlight, 1.0 / max(gamma, 1e-6))   # the highlights' gamma, before the star is made (Nuke's gamma convention)
+    # The w channel says which highlights are sources: the stars may reach outside the matte, the sources may not.
+    highlight = highlight * _visibility_channel(image, p.get("glint_w_channel", "none"), 0)[..., None]
+    aspect = max(float(p.get("glint_aspect", 1.0)), 1e-6)   # the star's width over its height
     count = max(0, min(32, int(p.get("rays", 2))))
     length = max(0.0, float(p.get("length", 50.0)))
     steps = max(1, min(256, int(p.get("glint_steps", 5))))
@@ -272,7 +279,7 @@ def glint(image, p):
     effect = np.zeros_like(rgb)
     for j, base in enumerate(glint_directions(count) if count else []):
         theta = math.radians(float(p.get("rotation", 0.0)) + base)
-        dx, dy = math.sin(theta), -math.cos(theta)
+        dx, dy = math.sin(theta) * aspect, -math.cos(theta)
         reach = length * (odd if j % 2 == 1 else 1.0)
         for k in range(1, steps + 1):
             colour = start + (end - start) * ((k - 1) / (steps - 1) if steps > 1 else 0.0)

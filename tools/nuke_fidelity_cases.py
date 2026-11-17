@@ -489,6 +489,15 @@ def _cases():
                     ("A",), "DustBust", {"enable": 1, "frame_offset": -1, "edge_hardness": 1.0,
                     "_stamp": {"frame": 2, "time": [1, 2], "spots": [{"frame": 2, "x": W//2, "y": H//2, "radius": 2}]}}, ("A",), dustbust_expected, "convention",
                     "Temporal spot replacement convention: the spot core samples the input at frame + frame_offset."))
+    def dustbust_half_expected(fx):
+        ref, valid = dustbust_expected(fx)
+        original = np.empty_like(ref); original[...] = [2.0, 0.25, 0.5, 1.0]
+        return original + (ref - original) * 0.5, valid
+    out.append(Case("dustbust_enable_half", "DustBust", "DustBust", (("enable", 0.5), ("view_source", False), ("frame_offset", -1), ("edge_hardness", 1.0)),
+                    ("A",), "DustBust", {"enable": 0.5, "frame_offset": -1, "edge_hardness": 1.0,
+                    "_stamp": {"frame": 2, "time": [1, 2], "spots": [{"frame": 2, "x": W//2, "y": H//2, "radius": 2}]}}, ("A",), dustbust_half_expected, "guide",
+                    "DustBust guide (draw_nodes/dustbust.html): enable 'sets the effect intensity from 0-1, where 1 is equal to the full effect'; read as the picture mixed "
+                    "with the full effect by that amount, so at 0.5 the spot core sits halfway between the input and the replaced pixels."))
     return out
 
 

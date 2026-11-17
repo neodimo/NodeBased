@@ -330,8 +330,8 @@ class VectorBlurConstantVectorTests(unittest.TestCase):
         picture[:, W // 2:, 3] = 0.0
         picture[:, W // 2:, :3] = 0.0
         u = np.full((H, W), 4.0)
-        plain = Evaluator._vector_blur(picture, u, np.zeros_like(u), {**SPECS["VectorBlur"]["params"], "vector_alpha": "none"})
-        weighted = Evaluator._vector_blur(picture, u, np.zeros_like(u), {**SPECS["VectorBlur"]["params"], "vector_alpha": "weighted"})
+        plain = Evaluator._vector_blur(picture, u, np.zeros_like(u), {**SPECS["VectorBlur"]["params"], "vector_scale": 1.0, "vector_alpha": "none"})
+        weighted = Evaluator._vector_blur(picture, u, np.zeros_like(u), {**SPECS["VectorBlur"]["params"], "vector_scale": 1.0, "vector_alpha": "weighted"})
         np.testing.assert_array_equal(weighted[..., 3], picture[..., 3])                          # the matte stays where it was
         self.assertTrue(differs(plain[..., 3], picture[..., 3]))                                   # unweighted, the matte smears
         self.assertTrue(differs(plain, weighted))

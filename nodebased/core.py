@@ -730,7 +730,7 @@ SPECS = {
                             "tvi_a": 0.0001, "legacy_scale": 0}},
     "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
-                              "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
+                              "vector_scale": 0.0, "vector_offset": -0.5, "vector_method": "forward",
                               "vector_sampling": "source", "vector_alpha": "none", "max_length": 100.0,
                               "samples": 0, "mix": 1.0, "invert_uv": 0, "vector_output": "result", **_vectorblurknobs.NEW}},
     # Shuffle's `layer` (step 5c) names one of the input's named layers (Raster.layers); empty or
@@ -943,7 +943,7 @@ SPECS = {
     "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte", "detail"],
                 "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "fillRegion": "Source Alpha", "smoothness": 1.0, "LABColourSpace": 0, "stretchAmount": 0.0, "stretchDirection": 0.0, "detailSource": "Source", "detailAmount": 0.0, "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0, "center_x": 480.0, "center_y": 270.0, "channels": "rgb", "mix": 1.0}},
     "MarkerRemoval": {"inputs": ["image"], "params": {"enabled": 1, "mode": "bilinear", "linearsearch": 100, "ctrlMask": "rgba.alpha", "x_offset": 0, "y_offset": 0}},
-    "DustBust": {"inputs": ["image"], "params": {"enable": 1, "frame_offset": 1, "edge_hardness": 0.5, "view_source": 0, "maskchannel": "none"}},
+    "DustBust": {"inputs": ["image"], "params": {"enable": 1.0, "frame_offset": 1, "edge_hardness": 0.5, "view_source": 0, "maskchannel": "none"}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0,
                   "autocrop_mode": "alpha", "autocrop_color_r": 0.0, "autocrop_color_g": 0.0, "autocrop_color_b": 0.0, "autocrop_tolerance": 0.1,
@@ -2273,6 +2273,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "tracker_warp": ["Translate", "Translate/Rotate", "Translate/Scale", "Translate/Rotate/Scale", "Affine"],
            "spark_mode": ["Rays", "Sparkles", "Fireworks"],
            "vismask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
+           "glint_w_channel": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
            "ctrlMask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
            "vis_mask": ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha", "rgba.luminance"],
            "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
