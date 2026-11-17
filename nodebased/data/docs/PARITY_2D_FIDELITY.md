@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 96.7 / 100** (167 nodes scored, rank-weighted; 98.8 counting only the nodes NodeBased has).
+**Overall fidelity: 96.8 / 100** (167 nodes scored, rank-weighted; 98.8 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.6 (98.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.7 (98.7 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.9 (98.9 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.9 (99.0 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -36,9 +36,9 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 97.1 | 96.9 | 98.1 | 6 |
 | Draw | 98.5 | 98.1 | 98.4 | 17 |
-| Time | 99.4 | 96.8 | 99.2 | 13 |
+| Time | 99.6 | 98.2 | 99.5 | 13 |
 | Channel | 99.2 | 98.6 | 98.9 | 5 |
-| Color | 97.7 | 93.1 | 97.2 | 34 |
+| Color | 97.8 | 94.8 | 97.5 | 34 |
 | Filter | 97.1 | 92.8 | 96.6 | 32 |
 | Keyer | 93.3 | 80.5 | 93.3 | 11 |
 | Merge | 99.7 | 99.3 | 99.7 | 12 |
@@ -46,9 +46,9 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 81.5 | 45.2 | 81.5 | 12 |
 
-Behaviour checked: 113 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 115 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 440 of the 441 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Per node
 
@@ -101,8 +101,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 7 | TimeBlur | `TimeBlur` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
 | 7 | TimeEcho | `TimeEcho` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 7 | TimeWarp | `TimeWarp` | supported | 96.1 | 96.1 | 100 (3/3) | - | 67 | 100 | - | 100 (16/16) | 100 | - | unmeasured |
-| 8 | Kronos | `Kronos` | supported | 83.2 | 79.3 | 65 (16/26) | - | 64 | 100 | - | 100 (30/30) | 98 | - | unmeasured |
-| 8 | OFlow | `OFlow` | supported | 85.2 | 82.3 | 73 (14/21) | - | 58 | 100 | - | 100 (30/30) | 98 | - | unmeasured |
+| 8 | Kronos | `Kronos` | supported | 91.9 | 89.4 | 78 (20/26) | - | 100 | 100 | - | 100 (32/32) | 99 | - | unmeasured |
+| 8 | OFlow | `OFlow` | supported | 95.5 | 94.3 | 88 (18/21) | - | 100 | 100 | - | 100 (32/32) | 98 | - | unmeasured |
 | 8 | SmartVector | `SmartVector` | supported | 94.8 | 94.4 | 94 (10/11) | - | 90 | 100 | - | - | 96 | - | no fixture |
 | 8 | VectorToMotion | `VectorToMotion` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
 | 9 | NoTimeBlur | `NoTimeBlur` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | - | 100 | - | no fixture |
@@ -149,10 +149,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 19 | Posterize | `Posterize` | supported | 99.0 | 98.9 | 100 (1/1) | 100 (1/1) | 89 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 19 | SoftClip | `SoftClip` | supported | 100.0 | 100.0 | 100 (3/3) | 100 (2/2) | 100 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
 | 19 | Toe | `Toe` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 20 | HistEQ | `HistEQ` | supported | 85.7 | 80.0 | 100 (1/1) | - | 100 | 100 | 0 | - | 100 | - | unmeasured |
-| 20 | Histogram | `Histogram` | supported | 73.5 | 65.1 | 67 (2/3) | - | 100 | 100 | 14 | - | 100 | - | no fixture |
+| 20 | HistEQ | `HistEQ` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 20 | Histogram | `Histogram` | supported | 100.0 | 100.0 | 100 (3/3) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 20 | MinColor | `MinColor` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
-| 20 | Sampler | `Sampler` | supported | 78.6 | 73.3 | 50 (2/4) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
+| 20 | Sampler | `Sampler` | supported | 93.5 | 90.0 | 75 (3/4) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 21 | GenerateLUT | `GenerateLUT` | supported | 86.1 | 83.1 | 82 (7/9) | - | 71 | 100 | - | - | 100 | - | no fixture |
 | 21 | Vectorfield | `Vectorfield` | supported | 82.8 | 80.2 | 85 (8/10) | - | 43 | 100 | - | - | 100 | - | no fixture |
 
@@ -324,8 +324,8 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | TimeBlur | 100.0% (2/2) | 100.0% (4/4) | 0 |
 | TimeEcho | — | 100.0% (3/3) | 0 |
 | TimeWarp | — | 100.0% (3/3) | 2 |
-| Kronos | 100.0% (2/2) | 92.9% (13/14) | 6 |
-| OFlow | 100.0% (2/2) | 91.7% (11/12) | 4 |
+| Kronos | 100.0% (2/2) | 94.4% (17/18) | 6 |
+| OFlow | 100.0% (2/2) | 93.8% (15/16) | 4 |
 | SmartVector | — | 88.9% (8/9) | 3 |
 | VectorToMotion | — | — | 0 |
 | NoTimeBlur | — | 100.0% (2/2) | 0 |
@@ -365,7 +365,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | HistEQ | — | 100.0% (1/1) | 0 |
 | Histogram | — | 100.0% (2/2) | 1 |
 | MinColor | — | 100.0% (4/4) | 1 |
-| Sampler | — | 100.0% (1/1) | 2 |
+| Sampler | — | 100.0% (2/2) | 2 |
 | GenerateLUT | 100.0% (2/2) | 100.0% (4/4) | 4 |
 | Vectorfield | — | 100.0% (5/5) | 3 |
 | Blur | — | 100.0% (3/3) | 1 |
@@ -473,7 +473,7 @@ Panel sweep S2 (2026-11-04) baseline for its eight nodes, before rows were place
 
 Panel sweep S3 (2026-11-04) baseline for its eight nodes, before rows were placed on one row and the Blend check box was paired with the guide's `weight1` (the guide's table names the normalize check box that): Remove rows 0/3; AppendClip types 4/5; CornerPin2D rows 0/2, types 10/12; BurnIn rows 0/2; Clamp rows 0/8; Blend types 1/2; DirBlur types 9/11; ContactSheet rows 0/6, types 8/11. Current: Remove rows 3/3, types 4/4; AppendClip rows 0/0, types 5/5; CornerPin2D rows 2/2, types 11/12; BurnIn rows 2/2, types 18/18; Clamp rows 8/8, types 8/8; Blend rows 0/0, types 2/2; DirBlur rows 0/0, types 11/11; ContactSheet rows 6/6, types 11/11. CornerPin2D's `invert` (a check box in the guide) is a check box over the stored forward/inverse text, DirBlur's `target` (an xy pair) is an x, y pair of fields over the stored text "x,y", and DirBlur's `Quality` (a number) is a whole-number field with a slider over the stored low/normal/high (1, 2 and 4; any other whole number is stored as its digits). A saved document keeps the text it held and renders as before. CornerPin2D's `motionblur` (a number in the guide, an on/off switch beside a samples count here) stays as it is, as Tracker's and Transform's do: one number would change how the node renders. AppendClip's `dissolve` (the length of the cross-fade in frames) and ContactSheet's `width`, `height` and `gap` (whole pixels) are listed as counting knobs. Clamp's enable check boxes sit beside the per-channel value they switch on, with the split button still on the value.
 
-Panel sweep S4 (2026-11-04) baseline for its nodes, before rows were placed on one row and the count and fraction knobs were listed: TimeBlur rows 0/2; TimeEcho types 2/3; ZDefocus types 24/25; IBKGizmo types 13/14; Encryptomatte rows 0/2; Kronos rows 0/2, types 12/14; IBKColor types 1/5; OFlow rows 0/2, types 10/12; CopyRectangle rows 0/4; TimeDissolve types 0/2; RotoPaint types 9/62. Current: TimeBlur rows 2/2, types 4/4; TimeEcho rows 0/0, types 3/3; ZDefocus rows 0/0, types 25/25; IBKGizmo rows 0/0, types 14/14; Encryptomatte rows 2/2, types 1/1; Kronos rows 2/2, types 13/14; IBKColor rows 0/0, types 1/3; OFlow rows 2/2, types 11/12; CopyRectangle rows 4/4, types 5/5; TimeDissolve rows 0/0, types 2/2; RotoPaint rows 53/54, types 66/67. Roto and RotoPaint per-item rows and widget types are measured through the `per_item` payload-to-selected-control mappings. Roto currently measures rows 40/40 and types 55/56; RotoPaint rows 51/53 and types 64/66. The two remaining RotoPaint gaps are dynamic size and transparency: the current payload has no corresponding fields or controls. `global_motionblur` remains a node-level samples count beside an on/off switch. Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.
+Panel sweep S4 (2026-11-04) baseline for its nodes, before rows were placed on one row and the count and fraction knobs were listed: TimeBlur rows 0/2; TimeEcho types 2/3; ZDefocus types 24/25; IBKGizmo types 13/14; Encryptomatte rows 0/2; Kronos rows 0/2, types 12/14; IBKColor types 1/5; OFlow rows 0/2, types 10/12; CopyRectangle rows 0/4; TimeDissolve types 0/2; RotoPaint types 9/62. Current: TimeBlur rows 2/2, types 4/4; TimeEcho rows 0/0, types 3/3; ZDefocus rows 0/0, types 25/25; IBKGizmo rows 0/0, types 14/14; Encryptomatte rows 2/2, types 1/1; Kronos rows 2/2, types 17/18; IBKColor rows 0/0, types 1/3; OFlow rows 2/2, types 15/16; CopyRectangle rows 4/4, types 5/5; TimeDissolve rows 0/0, types 2/2; RotoPaint rows 53/54, types 66/67. Roto and RotoPaint per-item rows and widget types are measured through the `per_item` payload-to-selected-control mappings. Roto currently measures rows 40/40 and types 55/56; RotoPaint rows 51/53 and types 64/66. The two remaining RotoPaint gaps are dynamic size and transparency: the current payload has no corresponding fields or controls. `global_motionblur` remains a node-level samples count beside an on/off switch. Kronos's and OFlow's `vectorDetail` (a fraction from 0 to 1 in the guide, a whole number of 1 to 6 pyramid levels here) and IBKColor's `off` and `mult` (RGB triples in the guide, single numbers here) stay: each needs a change to the kernel. IBKColor's `Size` and `multi` are left unmeasured because the guide's defaults cannot tell the widget. TimeEcho's frames behind, ZDefocus's blades and TimeDissolve's in and out are listed as counting knobs; IBKGizmo's screen range and the Kronos and OFlow timing frame are listed as fractions.
 
 Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on one row and the count knobs were listed: Grid types 11/12; Colorspace rows 0/6; MotionBlur2D and MotionBlur3D rows 0/2; SmartVector types 7/9; VectorBlur types 10/12; OCIODisplay types 6/7; OCIOFileTransform types 2/3; OCIOLookTransform types 3/4; Sparkles types 26/27. Current: Grid rows 0/0, types 12/12; Colorspace rows 6/6, types 1/1; MotionBlur2D rows 2/2, types 3/3; MotionBlur3D rows 2/2, types 3/3; SmartVector rows 0/0, types 8/9; VectorBlur rows 0/0, types 12/12; OCIODisplay rows 0/0, types 7/7; OCIOFileTransform rows 0/0, types 3/3; OCIOLookTransform rows 0/0, types 4/4; Sparkles rows 0/0, types 27/27. Grid's Number is one row of two whole-number fields; Colorspace's Input and Output are one row each of three menus; MotionBlur's shutter offset menu and custom offset share a row. OCIODisplay's, OCIOFileTransform's and OCIOLookTransform's Invert direction is a check box over the stored direction text (forward or inverse), as CornerPin2D's Invert is. SmartVector's matteDilation, VectorBlur's grow_bbox and Sparkles's ray_nb are listed as counting knobs. Root is the Project Settings dialog, not a node panel, and the ruler reads node panels only, so its frame-range and proxy rows are not measured here. SmartVector's `vectorDetailReg` (a fraction in the guide, an integer 1 to 6 here) needs a change to the kernel, and that stays the one types mismatch on SmartVector. VectorBlur's `uv` (a layer picker in the guide) is an editable menu of the motion and SmartVector layer names over the same stored layer name (panel sweep S5 finish); STMap and IDistort keep their layer name field.
 
@@ -517,7 +517,7 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 27 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
 | 28 | Tracker (Transform #3) | `Tracker` | 0.56 | 98.3 | nothing missing that the guide lists |
 | 29 | ZDefocus (Filter #8) | `ZDefocus` | 0.55 | 91.2 | 11 secondary knobs missing: `aspect#2`, `roundness`, `inner_size`, `inner_feather`, `inner_brightness` ... |
-| 30 | Kronos (Time #8) | `Kronos` | 0.52 | 83.2 | primary knobs missing: `resetInputRange`, `motionEstimation`, `strength`, `resampleType`; 6 secondary knobs missing: `legacymodeNuke9`, `weightRed`, `weightGreen`, `weightBlue`, `vectorSpacing` ... |
+| 30 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
 
 ## Formula cases
 
@@ -864,6 +864,15 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `ocio_display_invert` | convention | pass | within tolerance | - |
 | `ocio_file_forward` | convention | pass | within tolerance | - |
 | `ocio_file_invert` | convention | pass | within tolerance | - |
+| `kronos_default_weights_find_the_red_motion` | convention | pass | within tolerance | - |
+| `kronos_red_weight_zero_reads_no_motion` | convention | pass | within tolerance | - |
+| `kronos_resampling_filters` | convention | not scored: the guide names the filters and gives no weights, and a half-pixel move on a plate the estimator must measure cannot be written down to a tolerance that tells the filters apart; the kernel comparison is asserted on a known field in tests/test_2d_behaviour_retime_r.py | - | - |
+| `oflow_default_weights_find_the_red_motion` | convention | pass | within tolerance | - |
+| `oflow_red_weight_zero_reads_no_motion` | convention | pass | within tolerance | - |
+| `oflow_resampling_filters` | convention | not scored: the guide names the filters and gives no weights, and a half-pixel move on a plate the estimator must measure cannot be written down to a tolerance that tells the filters apart; the kernel comparison is asserted on a known field in tests/test_2d_behaviour_retime_r.py | - | - |
+| `sampler_passes_the_picture_through` | convention | pass | within tolerance | - |
+| `histogram_defaults_are_the_identity` | convention | pass | within tolerance | - |
+| `histogram_input_range_stretch` | convention | not scored: the guide describes the knobs as the input range, gamma and output range of a histogram's curve and gives no formula for the stretch's rounding or its clamp, so the exact values are not written down | - | - |
 | `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
 | `blur_box_1` | convention | pass | within tolerance | - |
 | `blur_box_2` | convention | pass | within tolerance | - |

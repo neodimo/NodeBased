@@ -1,3 +1,7 @@
+## Lane 2 step R (11:16 PM on 2026-11-16 PDT): Kronos and OFlow Resampling and weights; Sampler, Histogram, HistEQ knobs and rows
+
+Branch `openclaw/nb-2d-parity`, main at `8f9f209e` (0.58.0) plus this step. New: `nodebased/samplerknobs.py`, `tests/test_2d_behaviour_retime_r.py`, `tests/test_2d_behaviour_analysis_r.py`. Changed: `nodebased/retimeknobs.py`, `core.py`, `knobs.py`, `ops2d_chrome.py`, `app.py`, `tools/nuke_fidelity_cases_color.py`, `tools/nuke_fidelity_requirements.py`, the mapping, `docs/PARITY_2D.md` and the fidelity report (with their bundled copies). No schema bump: saved nodes take the new params from `upgrade_nodes`. See TASKLOG.md for the numbers and what is open.
+
 ## Lane 2 step P (2:30 PM on 2026-11-16 PDT): behaviour cases for ChromaKeyer, Keylight, IBKColor, IBKGizmo, ShuffleCopy, Remove and Posterize
 
 ## Continuous mode merge: Lane 11 (Review book, Claude Opus 5.5) (11:55 PM on 2026-11-16 PDT)
