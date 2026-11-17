@@ -1,5 +1,37 @@
 ## Lane 10 step T3 (11/17 3:40 AM): Viewer on-screen controls, partial
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 11 (Review book, Claude Opus 5.5) (9:46 AM on 2026-11-17 PDT)
+
+`main` moved `41def1b1` -> `b67c1496` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `b67c1496` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-0911.log`, started 9:12 AM): **Ran 10092 tests in 1919.425 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step W1 (Tue 11/17): filter, transform and draw panels match Nuke's, from the review book's worklist.** Commits:
+  - `95c8a092` Lane 9 step W1 fixes: Bilateral's layout test reads Channels first as the guide's table does; the bypass test runs DirBlur on its linear type (a new DirBlur opens on Nuke's zoom); the Tracker window tests set the bilinear filter their one-pixel margin assumes (a new Tracker opens on Nuke's cubic)
+  - `fb9c44c8` Fidelity report rebuilt after rebasing onto lanes 2 and 10 (overall 97.2); lane 9's W1 panel tests live in test_2d_behaviour_panels_w1_filter.py beside lane 2's
+  - `5abead9d` LensDistortion's 22 grid-detect and solve knobs and Flare's six look buttons are listed unsupported with their reasons; SplineWarp opens on cubic with curve resolution 3; report regenerated
+  - `22565f0d` Filter and Draw defaults follow the guide, part two: DropShadow, LightWrap, DirBlur, Dither, STMap, IDistort, Defocus, Inpaint, Denoise, DegrainSimple, GridWarp, MotionBlur and Reformat start as the tables list them; Grain's labels read as the guide's; Blur probes at its older size; report regenerated (97.1)
+  - `333af0cc` Roto, RotoPaint and Tracker read as the guide's (luminance matching off, cubic filter, labels); ZDefocus opens at focus 0, depth of field 0, maximum 50, shape 0; Channels leads ten Filter panels; missing behaviour cases for fifteen nodes
+  - `8c1a8fb0` Transform, CornerPin and Tracker: motion blur is the number of shutter samples as in Nuke; older nodes keep the switch and their samples knob (legacy_blur_samples)
+  - `38e92bc0` Filter and Draw defaults follow the guide: Blur starts at size 0, Crop's intersect is off, Sharpen amount 1, Glow 15 and 0, Soften 1, Rectangle and Radial softness 1, Text opens empty at size 100; the Text shadow knobs read as the guide's; two table errors recorded in the pairing
+  Diff: 44 files changed, 630 insertions(+), 300 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+- **Lane 11 (Review book, Claude Opus 5.5), step B3 (Tue 11/17): behaviour cases and missing knobs for the Image, Merge, Metadata and Other nodes.** Commits:
+  - `f8d65097` Fidelity report and worklist rebuilt after rebasing onto lanes 2 and 10 on main
+  - `04686f18` Fidelity report and worklist rebuilt on the stacked tree after lanes 2 and 10 (overall 97.1)
+  - `6ea4da59` Blend gets Nuke's invert beside the mask; worklist and fidelity report regenerated
+  - `4a73d9f6` Fidelity cases for the Image, Merge, Metadata and Other nodes the review book listed unchecked
+  Diff: 14 files changed, 557 insertions(+), 304 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #11.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (4:35 AM on 2026-11-17 PDT)
 
 `main` moved `dd24d5f1` -> `ae7ca214` (lane commits cherry-picked onto main in lane order) and then to this

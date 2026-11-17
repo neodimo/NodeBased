@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step W1 (Tue 11/17): filter, transform and draw panels match Nuke's, from the review book's worklist, Lane 11 (Review book, Claude Opus 5.5) step B3 (Tue 11/17): behaviour cases and missing knobs for the Image, Merge, Metadata and Other nodes (integrator tick)
+
+- **What was done:** `main` `41def1b1` -> `b67c1496` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `b67c1496`: Ran 10092 tests in 1919.425 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step W1 (Tue 11/17): colour, keying, channel and time panels match Nuke's, from the review book's worklist, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T3 (Tue 11/17): Viewer on-screen controls work like Nuke's, measured per node (integrator tick)
 
 - **What was done:** `main` `dd24d5f1` -> `ae7ca214` plus this docs commit. Evidence and per-lane commit
