@@ -1061,6 +1061,7 @@
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
+   "widget_notes": {"enable_path_mask": "the guide's table types this knob `string` with the default `off`; its page says of the path-mask group only \"Specifies the mask pattern to match the prim names to affect\" (the pattern field), so `off` is a checkbox's state and the table's type is its generic text type. NodeBased draws a checkbox, as Nuke does.", "inject_mask": "the guide's table types this knob `string` with the default `off`; its page says of the path-mask group only \"Specifies the mask pattern to match the prim names to affect\" (the pattern field), so `off` is a checkbox's state and the table's type is its generic text type. NodeBased draws a checkbox, as Nuke does.", "reverse_input": "the guide's table types this knob `string` with the default `off`, the state of its Reverse Input checkbox; NodeBased draws a checkbox."},
    "knobs": [
     {"nodebased": ["rounding_mode"], "nuke": ["rounding_mode"], "kind": "same"},
     {"nodebased": ["time_offset"], "nuke": ["time_offset"], "kind": "same"},
@@ -1076,6 +1077,7 @@
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
+   "widget_notes": {"enable_path_mask": "the guide's table types this knob `string` with the default `off`; its page says of the path-mask group only \"Specifies the mask pattern to match the prim names to affect\" (the pattern field), so `off` is a checkbox's state and the table's type is its generic text type. NodeBased draws a checkbox, as Nuke does.", "inject_mask": "the guide's table types this knob `string` with the default `off`; its page says of the path-mask group only \"Specifies the mask pattern to match the prim names to affect\" (the pattern field), so `off` is a checkbox's state and the table's type is its generic text type. NodeBased draws a checkbox, as Nuke does."},
    "knobs": [
     {"nodebased": ["rounding_mode"], "nuke": ["rounding_mode"], "kind": "same"},
     {"nodebased": ["first_frame"], "nuke": ["firstFrame"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `firstFrame`"},
@@ -1189,6 +1191,7 @@
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
+   "value_map": {"filter": {"blend": "box"}},
    "knobs": [
     {"nodebased": ["lookup_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'filter', scripting name `filter`"},
     {"nodebased": ["lookup"], "nuke": ["lookup"], "kind": "same"},
@@ -1228,7 +1231,9 @@
     {"nodebased": ["interpolation"], "nuke": ["interpolation"], "kind": "same"},
     {"nodebased": ["legacy_retime"], "kind": "extra", "reason": "NodeBased-only: 1 keeps the retime a Kronos saved before 2026-11-03 did (frame times speed from zero, no input range, interpolation frame blends); see nodebased/retimeknobs.py"},
     {"nodebased": ["flow_backend"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": ["vector_detail"], "nuke": ["vectorDetail"], "kind": "renamed", "reason": "the control is paired with Nuke vectorDetail; NodeBased selects 1 to 6 integer pyramid levels while Nuke uses a 0 to 1 field density, so the widget-scale mismatch remains measured until a different estimator can match it."},
+    {"nodebased": ["vector_density"], "nuke": ["vectorDetail"], "kind": "renamed", "reason": "the density of the computed vectors relative to the image, as the guide describes it: one vector per round(1 / density) pixels, the full-size estimate averaged over each block and sampled back at every pixel by bilinear interpolation (lane 2 step W1; estimating on the averaged-down picture measured rougher)"},
+    {"nodebased": ["vector_detail"], "kind": "extra", "reason": "NodeBased-only: how many pyramid levels the motion estimate uses (1 to 6), limited by the Vector Detail's smaller picture"},
+    {"nodebased": ["legacy_vector_density"], "kind": "extra", "reason": "NodeBased-only: estimates the motion at full size on graphs saved before Vector Detail was a density"},
     {"nodebased": ["smoothness"], "nuke": ["smoothness"], "kind": "renamed", "reason": "the estimator's smoothing; NodeBased's has one estimator, so this is the Local method's knob and Regularized's `strength` is not paired; the default stays 1.0 here against Nuke's 0.5: NodeBased's smoothness is the solver's own weight on a different scale, so the two numbers do not name the same estimate (the defaults score skips it)"},
     {"nodebased": ["shutter_time"], "nuke": ["shutterTime"], "kind": "renamed", "reason": "the shutter's width in source frames (0.5 is a 180 degree shutter); a Kronos saved before it keeps the output-speed-wide shutter (`legacy_shutter`)"},
     {"nodebased": ["auto_shutter_time"], "nuke": ["autoShutterTime"], "kind": "renamed", "reason": "on, the shutter is as wide as the speed's excess over the original speed, `max(0, |speed| - 1)`; the guide gives no formula, so this reading is not scored"},
@@ -1247,7 +1252,7 @@
     {"nodebased": [], "nuke": ["vectorSpacing"], "kind": "unsupported", "reason": "the spacing of the vectors drawn in the viewer by Overlay Vectors; viewer-only, and NodeBased's viewer draws no vector overlay for Kronos or OFlow (VectorGenerator writes the vectors as layers, which any viewer can show)"},
     {"nodebased": [], "nuke": ["showVectors"], "kind": "unsupported", "reason": "draws the motion vectors over the viewer image; viewer-only, and NodeBased's viewer has no vector overlay to wire it to (VectorGenerator writes the vectors as layers, which any viewer can show)"}
    ],
-   "skip_default": ["vectorDetail", "smoothness"],
+   "skip_default": ["smoothness"],
    "value_map": {"timing2": {"speed": "Output Speed", "input_speed": "Input Speed", "frame": "Frame"}}
   },
   "OFlow": {
@@ -1264,7 +1269,9 @@
     {"nodebased": ["speed"], "nuke": ["timingOutputSpeed"], "kind": "renamed", "reason": "output speed"},
     {"nodebased": ["input_speed"], "nuke": ["timingInputSpeed"], "kind": "renamed", "reason": "input speed; a negative value reads as 0, as the guide says Input Speed takes none"},
     {"nodebased": ["frame"], "nuke": ["timingFrame2"], "kind": "renamed", "reason": "output frame"},
-    {"nodebased": ["vector_detail"], "nuke": ["vectorDetail"], "kind": "renamed", "reason": "the control is paired with Nuke vectorDetail; NodeBased selects 1 to 6 integer pyramid levels while Nuke uses a 0 to 1 field density, so the widget-scale mismatch remains measured until a different estimator can match it."},
+    {"nodebased": ["vector_density"], "nuke": ["vectorDetail"], "kind": "renamed", "reason": "the density of the computed vectors relative to the image, as the guide describes it: one vector per round(1 / density) pixels, the full-size estimate averaged over each block and sampled back at every pixel by bilinear interpolation (lane 2 step W1; estimating on the averaged-down picture measured rougher)"},
+    {"nodebased": ["vector_detail"], "kind": "extra", "reason": "NodeBased-only: how many pyramid levels the motion estimate uses (1 to 6), limited by the Vector Detail's smaller picture"},
+    {"nodebased": ["legacy_vector_density"], "kind": "extra", "reason": "NodeBased-only: estimates the motion at full size on graphs saved before Vector Detail was a density"},
     {"nodebased": ["shutter_samples"], "nuke": ["shutterSamples"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterSamples`"},
     {"nodebased": ["shutter_time"], "nuke": ["shutterTime"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutterTime`"},
     {"nodebased": ["smoothness"], "nuke": ["smoothness"], "kind": "same", "reason": "the estimator's smoothing; the default stays 1.0 here against Nuke's 0.5: NodeBased's smoothness is the solver's own weight on a different scale, so the two numbers do not name the same estimate (the defaults score skips it)"},
@@ -1280,7 +1287,7 @@
     {"nodebased": [], "nuke": ["vectorSpacing"], "kind": "unsupported", "reason": "the spacing of the vectors drawn in the viewer by Overlay Vectors; viewer-only, and NodeBased's viewer draws no vector overlay for Kronos or OFlow (VectorGenerator writes the vectors as layers, which any viewer can show)"},
     {"nodebased": [], "nuke": ["showVectors"], "kind": "unsupported", "reason": "draws the motion vectors over the viewer image; viewer-only, and NodeBased's viewer has no vector overlay to wire it to (VectorGenerator writes the vectors as layers, which any viewer can show)"}
    ],
-   "skip_default": ["vectorDetail", "smoothness"],
+   "skip_default": ["smoothness"],
    "value_map": {"timing2": {"speed": "Output Speed", "input_speed": "Input Speed", "frame": "Frame"}}
   },
   "SmartVector": {
@@ -1289,6 +1296,7 @@
     {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
     {"nodebased": "matte", "nuke": "Matte", "kind": "mapped"}
    ],
+   "default_notes": {"vectorDetailReg": "NodeBased's `vector_detail` is the estimator's pyramid level count (1 to 6, default 4); Nuke's is a 0 to 1 density (default 0.3). Kronos and OFlow map the density (step W1); SmartVector's estimator is left on levels."},
    "knobs": [
     {"nodebased": ["vector_detail"], "nuke": ["vectorDetailReg"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `vectorDetailReg`"},
     {"nodebased": ["matte_channel"], "nuke": ["matteChannel"], "kind": "renamed", "reason": "NodeBased uses snake case; Nuke's scripting name is `matteChannel`: where the foreground mask comes from (the Source's alpha or the Matte input)"},
@@ -1367,6 +1375,7 @@
     {"nodebased": "B", "nuke": "B", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "label_notes": {"to0": "Nuke labels each Copy row's destination `to`; NodeBased's row is one control per destination channel (Red here), so the destination is the row's place and its tooltip.", "to1": "as to0: the destination is Green", "to2": "as to0: the destination is Blue", "to3": "as to0: the destination is Alpha"},
    "knobs": [
     {"nodebased": ["copy_red"], "nuke": ["from0", "to0"], "kind": "components", "reason": "one copy pair per output channel"},
     {"nodebased": ["copy_green"], "nuke": ["from1", "to1"], "kind": "components", "reason": "one copy pair per output channel"},
@@ -1392,6 +1401,7 @@
     {"nodebased": "B", "nuke": "B", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "value_map": {"A": {"A.a": "rgba.alpha"}, "B": {"B.a": "rgba.alpha"}, "output": {"A": "rgba.alpha"}},
    "knobs": [
     {"nodebased": ["a_channel"], "nuke": ["A"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `A`"},
     {"nodebased": ["b_channel"], "nuke": ["B"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `B`"},
@@ -1411,6 +1421,7 @@
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"}
    ],
+   "default_notes": {"channels": "Kept empty on purpose: with the operation on remove, a default of all would strip every layer from a new node; the guide's table lists the picker's all."},
    "knobs": [
     {"nodebased": ["remove_operation"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'operation', scripting name `operation`"},
     {"nodebased": ["layers"], "nuke": ["channels"], "kind": "renamed", "reason": "the layers to keep or remove"},
@@ -1673,6 +1684,7 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "default_notes": {"mode": "Kept at stops on purpose: the node's `exposure` is read in stops, and the guide's table lists Densities as the choice's default; a graph saved before reads stops too."},
    "knobs": [
     {"nodebased": ["exposure_mode"], "nuke": ["mode"], "kind": "renamed", "reason": "PARITY_2D.md Color #11: Nuke's `mode`, renamed because `mode` already belongs to Tracker in the shared CHOICES"},
     {"nodebased": ["blackpoint"], "nuke": ["blackpoint"], "kind": "same"},
@@ -1699,6 +1711,7 @@
     {"nodebased": "sat_mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
     {"nodebased": "brt_mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
+   "label_notes": {"Conversion": "The guide's `Conversion` (label `is`) and `output` are two menus on one line in Nuke; NodeBased's Output to alpha menu holds both, so one label cannot read as both."},
    "knobs": [
     {"nodebased": ["hue_range_min", "hue_range_max"], "nuke": ["huesrcs"], "kind": "components", "reason": "range as two scalar params"},
     {"nodebased": ["saturation_range_min", "saturation_range_max"], "nuke": ["satsrcs"], "kind": "components", "reason": "range as two scalar params"},
@@ -1815,6 +1828,7 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "default_notes": {"display": "The guide lists the config's own default display; NodeBased starts on the bundled config's sRGB display, the one a new project opens with.", "view": "The guide lists the sRGB view; NodeBased starts on the bundled config's default ACES view for the display it opens with."},
    "knobs": [
     {"nodebased": ["src"], "nuke": ["colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input colorspace', scripting name `colorspace`"},
     {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
@@ -1881,6 +1895,7 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "default_notes": {"working_space": "NodeBased names the working space `scene_linear`; the guide's `scene_linear (linear)` is that role's own label."},
    "knobs": [
     {"nodebased": ["path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'file', scripting name `file`"},
     {"nodebased": ["transform_direction"], "nuke": ["invert"], "kind": "renamed", "reason": "NodeBased's forward/inverse choice is Nuke's invert direction checkbox"},
@@ -1897,7 +1912,7 @@
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["divide_by_alpha"], "kind": "extra", "reason": "NodeBased-only: the older behaviour of dividing the colour by its alpha before the OpenColorIO transform and multiplying it back; a new node transforms the stored colour as Nuke does, and a graph saved before keeps this on"}
    ],
-   "value_map": {"invert": {"forward": false, "inverse": true}}
+   "value_map": {"invert": {"forward": false, "inverse": true}, "file": {"": "none"}}
   },
   "OCIOLogConvert": {
    "nodebased": "OCIOLogConvert",
@@ -1973,6 +1988,7 @@
     {"nodebased": "reference", "nuke": "Target", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
+   "widget_notes": {"sourceRefFrames": "The guide types the reference frames `number`; NodeBased takes a list of frames as text (1, 5, 10), which a single number field cannot hold.", "targetRefFrames": "As sourceRefFrames."},
    "knobs": [
     {"nodebased": ["grade_gain_r", "grade_gain_g", "grade_gain_b"], "nuke": ["slope"], "kind": "components", "reason": "the solved gain is Nuke's CDL slope"},
     {"nodebased": ["grade_gamma_r", "grade_gamma_g", "grade_gamma_b"], "nuke": ["power"], "kind": "components", "reason": "the solved gamma is Nuke's CDL power"},
@@ -2026,6 +2042,7 @@
     {"nodebased": "second", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "label_notes": {"temp_name0": "The guide's label `[variable name field]` is placeholder text for the name field; NodeBased labels it Variable 1 name.", "temp_name1": "The guide's label `[variable name field]` is placeholder text for the name field; NodeBased labels it Variable 2 name.", "temp_name2": "The guide's label `[variable name field]` is placeholder text for the name field; NodeBased labels it Variable 3 name.", "temp_name3": "The guide's label `[variable name field]` is placeholder text for the name field; NodeBased labels it Variable 4 name."},
    "knobs": [
     {"nodebased": ["temp_name0"], "nuke": ["temp_name0"], "kind": "same"},
     {"nodebased": ["temp_expr0"], "nuke": ["temp_expr0"], "kind": "same"},
@@ -2146,6 +2163,7 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "widget_notes": {"in": "The guide types `in` and `out` number_list; Nuke draws them as rows of numeric fields, which is the row of float fields NodeBased draws (Input range: black, white, gamma).", "out": "As `in`: a row of float fields (black out, white out)."},
    "knobs": [
     {"nodebased": ["black", "white", "gamma"], "nuke": ["in"], "kind": "components", "reason": "input range black, white and gamma"},
     {"nodebased": ["black_out", "white_out"], "nuke": ["out"], "kind": "components", "reason": "output range"},
@@ -2211,6 +2229,8 @@
    "inputs": [
     {"nodebased": "source", "nuke": "unnamed", "kind": "mapped"}
    ],
+   "default_notes": {"file_type": "The guide lists none; NodeBased's file type menu offers cube and 3dl only and starts on cube, the format a LUT written without a choice takes."},
+   "value_map": {"file": {"": "none"}},
    "knobs": [
     {"nodebased": ["lut_path"], "nuke": ["file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output file', scripting name `file`"},
     {"nodebased": ["lut_file_type"], "nuke": ["file_type"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'file type', scripting name `file_type`"},
@@ -2230,6 +2250,8 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
+   "value_map": {"interpolation": {"trilinear": "trilinear field"}, "vfield_file": {"": "none"}},
+   "default_notes": {"colorspaceIn": "NodeBased's working space is ACEScg, which is what the guide's `linear` names in a script that works in it; a new node leaves the picture in the working space.", "colorspaceOut": "As colorspaceIn: the output stays in the working space (ACEScg), the guide's `linear`."},
    "knobs": [
     {"nodebased": ["cube_path"], "nuke": ["vfield_file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'vectorfield file', scripting name `vfield_file`"},
     {"nodebased": ["reload"], "nuke": ["reload"], "kind": "same"},
@@ -3048,7 +3070,9 @@
    ],
    "knobs": [
     {"nodebased": ["key_red", "key_green", "key_blue"], "nuke": ["_screenColor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
-    {"nodebased": ["despill_bias"], "nuke": ["despillBias"], "kind": "renamed", "reason": "NodeBased has one scalar bias; Nuke's is per channel"},
+    {"nodebased": ["despill_bias_red", "despill_bias_green", "despill_bias_blue"], "nuke": ["despillBias"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob (lane 2 step W1)"},
+    {"nodebased": ["despill_bias"], "kind": "extra", "reason": "NodeBased-only: the single number a graph saved before the bias became a colour used; read while Older despill bias is on"},
+    {"nodebased": ["legacy_despill_bias"], "kind": "extra", "reason": "NodeBased-only: switches the despill back to the single number on graphs saved before the bias became a colour"},
     {"nodebased": ["premultiply"], "nuke": ["_preMultiply"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `_preMultiply`"},
     {"nodebased": ["key_tolerance"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["key_softness"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
@@ -3071,8 +3095,7 @@
     {"nodebased": ["replace_alpha_diff"], "nuke": ["_replaceAlphaDiff"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_replaceAlphaDiff`"},
     {"nodebased": ["replace_red", "replace_green", "replace_blue"], "nuke": ["_replaceColor"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"},
     {"nodebased": ["replace_amount"], "nuke": ["_replaceAmount"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `_replaceAmount`"}
-   ],
-   "skip_default": ["despillBias"]
+   ]
   },
   "Difference": {
    "nodebased": "Difference",
@@ -3181,6 +3204,7 @@
     {"nodebased": "pick", "nuke": "1", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
+   "widget_notes": {"off": "The guide types darks and lights `number_list` (red, green, blue); NodeBased's are single numbers that apply to every channel.", "mult": "As off.", "multi": "The guide types patch black `number`; NodeBased draws a checkbox, as the knob is an on/off switch (default 0)."},
    "knobs": [
     {"nodebased": ["fill_size"], "nuke": ["Size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `Size`"},
     {"nodebased": ["screen_erode"], "nuke": ["erode"], "kind": "renamed", "reason": "PARITY_2D.md Keyer #7: Nuke's `erode`"},
@@ -3199,6 +3223,7 @@
     {"nodebased": "bg", "nuke": "bg", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
+   "value_map": {"st": {"blue": "C-blue", "green": "C-green"}},
    "knobs": [
     {"nodebased": ["screen_type"], "nuke": ["st"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `st`"},
     {"nodebased": ["luminance_match"], "nuke": ["lm_enable"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `lm_enable`"},

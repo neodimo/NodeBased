@@ -602,4 +602,12 @@ def cases():
                               "and no weights for the in-between images; the blur of a moving plate is not written down")):
             retime("not_scored_" + what.split()[0], ((method_knob, "Motion"),), {"interpolation": "motion"}, 2, shows(1.0), "convention",
                    f"{node}: {what}", unscored=reason)
+    # ------------------------------------------------------------------------------------------------------------------- NoTimeBlur (step W1)
+    page = GUIDE + "notimeblur.html"
+    note = (f"NoTimeBlur ({page}): 'NoTimeBlur prevents nodes downstream from asking for fractional or multiple frames'; rounding sets 'the rounding type to use "
+            "when blocking fractional or multiple frames: rint - rounds the frame(s) to the nearest integer value. floor - rounds the frame(s) down to the nearest "
+            "integer value. ceil - rounds the frame(s) up to the nearest integer value. none - no rounding is applied to the requested frame(s)'")
+    for rounding, frame, picks in (("rint", 2.4, 2), ("rint", 2.6, 3), ("floor", 2.6, 2), ("ceil", 2.4, 3), ("none", 2.4, 2.4)):
+        case(f"notimeblur_{rounding}_at_{frame:g}", "NoTimeBlur", (("rounding", rounding),), {"rounding": rounding}, {"frame": frame}, shows(picks), "guide",
+             f"NoTimeBlur with rounding {rounding} asked for frame {frame:g} gives its input's frame {picks:g}. " + note)
     return out

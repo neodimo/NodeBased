@@ -311,8 +311,8 @@ class LayoutTests(unittest.TestCase):
         names = [n for n, _ in self.labels("OFlow")]
         paired = [n for n in names if n != "output_start" and n != "flow_backend"]
         self.assertEqual(paired, ["input_start", "retimed_channels", "interpolation", "timing", "speed", "input_speed", "frame",
-                                  "vector_detail", "smoothness", "resample_type", "shutter_samples", "shutter_time", "auto_shutter_time", "flicker_compensation",
-                                  "weight_red", "weight_green", "weight_blue"])
+                                  "vector_density", "vector_detail", "smoothness", "resample_type", "shutter_samples", "shutter_time", "auto_shutter_time", "flicker_compensation",
+                                  "weight_red", "weight_green", "weight_blue", "legacy_vector_density"])
         labels = dict(self.labels("OFlow"))
         self.assertEqual((labels["interpolation"], labels["speed"], labels["frame"]), ("Method", "Output Speed", "Frame"))
 

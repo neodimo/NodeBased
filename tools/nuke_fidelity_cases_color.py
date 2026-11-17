@@ -2043,6 +2043,81 @@ def _analysis_cases():
     return out
 
 
+# ----------------------------------------------------------------------------------------------- the nodes with no case yet (step W1)
+def _lut_cube_file():
+    """A 2 x 2 x 2 .cube file that maps (r, g, b) to (r / 2, g, 1 - b): an affine table, which trilinear and tetrahedral interpolation both read back
+    exactly. The red index changes first, as a .cube file lists its rows."""
+    import os
+    import tempfile
+    path = os.path.join(tempfile.mkdtemp(prefix="nb-cases-"), "affine.cube")
+    rows = ["TITLE \"affine\"", "LUT_3D_SIZE 2"]
+    for b in (0, 1):
+        for g in (0, 1):
+            for r in (0, 1):
+                rows.append(f"{0.5 * r} {float(g)} {float(1 - b)}")
+    with open(path, "w", encoding="ascii") as handle:
+        handle.write("\n".join(rows) + "\n")
+    return path
+
+
+def _w1_cases():
+    """Vectorfield applies a LUT file, and the nodes whose behaviour the guide does not state as a picture or a number are listed `unscored` with
+    that reason, so the audit knows each was looked at rather than skipped."""
+    out = []
+    base = "https://learn.foundry.com/nuke/17.0/content/reference_guide/"
+    cube = _lut_cube_file()
+
+    def lut_plate(red, green, blue):
+        def expected(fx):
+            ref = np.empty((12, 16, 4), np.float64)
+            ref[..., 0], ref[..., 1], ref[..., 2], ref[..., 3] = red / 2.0, green, 1.0 - blue, 1.0
+            return ref, np.ones((12, 16, 4), bool)
+        return expected
+    for interpolation in ("trilinear", "tetrahedral"):
+        for red, green, blue in ((0.2, 0.5, 0.8), (0.9, 0.1, 0.4)):
+            out.append(Case(id=f"vectorfield_{interpolation}_applies_the_lut_{red:g}_{green:g}_{blue:g}", nuke="Vectorfield", nuke_class="Vectorfield",
+                            nuke_knobs=(("vfield_file", "affine.cube"), ("interpolation", interpolation)), nuke_inputs=("A",), nb_kind="Vectorfield",
+                            nb_params={"_plate": {"type": "Constant", "params": {"red": red, "green": green, "blue": blue, "alpha": 1.0}},
+                                       "cube_path": cube, "interpolation": interpolation},
+                            nb_inputs=(), expected=lut_plate(red, green, blue), source="convention", tolerance=1e-6,
+                            statement=(f"Vectorfield ({base}color_nodes/vectorfield.html) 'applies color values from lookup tables (LUTs)': a .cube file that maps "
+                                       f"(r, g, b) to (r / 2, g, 1 - b) turns the plate ({red:g}, {green:g}, {blue:g}) into ({red / 2:g}, {green:g}, {1 - blue:g}). "
+                                       f"The table is affine, so {interpolation} interpolation returns it exactly; the file is written by the case")))
+    unscored = (
+        ("ColorTransfer", "color_nodes/colortransfer.html", "color_transfer_roi_colours",
+         "ColorTransfer matches the colours of input B to the region of input A",
+         "the guide documents the region of interest (x, y, r, t) and gives no formula for the match, so no number can be written down"),
+        ("MatchGrade", "color_nodes/matchgrade.html", "match_grade_matches_a_clip",
+         "MatchGrade analyses a source clip and a target clip and grades the source to look like the target",
+         "the guide describes the analysis (tasks, reference frames, transform choices) without a formula, and a clip matched to itself is not stated to be left alone"),
+        ("GenerateLUT", "color_nodes/generatelut.html", "generate_lut_writes_the_file",
+         "GenerateLUT writes a 1D or 3D LUT file from the colour nodes downstream of a CMSTestPattern",
+         "the guide states the node's output as a LUT file made when Generate is pressed, not a picture; the table's values are the downstream nodes' own"),
+        ("SmartVector", "time_nodes/smartvector.html", "smart_vector_writes_vectors",
+         "SmartVector writes vectors that carry a reference frame's picture through the clip",
+         "the vectors come from motion estimation across frames, and the guide gives no number a pixel case could check"),
+        ("VectorToMotion", "time_nodes/vectortomotion.html", "vector_to_motion_converts_layers",
+         "VectorToMotion turns a vector layer into motion vectors",
+         "the guide does not state the conversion's scale or sign, so the converted values are not written down"),
+        ("Cryptomatte", "keyer_nodes/cryptomatte.html", "cryptomatte_extracts_a_matte",
+         "Cryptomatte extracts mattes from a Cryptomatte-encoded render by object name or id",
+         "the case needs a render that carries Cryptomatte layers and a manifest, which the one-frame fixture does not have"),
+        ("Encryptomatte", "keyer_nodes/encryptomatte.html", "encryptomatte_writes_ids",
+         "Encryptomatte writes Cryptomatte layers from mattes and names",
+         "the guide gives the layer names and no values for the encoded ranks and coverage, so none can be written down"),
+        ("Ultimatte", "keyer_nodes/ultimatte.html", "ultimatte_keys_the_screen",
+         "Ultimatte keys a screen with the Ultimatte algorithm",
+         "a licensed third-party keyer: NodeBased has no node that runs its algorithm, and the guide states no number for its matte"),
+        ("Primatte", "keyer_nodes/primatte.html", "primatte_keys_the_screen",
+         "Primatte keys a screen with the Primatte algorithm",
+         "a licensed third-party keyer: NodeBased has no node that runs its algorithm, and the guide states no number for its matte"),
+    )
+    for nuke, path, case_id, statement, reason in unscored:
+        out.append(Case(id=case_id, nuke=nuke, nuke_class=nuke, nuke_knobs=(), nuke_inputs=("A",), nb_kind=nuke, nb_params=None, nb_inputs=("A",),
+                        expected=None, source="guide", statement=f"{statement} ({base}{path})", inexpressible=reason, unscored=reason))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
@@ -2052,4 +2127,4 @@ def cases():
             + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
             + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases()
             + _chroma_keyer_behaviour_cases() + _screen_keyer_behaviour_cases() + _ibk_behaviour_cases() + _shuffle_copy_cases() + _remove_cases()
-            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases() + _retime_weight_cases() + _analysis_cases())
+            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases() + _retime_weight_cases() + _analysis_cases() + _w1_cases())

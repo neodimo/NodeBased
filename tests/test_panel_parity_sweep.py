@@ -454,7 +454,7 @@ class PanelSweepTests(unittest.TestCase):
             return audit.panel_shape_metrics(nuke, pair, pair["nodebased"], key)
         rows, types = metrics("Kronos")
         self.assertEqual((rows["matched"], rows["total"]), (2, 2))
-        self.assertEqual([m[0] for m in types["missed"]], ["vectorDetail"])      # an integer 1 to 6 here, a 0 to 1 fraction in Nuke
+        self.assertEqual([m[0] for m in types["missed"]], [])      # Vector Detail is the guide's 0 to 1 density since lane 2 step W1
         rows, types = metrics("IBKColor")
         self.assertEqual([m[0] for m in types["missed"]], ["off", "mult"])      # single numbers here, RGB triples in Nuke
         self.assertEqual(types["unknown"], 3)

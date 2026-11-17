@@ -24,12 +24,15 @@ NEW = {
                     "black_point": 0.0, "key_view": "final result", "alpha_bias_red": 0.5, "alpha_bias_green": 0.5,
                     "alpha_bias_blue": 0.5, "inside_mask": "ignore", "override_despill_bias": 0, "replace_mode": "ignore",
                     "replace_alpha_diff": 0, "replace_red": 1.0, "replace_green": 1.0, "replace_blue": 1.0,
-                    "replace_amount": 1.0},
+                    "replace_amount": 1.0,
+                    # Lane 2 step W1: Nuke's despill bias is a colour (red, green, blue); `legacy_despill_bias` 1 keeps the single number a saved node has.
+                    "despill_bias_red": 0.5, "despill_bias_green": 0.5, "despill_bias_blue": 0.5, "legacy_despill_bias": 0},
     "Difference": {"output_enabled": 1, "output_channel": "rgba.alpha"},
 }
 OLD = {kind: dict(values) for kind, values in NEW.items()}
 OLD["CopyMetaData"]["keys_mode"] = "exact keys"          # the key list always named whole keys
 OLD["ChromaKeyer"]["override_despill_bias"] = 1           # despill_bias always applied; Nuke's default leaves it off
+OLD["ChromaKeyer"]["legacy_despill_bias"] = 1             # and it was one number, not a colour
 
 MERGE_MODES = ("Image + Meta", "Meta only", "Meta + Image", "Image only")
 FILTER_MODES = ("keys and values", "keys only", "values only", "exact keys")

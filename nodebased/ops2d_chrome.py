@@ -90,6 +90,9 @@ NATIVE_CHANNELS = frozenset({
     "Premult", "Unpremult",
 })
 NATIVE_VALUES = frozenset({"rgb", "rgba", "alpha"})
+# Kinds whose kernel also reads `channels` "all" (R, G, B and A), which is Nuke's default for them (lane 2 step W1). A node saved before
+# keeps the "rgb" it stored; the wrapper still handles "all" itself for every other native kind.
+NATIVE_ALL_KINDS = frozenset({"Invert", "Multiply", "Add", "Gamma", "Clamp", "Posterize"})
 # Kinds with no `mix` (Nuke's Roto, Premult and Unpremult have none), which the shared tests therefore leave out of their mix checks.
 MIXLESS = frozenset({"Roto", "Premult", "Unpremult"})
 # Kinds in FILTER_CHROME whose own kernel applies the strip, on its own (changed-size) output, so the generic evaluator and
@@ -412,6 +415,8 @@ class FilterConfig:
         """True when the wrapper (not the kernel) must restrict the result to some channels."""
         if self.native and self.channels in NATIVE_VALUES:
             return False
+        if self.native and self.channels == "all" and self.kind in NATIVE_ALL_KINDS:
+            return False        # the kernel reads "all" as every channel itself (Nuke's default for these nodes)
         default = FILTER_CHROME[self.kind][0]
         if not self.native and (default is None or self.channels == default):
             return False        # no channels knob on this node, or it is at its default

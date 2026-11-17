@@ -661,10 +661,10 @@ LAYOUTS = {
         '(Un)premult by', 'Invert', 'Mix luminance', 'Mix'
     ],
     'HSVTool': [
-        'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Hue rolloff', 'HMask', 'Invert hue mask',
-        'Saturation range', 'Saturation adjustment', 'Saturation rolloff', 'Force saturation', 'SMask', 'Invert saturation mask',
-        'Brightness range', 'Brightness adjustment', 'Brightness rolloff', 'Force brightness', 'BMask', 'Invert brightness mask',
-        'Output to alpha', 'Invert output matte', 'Adjust by scaling', 'Mix'
+        'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Range Rolloff', 'HMask',
+        'Invert mask', 'Saturation range', 'Adjustment', 'Range Rolloff', 'Force Value', 'SMask', 'Invert mask',
+        'Brightness range', 'Adjustment', 'Range Rolloff', 'Force Value', 'BMask', 'Invert mask', 'Output', 'Invert mask',
+        'Adjust by scaling', 'Mix'
     ],
     'Toe': ['Channels', 'Lift', 'Toe width', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
     'SoftClip': ['Conversion', 'Softclip min', 'Softclip max', 'Older grey', 'Mix'],
@@ -691,8 +691,8 @@ LAYOUTS = {
     ],
     'Expression': [
         'Variable 1 name', 'Variable 1 expression', 'Variable 2 name', 'Variable 2 expression', 'Variable 3 name',
-        'Variable 3 expression', 'Variable 4 name', 'Variable 4 expression', 'R channels', 'R expression', 'G channels',
-        'G expression', 'B channels', 'B expression', 'A channels', 'A expression', 'Older expression syntax', 'Mask', 'Inject',
+        'Variable 3 expression', 'Variable 4 name', 'Variable 4 expression', 'Channels', 'R expression', 'Channels',
+        'G expression', 'Channels', 'B expression', 'Channels', 'A expression', 'Older expression syntax', 'Mask', 'Inject',
         'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'A', 'B', 'C', 'D', 'Mix'],
@@ -704,7 +704,7 @@ LAYOUTS = {
         'View', 'Key colour', 'Screen gain', 'Screen balance', 'Chroma gain', 'White point', 'Black point', 'Alpha bias',
         'Inside mask', 'Use custom despill bias', 'Despill bias', 'Replace mode', 'Add in matte fix', 'Replace colour',
         'Replace amount', 'Premultiply', 'Tolerance', 'Softness', 'Luminance gain', 'Shadow level', 'Highlight level', 'Despill',
-        'Invert', 'Mix'
+        'Older despill bias', 'Older despill bias value', 'Invert', 'Mix'
     ],
     'Difference': ['Offset', 'Gain', 'Output', 'Mix'],      # the output switch and its channel share one row (panel sweep, 11/4)
     'IBKColor': ['Screen type', 'Size', 'Darks', 'Lights', 'Erode', 'Patch black', 'Mix'],
@@ -713,8 +713,8 @@ LAYOUTS = {
         'Magenta', 'Screen subtraction', 'Use bkg luminnance', 'Use bkg chroma', 'Mix'
     ],
     'Copy': [
-        'Copy Red', 'Copy Green', 'Copy Blue', 'Copy Alpha', 'Layer copy', 'Metadata from', 'Range from', 'Mask', 'Inject',
-        'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Copy channel', 'Copy channel', 'Copy channel', 'Copy channel', 'Layer copy', 'Metadata from', 'Range from', 'Mask',
+        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'ChannelMerge': [
         'A channel', 'Operation', 'B channel', 'Output', 'Older operations', 'Older operation', 'Mask', 'Inject', 'Invert', 'Fringe',
@@ -727,7 +727,13 @@ LAYOUTS = {
     'HistEQ': ['Histogram entries', 'Equalise', 'Mask', 'Inject', 'Invert mask', 'Fringe', 'Mix'],      # the mask strip joined it in lane 2 step R; Nuke's words and order (lane 10 step T2)
     'MinColor': ['Channels', 'Modify', 'Target', 'Direction', 'Delta', 'Frame start', 'Frame end', 'Find', 'Box origin', 'Box size', 'Result R', 'Result G', 'Result B', 'Result A'],
     'ScreenKeyer': [
-        'View', 'Unpremultiply result', 'Screen colour', 'Screen gain', 'Screen balance', 'Alpha bias colour', 'Despill bias colour', 'Use alpha bias for despill', 'Screen pre-blur', 'Clip black', 'Clip white', 'Clip rollback', 'Screen shrink/grow', 'Screen softness', 'Screen despot black', 'Screen despot white', 'Screen replace', 'Screen replace colour', 'Midtones at', 'Shadow gain', 'Midtone gain', 'Highlight gain', 'Source alpha', 'Inside replace', 'Inside replace colour', 'Crop x method', 'Crop y method', 'Crop edge colour', 'Crop left', 'Crop right', 'Crop bottom', 'Crop top', 'Inside component', 'Outside component', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Edge grade gain', 'Edge grade gamma', 'Edge grade saturation', 'Edge width', 'Older intermediate view', 'Mix'
+        'View', 'Unpremultiply result', 'Screen colour', 'Screen gain', 'Screen balance', 'Alpha bias colour',
+        'Despill bias colour', 'Use alpha bias for despill', 'Screen pre-blur', 'Clip black', 'Clip white', 'Clip rollback',
+        'Screen Dilate', 'Screen softness', 'Screen despot black', 'Screen despot white', 'Screen replace',
+        'Screen replace colour', 'Midtones at', 'Shadow gain', 'Midtones Gain', 'Highlights Gain', 'Source alpha',
+        'Inside replace', 'Inside replace colour', 'X Method', 'Y Method', 'Crop edge colour', 'Left', 'Right', 'Bottom', 'Top',
+        'Inside component', 'Outside component', 'Despill bias', 'Alpha bias', 'Use bias colours', 'Edge grade gain',
+        'Edge grade gamma', 'Edge grade saturation', 'Edge width', 'Older intermediate view', 'Mix'
     ],
 }
 

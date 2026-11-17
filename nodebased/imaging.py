@@ -6669,7 +6669,7 @@ class Evaluator:
 
     # Channel sets for the "channels" knob on Invert/Clamp/Multiply/Add/Gamma. "rgba" reaches
     # alpha too; the default "rgb" leaves it untouched, matching Nuke's own default.
-    _CHANNEL_SETS = {"rgb": (0, 1, 2), "rgba": (0, 1, 2, 3), "alpha": (3,)}
+    _CHANNEL_SETS = {"rgb": (0, 1, 2), "rgba": (0, 1, 2, 3), "alpha": (3,), "all": (0, 1, 2, 3)}
 
     @staticmethod
     def _invert(image, p):
@@ -6912,6 +6912,9 @@ class Evaluator:
             key = np.array([p.get("key_red", 0.1), p.get("key_green", 0.8), p.get("key_blue", 0.2)],
                            dtype=np.float32)
             bias = float(p.get("despill_bias", 0.5)) if p.get("override_despill_bias", 1) else 0.5
+            if p.get("override_despill_bias", 1) and not p.get("legacy_despill_bias", 1):
+                # Nuke's despill bias is a colour: the second of the two non-screen channels' share of their two entries.
+                bias = Evaluator._bias_weight(Evaluator._bias_colour(p, "despill_bias"), int(np.argmax(key)), bias)
             rgb = Evaluator._despill(rgb, key, bias)
         mode = p.get("replace_mode", "ignore")
         if mode != "ignore":

@@ -288,7 +288,7 @@ def kernel(kind, params, *inputs):
 
 
 # ================================================================================================================ ChromaKeyer
-_CK_BASE = {"replace_mode": "edge hard color", "chroma_gain": 0.5, "white_point": 0.8, "black_point": 0.1, "override_despill_bias": 1, "despill_bias": 0.7}
+_CK_BASE = {"replace_mode": "edge hard color", "chroma_gain": 0.5, "white_point": 0.8, "black_point": 0.1, "override_despill_bias": 1, "despill_bias_red": 0.3, "despill_bias_blue": 0.7}
 _CK_CHANGES = {
     "_view": {"key_view": "intermediate result"},
     "_screenColor": {"key_red": 0.7, "key_green": 0.2, "key_blue": 0.3},
@@ -300,7 +300,7 @@ _CK_CHANGES = {
     "_alphaBias": {"alpha_bias_red": 0.9, "alpha_bias_green": 0.2, "alpha_bias_blue": 0.2},
     "_insideMask": {"inside_mask": "source alpha"},
     "_overrideDespillBias": {"override_despill_bias": 0},
-    "despillBias": {"despill_bias": 0.1},
+    "despillBias": {"despill_bias_red": 0.9, "despill_bias_blue": 0.1},
     "_replace": {"replace_mode": "edge soft color"},
     "_replaceAlphaDiff": {"replace_alpha_diff": 1},
     "_replaceColor": {"replace_red": 0.2, "replace_green": 0.3, "replace_blue": 0.9},

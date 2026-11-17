@@ -99,9 +99,13 @@ OLD = {
     "OCIOLookTransform": {"divide_by_alpha": 1},
     "OCIODisplay": {"divide_by_alpha": 1},
     "OCIOFileTransform": {"divide_by_alpha": 1},
-    "IBKGizmo": {"luminance_level_enable": 1},
+    "IBKGizmo": {"luminance_level_enable": 1, "screen_type": "green", "luminance_level": 1.0},      # lane 2 step W1: a new one starts on C-blue with level 0, as the guide lists
     "ScreenKeyer": {"older_intermediate_view": 1},
     "GenerateLUT": {"lut_clamp_output": 0},
+    "Vectorfield": {"interpolation": "tetrahedral"},       # lane 2 step W1: a new Vectorfield starts on trilinear, the guide's default
+    # Lane 2 step W1: these start on Nuke's channels "all"; a node saved without the knob keeps the "rgb" it always had.
+    "Invert": {"channels": "rgb"}, "Multiply": {"channels": "rgb"}, "Add": {"channels": "rgb"}, "Gamma": {"channels": "rgb"},
+    "Clamp": {"channels": "rgb"}, "Posterize": {"channels": "rgb"},
 }
 LIMITS = {"lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_intermediate_view": (0, 1), "older_channel_operations": (0, 1)}
 # The operations the Reference Guide lists for ChannelMerge, in its order (the guide's names; "b if not a" is its `A?A:B`).

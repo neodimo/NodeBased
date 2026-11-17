@@ -414,7 +414,7 @@ def assert_in_order(test, kind, wanted):
 
 class LayoutTests(unittest.TestCase):
     def test_clamp(self):
-        assert_in_order(self, "Clamp", ["Channels", "Minimum", "Maximum", "Minimum clamp to", "Maximum clamp to"])   # each enable check box shares its value's row
+        assert_in_order(self, "Clamp", ["Channels", "Minimum", "Maximum", "MinClampTo", "MaxClampTo"])   # each enable check box shares its value's row
 
     def test_color_lookup(self):
         assert_in_order(self, "ColorLookup", ["Channels", "Use precomputed table", "Range", "Master", "Red", "Green", "Blue", "Alpha", "Source", "Target"])
@@ -436,10 +436,10 @@ class LayoutTests(unittest.TestCase):
     def test_keylight(self):
         assert_in_order(self, "ScreenKeyer", ["View", "Unpremultiply result", "Screen colour", "Screen gain", "Screen balance", "Alpha bias colour",
                                               "Despill bias colour", "Use alpha bias for despill", "Screen pre-blur", "Clip black", "Clip white",
-                                              "Clip rollback", "Screen shrink/grow", "Screen softness", "Screen despot black", "Screen despot white",
-                                              "Screen replace", "Screen replace colour", "Midtones at", "Shadow gain", "Midtone gain", "Highlight gain",
-                                              "Source alpha", "Inside replace", "Inside replace colour", "Crop x method", "Crop y method",
-                                              "Crop edge colour", "Crop left", "Crop right", "Crop bottom", "Crop top", "Inside component",
+                                              "Clip rollback", "Screen Dilate", "Screen softness", "Screen despot black", "Screen despot white",
+                                              "Screen replace", "Screen replace colour", "Midtones at", "Shadow gain", "Midtones Gain", "Highlights Gain",
+                                              "Source alpha", "Inside replace", "Inside replace colour", "X Method", "Y Method",
+                                              "Crop edge colour", "Left", "Right", "Bottom", "Top", "Inside component",
                                               "Outside component"])
 
     def test_ibk_gizmo_uses_the_guides_text_for_ublu(self):

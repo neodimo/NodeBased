@@ -254,12 +254,12 @@ class UnpremultTests(unittest.TestCase):
         source = image()
         alpha = source[..., 3:4]
         gamma = 2.0
-        out = render("Gamma", dict(gamma=gamma, unpremult="rgba.alpha")).pixels
+        out = render("Gamma", dict(gamma=gamma, unpremult="rgba.alpha", channels="rgb")).pixels
         straight = source[..., :3] / alpha
         expected_rgb = np.sign(straight) * np.abs(straight) ** (1.0 / gamma) * alpha
         np.testing.assert_allclose(out[..., :3], expected_rgb, rtol=1e-4, atol=1e-5)
         np.testing.assert_array_equal(out[..., 3], source[..., 3])
-        without = render("Gamma", dict(gamma=gamma)).pixels
+        without = render("Gamma", dict(gamma=gamma, channels="rgb")).pixels
         self.assertGreater(float(np.abs(out - without).max()), 0.01)
 
     def test_invert_unpremult_premultiplies_first(self):

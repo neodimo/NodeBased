@@ -79,7 +79,7 @@ class PosterizeTests(unittest.TestCase):
         return image
 
     def test_two_colours_gives_exactly_two_levels(self):
-        out = kernel("Posterize", self._ramp(), colors=2)
+        out = kernel("Posterize", self._ramp(), colors=2, channels="rgb")
         self.assertEqual(sorted(np.unique(out[..., :3]).tolist()), [0.0, 1.0])
         self.assertEqual(float(out[0, 127, 0]), 0.0)
         self.assertEqual(float(out[0, 128, 0]), 1.0)

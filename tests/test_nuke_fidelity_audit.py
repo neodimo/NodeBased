@@ -228,12 +228,15 @@ class ReferenceDataTests(unittest.TestCase):
 
 
 class MappingTests(unittest.TestCase):
-    def test_kronos_and_oflow_vector_detail_stays_paired_and_measures_scale_mismatch(self):
+    def test_kronos_and_oflow_vector_detail_is_the_guides_density(self):
+        # Lane 2 step W1: Vector Detail is the 0 to 1 density of the vectors, paired to `vector_density`; the integer pyramid levels are NodeBased's own.
         for kind in ("Kronos", "OFlow"):
             entry = next(e for e in MAPPING["pairs"][kind]["knobs"] if e.get("nuke") == ["vectorDetail"])
             self.assertEqual(entry["kind"], "renamed", kind)
-            self.assertIn("1 to 6 integer pyramid levels", entry["reason"], kind)
-            self.assertIn("widget-scale mismatch remains measured", entry["reason"], kind)
+            self.assertEqual(entry["nodebased"], ["vector_density"], kind)
+            self.assertIn("density of the computed vectors", entry["reason"], kind)
+            extra = next(e for e in MAPPING["pairs"][kind]["knobs"] if e["nodebased"] == ["vector_detail"])
+            self.assertEqual(extra["kind"], "extra", kind)
 
     def test_every_nodebased_knob_and_socket_is_listed_exactly_once(self):
         for key, pair in MAPPING["pairs"].items():

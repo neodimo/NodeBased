@@ -374,17 +374,17 @@ SPECS = {
     # and Gamma deliberately reuse Grade's "multiply"/"offset" and ColorCorrect's "gamma" param
     # names (and their existing LIMITS) rather than inventing a parallel "value" name: the math is
     # the identical knob, just alone on its own node, exactly as lanes.md's ranked list frames it.
-    "Invert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"channels": "rgb", "mix": 1.0, **_smallnodes.new_params("Invert")}},
+    "Invert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"channels": "all", "mix": 1.0, **_smallnodes.new_params("Invert")}},
     "Clamp": {"inputs": ["image"], "optional_inputs": ["mask"],
               "params": {"minimum": 0.0, "maximum": 1.0, "clamp_min": 1, "clamp_max": 1,
                         # Nuke's optional replacement values are deliberately separate from the
                         # bounds: a value below/above the bound can be replaced by any value.
                         "MinClampTo": 0.0, "MinClampTo_enable": 0,
                         "MaxClampTo": 1.0, "MaxClampTo_enable": 0,
-                        "channels": "rgb", "mix": 1.0}},
-    "Multiply": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"multiply": 1.0, "channels": "rgb", "mix": 1.0}},
-    "Add": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"offset": 0.0, "channels": "rgb", "mix": 1.0}},
-    "Gamma": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"gamma": 1.0, "channels": "rgb", "mix": 1.0}},
+                        "channels": "all", "mix": 1.0}},
+    "Multiply": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"multiply": 1.0, "channels": "all", "mix": 1.0}},
+    "Add": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"offset": 0.0, "channels": "all", "mix": 1.0}},
+    "Gamma": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"gamma": 1.0, "channels": "all", "mix": 1.0}},
     "Saturation": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"saturation": 1.0, "mix": 1.0, **_behaviour2d.new_params("Saturation")}},
     # Erode/Dilate/Median/Sharpen/Glow/Mirror are the lane's group (c) Filter/Transform nodes.
     # Erode's own "erode_size" and Dilate's "dilate_size" share one box min/max kernel
@@ -459,7 +459,7 @@ SPECS = {
         "expr_channels_r": "red", "expr_channels_g": "green", "expr_channels_b": "blue", "expr_channels_a": "alpha",
         "expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0, **_behaviour2d.new_params("Expression")}},
     # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
-    "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0, **_hsvtoolknobs.VECTORFIELD}},
+    "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "trilinear", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0, **_hsvtoolknobs.VECTORFIELD}},
     "GenerateLUT": {"inputs": ["source"], "params": {"lut_path": "", "lut_size": 33, "colorspace_in": "ACEScg", "colorspace_out": "ACEScg",
                                                   "lut_file_type": "cube", "prelut_size": 1024, "prelut_style": "logarithmic", "lut_input_bit_depth": "10 bit",
                                                   "lut_output_bit_depth": "input bit depth", **_behaviour2d.new_params("GenerateLUT")}},
@@ -581,7 +581,7 @@ SPECS = {
                                                                                                                        **_drawfxbehaviour.new_params("ScannedGrain")}},
     # Posterize (step 5b): `colors` levels per channel in the selected channels.
     "Posterize": {"inputs": ["image"], "optional_inputs": ["mask"],
-                  "params": {"colors": 16, "channels": "rgb", "mix": 1.0}},
+                  "params": {"colors": 16, "channels": "all", "mix": 1.0}},
     # SoftClip (step 5b): Nuke's four `conversion` modes with softclip_min / softclip_max.
     "SoftClip": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"conversion": "none", "softclip_min": 0.8, "softclip_max": 1.0, "mix": 1.0, **_behaviour2d.new_params("SoftClip")}},
@@ -1008,8 +1008,8 @@ SPECS = {
     # IBKGizmo (step K1): keys the foreground `fg` against the clean plate `c` (an IBKColor output
     # or any plate of the screen); `bg` is optional and only feeds the luminance match.
     "IBKGizmo": {"inputs": ["fg", "c"], "optional_inputs": ["bg", "mask"],
-                 "params": {"screen_type": "green", "color_r": 0.0, "color_g": 0.0, "color_b": 1.0, "red_weight": 0.5, "blue_green_weight": 0.5,
-                           "luminance_match": 0, "screen_range": 1.0, "luminance_level": 1.0, "luminance_level_enable": 0,
+                 "params": {"screen_type": "blue", "color_r": 0.0, "color_g": 0.0, "color_b": 1.0, "red_weight": 0.5, "blue_green_weight": 0.5,
+                           "luminance_match": 0, "screen_range": 1.0, "luminance_level": 0.0, "luminance_level_enable": 0,
                            "yellow": 0, "cyan": 0, "magenta": 0,
                            "screen_subtraction": 1, "use_bg_luminance": 0, "use_bg_chroma": 0, "mix": 1.0,
                            **_behaviour2d.new_params("IBKGizmo")}},
@@ -1943,7 +1943,7 @@ LIMITS = {"input_number": (1, 64), "enabled": (0, 1), "splat_write_overwrite": (
           "key_red": (0.0, 1000.0), "key_green": (0.0, 1000.0), "key_blue": (0.0, 1000.0),
           "key_tolerance": (0.0, 4.0), "key_softness": (0.0, 4.0), "luma_gain": (0.0, 4.0),
           "shadow_level": (0.0, 1.0), "highlight_level": (0.0, 1000000.0),
-          "despill": (0, 1), "despill_bias": (0.0, 1.0), "premultiply": (0, 1),
+          "despill": (0, 1), "despill_bias": (0.0, 1.0), "legacy_despill_bias": (0, 1), "premultiply": (0, 1),
           "fill_size": (0, 100), "screen_erode": (0.0, 50.0), "darks": (0.0, 1.0), "lights": (0.0, 1000.0),
           "patch_black": (0, 1), "red_weight": (0.0, 1.0), "blue_green_weight": (0.0, 1.0),
           "luminance_match": (0, 1), "luminance_level": (0.0, 1.0), "use_bg_luminance": (0, 1),
@@ -2561,7 +2561,7 @@ LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_cl
 LIMITS.update(_behaviour2d.LIMITS)
 LIMITS.update(_drawfxbehaviour.LIMITS)
 LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_length": (0.0, 64.0),
-               "legacy_shutter": (0, 1), "auto_shutter_time": (0, 1), "flicker_compensation": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
+               "legacy_shutter": (0, 1), "auto_shutter_time": (0, 1), "flicker_compensation": (0, 1), "vector_density": (0.02, 1.0), "legacy_vector_density": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["retime_output"] = list(_retimeknobs.OUTPUTS)
 CHOICES["resample_type"] = list(_retimeknobs.RESAMPLES)

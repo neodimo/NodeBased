@@ -298,7 +298,7 @@ class GraphTests(unittest.TestCase):
         plate = screen_graph(g)
         g.add("key", "ChromaKeyer", {}, image=plate)
         g.add("clean", "IBKColor", dict(OLD_IBK, fill_size=12), c=plate)
-        g.add("ibk", "IBKGizmo", {}, fg=plate, c="clean")
+        g.add("ibk", "IBKGizmo", {"screen_type": "green"}, fg=plate, c="clean")
         for name in ("key", "clean", "ibk"):
             out = evaluator_pixels(g.doc, name)
             self.assertEqual(out.shape, (71, 97, 4))
@@ -407,7 +407,7 @@ class BypassTests(unittest.TestCase):
         g = Graph()
         plate = screen_graph(g)
         g.add("clean", "IBKColor", dict(OLD_IBK), c=plate)
-        g.add("node", "IBKGizmo", {}, fg=plate, c="clean")
+        g.add("node", "IBKGizmo", {"screen_type": "green"}, fg=plate, c="clean")
         upstream = evaluator_pixels(g.doc, plate)
         self.assertFalse(np.array_equal(evaluator_pixels(g.doc, "node"), upstream))
         g.bypass("node")

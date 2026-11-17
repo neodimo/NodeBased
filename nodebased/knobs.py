@@ -1473,7 +1473,10 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("retimed_channels",), label="Channels"), KnobGroup("enum", ("interpolation",), label="Method"),
         KnobGroup("enum", ("timing",), label="Timing"), KnobGroup("float", ("speed",), label="Output Speed"),
         KnobGroup("float", ("input_speed",), label="Input Speed"), KnobGroup("float", ("frame",), label="Frame"),
-        KnobGroup("int", ("vector_detail",), label="Vector Detail"), KnobGroup("float", ("smoothness",), label="Smoothness"),
+        KnobGroup("float_slider", ("vector_density",), label="Vector Detail", soft_range=(0, 1),
+                  help="The density of the computed vectors relative to the image: 1 finds a vector at every pixel, 0.5 at every other pixel. A lower value estimates the motion on a smaller picture, which gives a smoother field."),
+        KnobGroup("int", ("vector_detail",), label="Pyramid levels", help="How many pyramid levels the motion estimate uses (1 to 6); it is limited by the Vector Detail's smaller picture."),
+        KnobGroup("float", ("smoothness",), label="Smoothness"),
         KnobGroup("enum", ("resample_type",), label="Resampling", help="The filter the motion warp samples with: Bilinear, or Lanczos4 and Lanczos6, which sharpen and can ring on a hard edge."),
         KnobGroup("int", ("shutter_samples",), label="Shutter Samples"), KnobGroup("float", ("shutter_time",), label="Shutter Time"),
         KnobGroup("bool", ("auto_shutter_time",), label="Automatic Shutter Time"),
@@ -1485,13 +1488,17 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("weight_blue",), label="Weight Blue", help="The blue weight of the luminance the motion is estimated on (Nuke's default 0.1)."),
         KnobGroup("enum", ("flow_backend",)),
         KnobGroup("bool", ("legacy_retime",), label="Legacy retime", help="Keep the retime this node had before it followed Nuke's timing knobs: the timeline frame times the speed from zero, and no input range."),
-        KnobGroup("bool", ("legacy_shutter",), label="Legacy shutter", help="Keep the shutter this node had before Shutter Time: the output speed wide.")),
+        KnobGroup("bool", ("legacy_shutter",), label="Legacy shutter", help="Keep the shutter this node had before Shutter Time: the output speed wide."),
+        KnobGroup("bool", ("legacy_vector_density",), label="Legacy vector detail", help="Estimate the motion at the full size of the picture, as this node did before Vector Detail was the density of the vectors.")),
     "OFlow": _groups(KnobGroup("float", ("input_start",), label="Input range first"), KnobGroup("float", ("input_end",), label="Input range last"),
         KnobGroup("float", ("output_start",), label="Output start"),
         KnobGroup("enum", ("retimed_channels",), label="Channels"), KnobGroup("enum", ("interpolation",), label="Method"),
         KnobGroup("enum", ("timing",), label="Timing"), KnobGroup("float", ("speed",), label="Output Speed"),
         KnobGroup("float", ("input_speed",), label="Input Speed"), KnobGroup("float", ("frame",), label="Frame"),
-        KnobGroup("int", ("vector_detail",), label="Vector Detail"), KnobGroup("float", ("smoothness",), label="Smoothness"),
+        KnobGroup("float_slider", ("vector_density",), label="Vector Detail", soft_range=(0, 1),
+                  help="The density of the computed vectors relative to the image: 1 finds a vector at every pixel, 0.5 at every other pixel. A lower value estimates the motion on a smaller picture, which gives a smoother field."),
+        KnobGroup("int", ("vector_detail",), label="Pyramid levels", help="How many pyramid levels the motion estimate uses (1 to 6); it is limited by the Vector Detail's smaller picture."),
+        KnobGroup("float", ("smoothness",), label="Smoothness"),
         KnobGroup("enum", ("resample_type",), label="Resampling", help="The filter the motion warp samples with: Bilinear, or Lanczos4 and Lanczos6, which sharpen and can ring on a hard edge."),
         KnobGroup("int", ("shutter_samples",), label="Shutter Samples"), KnobGroup("float", ("shutter_time",), label="Shutter Time"),
         KnobGroup("bool", ("auto_shutter_time",), label="Automatic Shutter Time"),
@@ -1499,7 +1506,8 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("weight_red",), label="Weight Red", help="The red weight of the luminance the motion is estimated on (Nuke's default 0.3). A node saved before these weights existed keeps the Rec. 709 values."),
         KnobGroup("float", ("weight_green",), label="Weight Green", help="The green weight of the luminance the motion is estimated on (Nuke's default 0.6)."),
         KnobGroup("float", ("weight_blue",), label="Weight Blue", help="The blue weight of the luminance the motion is estimated on (Nuke's default 0.1)."),
-        KnobGroup("enum", ("flow_backend",))),
+        KnobGroup("enum", ("flow_backend",)),
+        KnobGroup("bool", ("legacy_vector_density",), label="Legacy vector detail", help="Estimate the motion at the full size of the picture, as this node did before Vector Detail was the density of the vectors.")),
     "VectorToMotion": _groups(KnobGroup("string", ("forward_layer",), label="Forward layer"),
         KnobGroup("string", ("backward_layer",), label="Backward layer")),
     "MotionBlur": _groups(KnobGroup("int", ("samples",), label="Shutter samples"), KnobGroup("float", ("shutter",), label="Shutter time"),
@@ -1573,8 +1581,10 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("invert_mask",)), KnobGroup("enum", ("merge_bbox",), label="Set bbox to"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Copy": _groups(
-        KnobGroup("enum", ("copy_red",)), KnobGroup("enum", ("copy_green",)),
-        KnobGroup("enum", ("copy_blue",)), KnobGroup("enum", ("copy_alpha",)),
+        KnobGroup("enum", ("copy_red",), help="Copy this channel of A to the red channel of the result (Nuke's `to` is red)."),
+        KnobGroup("enum", ("copy_green",), help="Copy this channel of A to the green channel of the result (Nuke's `to` is green)."),
+        KnobGroup("enum", ("copy_blue",), help="Copy this channel of A to the blue channel of the result (Nuke's `to` is blue)."),
+        KnobGroup("enum", ("copy_alpha",), help="Copy this channel of A to the alpha channel of the result (Nuke's `to` is alpha)."),
         KnobGroup("string", ("channels",), label="Layer copy"),
         KnobGroup("enum", ("metainput",), label="Metadata from"), KnobGroup("enum", ("rangeinput",), label="Range from"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
@@ -1628,7 +1638,10 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("inside_mask",), label="Inside mask"),
         KnobGroup("bool", ("despill",), label="Despill"),
         KnobGroup("bool", ("override_despill_bias",), label="Use custom despill bias"),
-        KnobGroup("float_slider", ("despill_bias",), label="Despill bias", soft_range=(0, 1)),
+        KnobGroup("color", ("despill_bias_red", "despill_bias_green", "despill_bias_blue"), label="Despill bias"),
+        KnobGroup("bool", ("legacy_despill_bias",), label="Older despill bias",
+                  help="Read the despill bias below as one number, as a graph saved before the bias was a colour did."),
+        KnobGroup("float_slider", ("despill_bias",), label="Older despill bias value", soft_range=(0, 1)),
         KnobGroup("enum", ("replace_mode",), label="Replace mode"),
         KnobGroup("bool", ("replace_alpha_diff",), label="Add in matte fix"),
         KnobGroup("color", ("replace_red", "replace_green", "replace_blue"), label="Replace colour"),
@@ -2563,7 +2576,7 @@ NUKE_LAYOUT = {
               KnobGroup("xy", ("range_a", "range_b", "range_c", "range_d"), label="Range", captions=("A", "B", "C", "D"))),
     "HueKeyer": ("channels", "curve_amount", "curve_sat_thrsh", "output_enabled", "output_channel", "invert"),
     "ChromaKeyer": ("key_view", "key_red", "screen_gain", "screen_balance", "chroma_gain", "white_point", "black_point", "alpha_bias_red",
-                    "inside_mask", "override_despill_bias", "despill_bias", "replace_mode", "replace_alpha_diff", "replace_red", "replace_amount",
+                    "inside_mask", "override_despill_bias", "despill_bias_red", "replace_mode", "replace_alpha_diff", "replace_red", "replace_amount",
                     "premultiply"),
     "Difference": ("offset", "gain", "output_enabled", "output_channel"),
     "IBKColor": ("screen_type", "fill_size", "darks", "lights", "screen_erode", "patch_black"),
@@ -2666,6 +2679,36 @@ NUKE_LAYOUT_LANE2K = {
     "Precomp": ("file", "reload", "reading", "missing_frames", "reload_write", "output_node", "use_output"),
 }
 NUKE_LABELS.setdefault("AddTimeCode", {})["timecode"] = "Startcode"
+
+
+# Lane 2 step W1 (11/17): the colour, keying and channel panels in the guide's wording and order, from the review book's worklist
+# (docs/parity/review/WORKLIST.md). Labels and order only: every param stays, so documents load and render as before.
+# Multiply, Add and Gamma put `channels` first and call their one number "Value", as the guide's tables do.
+NUKE_LAYOUT_LANE2K.update({
+    "Multiply": ("channels", "multiply"), "Add": ("channels", "offset"), "Gamma": ("channels", "gamma"),
+    "Remove": ("remove_operation", "layers"),
+    "ColorMatrix": ("channels", *(f"matrix_{r}{c}" for r in range(3) for c in range(3)), "invert"),
+})
+NUKE_LABELS.update({
+    "Multiply": {"multiply": "Value"}, "Add": {"offset": "Value"}, "Gamma": {"gamma": "Value"},
+    "Remove": {"layers": "Channels"},
+    # Nuke draws the four Copy rows alike ("Copy channel", then "to"); each NodeBased row names the A channel that goes into one output
+    # channel, and its tooltip names that output channel.
+    "Copy": {"copy_red": "Copy channel", "copy_green": "Copy channel", "copy_blue": "Copy channel", "copy_alpha": "Copy channel"},
+    "ScreenKeyer": {"source_crop_left": "Left", "source_crop_right": "Right", "source_crop_bottom": "Bottom", "source_crop_top": "Top",
+                 "source_x_method": "X Method", "source_y_method": "Y Method", "highlight_gain": "Highlights Gain",
+                 "midtone_gain": "Midtones Gain", "screen_shrink": "Screen Dilate"},
+    "HSVTool": {"sat_adjust": "Adjustment", "brt_adjust": "Adjustment", "hue_rolloff": "Range Rolloff", "saturation_rolloff": "Range Rolloff",
+                "brightness_rolloff": "Range Rolloff", "set_saturation": "Force Value", "set_brightness": "Force Value",
+                "invert_hue_mask": "Invert mask", "invert_sat_mask": "Invert mask", "invert_bright_mask": "Invert mask",
+                "invert_alpha_mask": "Invert mask", "output_alpha": "Output"},
+    "Expression": {f"expr_channels_{c}": "Channels" for c in "rgba"},
+    "MatchGrade": {"match_source_frames": "Source", "match_target_frames": "Target"},
+})
+NUKE_LABELS.setdefault("Vectorfield", {}).update({"colorspace_in": "Colorspace in", "colorspace_out": "Colorspace out"})
+# The guide's HSVTool labels repeat ("Adjustment", "Range Rolloff", "Invert mask"); a heading over each part keeps the rows readable.
+NUKE_SECTIONS.update({"HSVTool": {"hue_range_min": "Hue", "saturation_range_min": "Saturation", "brightness_range_min": "Brightness",
+                                  "output_alpha": "Output"}})
 
 
 NUKE_LAYOUT_LANE2F = ({
@@ -2868,8 +2911,8 @@ ROW_GROUPS = {
     # Panel sweep S3 (11/4)
     "Remove": (KnobGroup("row", ("channels2", "channels3", "channels4"), label="And", members=("string", "string", "string")),),
     "CornerPin": (KnobGroup("row", ("shutter_offset", "custom_offset"), label="Shutter offset", members=("enum", "float")),),
-    "Clamp": (KnobGroup("row", ("MinClampTo", "MinClampTo_enable"), label="Minimum clamp to", members=("float", "bool")),
-              KnobGroup("row", ("MaxClampTo", "MaxClampTo_enable"), label="Maximum clamp to", members=("float", "bool"))),
+    "Clamp": (KnobGroup("row", ("MinClampTo", "MinClampTo_enable"), label="MinClampTo", members=("float", "bool")),
+              KnobGroup("row", ("MaxClampTo", "MaxClampTo_enable"), label="MaxClampTo", members=("float", "bool"))),
     "BurnIn": (KnobGroup("row", ("font", "font_style"), label="Font", members=("string", "string")),),
     "ContactSheet": (KnobGroup("row", ("width", "height"), label="Resolution", members=("int", "int")),
                      KnobGroup("row", ("rows", "columns"), label="Rows/columns", members=("int", "int")),

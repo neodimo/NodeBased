@@ -40,6 +40,12 @@ OUTPUTS = ("result", "matte", "foreground", "background")
 # Step N (11/3): Kronos's shutter knobs, matte and output, and the automatic shutter of both nodes.
 _KRONOS_STEP_N = {"shutter_time": 0.0, "auto_shutter_time": 0, "vector_detail": 4, "smoothness": 1.0, "motion_matte_channel": "None",
                   "retime_output": "result", "flicker_compensation": 0}
+# Step W1 (11/17): the guide's Vector Detail, the density of the computed vectors relative to the image (Kronos 0.3, OFlow 0.2 on a new node). It sets
+# the size the motion is estimated at: a density d finds the field on the picture averaged down by round(1 / d) and brings it back to full size, so a
+# lower value gives a smoother field. A node saved before keeps the full-size estimate (`legacy_vector_density` 1, density 1.0).
+DENSITY_FLAG = "legacy_vector_density"
+_DENSITY_NEW = {"Kronos": {"vector_density": 0.3, DENSITY_FLAG: 0}, "OFlow": {"vector_density": 0.2, DENSITY_FLAG: 0}}
+_DENSITY_OLD = {"vector_density": 1.0, DENSITY_FLAG: 1}
 # Step R (11/16): Resampling and the three luminance weights of both nodes. `resample_type` is the filter the motion warp samples with
 # (Bilinear is the guide's default and what every saved node used); the weights are the guide's 0.3, 0.6, 0.1 on a new node, and a node saved
 # before step R gets the Rec. 709 weights its estimator always read, so its pixels do not move.
@@ -49,15 +55,17 @@ _STEP_R_NEW = {"resample_type": "Bilinear", "weight_red": 0.3, "weight_green": 0
 _STEP_R_OLD = {"resample_type": "Bilinear", "weight_red": REC709[0], "weight_green": REC709[1], "weight_blue": REC709[2]}
 NEW = {
     "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 0.5, "retimed_channels": "all", FLAG: 0, "timing": "speed",
-               SHUTTER_FLAG: 0, **_KRONOS_STEP_N, **_STEP_R_NEW},
-    "OFlow": {"input_speed": 0.5, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_NEW},
+               SHUTTER_FLAG: 0, **_KRONOS_STEP_N, **_STEP_R_NEW, **_DENSITY_NEW["Kronos"]},
+    "OFlow": {"input_speed": 0.5, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_NEW,
+              **_DENSITY_NEW["OFlow"]},
 }
 # What a node saved before this step gets: Kronos's old rule, flagged. A missing flag reads as legacy. A Kronos saved before step N keeps the
 # shutter it had (the output speed wide, `shutter_time` unread); `legacy_shutter` says so.
 OLD = {
     "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 1, "timing": "speed", "frame": -1.0,
-               SHUTTER_FLAG: 1, **_KRONOS_STEP_N, **_STEP_R_OLD},
-    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_OLD},
+               SHUTTER_FLAG: 1, **_KRONOS_STEP_N, **_STEP_R_OLD, **_DENSITY_OLD},
+    "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_OLD,
+              **_DENSITY_OLD},
 }
 
 
@@ -67,6 +75,18 @@ def new_params(kind):
 
 def upgrade_params(kind):
     return dict(OLD.get(kind, {}))
+
+
+def density_step(params, height, width):
+    """How many times smaller than the picture the motion is estimated: 1 for a node saved before Vector Detail was the guide's density, else
+    round(1 / density), less what would leave a side under 12 pixels."""
+    if int(params.get(DENSITY_FLAG, 1)):
+        return 1
+    density = min(1.0, max(0.02, float(params.get("vector_density", 1.0))))
+    step = max(1, int(round(1.0 / density)))
+    while step > 1 and min(height, width) // step < 12:
+        step -= 1
+    return step
 
 
 def is_legacy(kind, params):
@@ -219,6 +239,41 @@ def estimation_gain(first, second):
     return out
 
 
+def estimate_flows(first, second, params, backend):
+    """The forward and backward vectors (pixels per frame) and the occlusion mask between two pictures: the estimate on the luminance the weights
+    give, one vector per `density_step` pixels (Vector Detail)."""
+    import numpy as np
+    from .opticalflow import flow_pair
+    if int(params.get("flicker_compensation", 0)):
+        second = estimation_gain(first, second)
+    weights = luminance_weights(params)
+    grey_a, grey_b = weighted_grey(first, weights), weighted_grey(second, weights)
+    height, width = grey_a.shape[:2]
+    step = density_step(params, height, width)
+    levels = int(params.get("vector_detail", 4))
+    if step == 1:
+        return flow_pair(grey_a, grey_b, vector_detail=levels, smoothness=float(params.get("smoothness", 1.0)), backend=backend)
+    # The vectors are kept at one per `step` pixels: the full-size estimate averaged over each block and brought back to full size by bilinear
+    # sampling. (Estimating on the averaged-down picture instead was measured noisier on a plate with two motions: it lost the detail the estimator
+    # matches on, so a lower value gave a rougher field, not a smoother one.)
+    fw, bw, occ = flow_pair(grey_a, grey_b, vector_detail=levels, smoothness=float(params.get("smoothness", 1.0)), backend=backend)
+    fw, bw = (_block_field(np.asarray(field, np.float32), step) for field in (fw, bw))
+    return fw, bw, occ
+
+
+def _block_field(field, step):
+    """`field` (h x w x 2 vectors in pixels) as one averaged vector per step x step block, sampled back at every pixel by bilinear interpolation."""
+    import numpy as np
+    from .opticalflow import _sample
+    height, width = field.shape[:2]
+    ph, pw = (-height) % step, (-width) % step
+    padded = np.pad(field, ((0, ph), (0, pw), (0, 0)), mode="edge")
+    blocks = padded.reshape(padded.shape[0] // step, step, padded.shape[1] // step, step, 2).mean(axis=(1, 3)).astype(np.float32)
+    xs = np.clip((np.arange(width, dtype=np.float32) + 0.5) / step - 0.5, 0, blocks.shape[1] - 1)
+    ys = np.clip((np.arange(height, dtype=np.float32) + 0.5) / step - 0.5, 0, blocks.shape[0] - 1)
+    return _sample(blocks, np.broadcast_to(xs, (height, width)), np.broadcast_to(ys[:, None], (height, width))).astype(np.float32)
+
+
 def retimed_picture(ap, bp, alpha, method, params, *, flow_backend, mosrc=None, given=None, mattes=None, output="result", sample_whole=False):
     """The picture between frames `ap` and `bp`, `alpha` of the way, by `method`.
 
@@ -232,11 +287,7 @@ def retimed_picture(ap, bp, alpha, method, params, *, flow_backend, mosrc=None, 
     alpha = np.float32(alpha)
 
     def estimate(first, second, backend):
-        if int(params.get("flicker_compensation", 0)):
-            second = estimation_gain(first, second)
-        weights = luminance_weights(params)
-        return flow_pair(weighted_grey(first, weights), weighted_grey(second, weights), vector_detail=int(params.get("vector_detail", 4)),
-                         smoothness=float(params.get("smoothness", 1.0)), backend=backend)
+        return estimate_flows(first, second, params, backend)
 
     def retime(xa, xb, flows):
         if sample_whole:
