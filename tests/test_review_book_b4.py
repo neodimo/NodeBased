@@ -5,6 +5,7 @@ import numpy as np
 
 from nodebased import knobs, ops2d_chrome
 from nodebased.core import CHOICES, LIMITS, SPECS
+from tests.test_2d_behaviour_filter_g import FRAME, H, W, pin_params, pinned, plate
 from tests.test_2d_behaviour_warp_h import ramp, run_spline, spline_params
 
 
@@ -56,6 +57,42 @@ class TransformPanelTests(unittest.TestCase):
         self.assertEqual(order[:12], ["channels", "uv_layer", "u_channel", "v_channel", "uv_offset_x", "uv_scale_x", "blur",
                                       "blur_scale", "maskChannel", "invert_mask", "premultiplied", "filter"])
         self.assertEqual(SPECS["IDistort"]["params"]["maskChannel"], "none")
+
+
+class VectorCornerPinFilterTests(unittest.TestCase):
+    """Nuke 17.0 guide, VectorCornerPin: imageFilter (Cubic) 'Select the filtering algorithm to use when remapping pixels', blurSize (0)
+    'Controls the amount of blur applied to the internally calculated STMap'."""
+
+    def test_new_and_saved_defaults(self):
+        from nodebased import vectorcornerpinknobs as vcp
+        params = SPECS["VectorCornerPin"]["params"]
+        self.assertEqual((params["image_filter"], params["blur_size"]), ("cubic", 0.0))
+        self.assertEqual((vcp.UPGRADE["image_filter"], vcp.UPGRADE["blur_size"]), ("bilinear", 0.0))
+        self.assertEqual(knobs.resolve_kind("VectorCornerPin", "image_filter", "cubic"), "enum")
+
+    def test_filter_changes_a_fractional_warp(self):
+        half = tuple((x + 2.5, y + 1.5) for x, y in FRAME)
+        bilinear = pinned(**pin_params(half), image_filter="bilinear")
+        cubic = pinned(**pin_params(half), image_filter="cubic")
+        impulse = pinned(**pin_params(half), image_filter="impulse")
+        self.assertFalse(np.allclose(impulse, bilinear, atol=1e-4))
+        # A ramp is linear inside, so bilinear and cubic agree away from the edges and differ only where cubic reaches past them.
+        np.testing.assert_allclose(cubic[3:-3, 4:-4], bilinear[3:-3, 4:-4], atol=1e-5)
+        # Impulse takes whole pixels of the plate, no new values.
+        self.assertTrue(set(np.round(impulse[..., 0].ravel(), 6)) <= set(np.round(plate()[..., 0].ravel(), 6)) | {0.0})
+
+    def test_bilinear_with_no_blur_is_the_saved_warp(self):
+        moved = tuple((x + 3, y + 2) for x, y in FRAME)
+        shifted = pinned(**pin_params(moved), image_filter="bilinear")
+        src = plate()
+        np.testing.assert_allclose(shifted[:H - 2, 3:], src[2:, :W - 3], atol=1e-6)
+
+    def test_blur_size_softens_the_st_map(self):
+        corner = ((0, 0), (W, 0), (W, H), (4, H - 3))     # one pin pulled in: the st-map bends near it
+        sharp = pinned(**pin_params(corner), image_filter="bilinear")
+        soft = pinned(**pin_params(corner), image_filter="bilinear", blur_size=4.0)
+        self.assertGreater(float(np.abs(soft - sharp).max()), 1e-3)
+        np.testing.assert_array_equal(pinned(**pin_params(corner), image_filter="bilinear", blur_size=0.4), sharp)   # under half a pixel: no blur
 
 
 if __name__ == "__main__":

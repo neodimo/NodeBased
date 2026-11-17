@@ -3470,8 +3470,13 @@ class Evaluator:
                             pins = user + np.stack([opticalflow._sample(field[..., axis], ux, uy) for axis in range(2)], axis=1)
                         matrix = homography_from_corners(src_quad, pins)
                         mode = str(params.get("output_mode", "warped src"))
+                        vcp_filter, vcp_blur = str(params.get("image_filter", "bilinear")), float(params.get("blur_size", 0.0))
                         if mode != "warped src":
                             warped = _vcp.st_map(matrix, w, h, inverse=mode == "st-map inverse")       # a map, not a picture: no mask or mix
+                        elif vcp_filter != "bilinear" or vcp_blur > 0:
+                            # Nuke's Filter and Blur Size (lane 11 step B4); bilinear with no blur keeps the warp below, GPU or not.
+                            warped = _vcp.filtered_warp(base.pixels, matrix, vcp_filter, vcp_blur, self._resample,
+                                                        lambda st: self._gaussian_2d(st, vcp_blur))
                         elif gpu_warp:
                             from .opticalflow_gpu import warp_by_homography_gpu
                             warped = warp_by_homography_gpu(base.pixels, matrix)

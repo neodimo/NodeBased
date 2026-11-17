@@ -42,7 +42,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Filter | 98.1 | 94.1 | 97.9 | 32 |
 | Keyer | 93.4 | 80.7 | 93.3 | 11 |
 | Merge | 99.9 | 99.7 | 99.9 | 13 |
-| Transform | 98.8 | 96.3 | 98.6 | 20 |
+| Transform | 98.9 | 96.5 | 98.6 | 20 |
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 83.7 | 53.0 | 83.7 | 14 |
 
@@ -286,7 +286,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 14 | GridWarp | `GridWarp` | supported | 88.4 | 85.5 | 65 (22/34) | - | 96 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 14 | SplineWarp | `SplineWarp` | supported | 91.1 | 90.7 | 88 (19/23) | - | 89 | 67 | 100 | 100 (3/3) | 96 | - | unmeasured |
 | 15 | Tile | `Tile` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
-| 16 | VectorCornerPin | `VectorCornerPin` | supported | 95.0 | 93.3 | 86 (14/17) | - | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
+| 16 | VectorCornerPin | `VectorCornerPin` | supported | 98.3 | 97.8 | 95 (16/17) | - | 100 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 | 16 | VectorDistort | `VectorDistort` | supported | 90.5 | 88.1 | 78 (5/6) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 17 | PointsTo3D | `PointsTo3D` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | 100 | - | - | 100 | - | unmeasured |
 | 18 | Reconcile3D | `Reconcile3D` | supported | 76.7 | 68.9 | 53 (7/14) | - | 100 | 100 | - | - | 100 | - | unmeasured |
@@ -479,7 +479,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | GridWarp | — | 100.0% (18/18) | 10 |
 | SplineWarp | — | 87.5% (14/16) | 4 |
 | Tile | — | 100.0% (5/5) | 0 |
-| VectorCornerPin | — | 100.0% (1/1) | 22 |
+| VectorCornerPin | — | 100.0% (3/3) | 22 |
 | VectorDistort | — | 100.0% (5/5) | 2 |
 | PointsTo3D | — | 100.0% (7/7) | 4 |
 | Reconcile3D | — | 100.0% (4/4) | 1 |

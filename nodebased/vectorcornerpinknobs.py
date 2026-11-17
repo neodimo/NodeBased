@@ -18,6 +18,11 @@ What the guide leaves open, and this module therefore fixes:
 * an st-map holds r = (x + 0.5) / width and g = 1 - (y + 0.5) / height of the source pixel each output pixel takes (the STMap node's own
   convention), b = 0 and alpha 1 where the warp reaches the picture and 0 elsewhere.
 
+Filter (`image_filter`, Cubic): "the filtering algorithm to use when remapping pixels from their original positions to new positions", the
+Transform group's list as VectorDistort offers it. Blur Size (`blur_size`, 0): "the amount of blur applied to the internally calculated STMap",
+the per-pixel source position the pins give, blurred with Soften's Gaussian before the picture is sampled (lane 11 step B4). A node saved before
+keeps bilinear sampling and no blur, which is the warp it always had. Frame Distance is not built, for VectorDistort's reason (one vector set).
+
 An older document's node (`legacy_vectorcornerpin` 1) keeps what it did: the four `corner` points are both the source quad and the pins' starting
 points, the vectors displace them and a SmartVector must be wired.
 """
@@ -29,12 +34,12 @@ CORNERS = (1, 2, 3, 4)
 SENTINEL = ((0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0))
 OUTPUT_MODES = ("warped src", "st-map", "st-map inverse")
 _SIDES = ("user", "to", "from")
-NEW = {"legacy_vectorcornerpin": 0, "output_mode": "warped src", "use_baked": 0}
+NEW = {"legacy_vectorcornerpin": 0, "output_mode": "warped src", "use_baked": 0, "image_filter": "cubic", "blur_size": 0.0}
 for _side in _SIDES:
     for _i, (_x, _y) in zip(CORNERS, SENTINEL):
         NEW[f"{_side}{_i}_x"] = _x
         NEW[f"{_side}{_i}_y"] = _y
-UPGRADE = {"legacy_vectorcornerpin": 1, "output_mode": "warped src", "use_baked": 0}
+UPGRADE = {"legacy_vectorcornerpin": 1, "output_mode": "warped src", "use_baked": 0, "image_filter": "bilinear", "blur_size": 0.0}
 for _side in _SIDES:
     for _i, (_x, _y) in zip(CORNERS, SENTINEL):
         UPGRADE[f"{_side}{_i}_x"] = _x
@@ -53,6 +58,33 @@ def points(p, side, width, height, tier=1):
     if np.allclose(raw, np.asarray(SENTINEL) / float(tier)):
         raw = np.asarray([[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]], np.float64)
     return np.stack([raw[:, 0] - 0.5, (height - raw[:, 1]) - 0.5], axis=1)
+
+
+def source_positions(matrix, width, height):
+    """For each output pixel, the source pixel the warp `matrix` (source index space to output index space) takes, as (rows, columns, 2)."""
+    yy, xx = np.mgrid[:height, :width].astype(np.float64)
+    inv = np.linalg.inv(np.asarray(matrix, np.float64))
+    den = inv[2, 0] * xx + inv[2, 1] * yy + inv[2, 2]
+    den = np.where(np.abs(den) < 1e-10, 1e-10, den)
+    return np.stack([(inv[0, 0] * xx + inv[0, 1] * yy + inv[0, 2]) / den,
+                     (inv[1, 0] * xx + inv[1, 1] * yy + inv[1, 2]) / den], axis=2).astype(np.float32)
+
+
+def filtered_warp(image, matrix, image_filter, blur_size, resample, blur):
+    """The warped picture with Nuke's Filter and Blur Size: the internal st-map (source positions) blurred by `blur`, then `resample`
+    `(src, sx, sy, filter)` reads the picture there; transparent black where the position falls outside the picture."""
+    h, w = image.shape[:2]
+    st = source_positions(matrix, w, h)
+    if float(blur_size) > 0:
+        st = blur(st).astype(np.float32)
+    sx, sy = st[..., 0], st[..., 1]
+    if str(image_filter) == "bilinear":
+        from .flow_nodes import _sample                    # the sampler of the unfiltered warp, so Blur Size alone changes only the map
+        out = _sample(np.asarray(image, np.float32), sx, sy)
+    else:
+        out = resample(np.asarray(image, np.float32), sx, sy, str(image_filter))
+    valid = (sx >= -1e-4) & (sx <= w - 1 + 1e-4) & (sy >= -1e-4) & (sy <= h - 1 + 1e-4)
+    return np.where(valid[..., None], out, 0).astype(np.float32)
 
 
 def st_map(matrix, width, height, inverse=False):

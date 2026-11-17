@@ -381,9 +381,9 @@ class VectorCornerPinTests(unittest.TestCase):
         self.assertEqual(pinned().shape, (H, W, 4))
 
     def test_the_main_tab_lists_the_knobs_in_nukes_order(self):
-        self.assertEqual(labels("VectorCornerPin")[:15], [
+        self.assertEqual(labels("VectorCornerPin")[:17], [
             "Reference Frame", "User1 xy", "User2 xy", "User3 xy", "User4 xy", "To1 xy", "To2 xy", "To3 xy", "To4 xy", "Bake corners",
-            "From1 xy", "From2 xy", "From3 xy", "From4 xy", "Output"])
+            "Filter", "From1 xy", "From2 xy", "From3 xy", "From4 xy", "Output", "Blur size"])
         kept, total = layout_order("VectorCornerPin")[0]
         self.assertEqual(kept, total)
 
