@@ -220,6 +220,30 @@ class ReadSplatTests(unittest.TestCase):
         self.d.document['nodes']['read']['disabled'] = True
         self.assertEqual(self.value().splats,())
 
+    def test_a_padded_pattern_reads_the_file_of_each_frame(self):
+        """`cloud.%04d.ply` or `cloud.####.ply` (what WriteSplat3D writes for a range) reads the frame's own file:
+        each frame is its own cached cloud and its own render, and a frame the sequence lacks names the file."""
+        folder = Path(self.tmp.name)
+        moved = replace(self.cloud, positions=self.cloud.positions + (.2, 0, 0))
+        files = {1001: folder/'seq.1001.ply', 1002: folder/'seq.1002.ply'}
+        splats.write_ply(self.cloud, files[1001]); splats.write_ply(moved, files[1002])
+        renders = {}
+        for number, path in files.items():
+            self.set('splat_path', str(path))
+            renders[number] = self.render(number)
+        self.assertFalse(np.array_equal(renders[1001], renders[1002]))
+        for pattern in ('seq.%04d.ply', 'seq.####.ply'):
+            with self.subTest(pattern=pattern):
+                self.set('splat_path', str(folder/pattern))
+                for number, path in files.items():
+                    self.assertIs(self.value(frame=number).splats[0].cloud, splats.load_cloud_cached(str(path)))
+                    np.testing.assert_array_equal(self.render(number), renders[number])
+                self.assertIs(self.value(frame=1001.4).splats[0].cloud, splats.load_cloud_cached(str(files[1001])))
+                with self.assertRaisesRegex(ValueError, 'no splat file for frame 1003'):
+                    self.value(frame=1003)
+        self.assertEqual(splats.frame_path(str(self.path), 7), str(self.path))
+        self.assertEqual(splats.frame_path('', 7), '')
+
     def test_create_connect_set_undo_redo(self):
         d = Dispatcher()
         states = [copy.deepcopy(d.document)]

@@ -1113,13 +1113,14 @@ class Evaluator:
         else:
             self._fluid_run_history[key] = stream.run
 
-    def _delit_cloud(self, cloud, params, cancel):
+    def _delit_cloud(self, cloud, params, cancel, path=None):
         """`cloud` with its intrinsic layer when the node's Delight is on (fitted once per cloud and
-        settings, then served from the simcache); otherwise the cloud itself, untouched."""
+        settings, then served from the simcache); otherwise the cloud itself, untouched. `path` is the
+        file the cloud came from (this frame's, for a sequence); the node's own path when not given."""
         if params.get("splat_delight", "off") != "on":
             return cloud
         from . import intrinsics, splats
-        identity = [*splats.fingerprint(params["splat_path"]), params["splat_orientation"], params["splat_colorspace"]]
+        identity = [*splats.fingerprint(path or params["splat_path"]), params["splat_orientation"], params["splat_colorspace"]]
         progress = self.progress
         report = None if progress is None else (lambda fraction: progress("delight", fraction, {}))
         layer = intrinsics.decompose_cached(
@@ -1834,7 +1835,8 @@ class Evaluator:
                     from . import splats
                     if not params["splat_path"]:
                         raise ValueError("ReadSplat3D: choose a splat file")
-                    fingerprint = splats.fingerprint(params["splat_path"])
+                    # A padded pattern reads this frame's file, so a sequence re-keys per frame.
+                    fingerprint = splats.fingerprint(splats.frame_path(params["splat_path"], frame))
                 if kind == "ReadGeo3D" and not node["disabled"]:
                     fingerprint = scene3d.obj_fingerprint(params["geo_path"])
                 if kind in ("ReadUSD3D", "ReadUSDCamera3D") and not node["disabled"]:
@@ -2347,10 +2349,11 @@ class Evaluator:
                         proxy = None if proxy_slot is None else values[proxy_slot]
                         value = scene3d.shrinkwrap_geometry(source, proxy, params)
                 elif kind == "ReadSplat3D":
+                    splat_file = None if node["disabled"] else splats.frame_path(params["splat_path"], frame)
                     value = scene3d.Scene() if node["disabled"] else scene3d.Scene(splats=(
                         scene3d.SplatInstance(self._delit_cloud(splats.load_cloud_cached(
-                            params["splat_path"], params["splat_orientation"], params["splat_colorspace"]),
-                            params, cancel),
+                            splat_file, params["splat_orientation"], params["splat_colorspace"]),
+                            params, cancel, splat_file),
                             scene3d._transform_from(params).matrix(), params["splat_sh_degree"],
                             params["splat_opacity"], params["splat_scale"], params.get("splat_relight", 0.0),
                             params.get("splat_shadow_catch", 0.0),

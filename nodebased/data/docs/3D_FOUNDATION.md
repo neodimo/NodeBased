@@ -41,7 +41,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
-| `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). `Smooth normals` averages each splat's estimated normal over its nearest splats (see "Normals (splats)"). `Delight` fits and divides out the capture's own lighting (see "Delight (intrinsic decomposition)"). |
+| `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). A padded pattern (`cloud.%04d.ply`, `cloud.####.ply`, what `WriteSplat3D` writes for a range) reads each frame's own file; a frame missing from the sequence is an error naming the file. `Smooth normals` averages each splat's estimated normal over its nearest splats (see "Normals (splats)"). `Delight` fits and divides out the capture's own lighting (see "Delight (intrinsic decomposition)"). |
 | `ReadAlembic3D` | scene | Polygon meshes from an Alembic (Ogawa) `.abc` as a scene. |
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |

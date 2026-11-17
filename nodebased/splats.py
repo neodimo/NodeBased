@@ -251,6 +251,21 @@ def to_linear_color(rgb, colorspace='srgb'):
                     ((np.maximum(rgb,0)+0.055)/1.055)**2.4).astype(np.float32)
 
 
+def frame_path(pattern, frame):
+    """The splat file for one frame: a plain path as it is, or a padded pattern (`cloud.%04d.ply`, `cloud.####.ply`,
+    the patterns Read takes and WriteSplat3D writes) with the frame number in it, a subframe rounded the way Read
+    rounds one. A frame missing from the sequence is an error naming the file it looked for."""
+    import math
+    from .media import is_sequence, sequence_path
+    if not pattern or not is_sequence(pattern):
+        return pattern
+    number = int(math.floor(float(frame) + 0.5))
+    path = sequence_path(pattern, number)
+    if not Path(path).expanduser().is_file():
+        raise ValueError(f'ReadSplat3D: no splat file for frame {number}: {path}')
+    return path
+
+
 def fingerprint(path):
     """Return [resolved path, size, mtime_ns], rejecting empty/unreadable files."""
     try:
