@@ -930,7 +930,13 @@
     {"nodebased": ["red"], "kind": "extra", "reason": "NodeBased-only: the older Flare's tint, read only while `legacy_flare` is on"},
     {"nodebased": ["green"], "kind": "extra", "reason": "NodeBased-only: the older Flare's tint, read only while `legacy_flare` is on"},
     {"nodebased": ["blue"], "kind": "extra", "reason": "NodeBased-only: the older Flare's tint, read only while `legacy_flare` is on"},
-    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
+    {"nodebased": [], "nuke": ["Bright"], "kind": "unsupported", "reason": "the guide's Flare tab has one button for each of Foundry's stored flare looks (Bright, LgRainbow, ManyBright, MultiPenta, Symmetry4 and the all button that applies one to every flare); NodeBased ships no preset library, so there are no looks for the buttons to load"},
+    {"nodebased": [], "nuke": ["LgRainbow"], "kind": "unsupported", "reason": "the guide's Flare tab has one button for each of Foundry's stored flare looks (Bright, LgRainbow, ManyBright, MultiPenta, Symmetry4 and the all button that applies one to every flare); NodeBased ships no preset library, so there are no looks for the buttons to load"},
+    {"nodebased": [], "nuke": ["ManyBright"], "kind": "unsupported", "reason": "the guide's Flare tab has one button for each of Foundry's stored flare looks (Bright, LgRainbow, ManyBright, MultiPenta, Symmetry4 and the all button that applies one to every flare); NodeBased ships no preset library, so there are no looks for the buttons to load"},
+    {"nodebased": [], "nuke": ["MultiPenta"], "kind": "unsupported", "reason": "the guide's Flare tab has one button for each of Foundry's stored flare looks (Bright, LgRainbow, ManyBright, MultiPenta, Symmetry4 and the all button that applies one to every flare); NodeBased ships no preset library, so there are no looks for the buttons to load"},
+    {"nodebased": [], "nuke": ["Symmetry4"], "kind": "unsupported", "reason": "the guide's Flare tab has one button for each of Foundry's stored flare looks (Bright, LgRainbow, ManyBright, MultiPenta, Symmetry4 and the all button that applies one to every flare); NodeBased ships no preset library, so there are no looks for the buttons to load"},
+    {"nodebased": [], "nuke": ["all"], "kind": "unsupported", "reason": "the guide's Flare tab has one button for each of Foundry's stored flare looks (Bright, LgRainbow, ManyBright, MultiPenta, Symmetry4 and the all button that applies one to every flare); NodeBased ships no preset library, so there are no looks for the buttons to load"}
    ]
   },
   "Glint": {
@@ -4169,7 +4175,7 @@
     {"nodebased": ["distortionOrder_x", "distortionOrder_y"], "nuke": ["distortionOrder"], "kind": "components", "reason": "split numerator and denominator terms"},
     {"nodebased": ["distortionExponent_x", "distortionExponent_y"], "nuke": ["distortionExponent"], "kind": "components", "reason": "split numerator and denominator exponents"},
     {"nodebased": ["normalisationType"], "nuke": ["normalisationType"], "kind": "same", "reason": "same normalization selector"},
-    {"nodebased": ["distortInFisheyeSpace"], "nuke": ["distortInFisheyeSpace"], "kind": "same", "reason": "same operation-order switch"},
+    {"nodebased": ["distortInFisheyeSpace"], "nuke": ["distortInFisheyeSpace"], "kind": "same", "reason": "same operation-order switch; the guide's table gives its default as the text `enabled (if a fisheye Projection Model is selected)`, which is why the table reads it as a string: the page describes a check box (Distort in Fisheye Space)"},
     {"nodebased": ["projection"], "nuke": ["projection"], "kind": "same", "reason": "same projection selector"},
     {"nodebased": ["focal"], "nuke": ["focal"], "kind": "same", "reason": "same focal-length control"},
     {"nodebased": ["sensorSize_x", "sensorSize_y"], "nuke": ["sensorSize"], "kind": "components", "reason": "split x and y sensor dimensions"},
@@ -4178,7 +4184,29 @@
     {"nodebased": ["beamSplitterDirection"], "nuke": ["beamSplitterDirection"], "kind": "same", "reason": "same direction control"},
     {"nodebased": ["beamSplitterBending"], "nuke": ["beamSplitterBending"], "kind": "same", "reason": "same bending control"},
     {"nodebased": ["distortionModelDisplayX"], "nuke": ["distortionModelDisplayX"], "kind": "same", "reason": "equation display field"},
-    {"nodebased": ["distortionModelDisplayY"], "nuke": ["distortionModelDisplayY"], "kind": "same", "reason": "equation display field"}
+    {"nodebased": ["distortionModelDisplayY"], "nuke": ["distortionModelDisplayY"], "kind": "same", "reason": "equation display field"},
+    {"nodebased": [], "nuke": ["detect"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["detectionFrameType"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["detectionThreshold"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["angleThreshold"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["distanceThreshold"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["featureSeparation"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["numFeatures"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["patchSize"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["peakThreshold"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["errorThreshold"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["deleteOutliers"], "kind": "unsupported", "reason": "NodeBased has no grid detector: it cannot find the lines or features of a grid shot, so this setting of the detection step has nothing to control"},
+    {"nodebased": [], "nuke": ["lineDrawingModeAddFeatures"], "kind": "unsupported", "reason": "NodeBased has no grid detector, so there are no detected features or lines to select, add or remove with this drawing mode"},
+    {"nodebased": [], "nuke": ["lineDrawingModeAddLines"], "kind": "unsupported", "reason": "NodeBased has no grid detector, so there are no detected features or lines to select, add or remove with this drawing mode"},
+    {"nodebased": [], "nuke": ["lineDrawingModeRemoveFeatures"], "kind": "unsupported", "reason": "NodeBased has no grid detector, so there are no detected features or lines to select, add or remove with this drawing mode"},
+    {"nodebased": [], "nuke": ["lineDrawingModeSelectAll"], "kind": "unsupported", "reason": "NodeBased has no grid detector, so there are no detected features or lines to select, add or remove with this drawing mode"},
+    {"nodebased": [], "nuke": ["lineDrawingModeSelectFeatures"], "kind": "unsupported", "reason": "NodeBased has no grid detector, so there are no detected features or lines to select, add or remove with this drawing mode"},
+    {"nodebased": [], "nuke": ["lineDrawingModeSelectLines"], "kind": "unsupported", "reason": "NodeBased has no grid detector, so there are no detected features or lines to select, add or remove with this drawing mode"},
+    {"nodebased": [], "nuke": ["overlayType"], "kind": "unsupported", "reason": "NodeBased has no grid detector or solver, so there is no detected grid or solved line set to show over the picture"},
+    {"nodebased": [], "nuke": ["preview"], "kind": "unsupported", "reason": "NodeBased has no grid detector or solver, so there is no detected grid or solved line set to show over the picture"},
+    {"nodebased": [], "nuke": ["solveDistortion"], "kind": "unsupported", "reason": "NodeBased has no distortion solver: the coefficients are typed in, never calculated from lines, so there is no solve to run, no solve error to report and no solved result to reset"},
+    {"nodebased": [], "nuke": ["solveError"], "kind": "unsupported", "reason": "NodeBased has no distortion solver: the coefficients are typed in, never calculated from lines, so there is no solve to run, no solve error to report and no solved result to reset"},
+    {"nodebased": [], "nuke": ["resetDistortion"], "kind": "unsupported", "reason": "NodeBased has no distortion solver: the coefficients are typed in, never calculated from lines, so there is no solve to run, no solve error to report and no solved result to reset"}
    ]
   },
   "ViewMetaData": {

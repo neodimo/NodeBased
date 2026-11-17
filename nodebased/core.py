@@ -697,8 +697,8 @@ SPECS = {
                             "filter": "cubic", "blur": "none", "blur_scale": 1.0, "maskChannel": "rgba.alpha", "premultiplied": 0, "channels": "all", "invert_mask": 0, "mix": 1.0,
                             **_filterbehaviour.new_params("IDistort")}},
     "SplineWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {"mix": 1.0, "curve_resolution": 12, "bbox": "source",
-                              "root_warp": "A", "filter": "bilinear", "output": "image", **_warpknobs.new_params("SplineWarp")}},
+                   "params": {"mix": 1.0, "curve_resolution": 3, "bbox": "source",
+                              "root_warp": "A", "filter": "cubic", "output": "image", **_warpknobs.new_params("SplineWarp")}},
     # GridWarp's `dst` and `bg` follow the mask so a saved edge into the mask keeps its slot (lane 9 step H).
     "GridWarp": {"inputs": ["image"], "optional_inputs": ["mask", "dst", "bg"],
                  "params": {"mix": 1.0, "rows": 5, "columns": 5, "bbox": "union",

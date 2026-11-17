@@ -102,6 +102,7 @@ class WarpNodeTests(unittest.TestCase):
                  "destination": [[12.5, 2.5, 0, 0, 0, 0], [12.5, 29.5, 0, 0, 0, 0]]}]
         params = dict(SPECS["SplineWarp"]["params"])
         params["curve_resolution"] = 8
+        params["filter"] = "bilinear"       # the STMap below reads bilinear; the node itself starts on the guide's cubic
         expected = Evaluator._warp_node("SplineWarp", params, [self.image], data)
         params["output"] = "stmap"
         uv = Evaluator._warp_node("SplineWarp", params, [self.image], data)
