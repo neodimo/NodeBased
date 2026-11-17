@@ -156,6 +156,43 @@ def _color_correct_cases():
                         "mix dissolves between the original at 0 and the full correction at 1", source="guide", master=dict(gain=1.8), mix=0.5))
     out.append(_cc_case("cc_mask", {"gain": 1.8}, (("gain", 1.8),),
                         "the correction is limited to the non-black areas of the mask input", source="guide", master=dict(gain=1.8), use_mask=True))
+
+    def mix_luminance_expected(amount, **master):
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            corrected = color_correct_reference(src[..., :3], master)
+            corrected = corrected + amount * (_grey(src[..., :3], REC709) - _grey(corrected, REC709))
+            ref = np.concatenate([corrected, src[..., 3:4]], axis=-1)
+            return ref, _finite(ref)
+        return expected
+    for amount in (1.0, 0.5):
+        out.append(_cc_case(f"cc_mix_luminance_{str(amount).replace('.', '_')}", {"gain": 1.8, "saturation": 1.4, "mix_luminance": amount},
+                            (("gain", 1.8), ("saturation", 1.4), ("mix_luminance", amount)),
+                            "mix luminance controls how much of the original luminance is kept after the correction: 0 uses the altered luminance, 1 gives "
+                            "the output the luminance of the input" if amount == 1.0 else
+                            "mix luminance 0.5 is half way between the altered luminance and the input's",
+                            source="guide", master=dict(gain=1.8, saturation=1.4), expected=mix_luminance_expected(amount, gain=1.8, saturation=1.4)))
+
+    def test_expected(fx):
+        src = fx["A"].astype(np.float64)
+        lum = _grey(src[..., :3], REC709)
+        shadows = 1.0 - _smoothstep(0.0, 0.09, lum)
+        highlights = _smoothstep(0.5, 1.0, lum)
+        midtones = 1.0 - shadows - highlights
+        grey = np.where(shadows >= 1.0 - 1e-6, 0.0, np.where(midtones >= 1.0 - 1e-6, 0.5, np.where(highlights >= 1.0 - 1e-6, 1.0, 0.0)))
+        pure = (shadows >= 1.0 - 1e-6) | (midtones >= 1.0 - 1e-6) | (highlights >= 1.0 - 1e-6)
+        ref = np.concatenate([np.repeat(grey, 3, axis=-1), src[..., 3:4]], axis=-1)
+        valid = np.concatenate([np.repeat(pure, 3, axis=-1), np.ones_like(pure)], axis=-1)
+        return ref, valid
+    out.append(_cc_case("cc_test_ranges", {"test": 1, "gain": 1.8}, (("test", True), ("gain", 1.8)),
+                        "test overlays the output with black, grey or white where a pixel counts wholly as shadows, midtones or highlights; "
+                        "pixels in a mixture of ranges are left out (the guide's green and magenta are not scored)",
+                        source="guide", expected=test_expected))
+    out.append(Case("cc_test_mixture_colours", "ColorCorrect", "ColorCorrect", (("test", True),), ("A",), "ColorCorrect", {"test": 1}, ("A",),
+                    lambda fx: (fx["A"].astype(np.float64), _all_valid(fx["A"])), "guide",
+                    "test draws green and magenta where the ranges mix",
+                    unscored="the guide says green and magenta indicate a mixture of ranges but not which mixture gets which colour, or where a mix "
+                             "ends and a pure range starts; NodeBased draws green for a blend of neighbouring ranges and magenta for overlapping curves"))
     return out
 
 
@@ -1101,11 +1138,30 @@ def _histeq_cases():
 def _mincolor_cases():
     guide = ("MinColor (Nuke 17.0 Reference Guide): 'Calculates the difference between the darkest value in the input image and the target value, and then adds the result to "
              "the image. This sets the darkest pixel to the target value.'")
-    return [
-        _unscored_case("mincolor_adds_the_delta", "MinColor", "MinColor", guide,
-                       "the delta that is added is calculated by the Find Pixel Delta button over a range of frames, not by rendering: the node adds the stored delta "
-                       "(tests/test_2d_behaviour_color_b.py runs the button's calculation and the addition against this statement)"),
-    ]
+
+    def plate(colour, delta):
+        def expected(fx):
+            ref = np.empty((12, 16, 4), np.float64)
+            ref[..., 0], ref[..., 1], ref[..., 2], ref[..., 3] = colour
+            ref[..., :3] += delta
+            valid = np.ones((12, 16, 4), bool)
+            valid[..., 3] = False             # the guide does not say whether the alpha channel takes the addition
+            return ref, valid
+        return expected
+    out = []
+    for name, colour, target in (("mincolor_sets_the_darkest_value_to_the_target", (0.3, 0.5, 0.2, 1.0), 0.095),
+                                 ("mincolor_darkest_value_up_to_a_higher_target", (0.4, 0.15, 0.6, 1.0), 0.5)):
+        delta = target - min(colour[:3])
+        out.append(Case(id=name, nuke="MinColor", nuke_class="MinColor", nuke_knobs=(("target", target),), nuke_inputs=("A",), nb_kind="MinColor",
+                        nb_params={"_plate": {"type": "Constant", "params": dict(zip(("red", "green", "blue", "alpha"), colour))},
+                                   "target": target, "pixeldelta": delta, "adjdir": "Both"},
+                        nb_inputs=("A",), expected=plate(colour, delta), source="guide", tolerance=1e-6,
+                        statement=(f"{guide} A plate whose darkest colour value is {min(colour[:3]):g}, a target of {target:g} and the stored delta {delta:+.3f} "
+                                   f"(the Find Pixel Delta button's target minus the darkest value) comes out with {target:g} as its darkest value")))
+    out.append(_unscored_case("mincolor_alpha_takes_the_delta", "MinColor", "MinColor", guide + " Whether the alpha channel is among the channels the delta is added to",
+                              "the guide's table is not read for the modify choice, and states which channels the addition reaches only as 'the image'; NodeBased adds to all "
+                              "four channels by default and the case leaves alpha out"))
+    return out
 
 
 # ------------------------------------------------------------------------------------------------------------ Keyer (step C)
@@ -2118,6 +2174,117 @@ def _w1_cases():
     return out
 
 
+def _generated_lut_file(multiply):
+    """A .cube file written by GenerateLUT's own export for a Constant into a Grade multiplying by `multiply`."""
+    import os
+    import tempfile
+    from nodebased.core import Dispatcher, empty_document
+    from nodebased.lutio import export_graph_cube
+    path = os.path.join(tempfile.mkdtemp(prefix="nb-cases-"), "multiply_half.cube")
+    d = Dispatcher(empty_document())
+    d.execute({"op": "create", "id": "src", "type": "Constant", "params": {"width": 8, "height": 8}})
+    d.execute({"op": "create", "id": "grade", "type": "Grade", "params": {"multiply": multiply}})
+    d.execute({"op": "connect", "id": "grade", "input": "image", "source": "src"})
+    d.execute({"op": "create", "id": "lut", "type": "GenerateLUT", "params": {"lut_path": path, "lut_size": 17}})
+    d.execute({"op": "connect", "id": "lut", "input": "source", "source": "grade"})
+    return export_graph_cube(d.document, "lut", path, 17)
+
+
+_CINEON_STEP = 0.6 / (0.002 * 1023.0)       # code value (over 1023) of a factor of ten at gamma 0.6: Log2Lin's slope with ignore on
+
+
+def _w2_cases():
+    """Lane 2 step W2: Exposure's Colorspace Cineon, and the rest of W1's left-out worklist rows, each acting as the guide states or listed
+    `unscored` with the guide's reason."""
+    out = []
+    base = "https://learn.foundry.com/nuke/17.0/content/reference_guide/"
+    page = base + "color_nodes/exposure.html"
+    cineon_note = (f"Exposure colorspace Cineon ({page}): 'data is assumed to be raw data from a Cineon file requiring addition or subtraction. The result, "
+                   "when passed through a Log2Lin node, approximately matches the Linear result. You can match Linear exactly if you set gamma to 0.6 and "
+                   "enable ignore in the Log2Lin node', so the exposure is log10(gain) / (0.002 / 0.6 x 1023) of a code value added, with the gain the "
+                   "Linear result would multiply by")
+
+    def cineon(stops, green_stops=None, blackpoint=0.0):
+        def expected(fx):
+            src = fx["A"].astype(np.float64)
+            ref = src.copy()
+            gains = [stops, stops if green_stops is None else green_stops, stops]
+            for channel, amount in enumerate(gains):
+                ref[..., channel] = (src[..., channel] - blackpoint) + np.log10(2.0 ** amount) * _CINEON_STEP
+            return ref, np.ones(ref.shape, bool)
+        return expected
+    out.append(Case("exposure_cineon_stops", "Exposure", "Exposure", (("colorspace", "Cineon"), ("mode", "Stops"), ("red", 1.0), ("green", 1.0), ("blue", 1.0)),
+                    ("A",), "Exposure", {"exposure_colorspace": "Cineon", "exposure_mode": "stops", "red": 1.0, "gang": 1}, ("A",), cineon(1.0), "guide",
+                    "One stop in Cineon is the code value added that Log2Lin turns into a factor of two. " + cineon_note, tolerance=1e-6))
+    out.append(Case("exposure_cineon_ungang", "Exposure", "Exposure", (("colorspace", "Cineon"), ("mode", "Stops"), ("gang", False), ("red", -1.0),
+                                                                      ("green", 2.0), ("blue", -1.0)), ("A",), "Exposure",
+                    {"exposure_colorspace": "Cineon", "exposure_mode": "stops", "gang": 0, "red": -1.0, "green": 2.0, "blue": -1.0}, ("A",),
+                    cineon(-1.0, 2.0), "guide", "Each colour channel has its own addition when the sliders are not ganged. " + cineon_note, tolerance=1e-6))
+
+    hist_page = base + "color_nodes/histogram.html"
+
+    def levels(red, valid_all=False, alpha=1.0):
+        def expected(fx):
+            ref = np.empty((12, 16, 4), np.float64)
+            ref[..., 0], ref[..., 1], ref[..., 2], ref[..., 3] = red, 0.25, 0.5, alpha
+            valid = np.ones((12, 16, 4), bool)
+            if not valid_all:
+                valid[..., 1:3] = False          # only the red channel's value is written down
+            return ref, valid
+        return expected
+    out.append(Case("histogram_clamps_superwhite", "Histogram", "Histogram", (), ("stamp",), "Histogram",
+                    {"_stamp": {"frame": 2.0}}, (), levels(1.0), "guide",
+                    f"Histogram ({hist_page}): 'Histogram clamps superblacks and superwhites': a red of 2 comes out at the output range's white, 1"))
+    out.append(Case("histogram_clamps_superblack", "Histogram", "Histogram", (), ("stamp",), "Histogram",
+                    {"_stamp": {"frame": -1.0}}, (), levels(0.0), "guide",
+                    f"Histogram ({hist_page}): 'Histogram clamps superblacks and superwhites': a red of -1 comes out at the output range's black, 0"))
+    out.append(Case("histogram_output_range_black_is_the_left_value", "Histogram", "Histogram", (("out", (0.2, 0.8)),), ("stamp",), "Histogram",
+                    {"black_out": 0.2, "white_out": 0.8, "_stamp": {"frame": 0.0}}, (), levels(0.2), "guide",
+                    f"Histogram ({hist_page}): output range, 'any pixels that are black are set to the value on the left': a red of 0 becomes 0.2"))
+    out.append(Case("histogram_output_range_white_is_the_right_value", "Histogram", "Histogram", (("out", (0.2, 0.8)),), ("stamp",), "Histogram",
+                    {"black_out": 0.2, "white_out": 0.8, "_stamp": {"frame": 1.0}}, (), levels(0.8), "guide",
+                    f"Histogram ({hist_page}): output range, 'any pixels that are white are set to the value on the right': a red of 1 becomes 0.8"))
+    out.append(Case("histogram_input_black_point_is_black", "Histogram", "Histogram", (("in", (0.2, 1.0, 1.0)),), ("stamp",), "Histogram",
+                    {"black": 0.2, "_stamp": {"frame": 0.2}}, (), levels(0.0), "convention",
+                    f"Histogram ({hist_page}): the leftmost input slider is the black point, 'this makes shadows darker': a red of 0.2 with the black point at 0.2 "
+                    "comes out black"))
+    out.append(Case("histogram_input_white_point_is_white", "Histogram", "Histogram", (("in", (0.0, 1.0, 0.5)),), ("stamp",), "Histogram",
+                    {"white": 0.5, "_stamp": {"frame": 0.5}}, (), levels(1.0), "convention",
+                    f"Histogram ({hist_page}): the rightmost input slider is the white point, 'this makes highlights lighter': a red of 0.5 with the white point at 0.5 "
+                    "comes out white"))
+
+    ibk_reason = ("the guide's table types IBKColor's darks and lights number_list (red, green, blue), and the page the guide links is a keyer walk-through that "
+                  "never says what the three entries do to the clean plate, so no per-channel value can be written down; NodeBased's one number clamps the screen channel")
+    out.append(Case("ibk_color_darks_lights_red_green_blue", "IBKColor", "IBKColor", (), ("A",), "IBKColor", None, ("A",), None, "guide",
+                    f"IBKColor ({base}keyer_nodes/ibkcolor.html) darks and lights take a value for each of red, green and blue",
+                    inexpressible=ibk_reason, unscored=ibk_reason))
+    hsv_reason = ("the guide's table gives the Conversion menu (label 'is', beside the output channel) only its default, hue, and states neither its choices nor what "
+                  "it does to the written channel, so no value can be written down; NodeBased's Output to alpha menu holds the matte choices and the raw hue, "
+                  "saturation and value in one")
+    out.append(Case("hsv_tool_output_conversion", "HSVTool", "HSVTool", (), ("A",), "HSVTool", None, ("A",), None, "guide",
+                    f"HSVTool ({base}color_nodes/hsvtool.html) writes the output channel as the Conversion menu says",
+                    inexpressible=hsv_reason, unscored=hsv_reason))
+
+    # GenerateLUT writes a LUT from the colour nodes upstream of it; the file read back by a Vectorfield applies what those nodes did. A multiply
+    # is affine, which trilinear interpolation returns exactly for colours inside the table (0 to 1).
+    lut_cube = _generated_lut_file(0.5)
+
+    def generated(fx):
+        src = fx["A"].astype(np.float64)
+        ref = src.copy()
+        ref[..., :3] = src[..., :3] * 0.5
+        opaque = (src[..., 3:4] == 1.0)       # the guide does not say how a Vectorfield treats a transparent pixel's colour
+        inside = np.broadcast_to(opaque, src.shape).copy()
+        inside[..., :3] &= (src[..., :3] >= 0.0) & (src[..., :3] <= 1.0)
+        return ref, inside
+    out.append(Case("generate_lut_writes_what_the_nodes_upstream_do", "GenerateLUT", "Vectorfield", (("file", "multiply_half.cube"),), ("A",), "Vectorfield",
+                    {"cube_path": lut_cube, "interpolation": "trilinear"}, ("A",), generated, "guide", tolerance=1e-5,
+                    statement=(f"GenerateLUT ({base}color_nodes/generatelut.html) 'generates lookup tables, or LUTs, from color management nodes' upstream of it: the "
+                               "file it writes for a Multiply of 0.5, read back by a Vectorfield, halves every opaque colour inside the table. The graph and the file are "
+                               "made by the case through `lutio.export_graph_cube` (the node's Generate and Write LUT File button)")))
+    return out
+
+
 def cases():
     # Imported here, not at the top: `nuke_fidelity_cases` imports this module from its own last lines, and a module-level import
     # would re-enter it half built when it was itself imported as `tools.nuke_fidelity_cases`.
@@ -2127,4 +2294,4 @@ def cases():
             + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
             + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases()
             + _chroma_keyer_behaviour_cases() + _screen_keyer_behaviour_cases() + _ibk_behaviour_cases() + _shuffle_copy_cases() + _remove_cases()
-            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases() + _retime_weight_cases() + _analysis_cases() + _w1_cases())
+            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases() + _retime_weight_cases() + _analysis_cases() + _w1_cases() + _w2_cases())

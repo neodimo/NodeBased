@@ -7648,8 +7648,14 @@ class Evaluator:
         gains.append(gains[0])
         black = np.float32(p.get("blackpoint", 0.0))
         out = image.copy()
+        # Colorspace Cineon (the guide): the data is raw Cineon code values, which take an addition or subtraction instead of a multiplication; the
+        # result, passed through Log2Lin with gamma 0.6 and ignore, matches Linear exactly. A gain g is log10(g) / (0.002 / 0.6 * 1023) of code value.
+        cineon = p.get("exposure_colorspace", "Linear") == "Cineon"
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
-            out[..., c] = (image[..., c] - black) * gains[c]
+            if cineon:
+                out[..., c] = (image[..., c] - black) + np.float32(math.log10(float(gains[c])) * 0.6 / (0.002 * 1023.0))
+            else:
+                out[..., c] = (image[..., c] - black) * gains[c]
         return out
 
     @staticmethod
@@ -9531,7 +9537,7 @@ class Evaluator:
         controls = ("saturation", "contrast", "gamma", "gain", "offset")
         if any(isinstance(q.get(name), (list, tuple)) for name in SPLITTABLE.get("ColorCorrect", ())):
             return Evaluator._color_correct_split(image, q)
-        if all(float(q[name]) == (0.0 if name == "offset" else 1.0) for name in controls) and all(
+        if not q.get("test", 0) and all(float(q[name]) == (0.0 if name == "offset" else 1.0) for name in controls) and all(
                 float(q[f"{zone}_{name}"]) == (0.0 if name == "offset" else 1.0)
                 for zone in ("shadows", "midtones", "highlights") for name in controls):
             return image
@@ -9561,6 +9567,10 @@ class Evaluator:
         shadows = weight(q["shadows_curve"], lum)
         highlights = weight(q["highlights_curve"], lum)
         weights = {"shadows": shadows, "midtones": 1.0 - shadows - highlights, "highlights": highlights}
+        if q.get("test", 0):
+            # The Ranges tab's test: the output is the ranges drawn over the picture, not the correction.
+            overlay = Evaluator._color_correct_test_overlay(weights, lum)
+            return np.concatenate([overlay * alpha if divide else overlay, alpha], axis=2).astype(np.float32)
         pivots = {"shadows": 0.04, "midtones": 0.18, "highlights": 0.65}
         master = {name: float(q[name]) for name in ("saturation", "contrast", "gamma", "gain", "offset")}
         # Ranges whose own knobs are equal correct the pixel identically, so the default case (only
@@ -9596,7 +9606,35 @@ class Evaluator:
                 result = corrected      # the weights add up to 1; skip their rounding
                 break
             result += w * corrected
+        result = Evaluator._color_correct_mix_luminance(result, lum, q)
         return np.concatenate([result * alpha if divide else result, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _color_correct_mix_luminance(result, lum, q):
+        """ColorCorrect's `mix luminance` (Ranges tab): 0 keeps the corrected luminance, 1 puts back the luminance the pixel came in with
+        (the correction then changes the colour only). The shift is the same for all three channels, so it is exact for Rec. 709 weights."""
+        mixed = float(q.get("mix_luminance", 0.0))
+        if mixed == 0.0:
+            return result
+        grey = 0.2125 * result[..., 0:1] + 0.7154 * result[..., 1:2] + 0.0721 * result[..., 2:3]
+        return (result + mixed * (lum - grey)).astype(np.float32)
+
+    @staticmethod
+    def _color_correct_test_overlay(weights, lum):
+        """ColorCorrect's `test` (Ranges tab): black where a pixel is wholly shadow, grey where it is wholly midtone, white where it is wholly
+        highlight. The guide says green and magenta mark a mixture of ranges without saying which mixture gets which, so a blend of the
+        neighbouring ranges draws green and curves that overlap (a range above 1 or below 0) draw magenta, NodeBased's reading."""
+        s, m, h = weights["shadows"], weights["midtones"], weights["highlights"]
+        eps = 1e-4
+        only = lambda a, b, c: (a >= 1.0 - eps) & (np.abs(b) <= eps) & (np.abs(c) <= eps)
+        grey = np.where(only(s, m, h), 0.0, np.where(only(m, s, h), 0.5, np.where(only(h, s, m), 1.0, np.nan)))
+        mixed = np.isnan(grey)
+        overlapping = (np.minimum(np.minimum(s, m), h) < -eps) | (np.maximum(np.maximum(s, m), h) > 1.0 + eps)
+        out = np.repeat(np.nan_to_num(grey, nan=0.0), 3, axis=2).astype(np.float32)
+        green = np.array([0.0, 1.0, 0.0], np.float32)
+        magenta = np.array([1.0, 0.0, 1.0], np.float32)
+        out = np.where(mixed & overlapping, magenta, np.where(mixed, green, out))
+        return out.astype(np.float32)
 
     @staticmethod
     def _color_correct_split(image, q):
@@ -9624,6 +9662,9 @@ class Evaluator:
 
         shadows, highlights = weight(q["shadows_curve"]), weight(q["highlights_curve"])
         weights = {"shadows": shadows, "midtones": 1.0 - shadows - highlights, "highlights": highlights}
+        if q.get("test", 0):
+            overlay = Evaluator._color_correct_test_overlay(weights, lum)
+            return np.concatenate([overlay * alpha if divide else overlay, alpha], axis=2).astype(np.float32)
         pivots = {"shadows": 0.04, "midtones": 0.18, "highlights": 0.65}
         master = {name: entries(name) for name in controls}
         channels = straight if count == 3 else np.concatenate([straight, alpha], axis=2)
@@ -9665,6 +9706,7 @@ class Evaluator:
                 result = corrected
                 break
             result = result + w * corrected
+        result = np.concatenate([Evaluator._color_correct_mix_luminance(result[..., :3], lum, q), result[..., 3:]], axis=2)
         rgb = result[..., :3] * alpha if divide else result[..., :3]
         return np.concatenate([rgb, result[..., 3:4] if count == 4 else alpha], axis=2).astype(np.float32)
 

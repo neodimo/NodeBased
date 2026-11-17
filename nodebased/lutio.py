@@ -260,10 +260,11 @@ def prelut_inverse(style, u):
     return np.expm1(u * np.log1p(_PRELUT_CURVE)) / _PRELUT_CURVE if style == "logarithmic" else u
 
 
-def write_3dl(path, values, size, shaper_size=1024, style="logarithmic", input_depth=10, output_depth=None, clamp=True):
+def write_3dl(path, values, size, shaper_size=1024, style="logarithmic", input_depth=10, output_depth=None, clamp=True, header=True):
     """Write a Flame/Lustre .3dl: a 1D preLUT row (`shaper_size` entries of the curve at the input depth) and the blue-fastest mesh at the
     output depth. `values` is the graph sampled at the lattice whose axis is prelut_inverse(style, evenly spaced) (red fastest, as for .cube),
-    so reading the file back (`read_3dl` and `apply_3dl`) maps a colour x through the preLUT then the mesh."""
+    so reading the file back (`read_3dl` and `apply_3dl`) maps a colour x through the preLUT then the mesh. `header` writes the `3DMESH` / `Mesh` lines
+    Autodesk Lustre's files open with (the guide's "autodesk lustre" 3dl file format); Flame and Smoke files go without them."""
     path = Path(path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     output_depth = output_depth or input_depth
@@ -274,7 +275,8 @@ def write_3dl(path, values, size, shaper_size=1024, style="logarithmic", input_d
     codes = np.rint(np.clip(mesh, 0.0, 2.0) * out_max).astype(np.int64).transpose(2, 1, 0, 3).reshape((-1, 3))      # blue fastest
     positions = np.rint(prelut(style, np.linspace(0.0, 1.0, int(shaper_size))) * in_max).astype(np.int64)
     with path.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("3DMESH\nMesh %d %d\n" % (int(round(math.log2(size - 1))), output_depth))
+        if header:
+            handle.write("3DMESH\nMesh %d %d\n" % (int(round(math.log2(size - 1))), output_depth))
         handle.write(" ".join(str(int(v)) for v in positions) + "\n")
         for row in codes:
             handle.write("%d %d %d\n" % tuple(int(v) for v in row))
@@ -282,7 +284,8 @@ def write_3dl(path, values, size, shaper_size=1024, style="logarithmic", input_d
 
 
 def export_graph_cube(document, target_key, path, size, source_space="ACEScg", output_space="ACEScg", file_type="cube", prelut_size=1024,
-                      prelut_style="logarithmic", input_bit_depth="10 bit", output_bit_depth="input bit depth", clamp_output=False):
+                      prelut_style="logarithmic", input_bit_depth="10 bit", output_bit_depth="input bit depth", clamp_output=False,
+                      format_3dl="autodesk lustre"):
     """Evaluate the upstream graph on a synthetic identity lattice, replacing its image roots, and write it as a .cube or a .3dl (file_type)."""
     from copy import deepcopy
     path = str(path or "").strip()
@@ -340,5 +343,7 @@ def export_graph_cube(document, target_key, path, size, source_space="ACEScg", o
     if file_type == "3dl":
         in_depth = BIT_DEPTHS[input_bit_depth]
         out_depth = in_depth if output_bit_depth == "input bit depth" else BIT_DEPTHS[output_bit_depth]
-        return write_3dl(path, out, size, prelut_size, prelut_style, in_depth, out_depth, bool(clamp_output))
+        if format_3dl not in ("autodesk flame/smoke", "autodesk lustre"):
+            raise ValueError("GenerateLUT: the 3dl file format must be autodesk flame/smoke or autodesk lustre")
+        return write_3dl(path, out, size, prelut_size, prelut_style, in_depth, out_depth, bool(clamp_output), header=format_3dl == "autodesk lustre")
     return write_cube(path, np.clip(out, 0.0, 1.0) if clamp_output else out, size)

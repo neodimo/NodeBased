@@ -46,12 +46,16 @@ PATH_MASK = {"enable_path_mask": 0, "mask_patterns": "", "inject_mask": 0}
 
 # What a new node gets (Nuke's defaults where the guide states them) and what an older document's node gets, which is
 # what that node did before the knob existed.
+# The Retime TimeWarp tab's curve: a straight line from (0, 0) to (1, 1), which warps nothing. x is the position in the output range and y the
+# position in the input range, both as a fraction of the range (the guide: the curve must pass through 0,0 and 1,1).
+WARP_IDENTITY = '{"interpolation":"linear","points":[[0,0],[1,1]]}'
+
 NEW = {
     "TimeOffset": {"rounding_mode": "Whole frames", "reverse_input": 0, **PATH_MASK},
     "FrameHold": {"rounding_mode": "Whole frames", **PATH_MASK},
     "Retime": {"input_range_start_lock": 0, "input_range_end_lock": 0, "output_range_start_lock": 0,
                "output_range_end_lock": 0, "reverse": 0, "retime_before": "hold", "retime_after": "hold",
-               "retime_filter": "box", "shutter": 1.0},
+               "retime_filter": "box", "shutter": 1.0, "warp": WARP_IDENTITY},
     "TimeClip": {"fade_in": 5.0, "fade_out": 5.0, "frame_mode": "expression", "frame_expr": "", "origfirst": 0,
                  "origlast": 0, "reverse": 0},
     "FrameRange": {"legacy_fractional_frames": 0},
@@ -63,7 +67,7 @@ OLD = {
     "FrameHold": {"rounding_mode": "Whole frames", **PATH_MASK},
     "Retime": {"input_range_start_lock": 1, "input_range_end_lock": 0, "output_range_start_lock": 1,
                "output_range_end_lock": 0, "reverse": 0, "retime_before": "continue", "retime_after": "continue",
-               "retime_filter": "nearest", "shutter": 1.0},
+               "retime_filter": "nearest", "shutter": 1.0, "warp": WARP_IDENTITY},
     "TimeClip": {"fade_in": 0.0, "fade_out": 0.0, "frame_mode": "expression", "frame_expr": "", "origfirst": 0,
                  "origlast": 0, "reverse": 0},
     "FrameRange": {"legacy_fractional_frames": 1},
@@ -205,9 +209,34 @@ def retime_numbers(params, clip):
     return in_first, in_last, out_first, out_last, speed
 
 
+def _warp_curve(params):
+    """The decoded warp curve, or None while it is the straight line from (0, 0) to (1, 1) (and for a node saved without the knob)."""
+    text = params.get("warp", WARP_IDENTITY)
+    if not text or text == WARP_IDENTITY:
+        return None
+    from . import colorcurves
+    curve = colorcurves.decode(text)
+    points = [(float(x), float(y)) for x, y in curve["points"]]
+    if points == [(0.0, 0.0), (1.0, 1.0)]:
+        return None
+    return curve
+
+
+def _warped_input(curve, frame, in_first, in_last, out_first, out_last, reverse):
+    """The input time the warp curve gives output `frame`: the curve's y (a fraction of the input range) at the frame's fraction of the output
+    range. Outside the output range the line carries on straight (no warp), so `before` and `after` find the frame where they always did."""
+    from . import colorcurves
+    span = out_last - out_first
+    u = (frame - out_first) / span if span else 0.0
+    w = colorcurves.evaluate(curve, u) if 0.0 <= u <= 1.0 else u
+    length = in_last - in_first
+    return in_last - w * length if reverse else in_first + w * length
+
+
 def retime_plan(params, frame, clip):
-    in_first, in_last, out_first, _out_last, speed = retime_numbers(params, clip)
+    in_first, in_last, out_first, out_last, speed = retime_numbers(params, clip)
     reverse = bool(params.get("reverse"))
+    warp = _warp_curve(params)
     lo, hi = min(in_first, in_last), max(in_first, in_last)
     # The policy follows the output side (frames before output.first, frames after it), whichever way the input runs.
     policy = params.get("retime_before", "hold") if frame < out_first else params.get("retime_after", "hold")
@@ -219,8 +248,14 @@ def retime_plan(params, frame, clip):
 
     step = (frame - out_first) * speed
     x = in_last - step if reverse else in_first + step
+    local_speed = abs(speed)
+    if warp is not None:
+        x = _warped_input(warp, frame, in_first, in_last, out_first, out_last, reverse)
+        # The box covers the input frames the output frame's own span passes over, so it widens where the curve is steep.
+        local_speed = abs(_warped_input(warp, frame + 0.5, in_first, in_last, out_first, out_last, reverse)
+                          - _warped_input(warp, frame - 0.5, in_first, in_last, out_first, out_last, reverse))
     mode = str(params.get("retime_filter", "box"))
-    width = min(abs(speed) * float(params.get("shutter", 1.0)), MAX_BOX_FRAMES)
+    width = min(local_speed * float(params.get("shutter", 1.0)), MAX_BOX_FRAMES)
     if mode == "box" and width > 0:
         low, high = x - width / 2.0, x + width / 2.0
         weights = {}

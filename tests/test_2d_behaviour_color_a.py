@@ -230,6 +230,7 @@ _CC_CHANGES = {
     "lookup": {"shadows_curve": '{"interpolation":"smooth","points":[[0,1],[0.4,0]]}',
                "highlights_curve": '{"interpolation":"smooth","points":[[0.2,0],[0.6,1]]}'},
     "saturation": {"saturation": 0.4}, "contrast": {"contrast": 1.5}, "gamma": {"gamma": 1.5}, "gain": {"gain": 1.2}, "offset": {"offset": -0.1},
+    "test": {"test": 1}, "mix_luminance": {"mix_luminance": 0.8},         # lane 2 step W2
 }
 for _zone in ("shadows", "midtones", "highlights"):
     for _name, _value in (("saturation", 0.4), ("contrast", 1.5), ("gamma", 1.5), ("gain", 1.2), ("offset", -0.1)):

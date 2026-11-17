@@ -15270,6 +15270,16 @@ class Window(QMainWindow):
                 reset_range_button.setToolTip("Set the input range to the first and last frame of the clip")
                 reset_range_button.clicked.connect(lambda _checked=False, k=key: self.retime_reset_range(k))
                 form.addRow(reset_range_button)
+            if node["type"] == "Colorspace":
+                # Nuke's `color matrix output`: the matrix between the two sets of primaries and illuminants. Read-only; copy the numbers into a ColorMatrix.
+                from .ocio_nodes import colorspace_matrix_text
+                matrix_label = QLabel(colorspace_matrix_text(node["params"]))
+                matrix_label.setObjectName("colorspace-matrix-readout")
+                matrix_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                matrix_label.setStyleSheet("font-family: monospace;")
+                matrix_label.setToolTip("The matrix between the input and output primaries and illuminants, applied between the two curves "
+                                        "(rgb out = matrix x rgb in). Changing it here has no effect; copy the numbers into a ColorMatrix node to apply them.")
+                form.addRow("Color matrix output", matrix_label)
             if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
                 readout = QLabel("Analyze the configured frame range")
                 readout.setWordWrap(True)
@@ -15288,18 +15298,30 @@ class Window(QMainWindow):
                         src = self.evaluator.evaluate_raster(doc, target=inputs["image"], frame=frame)
                         px = src.pixels
                         if selected["type"] == "Histogram":
-                            hist, _ = np.histogram(px[..., :3], bins=64)
+                            # Nuke's `hist`: brightness 0 to 1 along the bottom (shadows left), the percentage of pixels up the side. Grey is the picture
+                            # as it came in, the coloured curves the picture as the node leaves it (nodebased/histogramplot.py).
+                            from . import histogramplot
+                            before, after = histogramplot.plot_data(px, selected["params"])
                             plot = QPixmap(320, 100)
                             plot.fill(QColor("#202027"))
                             painter = QPainter(plot)
+                            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                            peak = max(1e-9, float(before.max()), float(after.max()))
+                            width, height = plot.width() - 1, plot.height() - 8
                             painter.setPen(Qt.PenStyle.NoPen)
-                            painter.setBrush(QColor("#77c9a8"))
-                            peak = max(1, int(hist.max()))
-                            for i, n in enumerate(hist):
-                                height = int(92 * n / peak)
-                                painter.drawRect(i * 5, 100 - height, 4, height)
+                            painter.setBrush(QColor("#4a4a55"))
+                            columns = before.shape[1]
+                            for i, n in enumerate(before.max(axis=0)):
+                                bar = int(height * n / peak)
+                                painter.drawRect(int(i * width / columns), 100 - bar, max(1, int(width / columns) - 1), bar)
+                            for row, colour in enumerate(("#ff625e", "#76d67c", "#669bff")):
+                                painter.setPen(QPen(QColor(colour), 1.2))
+                                points = [QPointF((i + 0.5) * width / columns, 100 - height * float(n) / peak) for i, n in enumerate(after[row])]
+                                painter.drawPolyline(QPolygonF(points))
                             painter.end()
                             label.setPixmap(plot)
+                            label.setToolTip("Brightness from 0 (left) to 1 (right); the height is the percentage of pixels at that brightness. "
+                                             "Grey: the input. Coloured: the result of the input range, midtone and output range.")
                         elif selected["type"] == "MinColor":
                             start, end = int(selected["params"]["frame_start"]), int(selected["params"]["frame_end"])
                             if end < start:
@@ -16214,7 +16236,9 @@ class Window(QMainWindow):
                     button.clicked.connect(lambda checked=False, k=key, s=single: self.export_geometry(k, s))
                     form.addRow(button)
             if node["type"] == "GenerateLUT":
-                button = QPushButton("Generate .cube LUT")
+                button = QPushButton("Generate and Write LUT File")
+                button.setObjectName("generate-lut-file")
+                button.setToolTip("Generate the LUT file and save it to the output file location")
                 button.clicked.connect(lambda checked=False, k=key: self.export_lut(k))
                 form.addRow(button)
             if node["type"] == "Generate":
@@ -20794,7 +20818,7 @@ class Window(QMainWindow):
                                      params["lut_size"], params["colorspace_in"], params["colorspace_out"],
                                      params.get("lut_file_type", "cube"), params.get("prelut_size", 1024), params.get("prelut_style", "logarithmic"),
                                      params.get("lut_input_bit_depth", "10 bit"), params.get("lut_output_bit_depth", "input bit depth"),
-                                     bool(params.get("lut_clamp_output", 0)))
+                                     bool(params.get("lut_clamp_output", 0)), params.get("lut_3dl_format", "autodesk lustre"))
         except (OSError, ValueError, RuntimeError) as error:
             self.statusBar().showMessage(str(error), 10000)
             QMessageBox.warning(self, "LUT export", str(error))

@@ -58,7 +58,7 @@ FLAT_ZERO = '{"interpolation":"linear","points":[[0,0],[360,0]]}'
 SATURATION_MATH = ("Rec 709", "Ccir 601", "Average", "Maximum", "Rec 709 (old weights)")
 
 NEW = {
-    "ColorCorrect": {"divide_by_alpha": 0},
+    "ColorCorrect": {"divide_by_alpha": 0, "mix_luminance": 0.0, "test": 0},
     "Saturation": {"luminance_math": "Rec 709"},
     "HueCorrect": {"older_curve_maths": 0},
     "HSVTool": {"adjust_by_scaling": 0},
@@ -78,10 +78,11 @@ NEW = {
     "OCIOFileTransform": {"divide_by_alpha": 0},
     "IBKGizmo": {"luminance_level_enable": 0},
     "ScreenKeyer": {"older_intermediate_view": 0},
-    "GenerateLUT": {"lut_clamp_output": 1},
+    "GenerateLUT": {"lut_clamp_output": 1, "lut_3dl_format": "autodesk flame/smoke"},
+    "Exposure": {"exposure_colorspace": "Linear"},
 }
 OLD = {
-    "ColorCorrect": {"divide_by_alpha": 1},
+    "ColorCorrect": {"divide_by_alpha": 1, "mix_luminance": 0.0, "test": 0},       # lane 2 step W2: neutral on a node saved before
     "Saturation": {"luminance_math": "Rec 709 (old weights)"},
     "HueCorrect": {"older_curve_maths": 1},
     "HSVTool": {"adjust_by_scaling": 1},
@@ -101,16 +102,17 @@ OLD = {
     "OCIOFileTransform": {"divide_by_alpha": 1},
     "IBKGizmo": {"luminance_level_enable": 1, "screen_type": "green", "luminance_level": 1.0},      # lane 2 step W1: a new one starts on C-blue with level 0, as the guide lists
     "ScreenKeyer": {"older_intermediate_view": 1},
-    "GenerateLUT": {"lut_clamp_output": 0},
+    "GenerateLUT": {"lut_clamp_output": 0, "lut_3dl_format": "autodesk lustre"},      # lane 2 step W2: the 3DMESH / Mesh header the node always wrote
+    "Exposure": {"exposure_colorspace": "Linear"},          # lane 2 step W2: Linear is the multiplication the node always did
     "Vectorfield": {"interpolation": "tetrahedral"},       # lane 2 step W1: a new Vectorfield starts on trilinear, the guide's default
     # Lane 2 step W1: these start on Nuke's channels "all"; a node saved without the knob keeps the "rgb" it always had.
     "Invert": {"channels": "rgb"}, "Multiply": {"channels": "rgb"}, "Add": {"channels": "rgb"}, "Gamma": {"channels": "rgb"},
     "Clamp": {"channels": "rgb"}, "Posterize": {"channels": "rgb"},
 }
-LIMITS = {"lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_intermediate_view": (0, 1), "older_channel_operations": (0, 1)}
+LIMITS = {"test": (0, 1), "lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_intermediate_view": (0, 1), "older_channel_operations": (0, 1)}
 # The operations the Reference Guide lists for ChannelMerge, in its order (the guide's names; "b if not a" is its `A?A:B`).
 CHANNEL_MERGE_OPERATIONS = ("absminus", "b if not a", "divide", "from", "in", "max", "min", "minus", "multiply", "out", "plus", "stencil", "union", "xor")
-CHOICES = {"luminance_math": list(SATURATION_MATH), "channel_operation": list(CHANNEL_MERGE_OPERATIONS)}
+CHOICES = {"exposure_colorspace": ["Linear", "Cineon"], "lut_3dl_format": ["autodesk flame/smoke", "autodesk lustre"], "luminance_math": list(SATURATION_MATH), "channel_operation": list(CHANNEL_MERGE_OPERATIONS)}
 
 
 def new_params(kind):

@@ -103,6 +103,33 @@ def _encode(rgb, transfer):
     return np.sign(rgb) * np.power(np.abs(rgb), 1 / gamma)
 
 
+def colorspace_matrix(p):
+    """The 3 x 3 matrix of a Colorspace node's conversion between linear light in its input primaries and illuminant and linear light in its output
+    ones, as the node applies it between its two curves (the guide's `color matrix output`: copy it into a ColorMatrix node to apply it to an
+    image). It is read by `rgb_out = M @ rgb_in`. The curves are not part of it: a conversion may do far more than one matrix, as the guide says."""
+    if int(p.get("swap", 0)):
+        p = dict(p)
+        for name in ("primaries", "transfer", "whitepoint"):
+            p[f"{name}_in"], p[f"{name}_out"] = p[f"{name}_out"], p[f"{name}_in"]
+    a = _rgb_to_xyz(p["primaries_in"], p["whitepoint_in"])
+    b = _rgb_to_xyz(p["primaries_out"], p["whitepoint_out"])
+    matrix = a
+    if p["whitepoint_in"] != p["whitepoint_out"] and p.get("bradford_matrix", 0):
+        source_white = _BRADFORD @ _xy_xyz(_WHITE[p["whitepoint_in"]])
+        target_white = _BRADFORD @ _xy_xyz(_WHITE[p["whitepoint_out"]])
+        matrix = (np.linalg.inv(_BRADFORD) @ np.diag(target_white / source_white) @ _BRADFORD) @ a
+    return np.linalg.inv(b) @ matrix
+
+
+def colorspace_matrix_text(p):
+    """`colorspace_matrix` as three lines of three numbers, or the reason it cannot be made (an unknown primaries or white point)."""
+    try:
+        matrix = colorspace_matrix(p)
+    except (KeyError, ValueError, np.linalg.LinAlgError) as error:
+        return f"no matrix ({error})"
+    return "\n".join("  ".join(f"{value:9.6f}" for value in row) for row in matrix)
+
+
 def _colorspace(p, pixels):
     """Nuke's Colorspace on the stored colour: decode the input curve, go through CIE XYZ between the two sets of primaries (each built on its own
     illuminant, so the XYZ values stay the same), encode the output curve. `bradford_matrix` adds the Bradford illuminant adaptation when the two

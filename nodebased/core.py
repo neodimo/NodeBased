@@ -439,7 +439,7 @@ SPECS = {
     # because CHOICES is keyed globally by parameter name and "mode" already belongs to Tracker.
     "Exposure": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"exposure_mode": "stops", "blackpoint": 0.0, "gang": 1, "red": 0.0,
-                            "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0}},
+                            "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0, **_behaviour2d.new_params("Exposure")}},
     "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,1],[360,1]]}' for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "sat_thrsh": 0.0, "hue_shift": 0.0, "mix_luminance": 0.0, "mix": 1.0, **_behaviour2d.new_params("HueCorrect")}},
     "ColorLookup": {"inputs": ["image"], "optional_inputs": ["mask"],

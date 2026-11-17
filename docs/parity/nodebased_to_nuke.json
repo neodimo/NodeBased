@@ -1118,7 +1118,8 @@
     {"nodebased": ["retime_before"], "nuke": ["before"], "kind": "renamed", "reason": "same control under another name (`before` is TimeClip's four-value choice in NodeBased's parameter table; Retime's has `continue` too)"},
     {"nodebased": ["retime_after"], "nuke": ["after"], "kind": "renamed", "reason": "same control under another name (`after` is TimeClip's four-value choice in NodeBased's parameter table; Retime's has `continue` too)"},
     {"nodebased": ["retime_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name (`filter` is Transform's and Tracker's choice in NodeBased's parameter table)"},
-    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"}
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["warp"], "nuke": ["warp"], "kind": "same"}
    ]
   },
   "TimeClip": {
@@ -1508,6 +1509,8 @@
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
+    {"nodebased": ["test"], "nuke": ["test"], "kind": "same"},
+    {"nodebased": ["mix_luminance"], "nuke": ["mix_luminance"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["divide_by_alpha"], "kind": "extra", "reason": "NodeBased-only: the older behaviour of dividing the colour by alpha before correcting; a new node corrects the stored colour as Nuke does, and a graph saved before keeps this on"}
    ],
@@ -1702,6 +1705,7 @@
    "default_notes": {"mode": "Kept at stops on purpose: the node's `exposure` is read in stops, and the guide's table lists Densities as the choice's default; a graph saved before reads stops too."},
    "knobs": [
     {"nodebased": ["exposure_mode"], "nuke": ["mode"], "kind": "renamed", "reason": "PARITY_2D.md Color #11: Nuke's `mode`, renamed because `mode` already belongs to Tracker in the shared CHOICES"},
+    {"nodebased": ["exposure_colorspace"], "nuke": ["colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'colorspace', scripting name `colorspace` (`colorspace` belongs to other nodes in the shared CHOICES)"},
     {"nodebased": ["blackpoint"], "nuke": ["blackpoint"], "kind": "same"},
     {"nodebased": ["gang"], "nuke": ["gang"], "kind": "same"},
     {"nodebased": ["red"], "nuke": ["red"], "kind": "same"},
@@ -1801,6 +1805,7 @@
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
+    {"nodebased": [], "nuke": ["colormatrix"], "kind": "panel", "reason": "the read-only `color matrix output` of the Colorspace panel (nodebased/app.py, `ocio_nodes.colorspace_matrix_text`): the 3 x 3 matrix between the input and output primaries and illuminants, which a ColorMatrix node can apply; the guide says changing its values has no effect"},
     {"nodebased": ["divide_by_alpha"], "kind": "extra", "reason": "NodeBased-only: the older behaviour of dividing the colour by its alpha before converting and multiplying it back; a new node converts the stored colour as Nuke does, and a graph saved before keeps this on"}
    ],
    "skip_default": ["primary_in", "primary_out", "colorspace_in", "colorspace_out"]
@@ -2182,7 +2187,7 @@
    "knobs": [
     {"nodebased": ["black", "white", "gamma"], "nuke": ["in"], "kind": "components", "reason": "input range black, white and gamma"},
     {"nodebased": ["black_out", "white_out"], "nuke": ["out"], "kind": "components", "reason": "output range"},
-    {"nodebased": [], "nuke": ["hist"], "kind": "panel", "reason": "the histogram plot of the Histogram panel (nodebased/app.py, Analyze / refresh): 64 bins of the input's red, green and blue values, a readout that leaves the picture alone"},
+    {"nodebased": [], "nuke": ["hist"], "kind": "panel", "reason": "the histogram plot of the Histogram panel (nodebased/app.py, Analyze / refresh; nodebased/histogramplot.py): brightness 0 to 1 along the bottom with the shadows on the left, the percentage of pixels up the side, grey for the input and a curve per colour channel for the picture as the input range, midtone and output range leave it; a readout that leaves the picture alone"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
@@ -2254,6 +2259,8 @@
     {"nodebased": ["lut_input_bit_depth"], "nuke": ["bitdepth_id"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'input bit depth (.3dl)', scripting name `bitdepth_id`"},
     {"nodebased": ["lut_output_bit_depth"], "nuke": ["output_bitdepth_id"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output bit depth (.3dl)', scripting name `output_bitdepth_id`"},
     {"nodebased": ["lut_clamp_output"], "nuke": ["clamp_output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'clamp ouput', scripting name `clamp_output`"},
+    {"nodebased": ["lut_3dl_format"], "nuke": ["format_3dl_id"], "kind": "renamed", "reason": "same control under another name; Nuke's label is '3dl file format', scripting name `format_3dl_id`; NodeBased writes autodesk flame/smoke and autodesk lustre (the 3DMESH / Mesh header), and not assimilate scratch, whose scale and offset the guide gives no numbers for"},
+    {"nodebased": [], "nuke": ["generate"], "kind": "panel", "reason": "the Generate and Write LUT File button of the GenerateLUT panel (nodebased/app.py `export_lut`, `lutio.export_graph_cube`): writes the LUT file to the output file location"},
     {"nodebased": ["lut_size"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["colorspace_in"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["colorspace_out"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}

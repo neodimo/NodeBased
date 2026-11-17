@@ -1,3 +1,10 @@
+## Lane 2 step W2 (11/17 9:50 AM): the rest of the colour and time worklist, then behaviour cases
+
+Branch `openclaw/nb-2d-parity`. Detail in the TASKLOG entry of the same name. New params with neutral load-time defaults: ColorCorrect `test`, `mix_luminance`; Retime `warp`;
+Exposure `exposure_colorspace`; GenerateLUT `lut_3dl_format` (a saved node keeps `autodesk lustre`, the header it always wrote). New modules: `nodebased/histogramplot.py`;
+`ocio_nodes.colorspace_matrix` (the Colorspace panel's color matrix output). Cases in `tools/nuke_fidelity_cases_color.py` (`_w2_cases`, `_mincolor_cases`) and `_time.py` (Retime warp).
+No schema bump. Fidelity 97.0 overall (99.1 counting only the nodes NodeBased has), Color 98.6, Time 99.8; 119 of 167 nodes have behaviour checked.
+
 ## Lane 10 step T3 (11/17 3:40 AM): Viewer on-screen controls, partial
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 11 (Review book, Claude Opus 5.5) (9:46 AM on 2026-11-17 PDT)

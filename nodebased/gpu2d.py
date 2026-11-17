@@ -243,6 +243,8 @@ def map_color_correct(p):
     q = {**SPECS["ColorCorrect"]["params"], **p}
     if any(isinstance(q.get(name), (list, tuple)) for name in SPLITTABLE.get("ColorCorrect", ())):
         raise Unsupported("ColorCorrect with per-channel (split) knobs has no GPU kernel yet")
+    if q.get("test", 0) or float(q.get("mix_luminance", 0.0)) != 0.0:
+        raise Unsupported("ColorCorrect's range test and mix luminance have no GPU kernel yet")
     # A large effective tone exponent amplifies float32 pow differences on
     # HDR/low-alpha pixels beyond the pixel gate. Keep those uncommon knob
     # combinations on the CPU until a higher-precision GPU path is available.

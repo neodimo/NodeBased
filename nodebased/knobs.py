@@ -209,6 +209,9 @@ KNOB_LAYOUT = {
                                   ("highlights_", "Highlights"))
           for name, soft in (("saturation", (0, 4)), ("contrast", (0, 4)), ("gamma", (0.2, 5)),
                              ("gain", (0, 4)), ("offset", (-1, 1)))],
+        KnobGroup("bool", ("test",), label="Test", section="Ranges",
+                  help="Draw the ranges over the picture instead of the correction: black where it counts as shadows, grey for midtones and white "
+                       "for highlights; green marks a mixture of ranges and magenta ranges that overlap."),
         KnobGroup("curve", ("shadows_curve",), label="Shadows curve", section="Ranges",
                   help="How much of a pixel counts as shadow, by its luminance. Midtones are whatever "
                        "the shadow and highlight curves leave."),
@@ -216,6 +219,9 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", section="Ranges",
                   help="Divide the colour by its alpha before correcting and multiply it back after, as NodeBased's ColorCorrect always did. "
                        "Off is Nuke's: the stored colour is corrected, and (un)premult by does the dividing when you want it."),
+        KnobGroup("float_slider", ("mix_luminance",), label="Mix luminance", soft_range=(0, 1), section="Ranges",
+                  help="How much of the original luminance is kept after the correction: 0 uses the corrected luminance, 1 gives the output the "
+                       "luminance the pixel came in with."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Blur": _groups(
         KnobGroup("split", ("radius",), label="Size", soft_range=(0, 100), channels="wh", help="The blur's reach in pixels. ""The split button gives the width and the height their own size."),
@@ -799,6 +805,9 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("legacy_adjustbbox",), label="Legacy fill",
                   help="Leave the area a growing box adds empty instead of repeating the outermost pixels. Set on graphs saved before AdjustBBox followed Nuke.")),
     "Exposure": _groups(
+        KnobGroup("enum", ("exposure_colorspace",), label="Colorspace",
+                  help="Linear multiplies by the gain. Cineon takes the data as raw Cineon code values and adds or subtracts instead; passed through a "
+                       "Log2Lin set to gamma 0.6 with ignore on, it matches the Linear result exactly."),
         KnobGroup("enum", ("exposure_mode",), label="Adjust in"),
         KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1)),
         KnobGroup("bool", ("gang",), label="Gang"),
@@ -882,6 +891,9 @@ KNOB_LAYOUT = {
                            KnobGroup("enum", ("lut_input_bit_depth",), label="Input bit depth (.3dl)"),
                            KnobGroup("enum", ("lut_output_bit_depth",), label="Output bit depth (.3dl)"),
                            KnobGroup("bool", ("lut_clamp_output",), label="Clamp output", help="Clip the written values to 0..1. Documents saved before this box existed have it off."),
+                           KnobGroup("enum", ("lut_3dl_format",), label="3dl file format",
+                                     help="autodesk flame/smoke writes the preLUT row and the mesh. autodesk lustre also opens the file with a 3DMESH / Mesh header. "
+                                          "The size is 17, 33 or 65 in both. Assimilate Scratch's older scaled and offset format is not written."),
                            KnobGroup("enum", ("colorspace_in",), label="Input space"), KnobGroup("enum", ("colorspace_out",), label="Output space")),
     "OCIOColorspace": _groups(KnobGroup("string", ("src",)), KnobGroup("string", ("dst",)), KnobGroup("bool", ("swap",), label="Swap input/output", help="Trade the input and output colorspaces: the conversion runs from the output space to the input space."), KnobGroup("string", ("config",)), KnobGroup("enum", ("transform_direction",)), KnobGroup("bool", ("divide_by_alpha",), label="Divide by alpha", help="Divide the colour by its alpha before the transform and multiply it back after, as these nodes did before. Off is Nuke's: the stored colour is transformed, and (un)premult by does the dividing when you want it."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1)), *_OCIO_CONTEXT),
     "OCIODisplay": _groups(KnobGroup("string", ("src",), label="Input colorspace", help="The space the picture is in. A space of the config by that name, otherwise the config's scene-linear space (Nuke's default is linear)."), KnobGroup("string", ("display",)), KnobGroup("string", ("view",)), KnobGroup("string", ("look",)), KnobGroup("string", ("config",)),
@@ -1785,7 +1797,10 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("speed",), soft_range=(-4.0, 4.0)),
         KnobGroup("enum", ("retime_before",), label="Before"), KnobGroup("enum", ("retime_after",), label="After"),
         KnobGroup("enum", ("retime_filter",), label="Filter"),
-        KnobGroup("float_slider", ("shutter",), soft_range=(0, 2))),
+        KnobGroup("float_slider", ("shutter",), soft_range=(0, 2)),
+        KnobGroup("curve", ("warp",), label="Warp", section="TimeWarp",
+                  help="Edit the curve to warp the clip: its x is the output range and its y the input range, each from 0 to 1. A shallower slope slows the "
+                       "motion down, a steeper one speeds it up and a dip runs it backwards. It starts at (0, 0) and ends at (1, 1).")),
     "TimeClip": _groups(
         KnobGroup("float", ("fade_in",), label="Fade in"), KnobGroup("float", ("fade_out",), label="Fade out"),
         KnobGroup("enum", ("frame_range_type",), label="Frame range type"),
@@ -2562,7 +2577,8 @@ NUKE_LAYOUT = {
     "ColorCorrect": ("channels",
                      *(f"{prefix}{name}" for prefix in ("", "shadows_", "midtones_", "highlights_")
                        for name in ("saturation", "contrast", "gamma", "gain", "offset")),
-                     "shadows_curve", "highlights_curve"),
+                     "test", "shadows_curve", "highlights_curve", "divide_by_alpha",
+                     "maskChannelInput", "inject", "invert_mask", "fringe", "unpremult", "invert_unpremult", "mix_luminance"),
     "Saturation": ("channels", "saturation", "luminance_math"),
     "HueCorrect": ("channels", "curve_sat", "curve_lum", "curve_red", "curve_green", "curve_blue", "curve_r_sup", "curve_g_sup", "curve_b_sup",
                    "sat_thrsh", "hue_shift", "older_curve_maths", "maskChannelInput", "inject", "invert_mask", "fringe", "unpremult", "invert_unpremult", "mix_luminance"),
@@ -2641,7 +2657,7 @@ NUKE_LAYOUT.update({
     "Clamp": ("channels", "minimum", "maximum", "MinClampTo", "MinClampTo_enable", "MaxClampTo", "MaxClampTo_enable"),
     "AddMix": ("Achannels", "Bchannels", "merge_output", "premultiplied", "nonlinear", "lut_a", "lut_b"),
     "Vectorfield": ("cube_path", "reload", "vector_file_type", "interpolation", "colorspace_in", "colorspace_out", "vector_output_bitdepth", "vector_normalize_output"),
-    "Exposure": ("channels", "blackpoint", "exposure_mode", "gang", "red", "green", "blue"),
+    "Exposure": ("channels", "exposure_colorspace", "blackpoint", "exposure_mode", "gang", "red", "green", "blue"),
     "ShuffleCopy": ("layer1", "layer2", *[f"out{o}_{c}" for o in (1, 2) for c in "rgba"]),
     "MatchGrade": ("match_task", "match_analysis", "grade_mask", "apply_to_mask", "match_output", "match_crop_target", "match_source_frames", "match_target_frames",
                    "match_transform", "match_prelut", "match_lut_res", "match_colorspace", "match_iterations",

@@ -652,8 +652,8 @@ LAYOUTS = {
     'ColorCorrect': [
         'Channels', 'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset', 'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset',
         'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset', 'Saturation', 'Contrast', 'Gamma', 'Gain', 'Offset',
-        'Shadows curve', 'Highlights curve', 'Divide by alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
-        'Mix'
+        'Test', 'Shadows curve', 'Highlights curve', 'Divide by alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
+        'Mix luminance', 'Mix'
     ],
     'Saturation': ['Channels', 'Saturation', 'Luminance math', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
     'HueCorrect': [
@@ -788,7 +788,7 @@ class LayoutTests(unittest.TestCase):
 
     def test_nodebased_only_knobs_sit_between_nuke_knobs_and_the_mask_strip(self):
         self.assertEqual(displayed("Grade")[10:14], ["White clamp", "Exposure", "Offset follows alpha", "Mask"])
-        self.assertEqual(displayed("ColorCorrect")[21:25], ["Shadows curve", "Highlights curve", "Divide by alpha", "Mask"])
+        self.assertEqual(displayed("ColorCorrect")[21:26], ["Test", "Shadows curve", "Highlights curve", "Divide by alpha", "Mask"])
 
     def test_keyer_range_handles_read_a_b_c_d_and_the_hsv_ranges_are_one_row_each(self):
         labels = {g.params: g.label for g in knobs.knob_layout("Keyer")}

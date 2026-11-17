@@ -232,6 +232,37 @@ def cases():
          {"frame": 4, "chain": CLIP20}, shows(7.0), "convention", "Retime shutter 0.5 'generates less frame-blending'",
          unscored="the guide gives no width or weights for the blend, only that a lower shutter blends less")
 
+    # The TimeWarp tab's curve: x the output range and y the input range, each as a fraction of the range (the guide: the curve must pass through
+    # 0,0 and 1,1 so the in and out points work; a shallower slope slows the motion, a steeper one speeds it up, a dip reverses it).
+    warp_page = GUIDE + "retime.html"
+    warp_range = {"input_range_start": 1, "input_range_start_lock": 1, "input_range_end": 17, "input_range_end_lock": 1,
+                  "output_range_start": 1, "output_range_start_lock": 1, "output_range_end": 17, "output_range_end_lock": 1, "retime_filter": "none"}
+    warp_range_knobs = (("input.first", 1.0), ("input.first_lock", True), ("input.last", 17.0), ("input.last_lock", True), ("output.first", 1.0),
+                        ("output.first_lock", True), ("output.last", 17.0), ("output.last_lock", True), ("filter", "none"))
+
+    def warp_curve(points):
+        text = "{\"interpolation\":\"linear\",\"points\":[" + ",".join(f"[{x:g},{y:g}]" for x, y in points) + "]}"
+        nuke = "{curve L " + " ".join(f"x{x:g} {y:g}" for x, y in points) + "}"
+        return text, nuke
+    slow, slow_nuke = warp_curve(((0, 0), (0.5, 0.25), (1, 1)))
+    dip, dip_nuke = warp_curve(((0, 0), (0.5, 0.6), (0.75, 0.4), (1, 1)))
+    warp_note = (f"Retime warp ({warp_page}): the curve must pass through 0,0 and 1,1 so that the in and out points work; the guide does not name "
+                 "its axes, so x is read as the output range and y as the input range, each as a fraction of the range, as the slope sentences need")
+    for frame, picks in ((1, 1.0), (17, 17.0)):
+        case(f"retime_warp_ends_at_{frame}", "Retime", warp_range_knobs + (("warp", slow_nuke),), dict(warp_range, warp=slow),
+             {"frame": frame, "chain": CLIP20}, shows(picks), "guide",
+             f"A warped Retime still starts on the first input frame and ends on the last: output frame {frame} shows input frame {picks:g}. " + warp_note)
+    for frame, picks in ((5, 1 + 16 * 0.125), (9, 1 + 16 * 0.25)):
+        case(f"retime_warp_shallow_slope_at_{frame}", "Retime", warp_range_knobs + (("warp", slow_nuke),), dict(warp_range, warp=slow),
+             {"frame": frame, "chain": CLIP20}, shows(picks), "convention",
+             f"Retime warp with a knot at (0.5, 0.25): 'to slow down motion, decrease the slope of the curve'; output frame {frame} shows input frame {picks:g}, "
+             "behind the unwarped one. " + warp_note)
+    for frame, picks in ((9, 1 + 16 * 0.6), (13, 1 + 16 * 0.4)):
+        case(f"retime_warp_dip_runs_backwards_at_{frame}", "Retime", warp_range_knobs + (("warp", dip_nuke),), dict(warp_range, warp=dip),
+             {"frame": frame, "chain": CLIP20}, shows(picks), "convention",
+             f"Retime warp with a dip: 'to reverse motion, create a downward sloping portion on the curve'; output frame {frame} shows input frame {picks:g} "
+             "(the later output frame 13 shows an earlier input frame than 9). " + warp_note)
+
     # ----------------------------------------------------------------------------------------------------------------- FrameRange
     page = GUIDE + "framerange.html"
     for frame in (25, 30, 50):
