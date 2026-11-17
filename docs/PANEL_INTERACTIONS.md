@@ -51,7 +51,10 @@ Other fixes in the same step:
 
 ## Open gaps
 
-- Every documented behaviour now passes. What the folded line of a split knob shows is NodeBased's own choice: the guide
-  does not say what Nuke displays there.
-- Enumeration, check box, channel and layer pickers, XY, file, and the mask/mix rows have no interaction rule on the
-  User Guide pages read, so they are listed as undocumented.
+- Channel pickers (Calling Channels page): choosing a layer in a node's channels field should show that layer's channels
+  with check boxes so one can be left out, and with channels set to none a right-most channel field should pick a single
+  channel. NodeBased's channels knob is one menu with neither. Both need a change to what the channels knob stores.
+- What the folded line of a split knob shows is NodeBased's own choice: the guide does not say what Nuke displays there.
+- Enumeration, check box, XY and file knobs, the mask fringe box, a typed value outside the slider range, and the
+  Animation menu's Copy/Paste and Set to default have no interaction rule on the User Guide pages read, so they are listed
+  as undocumented.

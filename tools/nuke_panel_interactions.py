@@ -618,6 +618,37 @@ def _node_disable(bench):
     return disabled, f"after checking disable the node is disabled: {disabled}"
 
 
+# -- channel pickers and the mask/mix row --------------------------------------------------------------------------------
+
+@probe("channel.layer_check_boxes")
+def _layer_boxes(bench):
+    from PySide6.QtWidgets import QCheckBox
+    bench.node("Grade", {"channels": "rgba"})
+    # A per-channel box is named after the knob and the channel (channels-red-box and so on).
+    boxes = [b for b in bench.window.properties_dock.findChildren(QCheckBox)
+             if b.objectName().startswith("channels-") and b.window() is bench.window and not b.isHidden()]
+    return len(boxes) >= 3, f"{len(boxes)} per-channel check boxes for the channels knob"
+
+
+@probe("channel.single_channel")
+def _single_channel(bench):
+    from PySide6.QtWidgets import QComboBox
+    bench.node("Grade", {"channels": "none"})
+    combos = [c for c in bench.window.properties_dock.findChildren(QComboBox)
+              if c.objectName().startswith("channels") and c.window() is bench.window and not c.isHidden()]
+    extra = [c for c in combos if c.objectName() != "channels-choice"]
+    return bool(extra), f"channel fields beside the channels menu: {[c.objectName() for c in combos]}"
+
+
+@probe("mask_mix.controls")
+def _mask_controls(bench):
+    bench.node("Grade")
+    names = {"mask channel menu": "maskChannelInput-choice", "inject": "inject-switch", "invert": "invert_mask-switch",
+             "mix": "mix-field"}
+    missing = [label for label, name in names.items() if bench.child(name) is None]
+    return not missing, f"missing {missing}" if missing else "mask menu, inject, invert and mix slider are all there"
+
+
 # -- run -------------------------------------------------------------------------------------------------------------------
 
 def probe_all():

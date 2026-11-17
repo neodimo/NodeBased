@@ -3,7 +3,8 @@
   "sources": {
     "properties": {"title": "Properties Panels (Nuke 17.0 User Guide)", "url": "https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/properties_panels.html"},
     "color": {"title": "Using the Color Controls (Nuke 17.0 User Guide)", "url": "https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/using_color_controls.html"},
-    "animation": {"title": "Animating Parameters (Nuke 17.0 User Guide)", "url": "https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/animating_parameters.html"}
+    "animation": {"title": "Animating Parameters (Nuke 17.0 User Guide)", "url": "https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/animating_parameters.html"},
+    "channels": {"title": "Calling Channels (Nuke 17.0 User Guide)", "url": "https://learn.foundry.com/nuke/17.0/content/comp_environment/channels/calling_channels.html"}
   },
   "widget_order": ["number", "color", "animation", "split", "node_tab", "enumeration", "checkbox", "channel", "xy", "file", "mask_mix"],
   "behaviours": [
@@ -78,13 +79,17 @@
      "nuke": "The guide pages read show dropdown menus but state no interaction rule beyond choosing an entry."},
     {"id": "checkbox.toggle", "widget": "checkbox", "status": "undocumented",
      "nuke": "No rule beyond checking and unchecking is stated for ordinary check boxes."},
-    {"id": "channel.layer_menu", "widget": "channel", "status": "undocumented",
-     "nuke": "The channel knob's layer menu and per-channel boxes are not described on the User Guide pages read."},
+    {"id": "channel.layer_check_boxes", "widget": "channel", "status": "documented", "source": "channels",
+     "nuke": "Choosing a layer in a node's channels field shows that layer's channels with check boxes; unchecked channels are not processed.", "quote": "From the channels field, select the layer containing the channels you wish to process. The layer's channels appear with check boxes. Deselect those channels which you don't wish to process."},
+    {"id": "channel.single_channel", "widget": "channel", "status": "documented", "source": "channels",
+     "nuke": "To process one channel, set the channels field to none and pick the channel in the right-most channel field.", "quote": "From the channels field, select none. From the right most channel field - the one which typically calls the alpha channel - select the single channel you wish to process."},
     {"id": "xy.drag", "widget": "xy", "status": "undocumented",
      "nuke": "XY knob interaction (two fields plus a Viewer handle) is not described on the User Guide pages read."},
     {"id": "file.browse", "widget": "file", "status": "undocumented",
      "nuke": "File knob browsing is described on the Read node pages, not the knob pages read here."},
-    {"id": "mask_mix.row", "widget": "mask_mix", "status": "undocumented",
-     "nuke": "The mask/invert/fringe and mix rows are described per node in the Reference Guide; the User Guide pages read give no interaction rule for them."}
+    {"id": "mask_mix.controls", "widget": "mask_mix", "status": "documented", "source": "channels",
+     "nuke": "A node with mask controls offers a mask channel menu, an inject box, an invert box and a mix slider.", "quote": "select the channel you want to use from the mask dropdown menu ... check inject ... check the invert box to reverse the mask ... adjusting the mix slider."},
+    {"id": "mask_mix.fringe", "widget": "mask_mix", "status": "undocumented",
+     "nuke": "The User Guide pages read do not describe the fringe box's interaction; its effect is on the node reference pages."}
   ]
 }
