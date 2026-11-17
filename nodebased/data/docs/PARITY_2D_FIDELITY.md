@@ -70,20 +70,20 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 
 ## On-screen controls that work like Nuke
 
-**5 of 16 documented on-screen controls work as Nuke's do**, over 5 nodes whose guide pages describe Viewer controls. The reference is `docs/parity/nuke_viewer_controls.json` (Nuke 17.0 Reference Guide node pages and the User Guide's Transforming in 2D page); `tools/nuke_viewer_controls.py` presses, drags and releases on NodeBased's Viewer and checks the knob values, the single undo step and the key on an animated knob. Reported beside the fidelity score, not part of it. Roto and RotoPaint are measured in [ROTO_NUKE_UI.md](ROTO_NUKE_UI.md). See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**16 of 16 documented on-screen controls work as Nuke's do**, over 5 nodes whose guide pages describe Viewer controls. The reference is `docs/parity/nuke_viewer_controls.json` (Nuke 17.0 Reference Guide node pages and the User Guide's Transforming in 2D page); `tools/nuke_viewer_controls.py` presses, drags and releases on NodeBased's Viewer and checks the knob values, the single undo step and the key on an animated knob. Reported beside the fidelity score, not part of it. Roto and RotoPaint are measured in [ROTO_NUKE_UI.md](ROTO_NUKE_UI.md). See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Node | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
-| Transform | 5 / 10 | `scale_x`, `scale_y`, `rotate_snap`, `skew`, `invert_handle` | `when_shown`, `center_ctrl_keeps_image` |
-| Crop | 0 / 1 | NodeBased has no on-screen control: `box_edges` | - |
+| Transform | 10 / 10 | - | `when_shown`, `center_ctrl_keeps_image` |
+| Crop | 1 / 1 | - | - |
 | CornerPin | 0 / 0 | - | `pins` |
 | Reformat | 0 / 0 | - | `box` |
 | Radial | 0 / 0 | - | `area` |
 | Ramp | 0 / 0 | - | `points` |
 | Rectangle | 0 / 0 | - | `area` |
-| Text | 0 / 2 | NodeBased has no on-screen control: `box_move_resize`, `center_ctrl` | - |
-| Tracker | 0 / 1 | `anchor` (not probed) | - |
-| GridWarp | 0 / 2 | `grid_handles` (not probed), `grid_transform` (not probed) | - |
+| Text | 2 / 2 | - | - |
+| Tracker | 1 / 1 | - | - |
+| GridWarp | 2 / 2 | - | - |
 | Position | 0 / 0 | - | `translate` |
 | Flare | 0 / 0 | - | `position` |
 

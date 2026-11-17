@@ -1,3 +1,12 @@
+## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
+
+All 16 on-screen controls Nuke's guide pages document for 2D nodes now pass the probes in `tools/nuke_viewer_controls.py`
+(5 before this pass): the Transform jack's one-axis scale points (split scale), rotate snap to 45-degree values with Shift
+to turn it off, skew bar and invert handle; Crop's box edges; Text's box and Ctrl-drag centre; the Tracker anchor (its
+centre now wins over the pattern box edges when zoomed out); GridWarp's grid points and a new transformation overlay.
+`KNOWN_GAPS` in `tests/test_viewer_controls.py` is empty. Details in docs/PANEL_INTERACTIONS.md, "On-screen controls".
+Still undocumented on the pages read (not scored): CornerPin, Reformat, Radial, Ramp, Rectangle, Position and Flare controls.
+
 ## Lane 2 step W2 (11/17 9:50 AM): the rest of the colour and time worklist, then behaviour cases
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:36 AM on 2026-11-17 PDT)

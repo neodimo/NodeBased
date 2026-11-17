@@ -114,8 +114,29 @@ Fixed in this step: Ctrl-drag on the jack's centre now moves the pivot as in Nuk
 still works), and Shift-drag keeps a translate on the axis the pointer moved furthest along. Before the step 3 of the 16
 documented controls worked like Nuke's; after it, 5.
 
-Still open, named in the report's table: the jack's scale-x and scale-y points, rotate snapping, the skew bar and the invert
-handle; on-screen boxes for Crop and Text; probes for the Tracker anchor and GridWarp's grids, which NodeBased does draw.
+Finished in the step's finish pass (all 16 documented controls now pass):
+
+- **Transform jack.** The left and right points scale x alone and the top and bottom points y alone, storing scale as two
+  values (Nuke's split scale); a split scale keeps its handle, and the corners then scale both factors together. The jack is
+  drawn through the same matrix as the picture (split scale and skew included). Rotating snaps to the nearest multiple of 45
+  degrees within 2 degrees (the guide says "typical values" and names none, so the values are NodeBased's); Shift, pressed
+  at any time during the drag, turns the snapping off. A vertical bar rises from the pivot: dragging its top sideways sets
+  skew X so the bar passes through the pointer. With invert on, a small second handle (circle and cross) is drawn beside the
+  pivot; the guide says only that it appears.
+- **Crop.** The box is drawn with grips at its corners and edge midpoints; dragging an edge or corner moves that side and
+  keeps the opposite one, in whole pixels. Inside the box is left to the Viewer (the guide names only the edges).
+- **Text.** The box moves when dragged inside and resizes from its edges and corners; Ctrl-drag moves the centre (the
+  offset from the box's centre that rotation and scaling turn about), marked with a cross.
+- **Tracker.** Add track places a new anchor, drawn with its pattern and search boxes; dragging the anchor's centre moves the
+  track. Zoomed out, the pattern box's edges came within grab range of the centre and took the click; the centre now wins
+  within half the pattern box (or 4 screen pixels), and the edges still resize further out.
+- **GridWarp.** The source and destination grids' lines and points are drawn whenever the node is viewed and selected
+  (Nuke's per-grid visible switch has no NodeBased counterpart); where the two grids share a point, a drag takes the
+  source's. A transformation overlay sits at the grid transform's centre: dragging the centre translates the whole grid,
+  dragging the end of its x or y axis turns and scales it. It edits the source transform while "use source transform" is on,
+  the destination's otherwise. Grid points take a click before the overlay.
+
+Every drag is one undo step and keys an animated knob at the current frame.
 
 ## Open gaps
 

@@ -9,6 +9,20 @@
 - **What was done:** `main` `41def1b1` -> `b67c1496` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `b67c1496`: Ran 10092 tests in 1919.425 s, OK (skipped=38), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
+## 2026-11-17 — Lane 10 step T3 finish: Viewer on-screen controls, all documented ones pass
+
+- **What was done:** Built every item the T3 partial left out: Transform jack scale-x/scale-y points (scale stored as two
+  values), rotate snapping (45-degree values within 2 degrees, Shift turns it off), the skew bar, the invert handle; Crop's
+  on-screen box (edges and corners), Text's box (move, resize) and Ctrl-drag centre; Tracker anchor and GridWarp probes, with
+  a fix so the anchor's centre grabs when zoomed out, and a new GridWarp grid transformation overlay. Evidence: probes drive
+  the viewer's press/move/release and check knob values, one undo step and a key on an animated knob; 16 of 16 pass.
+- **Artifacts:** nodebased/app.py, nodebased/handles2d.py, tools/nuke_viewer_controls.py, tests/test_viewer_controls.py,
+  tests/test_handles2d.py, tests/test_transform_handle_ui.py (the ring-rotate test drags with Shift so it is not snapped),
+  docs/PANEL_INTERACTIONS.md, docs/PARITY_2D_FIDELITY.md (+ bundled copy), review worklist. Committed on
+  openclaw/nb-panel-function, not pushed.
+- **State:** done. Unverified: visual QA of the new overlays; Nuke's actual snap values (the guide names none).
+- **Next owner:** integrator.
+
 ## Lane 2 step W2 (Tue 11/17): the rest of the colour and time worklist, then behaviour cases
 
 - **What was done (evidence):** worklist rows for lane 2: 126 open -> 111 open by the brief's count (`tools/parity_review_book.py --worklist`; 87 of the 111 are Ultimatte and Primatte, which stay unsupported; the other 24 sit on 10 nodes, down from 16 after W1). Each W1 left-out item acts as the guide states or is listed with the guide's reason:
