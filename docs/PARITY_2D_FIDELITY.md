@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 96.8 / 100** (167 nodes scored, rank-weighted; 98.9 counting only the nodes NodeBased has).
+**Overall fidelity: 96.9 / 100** (167 nodes scored, rank-weighted; 98.9 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 96.7 (98.8 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 96.9 (99.0 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.0 (99.0 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -34,14 +34,14 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
-| Image | 97.1 | 96.9 | 98.1 | 6 |
+| Image | 97.6 | 97.2 | 98.1 | 6 |
 | Draw | 98.5 | 98.1 | 98.4 | 17 |
 | Time | 99.6 | 98.5 | 99.6 | 13 |
 | Channel | 99.2 | 98.6 | 98.9 | 5 |
 | Color | 97.8 | 94.8 | 97.5 | 34 |
 | Filter | 97.2 | 93.1 | 96.8 | 32 |
 | Keyer | 93.3 | 80.5 | 93.3 | 11 |
-| Merge | 99.7 | 99.3 | 99.7 | 12 |
+| Merge | 99.8 | 99.5 | 99.7 | 12 |
 | Transform | 98.1 | 95.6 | 97.7 | 20 |
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 81.5 | 45.2 | 81.5 | 12 |
@@ -77,7 +77,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Read | `Read` | supported | 100.0 | 100.0 | 100 (32/32) | - | 100 | - | - | - | 100 | - | no fixture |
-| 2 | Write | `Write` | supported | 94.9 | 99.4 | 100 (27/27) | - | 96 | - | 100 | - | 74 | - | no fixture |
+| 2 | Write | `Write` | supported | 97.0 | 99.4 | 100 (27/27) | - | 96 | - | 100 | - | 86 | - | no fixture |
 | 3 | Viewer | `Viewer` | supported | 88.7 | 89.7 | 83 (20/24) | - | - | 100 | 100 | - | 82 | - | no fixture |
 | 4 | Constant | `Constant` | supported | 97.6 | 97.2 | 100 (4/4) | 100 (2/2) | 75 | - | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 5 | UDIM Import | - | missing | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
@@ -243,7 +243,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 9 | CopyRectangle | `CopyRectangle` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 10 | ContactSheet | `ContactSheet` | supported | 97.0 | 97.0 | 100 (11/11) | - | 82 | 100 | - | - | 100 | - | no fixture |
 | 11 | TimeDissolve | `TimeDissolve` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 12 | ZMerge | `ZMerge` | supported | 98.1 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 89 | - | no fixture |
+| 12 | ZMerge | `ZMerge` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 100 | - | no fixture |
 
 ### Transform
 
@@ -310,7 +310,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Node | Shared-row knobs on one row | Widget types matching | Unknown types (unmeasured) |
 |---|---:|---:|---:|
 | Read | 100.0% (8/8) | 100.0% (29/29) | 42 |
-| Write | 0.0% (0/4) | 95.5% (21/22) | 21 |
+| Write | 50.0% (2/4) | 95.5% (21/22) | 21 |
 | Viewer | — | 82.4% (14/17) | 3 |
 | Constant | 100.0% (2/2) | 100.0% (3/3) | 1 |
 | UDIM Import | — | — | 0 |
@@ -497,7 +497,7 @@ Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on o
 
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
-**Lowest shared-row scores:** MarkerRemoval (0.0%); Root (0.0%); Write (0.0%); RotoPaint (98.1%); BurnIn (100.0%).
+**Lowest shared-row scores:** MarkerRemoval (0.0%); Root (0.0%); Write (50.0%); RotoPaint (98.1%); BurnIn (100.0%).
 **Lowest widget-type scores:** Expression (0.0%); IBKColor (33.3%); MarkerRemoval (40.0%); Convolve (66.7%); DustBust (80.0%).
 
 ## The 30 largest gaps
@@ -518,8 +518,8 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 10 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 11 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 12 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 13 | Write (Image #2) | `Write` | 2.53 | 94.9 | nothing missing that the guide lists |
-| 14 | Roto (Draw #1) | `Roto` | 1.70 | 98.3 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
+| 13 | Roto (Draw #1) | `Roto` | 1.70 | 98.3 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
+| 14 | Write (Image #2) | `Write` | 1.48 | 97.0 | nothing missing that the guide lists |
 | 15 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
 | 16 | Crop (Transform #2) | `Crop` | 1.19 | 97.6 | nothing missing that the guide lists |
 | 17 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
@@ -1544,7 +1544,6 @@ Not probed, because a one-frame pixel probe cannot see them: acts across frames 
 Labels below are NodeBased's, then the guide's.
 
 - MarkerRemoval (`MarkerRemoval`): 5 of 6 paired knobs in Nuke's order
-- ZMerge (`ZMerge`): `z_channel` reads "Depth layer", Nuke "Z channel"
 
 ### Split knobs
 
