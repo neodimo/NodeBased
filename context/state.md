@@ -1,3 +1,7 @@
+## Lane 2 step W1 (11/17): panels in the guide's wording, order and defaults
+
+Done on `openclaw/nb-2d-parity`: see TASKLOG.md. Worklist 243 -> 128 open rows (60 + 27 of the rest are Ultimatte's and Primatte's knobs). Defaults that now follow the guide, each with a legacy value on older documents: `channels` all (Invert, Multiply, Add, Gamma, Clamp, Posterize), IBKGizmo C-blue and level 0, Vectorfield trilinear, ChromaKeyer's despill bias colour, Kronos and OFlow Vector Detail density. No schema bump.
+
 ## Lane 10 step T1 (11/16 11:30 PM): panel interactions
 
 ## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5), Lane 11 (Review book, Claude Opus 5.5) (2:35 AM on 2026-11-17 PDT)
