@@ -713,12 +713,12 @@ LAYOUTS = {
         'Magenta', 'Screen subtraction', 'Use bkg luminnance', 'Use bkg chroma', 'Mix'
     ],
     'Copy': [
-        'Copy channel', 'Copy channel', 'Copy channel', 'Copy channel', 'Layer copy', 'Metadata from', 'Range from', 'Mask',
-        'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Copy channel', 'Copy channel', 'Copy channel', 'Copy channel', 'Layer copy', 'Set bbox to', 'Metadata from',
+        'Range from', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'ChannelMerge': [
-        'A channel', 'Operation', 'B channel', 'Output', 'Older operations', 'Older operation', 'Mask', 'Inject', 'Invert', 'Fringe',
-        'Mix'
+        'A channel', 'Operation', 'B channel', 'Output', 'Set bbox to', 'Older operations', 'Older operation', 'Mask', 'Inject',
+        'Invert', 'Fringe', 'Mix'
     ],
     'Shuffle': [
         'In', 'Red From', 'Green From', 'Blue From', 'Alpha From', 'Second output layer',

@@ -15,7 +15,7 @@ import numpy as np
 NEW = {
     "Constant": {"first": 1, "last": 1, "channels": "rgba"},
     "Invert": {"clamp": 0},
-    "Copy": {"channels": "none", "metainput": "B", "rangeinput": "B"},
+    "Copy": {"channels": "none", "metainput": "B", "rangeinput": "B", "merge_bbox": "union"},
     "Remove": {"channels2": "none", "channels3": "none", "channels4": "none"},
     "CopyMetaData": {"merge_mode": "Image + Meta", "keys_mode": "keys and values", "image_keys": "",
                      "image_keys_mode": "keys and values"},

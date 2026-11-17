@@ -1586,6 +1586,7 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("copy_blue",), help="Copy this channel of A to the blue channel of the result (Nuke's `to` is blue)."),
         KnobGroup("enum", ("copy_alpha",), help="Copy this channel of A to the alpha channel of the result (Nuke's `to` is alpha)."),
         KnobGroup("string", ("channels",), label="Layer copy"),
+        KnobGroup("enum", ("merge_bbox",), label="Set bbox to", help="The output's bounding box: the union of the two inputs', their intersection, A's or B's."),
         KnobGroup("enum", ("metainput",), label="Metadata from"), KnobGroup("enum", ("rangeinput",), label="Range from"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ChannelMerge": _groups(
@@ -1594,6 +1595,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("older_channel_operations",), label="Older operations",
                   help="Use the Older operation below, one of NodeBased's Merge operations with the formulas the node had before it followed the guide's list. Set on graphs saved before."),
         KnobGroup("enum", ("operation",), label="Older operation"),
+        KnobGroup("enum", ("merge_bbox",), label="Set bbox to", help="The output's bounding box: the union of the two inputs', their intersection, A's or B's."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Keyer": _groups(
         KnobGroup("enum", ("key_input",), label="Input"),
@@ -2581,8 +2583,8 @@ NUKE_LAYOUT = {
     "Difference": ("offset", "gain", "output_enabled", "output_channel"),
     "IBKColor": ("screen_type", "fill_size", "darks", "lights", "screen_erode", "patch_black"),
     "IBKGizmo": ("screen_type", "color_r", "red_weight", "blue_green_weight", "luminance_match", "screen_range", "luminance_level", "luminance_level_enable", "yellow", "cyan", "magenta", "screen_subtraction", "use_bg_luminance", "use_bg_chroma"),
-    "Copy": ("copy_red", "copy_green", "copy_blue", "copy_alpha", "channels", "metainput", "rangeinput"),
-    "ChannelMerge": ("a_channel", "channel_operation", "b_channel", "out_channel"),
+    "Copy": ("copy_red", "copy_green", "copy_blue", "copy_alpha", "channels", "merge_bbox", "metainput", "rangeinput"),
+    "ChannelMerge": ("a_channel", "channel_operation", "b_channel", "out_channel", "merge_bbox"),
     "Shuffle": ("fromInput1", "layer", "fromInput2", "in2", "red_from", "green_from", "blue_from", "alpha_from", "out2",
                 "red_from2", "green_from2", "blue_from2", "alpha_from2"),
 }

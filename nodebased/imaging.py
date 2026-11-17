@@ -4299,9 +4299,9 @@ class Evaluator:
                 # as it did before bounding boxes existed. Differing *data* windows is now normal:
                 # that is a plate with overscan merged over one without, which must work.
                 raise ValueError(f"{kind} inputs must have matching formats in M0")
-            if kind in ("Merge", "Keymix"):
+            if kind in ("Merge", "Keymix", "Copy", "ChannelMerge"):
                 from . import mergeknobs
-                out = mergeknobs.bbox_window(p, a.data, b.data)         # union, intersection, A or B
+                out = mergeknobs.bbox_window(p, a.data, b.data)         # union, intersection, A or B (Copy and ChannelMerge: lane 2 step W1)
             else:
                 out = a.data.union(b.data)
             mask = inputs[2] if len(inputs) > 2 else None

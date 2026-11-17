@@ -518,6 +518,8 @@ def needs_full_frame(kind, p):
         from . import mergeknobs
         if mergeknobs.needs_full_frame(p):
             return True      # a bounding box other than the union moves the output window, and layers are not in tiles
+    if kind in ("Copy", "ChannelMerge") and str(p.get("merge_bbox", "union")) != "union":
+        return True      # a bounding box other than the union moves the output window (lane 2 step W1)
     if kind in DRAW_KINDS_WITH_CHROME and str(p.get("cliptype", "format")) != "format":
         return True      # a clip other than the format moves the output window, which tiles of the format cannot hold
     if kind == "Write" and p.get("reading"):

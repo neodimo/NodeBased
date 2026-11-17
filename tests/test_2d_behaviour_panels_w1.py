@@ -248,5 +248,47 @@ class VectorDetailTests(unittest.TestCase):
                 self.assertEqual(params["vector_density"], 1.0)
 
 
+class SetBboxTests(unittest.TestCase):
+    """Copy and ChannelMerge's Set bbox to: the data window of the result is the union of the two inputs', their intersection, A's or B's."""
+
+    def _rasters(self):
+        from nodebased.raster import Raster
+        from nodebased.tiers import Region
+        display = Region(0, 0, 16, 12)
+        a_data, b_data = Region(0, 0, 8, 12), Region(4, 0, 12, 12)
+        a = Raster(np.full((12, 8, 4), 0.25, np.float32), a_data, display)
+        b = Raster(np.full((12, 12, 4), 0.75, np.float32), b_data, display)
+        return a, b, {"union": Region(0, 0, 16, 12), "intersection": Region(4, 0, 4, 12), "A": a_data, "B": b_data}
+
+    def test_the_window_follows_the_choice(self):
+        a, b, windows = self._rasters()
+        for kind in ("Copy", "ChannelMerge"):
+            for choice, region in windows.items():
+                with self.subTest(kind=kind, bbox=choice):
+                    params = dict(SPECS[kind]["params"], merge_bbox=choice)
+                    out = Evaluator._windowed_kernel(kind, params, [a, b, None])
+                    self.assertEqual(out.data, region)
+
+    def test_union_is_the_default_and_an_older_node_is_the_union(self):
+        for kind in ("Copy", "ChannelMerge"):
+            with self.subTest(kind=kind):
+                self.assertEqual(SPECS[kind]["params"]["merge_bbox"], "union")
+                g = Graph()
+                g.add("node", kind, {})
+                doc = copy.deepcopy(g.doc)
+                doc["nodes"]["node"]["params"].pop("merge_bbox", None)
+                self.assertEqual(upgrade_document(doc)["nodes"]["node"]["params"]["merge_bbox"], "union")
+
+    def test_a_window_other_than_the_union_leaves_the_tile_path(self):
+        from nodebased import ops2d_chrome
+        for kind in ("Copy", "ChannelMerge"):
+            self.assertFalse(ops2d_chrome.needs_full_frame(kind, {"merge_bbox": "union"}))
+            self.assertTrue(ops2d_chrome.needs_full_frame(kind, {"merge_bbox": "intersection"}))
+
+    def test_the_panel_has_the_knob_in_the_guides_place(self):
+        self.assertEqual(labels("Copy").index("Set bbox to") - labels("Copy").index("Layer copy"), 1)
+        self.assertIn("Set bbox to", labels("ChannelMerge"))
+
+
 if __name__ == "__main__":
     unittest.main()

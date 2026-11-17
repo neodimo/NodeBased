@@ -1375,8 +1375,10 @@
     {"nodebased": "B", "nuke": "B", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
+   "value_map": {"bbox": {"A": "A side", "B": "B side"}},
    "label_notes": {"to0": "Nuke labels each Copy row's destination `to`; NodeBased's row is one control per destination channel (Red here), so the destination is the row's place and its tooltip.", "to1": "as to0: the destination is Green", "to2": "as to0: the destination is Blue", "to3": "as to0: the destination is Alpha"},
    "knobs": [
+    {"nodebased": ["merge_bbox"], "nuke": ["bbox"], "kind": "renamed", "reason": "same control under another name: the output's bounding box (union, B side, A side; NodeBased also offers intersection); Nuke's scripting name is `bbox` (lane 2 step W1)"},
     {"nodebased": ["copy_red"], "nuke": ["from0", "to0"], "kind": "components", "reason": "one copy pair per output channel"},
     {"nodebased": ["copy_green"], "nuke": ["from1", "to1"], "kind": "components", "reason": "one copy pair per output channel"},
     {"nodebased": ["copy_blue"], "nuke": ["from2", "to2"], "kind": "components", "reason": "one copy pair per output channel"},
@@ -1401,8 +1403,9 @@
     {"nodebased": "B", "nuke": "B", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
    ],
-   "value_map": {"A": {"A.a": "rgba.alpha"}, "B": {"B.a": "rgba.alpha"}, "output": {"A": "rgba.alpha"}},
+   "value_map": {"A": {"A.a": "rgba.alpha"}, "B": {"B.a": "rgba.alpha"}, "output": {"A": "rgba.alpha"}, "bbox": {"A": "A side", "B": "B side"}},
    "knobs": [
+    {"nodebased": ["merge_bbox"], "nuke": ["bbox"], "kind": "renamed", "reason": "same control under another name: the output's bounding box (union, B side, A side; NodeBased also offers intersection); Nuke's scripting name is `bbox` (lane 2 step W1)"},
     {"nodebased": ["a_channel"], "nuke": ["A"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `A`"},
     {"nodebased": ["b_channel"], "nuke": ["B"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `B`"},
     {"nodebased": ["out_channel"], "nuke": ["output"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'output', scripting name `output`"},
