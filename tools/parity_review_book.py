@@ -344,7 +344,8 @@ def alignment(nuke_node, pair, kind, name=""):
     for i, k in enumerate(nuke_node["knobs"]):
         e = by_nuke.get(k["name"])
         row = {"tab": k["tab"], "name": k["name"], "label": k["label"], "type": k["type"], "default": k["default"],
-               "primary": k["primary"], "status": "missing", "nodebased": "", "nb_label": "", "nb_widget": "", "nb_default": "",
+               "primary": k["primary"], "counted": bool(k.get("counted", True) or str(k.get("role", "")).startswith("chrome:")),
+               "status": "missing", "nodebased": "", "nb_label": "", "nb_widget": "", "nb_default": "",
                "marks": [], "reason": ""}
         if e is None:
             row["reason"] = "no pairing in nodebased_to_nuke.json"
@@ -748,6 +749,8 @@ def node_items(name, row, nuke_node, pair, weight, interactions=None, case_resul
                       "weight": round(weight * (2 if primary else 1), 6)})
 
     for r in alignment(nuke_node, pair, kind, name):
+        if not r["counted"]:
+            continue   # shown on the page; the audit does not count it (UI-only row, Python callback, format or GPU option)
         if r["status"] == "missing":
             add("missing knob", r["name"], r["label"], "", r["primary"], reason=r["reason"])
             continue
@@ -831,7 +834,8 @@ def worklist_markdown(items):
          "widget type, order, missing knob, failing or missing behaviour case and failing widget behaviour, one row each, "
          "sorted by the node's rank weight (the audit's 1 / rank; a main-tab knob counts twice). The full list with "
          "values is `worklist.json` beside this file. A default difference the pairing accepts on purpose (`skip_default`) "
-         "is listed as accepted with its reason and is not work.", "",
+         "is listed as accepted with its reason and is not work. Knobs the audit does not count (rows without a scripting name, "
+         "Python callbacks, file-format and GPU options) keep their marks on the node pages and are not listed here.", "",
          "| Lane | Owns | Open | Accepted | Open by kind |", "|---|---|---|---|---|"]
     for lane, c in counts.items():
         by = ", ".join(f"{k} {n}" for k, n in sorted(kinds.get(lane, {}).items(), key=lambda kv: -kv[1]))
