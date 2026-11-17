@@ -84,6 +84,39 @@ In the order the Properties Panels page lists it: label; font, with bold, italic
 row; hide input; cached; disable; dope sheet; bookmark; postage stamp; static frame; lifetime range (start, end, use
 lifetime). The node colour and the Viewer highlight colour, which sit in Nuke's panel header, stay at the end of the tab.
 
+## Copy and ChannelMerge channel menus (lane 10, step T3, 2026-11-17)
+
+Copy's four from/to menus and ChannelMerge's A, B and output menus are Nuke single-channel knobs, so they now show as the
+layer menu and channel menu side by side (`A` + `red`, `rgba` + `alpha`). The document keeps the words it always held
+(`A.r`, `B.a`, `R`, `none`), so older scripts load unchanged; a pick stores the matching word, and a channel the menu does
+not offer is refused and the stored one shown again.
+
+## On-screen controls (lane 10, step T3, 2026-11-17)
+
+- **Reference:** `docs/parity/nuke_viewer_controls.json`, one entry per on-screen control of a 2D node, each quoting its
+  source: the User Guide's [Transforming in 2D](https://learn.foundry.com/nuke/17.0/content/comp_environment/transforming_elements/transforming_2d.html)
+  page for the Transform jack, and the Reference Guide node pages for Crop, Text, Tracker, GridWarp and the rest. A control
+  or rule the pages read do not state is `undocumented`; Blur and Defocus have no on-screen control.
+- **Probes:** `tools/nuke_viewer_controls.py` presses, drags and releases on NodeBased's Viewer at image coordinates through
+  the viewer's own press, move and release handlers, then checks the knob values, that the drag is one undo step and that an
+  animated knob gets a key at the current frame. `tests/test_viewer_controls.py` asserts every result.
+- **Live numbers:** the section "On-screen controls that work like Nuke" in `docs/PARITY_2D_FIDELITY.md`, one row per node.
+
+What Nuke documents for the Transform jack: drag the centre to translate, Shift+drag to keep the move on x or y, Ctrl/Cmd+drag
+to move the pivot; drag the circle to scale both ways, its left and right points to scale x, top and bottom points to scale y;
+drag the horizontal bar to rotate (snapping to typical values, Shift turns the snapping off); drag the vertical bar to skew;
+with invert on, a second small handle appears. Crop's box edges drag in the Viewer; Text's box moves and resizes there and
+Ctrl/Cmd+drag moves its centre; the Tracker places an anchor per track; GridWarp shows its source and destination grids with
+handles and a transform overlay. The pages read state no Viewer control for CornerPin2D's pins, Reformat, Radial, Ramp,
+Rectangle, Position or Flare, so those are listed as undocumented.
+
+Fixed in this step: Ctrl-drag on the jack's centre now moves the pivot as in Nuke (it needed Ctrl+Shift before; Ctrl+Shift
+still works), and Shift-drag keeps a translate on the axis the pointer moved furthest along. Before the step 3 of the 16
+documented controls worked like Nuke's; after it, 5.
+
+Still open, named in the report's table: the jack's scale-x and scale-y points, rotate snapping, the skew bar and the invert
+handle; on-screen boxes for Crop and Text; probes for the Tracker anchor and GridWarp's grids, which NodeBased does draw.
+
 ## Open gaps
 
 - None among the documented behaviours read so far (31 of 31 pass). Not documented, so not scored:

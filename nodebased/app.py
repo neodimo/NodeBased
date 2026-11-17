@@ -3415,8 +3415,10 @@ class Viewer(PanZoomView):
         start = self._transform_data_point(drag["start"])
         current = self._transform_data_point(drag["scene"])
         if drag["kind"] == "translate":
-            values.update(translate_x=original["translate_x"] + current[0] - start[0],
-                          translate_y=original["translate_y"] + current[1] - start[1])
+            dx, dy = current[0] - start[0], current[1] - start[1]
+            if drag.get("constrain"):          # Shift: only the axis the pointer moved further along
+                dx, dy = (dx, 0.0) if abs(dx) >= abs(dy) else (0.0, dy)
+            values.update(translate_x=original["translate_x"] + dx, translate_y=original["translate_y"] + dy)
         elif drag["kind"] == "pivot":
             cx, cy, tx, ty = handles2d.pivot_drag_result(
                 original["translate_x"], original["translate_y"], values["rotate"], values["scale"],
@@ -6585,13 +6587,17 @@ class Viewer(PanZoomView):
                         kind = "rotate"
                     elif (handles2d.point_in_quad(point[0], point[1], corners)
                           or distance <= hit_radius):
-                        kind = "pivot" if (modifiers & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)) == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier) else "translate"
+                        # Nuke 17.0 User Guide, Transforming in 2D: "Ctrl/Cmd+drag to reposition the pivot point";
+                        # Ctrl+Shift, NodeBased's older chord, still moves it.
+                        kind = "pivot" if modifiers & Qt.KeyboardModifier.ControlModifier else "translate"
                 if kind is not None:
                     touched = {"translate": ("translate_x", "translate_y"),
                                "pivot": ("center_x", "center_y", "translate_x", "translate_y"),
                                "rotate": ("rotate",), "scale": ("scale",)}[kind]
                     self.transform_drag = {"kind": kind, "key": key, "start": scene_pos, "scene": scene_pos,
                                            "moved": False, "pivot": pivot,
+                                           # "Shift+drag to constrain the translation to x or y" (same page)
+                                           "constrain": kind == "translate" and bool(modifiers & Qt.KeyboardModifier.ShiftModifier),
                                            "original": {param: node["params"][param] for param in touched}}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     return True

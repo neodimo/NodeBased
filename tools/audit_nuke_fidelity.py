@@ -734,6 +734,41 @@ def panel_interactions_section(w):
     w("")
 
 
+def viewer_controls_section(w):
+    """How NodeBased's Viewer handles work against Nuke's documented on-screen controls (lane 10, step T3, 2026-11-17).
+    Reported beside the score, never folded into it: tools/nuke_viewer_controls.py drives the viewer offscreen."""
+    w("## On-screen controls that work like Nuke")
+    w("")
+    try:
+        import nuke_viewer_controls as controls
+        results = controls.probe_all()
+    except Exception as exc:  # no Qt here: say so rather than print a number nobody measured
+        w(f"Not measured in this run ({type(exc).__name__}: {exc}). Run the audit with `QT_QPA_PLATFORM=offscreen`.")
+        w("")
+        return
+    rows = controls.table(results)
+    data = controls.reference()
+    passing, documented = sum(r[1] for r in rows), sum(r[2] for r in rows)
+    w(f"**{passing} of {documented} documented on-screen controls work as Nuke's do**, over {sum(1 for r in rows if r[2])} nodes whose "
+      "guide pages describe Viewer controls. The reference is `docs/parity/nuke_viewer_controls.json` (Nuke 17.0 Reference Guide node "
+      "pages and the User Guide's Transforming in 2D page); `tools/nuke_viewer_controls.py` presses, drags and releases on NodeBased's "
+      "Viewer and checks the knob values, the single undo step and the key on an animated knob. Reported beside the fidelity score, "
+      "not part of it. Roto and RotoPaint are measured in [ROTO_NUKE_UI.md](ROTO_NUKE_UI.md). See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).")
+    w("")
+    w("| Node | Passing / documented | Not yet like Nuke | Undocumented |")
+    w("|---|---|---|---|")
+    for node, ok, total, failing, undoc in rows:
+        failing_text = ", ".join(f"`{c.split('.', 1)[1]}`" + (" (not probed)" if results[c]["result"] == "not probed" else "")
+                                 for c in failing) or "-"
+        if total and ok == 0 and all(results[c]["detail"].startswith("NodeBased draws no") for c in failing):
+            failing_text = "NodeBased has no on-screen control: " + failing_text
+        undoc_text = ", ".join(f"`{c.split('.', 1)[1]}`" for c in undoc) or "-"
+        w(f"| {node} | {ok} / {total} | {failing_text} | {undoc_text} |")
+    w("")
+    w("No on-screen control in Nuke: " + ", ".join(sorted(data["no_controls"])) + ".")
+    w("")
+
+
 def build_report(reference_dir=None):
     nuke_doc, map_doc = load_json(NUKE_JSON), load_json(MAP_JSON)
     units, skipped = build_units(nuke_doc, map_doc, reference_dir)
@@ -825,6 +860,7 @@ def build_report(reference_dir=None):
       f"Splits: {sum(1 for u in split_nodes if u['components']['splits'] == 1)} of the {len(split_nodes)} nodes with split knobs in the table split all of them.")
     w("")
     panel_interactions_section(w)
+    viewer_controls_section(w)
     w("## Per node")
     w("")
     w("Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D status, fidelity, then the component fractions as percentages "
