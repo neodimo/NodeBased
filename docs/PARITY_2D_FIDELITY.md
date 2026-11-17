@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 97.3 / 100** (170 nodes scored, rank-weighted; 99.3 counting only the nodes NodeBased has).
+**Overall fidelity: 97.3 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.2 (99.2 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.3 (99.3 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.4 (99.4 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.4 (99.5 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -36,9 +36,9 @@ Root is the one Nuke node scored against something that is not a node: the proje
 |---|---|---|---|---|
 | Image | 98.2 | 97.9 | 98.6 | 6 |
 | Draw | 99.0 | 98.4 | 98.8 | 17 |
-| Time | 99.7 | 98.9 | 99.6 | 13 |
+| Time | 99.8 | 99.0 | 99.8 | 13 |
 | Channel | 99.8 | 99.7 | 99.8 | 5 |
-| Color | 98.2 | 95.2 | 97.8 | 34 |
+| Color | 98.6 | 95.8 | 98.6 | 34 |
 | Filter | 98.1 | 94.0 | 97.9 | 32 |
 | Keyer | 93.4 | 80.7 | 93.3 | 11 |
 | Merge | 99.9 | 99.7 | 99.9 | 13 |
@@ -46,9 +46,9 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 83.7 | 53.0 | 83.7 | 14 |
 
-Behaviour checked: 134 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 136 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
-Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
+Knobs that act: 448 of the 449 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
 ## Panels that work like Nuke
 
@@ -133,7 +133,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | TimeOffset | `TimeOffset` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (14/14) | 100 | - | unmeasured |
 | 2 | FrameHold | `FrameHold` | supported | 100.0 | 100.0 | 100 (7/7) | - | 100 | 100 | - | 100 (8/8) | 100 | - | unmeasured |
-| 3 | Retime | `Retime` | supported | 98.8 | 98.4 | 97 (14/15) | - | 100 | 100 | - | 100 (47/47) | 100 | - | unmeasured |
+| 3 | Retime | `Retime` | supported | 100.0 | 100.0 | 100 (15/15) | - | 100 | 100 | - | 100 (53/53) | 100 | - | unmeasured |
 | 4 | TimeClip | `TimeClip` | supported | 100.0 | 100.0 | 100 (10/10) | - | 100 | 100 | - | 100 (33/33) | 100 | - | unmeasured |
 | 5 | FrameRange | `FrameRange` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 | 6 | AppendClip | `AppendClip` | supported | 100.0 | 100.0 | 100 (6/6) | - | 100 | 100 | - | 100 (12/12) | 100 | - | unmeasured |
@@ -161,7 +161,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Grade | `Grade` | supported | 100.0 | 100.0 | 100 (10/10) | 100 (10/10) | 100 | 100 | 100 | 100 (6/6) | 100 | 100 (7/7) | unmeasured |
-| 2 | ColorCorrect | `ColorCorrect` | supported | 97.9 | 96.5 | 91 (21/23) | 100 (20/20) | 100 | 100 | 100 | 100 (20/20) | 100 | 100 (20/20) | unmeasured |
+| 2 | ColorCorrect | `ColorCorrect` | supported | 100.0 | 100.0 | 100 (23/23) | 100 (22/22) | 100 | 100 | 100 | 100 (23/23) | 100 | 100 (20/20) | unmeasured |
 | 3 | Invert | `Invert` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 4 | Saturation | `Saturation` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (13/13) | 100 | - | unmeasured |
 | 5 | Multiply | `Multiply` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (1/1) | 100 | 100 (1/1) | unmeasured |
@@ -170,10 +170,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | Clamp | `Clamp` | supported | 100.0 | 100.0 | 100 (8/8) | 100 (8/8) | 100 | 100 | 100 | 100 (3/3) | 100 | 100 (2/2) | unmeasured |
 | 9 | HueCorrect | `HueCorrect` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
 | 10 | ColorLookup | `ColorLookup` | supported | 92.1 | 90.0 | 75 (6/8) | - | 100 | 100 | 100 | 100 (7/7) | 100 | - | unmeasured |
-| 11 | Exposure | `Exposure` | supported | 95.7 | 93.6 | 86 (6/7) | 100 (6/6) | 93 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 11 | Exposure | `Exposure` | supported | 99.4 | 99.3 | 100 (7/7) | 100 (7/7) | 93 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 12 | HSVTool | `HSVTool` | partial | 96.8 | 94.8 | 89 (22/25) | 100 (14/14) | 100 | 100 | - | 100 (11/11) | 100 | - | unmeasured |
 | 13 | ColorMatrix | `ColorMatrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 14 | Colorspace | `Colorspace` | supported | 97.1 | 95.6 | 89 (8/9) | 100 (8/8) | 100 | 100 | 100 | 100 (21/21) | 100 | - | unmeasured |
+| 14 | Colorspace | `Colorspace` | supported | 100.0 | 100.0 | 100 (9/9) | 100 (8/8) | 100 | 100 | 100 | 100 (21/21) | 100 | - | unmeasured |
 | 14 | OCIOColorspace | `OCIOColorspace` | supported | 100.0 | 100.0 | 100 (11/11) | 100 (3/3) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 14 | OCIODisplay | `OCIODisplay` | supported | 95.4 | 93.4 | 92 (16/17) | 100 (8/8) | 75 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
 | 14 | OCIOFileTransform | `OCIOFileTransform` | supported | 99.3 | 99.2 | 100 (4/4) | 100 (2/2) | 92 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
@@ -189,10 +189,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 19 | SoftClip | `SoftClip` | supported | 100.0 | 100.0 | 100 (3/3) | 100 (2/2) | 100 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
 | 19 | Toe | `Toe` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 20 | HistEQ | `HistEQ` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | - | 100 | - | unmeasured |
-| 20 | Histogram | `Histogram` | supported | 100.0 | 100.0 | 100 (3/3) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 20 | MinColor | `MinColor` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
+| 20 | Histogram | `Histogram` | supported | 100.0 | 100.0 | 100 (3/3) | 100 (2/2) | 100 | 100 | 100 | 100 (7/7) | 100 | - | unmeasured |
+| 20 | MinColor | `MinColor` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 20 | Sampler | `Sampler` | supported | 93.5 | 90.0 | 75 (3/4) | 100 (2/2) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 21 | GenerateLUT | `GenerateLUT` | supported | 88.5 | 85.5 | 82 (7/9) | - | 86 | 100 | - | - | 100 | - | unmeasured |
+| 21 | GenerateLUT | `GenerateLUT` | supported | 98.5 | 98.5 | 100 (9/9) | - | 88 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
 | 21 | Vectorfield | `Vectorfield` | supported | 91.2 | 89.4 | 85 (8/10) | - | 71 | 100 | - | 100 (4/4) | 100 | - | unmeasured |
 
 ### Filter
@@ -374,7 +374,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | ChannelMerge | — | 100.0% (1/1) | 3 |
 | Remove | 100.0% (3/3) | 100.0% (4/4) | 0 |
 | Grade | — | 100.0% (10/10) | 0 |
-| ColorCorrect | — | 100.0% (20/20) | 2 |
+| ColorCorrect | — | 100.0% (22/22) | 2 |
 | Invert | — | 100.0% (1/1) | 0 |
 | Saturation | — | 100.0% (1/1) | 0 |
 | Multiply | — | 100.0% (1/1) | 0 |
@@ -383,7 +383,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Clamp | 100.0% (8/8) | 100.0% (8/8) | 0 |
 | HueCorrect | — | 100.0% (1/1) | 2 |
 | ColorLookup | — | 100.0% (2/2) | 5 |
-| Exposure | — | 100.0% (5/5) | 1 |
+| Exposure | — | 100.0% (6/6) | 1 |
 | HSVTool | — | 100.0% (17/17) | 8 |
 | ColorMatrix | — | 100.0% (2/2) | 0 |
 | Colorspace | 100.0% (6/6) | 100.0% (1/1) | 8 |
@@ -405,7 +405,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | Histogram | — | 100.0% (2/2) | 1 |
 | MinColor | — | 100.0% (4/4) | 1 |
 | Sampler | — | 100.0% (2/2) | 2 |
-| GenerateLUT | 100.0% (2/2) | 100.0% (4/4) | 4 |
+| GenerateLUT | 100.0% (2/2) | 100.0% (5/5) | 4 |
 | Vectorfield | — | 100.0% (5/5) | 3 |
 | Blur | — | 100.0% (3/3) | 1 |
 | Sharpen | — | 100.0% (6/6) | 1 |
@@ -543,20 +543,20 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 14 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
 | 15 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
 | 16 | Write (Image #2) | `Write` | 1.05 | 97.9 | nothing missing that the guide lists |
-| 17 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
-| 18 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
-| 19 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
-| 20 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
-| 21 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
-| 22 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
-| 23 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
-| 24 | Retime (Time #3) | `Retime` | 0.41 | 98.8 | 1 secondary knob missing: `warp` |
-| 25 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
-| 26 | Exposure (Color #11) | `Exposure` | 0.40 | 95.7 | primary knobs missing: `colorspace` |
-| 27 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
-| 28 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
-| 29 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
-| 30 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
+| 17 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
+| 18 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
+| 19 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
+| 20 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
+| 21 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
+| 22 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
+| 23 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
+| 24 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
+| 25 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
+| 26 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
+| 27 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
+| 28 | SplineWarp (Transform #14) | `SplineWarp` | 0.33 | 90.8 | 4 secondary knobs missing: `transform_matrix`, `boundary_curverez`, `previewrez`, `rbf`; sockets missing: `B` |
+| 29 | Expression (Color #17) | `Expression` | 0.31 | 94.7 | nothing missing that the guide lists |
+| 30 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 0.30 | 99.4 | nothing missing that the guide lists |
 
 ## Formula cases
 
@@ -636,6 +636,10 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `cc_stored_colour_not_straight` | guide | pass | within tolerance | - |
 | `cc_mix_half` | guide | pass | within tolerance | - |
 | `cc_mask` | guide | pass | within tolerance | - |
+| `cc_mix_luminance_1_0` | guide | pass | within tolerance | - |
+| `cc_mix_luminance_0_5` | guide | pass | within tolerance | - |
+| `cc_test_ranges` | guide | pass | within tolerance | - |
+| `cc_test_mixture_colours` | guide | not scored: the guide says green and magenta indicate a mixture of ranges but not which mixture gets which colour, or where a mix ends and a pure range starts; NodeBased draws green for a blend of neighbouring ranges and magenta for overlapping curves | - | - |
 | `saturation_rec709_zero` | convention | pass | within tolerance | - |
 | `saturation_rec709_half` | convention | pass | within tolerance | - |
 | `saturation_ccir601_zero` | convention | pass | within tolerance | - |
@@ -774,7 +778,9 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `crosstalk_alpha` | guide | not scored: the page says the output colour channels are sums of lookups and says nothing about alpha (NodeBased leaves it alone) | - | - |
 | `histeq_flat_histogram` | guide | not scored: the page states the aim, a flat histogram, and no algorithm: not which channels are equalised together (each on its own or the luminance), the range the histogram covers (the data's minimum to maximum, or 0 to 1, and what happens to values outside it), nor where inside a bin a value lands, so no pixel can be written down (tests/test_2d_behaviour_color_b.py checks the property instead: the output's histogram is flatter and the order of the values is kept) | - | - |
 | `histeq_histogram_entries` | guide | not scored: the page names the knob and nothing else about it: how many entries are better than few, and how Nuke maps values into the entries, is not published | - | - |
-| `mincolor_adds_the_delta` | guide | not scored: the delta that is added is calculated by the Find Pixel Delta button over a range of frames, not by rendering: the node adds the stored delta (tests/test_2d_behaviour_color_b.py runs the button's calculation and the addition against this statement) | - | - |
+| `mincolor_sets_the_darkest_value_to_the_target` | guide | pass | within tolerance | - |
+| `mincolor_darkest_value_up_to_a_higher_target` | guide | pass | within tolerance | - |
+| `mincolor_alpha_takes_the_delta` | guide | not scored: the guide's table is not read for the modify choice, and states which channels the addition reaches only as 'the image'; NodeBased adds to all four channels by default and the case leaves alpha out | - | - |
 | `keyer_red_trapezoid` | convention | pass | within tolerance | - |
 | `keyer_green_trapezoid` | convention | pass | within tolerance | - |
 | `keyer_blue_trapezoid` | convention | pass | within tolerance | - |
@@ -927,6 +933,17 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `encryptomatte_writes_ids` | guide | not scored: the guide gives the layer names and no values for the encoded ranks and coverage, so none can be written down | - | - |
 | `ultimatte_keys_the_screen` | guide | not scored: a licensed third-party keyer: NodeBased has no node that runs its algorithm, and the guide states no number for its matte | - | - |
 | `primatte_keys_the_screen` | guide | not scored: a licensed third-party keyer: NodeBased has no node that runs its algorithm, and the guide states no number for its matte | - | - |
+| `exposure_cineon_stops` | guide | pass | within tolerance | - |
+| `exposure_cineon_ungang` | guide | pass | within tolerance | - |
+| `histogram_clamps_superwhite` | guide | pass | within tolerance | - |
+| `histogram_clamps_superblack` | guide | pass | within tolerance | - |
+| `histogram_output_range_black_is_the_left_value` | guide | pass | within tolerance | - |
+| `histogram_output_range_white_is_the_right_value` | guide | pass | within tolerance | - |
+| `histogram_input_black_point_is_black` | convention | pass | within tolerance | - |
+| `histogram_input_white_point_is_white` | convention | pass | within tolerance | - |
+| `ibk_color_darks_lights_red_green_blue` | guide | not scored: the guide's table types IBKColor's darks and lights number_list (red, green, blue), and the page the guide links is a keyer walk-through that never says what the three entries do to the clean plate, so no per-channel value can be written down; NodeBased's one number clamps the screen channel | - | - |
+| `hsv_tool_output_conversion` | guide | not scored: the guide's table gives the Conversion menu (label 'is', beside the output channel) only its default, hue, and states neither its choices nor what it does to the written channel, so no value can be written down; NodeBased's Output to alpha menu holds the matte choices and the raw hue, saturation and value in one | - | - |
+| `generate_lut_writes_what_the_nodes_upstream_do` | guide | pass | within tolerance | - |
 | `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
 | `blur_box_1` | convention | pass | within tolerance | - |
 | `blur_box_2` | convention | pass | within tolerance | - |
@@ -1409,6 +1426,12 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `retime_after_black_at_23` | guide | pass | within tolerance | - |
 | `retime_filter_box` | convention | not scored: the guide says only 'a weighted average of several frames together to cover the output range' and gives no weights | - | - |
 | `retime_shutter_blending` | convention | not scored: the guide gives no width or weights for the blend, only that a lower shutter blends less | - | - |
+| `retime_warp_ends_at_1` | guide | pass | within tolerance | - |
+| `retime_warp_ends_at_17` | guide | pass | within tolerance | - |
+| `retime_warp_shallow_slope_at_5` | convention | pass | within tolerance | - |
+| `retime_warp_shallow_slope_at_9` | convention | pass | within tolerance | - |
+| `retime_warp_dip_runs_backwards_at_9` | convention | pass | within tolerance | - |
+| `retime_warp_dip_runs_backwards_at_13` | convention | pass | within tolerance | - |
 | `framerange_inside_at_25` | guide | pass | within tolerance | - |
 | `framerange_inside_at_30` | guide | pass | within tolerance | - |
 | `framerange_inside_at_50` | guide | pass | within tolerance | - |
