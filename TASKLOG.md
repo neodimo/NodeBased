@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step W1 (Tue 11/17): colour, keying, channel and time panels match Nuke's, from the review book's worklist, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T3 (Tue 11/17): Viewer on-screen controls work like Nuke's, measured per node (integrator tick)
+
+- **What was done:** `main` `dd24d5f1` -> `ae7ca214` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `ae7ca214`: Ran 10069 tests in 1698.496 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — Lane 10 step T3 (partial): Viewer on-screen controls measured against Nuke
 
 - **What was done:** Copy's four from/to menus and ChannelMerge's A, B and output menus use the single-channel widget

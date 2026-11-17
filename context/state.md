@@ -1,5 +1,35 @@
 ## Lane 10 step T3 (11/17 3:40 AM): Viewer on-screen controls, partial
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (4:35 AM on 2026-11-17 PDT)
+
+`main` moved `dd24d5f1` -> `ae7ca214` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `ae7ca214` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-0359.log`, started 4:00 AM): **Ran 10069 tests in 1698.496 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step W1 (Tue 11/17): colour, keying, channel and time panels match Nuke's, from the review book's worklist.** Commits:
+  - `676fbee6` Lane 2 step W1 fixes: ColorLookup's use_precomputed back to a NodeBased-only speed setting (it changes no pixel), Copy's and ChannelMerge's Set bbox to checked through its window tests, HSVTool's layout test follows the guide's 'invert mask' labels by position, ChromaKeyer's scalar despill bias tested with its legacy switch on
+  - `aafe420c` Lane 2 step W1 notes: Set bbox to landed, worklist counts
+  - `1c952333` Copy and ChannelMerge Set bbox to (lane 2 step W1): the result's data window is the union, the intersection, A's or B's, as Merge's; union stays the default and the older documents' window; a window other than the union runs on the whole frame; report rebuilt
+  - `6825245c` Lane 2 step W1: ColorLookup range listed unsupported with the guide's sentence, use_precomputed paired as a speed setting, notes for the rows the pairing accepts (defaults, labels, widget types), report rebuilt (overall 96.9), step notes
+  - `ee7143ec` Colour, keying, channel and time panels in the guide's wording, order and defaults (lane 2 step W1): Multiply, Add and Gamma lead with Channels and call their number Value; Invert, Multiply, Add, Gamma, Clamp and Posterize start on channels all, as Nuke's do; Copy, Clamp, Keylight, HSVTool, Expression, Remove, ColorMatrix, MatchGrade and Vectorfield labels read as the guide's; ChromaKeyer's despill bias is a colour; IBKGizmo starts on C-blue with luminance level 0; Vectorfield starts on trilinear; Kronos and OFlow's Vector Detail is the guide's 0 to 1 density; cases for NoTimeBlur, Vectorfield and the nodes with none; older documents keep their pixels
+  Diff: 28 files changed, 792 insertions(+), 187 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T3 (Tue 11/17): Viewer on-screen controls work like Nuke's, measured per node.** Commits:
+  - `6092954c` Time row tests: read the refusal message from every status message shown, since a background frame evaluation can replace it before the assertion (two full suites red on 11/17)
+  - `c54ce890` Lane 10 step T3 notes: on-screen controls measured, what is left
+  - `385e86a5` Viewer on-screen controls measured against Nuke: reference of documented controls, probes driving the Viewer, the report's table; Transform's Ctrl-drag moves the pivot and Shift-drag keeps a translate on one axis
+  - `c2e3271f` Panels: Copy's and ChannelMerge's channel menus use Nuke's single-channel knob (layer + channel), storing the same enum words
+  Diff: 15 files changed, 648 insertions(+), 144 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Copy and ChannelMerge channel menus use the single-channel widget. On-screen controls are measured against Nuke in
 `docs/parity/nuke_viewer_controls.json` / `tools/nuke_viewer_controls.py`: 5 of 16 documented controls pass (Transform
 translate, Shift axis lock, Ctrl pivot, uniform scale, rotate). Open: jack scale-x/y, rotate snap, skew, invert handle;
