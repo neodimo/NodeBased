@@ -519,7 +519,7 @@ Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on o
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
 **Lowest shared-row scores:** MarkerRemoval (0.0%); Root (0.0%); Write (50.0%); RotoPaint (98.1%); BurnIn (100.0%).
-**Lowest widget-type scores:** Expression (0.0%); IBKColor (33.3%); MarkerRemoval (40.0%); MatchGrade (81.2%); SplineWarp (81.2%).
+**Lowest widget-type scores:** Expression (0.0%); IBKColor (33.3%); MarkerRemoval (40.0%); MatchGrade (81.2%); Viewer (82.4%).
 
 ## The 30 largest gaps
 
