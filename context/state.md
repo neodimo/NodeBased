@@ -1,3 +1,7 @@
+## Lane 10 step T1 (11/16 11:30 PM): panel interactions
+
+Knob-widget behaviour against Nuke 17.0's User Guide: 28 of 30 documented behaviours pass (`docs/PANEL_INTERACTIONS.md`, report section "Panels that work like Nuke"). Open: channel layer check boxes and the single-channel field.
+
 ## Lane 9 step S (4:50 PM on 2026-11-16 PDT): ZDefocus's bokeh-shape knobs, LensDistortion's layout, Reconcile3D and PointsTo3D
 
 ZDefocus 91.2 -> 98.7, LensDistortion 83.0 -> 87.1, Reconcile3D 73.1 -> 76.7, PointsTo3D 84.4 -> 100.0; Filter 97.1 -> 97.2, Transform 97.7 -> 98.1; overall 96.7 -> 96.8; knobs that
