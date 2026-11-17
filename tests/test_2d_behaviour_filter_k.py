@@ -164,8 +164,8 @@ class DirBlurKnobs(unittest.TestCase):
         impulse[4, 20] = 1.0
         spread = lambda a: int((kern("DirBlur", impulse, blur_type="linear", length=10.0, angle=0.0, PixelAspect=a)[4, :, 0] > 1e-6).sum())
         self.assertLess(spread(2.0), spread(1.0))                 # a pixel twice as wide: half as many of them under the blur
-        radial = kern("DirBlur", pixels, blur_type="radial", angle=20.0, center_x=22.0, center_y=18.0)
-        self.assertTrue(differs(radial, kern("DirBlur", pixels, blur_type="radial", angle=20.0, center_x=22.0, center_y=18.0, PixelAspect=2.0)))
+        radial = kern("DirBlur", pixels, blur_type="radial", angle=20.0, center_x=22.0, center_y=18.0, Samples=0)
+        self.assertTrue(differs(radial, kern("DirBlur", pixels, blur_type="radial", angle=20.0, center_x=22.0, center_y=18.0, Samples=0, PixelAspect=2.0)))
 
     def test_holdout_keeps_the_held_out_pixels_out_of_the_zoom_average(self):
         pixels = np.zeros((21, 21, 4), np.float32)
@@ -173,7 +173,7 @@ class DirBlurKnobs(unittest.TestCase):
         pixels[..., 3] = 0.0
         pixels[10, 14, :3] = 1.0
         pixels[10, 14, 3] = 1.0                                  # a bright pixel with a non-black holdout channel
-        zoom = dict(blur_type="zoom", length=40.0, center_x=10.5, center_y=10.5)
+        zoom = dict(blur_type="zoom", length=40.0, center_x=10.5, center_y=10.5, Samples=0)
         smeared = kern("DirBlur", pixels, **zoom)
         held = kern("DirBlur", pixels, holdout="on", **zoom)
         self.assertTrue(differs(smeared, held))

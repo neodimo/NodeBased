@@ -152,7 +152,7 @@ class GridWarpTrackerTests(unittest.TestCase):
             # The result is an image warp and can be chained into the ordinary GridWarp kernel.
             warped = Evaluator._warp_node("GridWarpTracker", params,
                                           [source, None, vectors], None, frame)
-            chained = Evaluator._warp_node("GridWarp", dict(SPECS["GridWarp"]["params"]),
+            chained = Evaluator._warp_node("GridWarp", {**SPECS["GridWarp"]["params"], "bbox": "source", "filter": "bilinear"},
                                            [warped], {"source": controls["source"],
                                                       "destination": controls["destination"]})
             self.assertEqual(chained.pixels.shape, source.pixels.shape)
@@ -180,7 +180,7 @@ class GridWarpTrackerTests(unittest.TestCase):
             current_offset = offset * t
             dst = [[(current_matrix @ np.asarray(point) + current_offset).tolist() for point in row]
                    for row in src]
-            expected = Evaluator._warp_node("GridWarp", dict(SPECS["GridWarp"]["params"]),
+            expected = Evaluator._warp_node("GridWarp", {**SPECS["GridWarp"]["params"], "bbox": "source", "filter": "bilinear"},
                                             [source], {"source": src, "destination": dst}).to_display()
             result = Evaluator().evaluate(doc, frame=frame)
             np.testing.assert_allclose(result, expected, atol=1e-6, err_msg=f"frame {frame}")
@@ -196,7 +196,7 @@ class GridWarpTrackerTests(unittest.TestCase):
             "drive": "smartvector", "reference_frame": 1}})
         d.execute({"op": "connect", "id": "warp", "input": "image", "source": "src"})
         d.execute({"op": "connect", "id": "warp", "input": "vectors", "source": "vectors"})
-        d.execute({"op": "create", "id": "grid", "type": "GridWarp"})
+        d.execute({"op": "create", "id": "grid", "type": "GridWarp", "params": {"bbox": "source", "filter": "bilinear"}})
         d.execute({"op": "connect", "id": "grid", "input": "image", "source": "warp"})
         result = Evaluator().evaluate(dict(d.document, view="grid"), frame=2)
         self.assertEqual(result.shape, (10, 12, 4))
@@ -233,7 +233,7 @@ class GridWarpTrackerTests(unittest.TestCase):
             tx, ty = 4.0 * (frame - 1) / 19.0, -2.0 * (frame - 1) / 19.0
             ox, oy = 32 + tx - c*32 + s*32, 32 + ty - s*32 - c*32
             moved = [[[(c*point[0]-s*point[1]+ox), (s*point[0]+c*point[1]+oy)] for point in row] for row in coords]
-            expected = Evaluator._warp_node("GridWarp", dict(SPECS["GridWarp"]["params"]),
+            expected = Evaluator._warp_node("GridWarp", {**SPECS["GridWarp"]["params"], "bbox": "source", "filter": "bilinear"},
                                             [source], {"source": coords, "destination": moved}).to_display()
             output = Evaluator().evaluate(doc, frame=frame)
             np.testing.assert_allclose(output, expected, atol=1e-6, err_msg=f"frame {frame}")

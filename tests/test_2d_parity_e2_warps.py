@@ -66,7 +66,7 @@ class WarpNodeTests(unittest.TestCase):
         return {"source": src, "destination": dst}
 
     def test_grid_identity_and_exact_control_motion(self):
-        params = dict(SPECS["GridWarp"]["params"])
+        params = {**SPECS["GridWarp"]["params"], "bbox": "source", "filter": "bilinear"}
         identity = Evaluator._warp_node("GridWarp", params, [self.image], self.grid_data())
         np.testing.assert_allclose(identity.pixels, self.image.pixels, atol=1e-5)
         moved = Evaluator._warp_node("GridWarp", params, [self.image], self.grid_data((3.0, -2.0)))
@@ -105,7 +105,7 @@ class WarpNodeTests(unittest.TestCase):
         expected = Evaluator._warp_node("SplineWarp", params, [self.image], data)
         params["output"] = "stmap"
         uv = Evaluator._warp_node("SplineWarp", params, [self.image], data)
-        stmap = dict(SPECS["STMap"]["params"])
+        stmap = {**SPECS["STMap"]["params"], "filter": "bilinear"}       # the SplineWarp's own filter
         actual = Evaluator._uv_node("STMap", stmap, [self.image, uv, None])
         np.testing.assert_allclose(actual.pixels, expected.pixels, atol=1e-5)
 

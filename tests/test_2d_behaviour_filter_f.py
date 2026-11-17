@@ -305,7 +305,7 @@ class DropShadowTests(unittest.TestCase):
 
 # ------------------------------------------------------------------------------------------------------------- DirBlur
 def dir_blur(pixels, **params):
-    return kern("DirBlur", pixels, **params)
+    return kern("DirBlur", pixels, **{"Samples": 0, **params})        # automatic taps: the older default of the knob
 
 
 def dot(n=33):

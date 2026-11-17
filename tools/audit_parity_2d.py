@@ -68,7 +68,7 @@ class Build:
 def source(b):
     """A soft-edged coloured shape on a transparent plate: non-flat colour and alpha for every filter."""
     clear = b.add("Constant", dict(width=W, height=H, red=0.1, green=0.5, blue=0.2, alpha=1.0))
-    box = b.add("Rectangle", dict(width=W, height=H, box_x=14.0, box_y=10.0, box_width=30.0, box_height=22.0,
+    box = b.add("Rectangle", dict(width=W, height=H, softness=0.0, box_x=14.0, box_y=10.0, box_width=30.0, box_height=22.0,
                                   red=0.8, green=0.2, blue=0.1), image=clear)
     return b.add("Blur", dict(radius=2.0), image=box)
 

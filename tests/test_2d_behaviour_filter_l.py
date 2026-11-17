@@ -139,8 +139,8 @@ class DenoiseBehaviourTests(unittest.TestCase):
 
     def test_lift_blacks_lifts_sub_blacks_to_0(self):
         picture = texture(20, 24)
-        self.assertLess(float(denoise(picture, denoise_lift_blacks=0)[..., :3].min()), 0.0)
-        lifted = denoise(picture, denoise_lift_blacks=1)
+        self.assertLess(float(denoise(picture, denoise_lift_blacks=0, denoise_strength=0.2)[..., :3].min()), 0.0)
+        lifted = denoise(picture, denoise_lift_blacks=1, denoise_strength=0.2)
         self.assertGreaterEqual(float(lifted[..., :3].min()), 0.0)
 
     def test_the_model_and_the_source_set_where_the_threshold_is_larger(self):

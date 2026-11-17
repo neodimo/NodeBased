@@ -62,7 +62,7 @@ def moved_grid(dx=3.0, dy=0.0):
 
 
 def grid_params(**knob):
-    return {**SPECS["GridWarp"]["params"], "rows": 3, "columns": 3, "filter": "bilinear", **knob}
+    return {**SPECS["GridWarp"]["params"], "rows": 3, "columns": 3, "bbox": "source", "filter": "bilinear", **knob}
 
 
 def run_grid(params, source, data, dst=None, bg=None, mask=None):
@@ -179,7 +179,7 @@ class GridWarpTests(unittest.TestCase):
         g = Dispatcher(empty_document())
         g.execute({"op": "create", "id": "plate", "type": "Ramp", "params": {"width": 16, "height": 12}})
         g.execute({"op": "create", "id": "matte", "type": "Constant", "params": {"width": 16, "height": 12, "red": 1, "green": 1, "blue": 1, "alpha": 0.5}})
-        g.execute({"op": "create", "id": "n", "type": "GridWarp", "params": {"rows": 2, "columns": 2}})
+        g.execute({"op": "create", "id": "n", "type": "GridWarp", "params": {"rows": 2, "columns": 2, "bbox": "source", "filter": "bilinear"}})
         g.execute({"op": "connect", "id": "n", "input": "image", "source": "plate"})
         corners = [[{"x": 0.5, "y": 0.5}, {"x": 15.5, "y": 0.5}], [{"x": 0.5, "y": 11.5}, {"x": 15.5, "y": 11.5}]]
         shifted = [[{"x": 3.5, "y": 0.5}, {"x": 15.5, "y": 0.5}], [{"x": 0.5, "y": 11.5}, {"x": 15.5, "y": 11.5}]]

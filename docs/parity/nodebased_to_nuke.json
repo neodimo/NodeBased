@@ -784,7 +784,9 @@
     {"nodebased": ["wrap_threshold"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["legacy_lightwrap_grade"], "kind": "extra", "reason": "NodeBased-only: graphs saved before LightWrap graded its wrap with the CCorrect tab keep the ungraded wrap; lane 9 step F"},
     {"nodebased": ["legacy_lightwrap_luma"], "kind": "extra", "reason": "NodeBased-only: graphs saved before LightWrap followed the guide ignore Disable luminance based wrap, Enable Glow, LumaTolerance, white and midtone bias; lane 9 step K"}
-   ]
+   ],
+   "skip_default": ["Intensity"],
+   "default_notes": {"Intensity": "a new NodeBased LightWrap wraps at intensity 1 so the effect shows as soon as the node is connected; the guide lists 0, which leaves every other knob without an effect until it is raised"}
   },
   "Grain": {
    "nodebased": "Grain",
@@ -1022,7 +1024,9 @@
     {"nodebased": ["monodither"], "nuke": ["monodither"], "kind": "same"},
     {"nodebased": ["static_seed"], "nuke": ["static_seed"], "kind": "same"},
     {"nodebased": ["legacy_dither"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Dither followed Nuke keep rounding to bits after triangular noise of up to a bit; lane 9 step C"}
-   ]
+   ],
+   "skip_default": ["channels"],
+   "default_notes": {"channels": "NodeBased's rgba is the guide's all for a four channel picture, so a new Dither works on every channel as Nuke's does"}
   },
   "Grid": {
    "nodebased": "Grid",
@@ -2312,7 +2316,7 @@
     {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"}
    ],
    "skip_default": ["channels"],
-   "default_notes": {"channels": "the guide's table lists channels as none; every Nuke build opens a new Sharpen on rgb (the page's own text says you can then pick the individual channels), so NodeBased keeps rgb"}
+   "default_notes": {"channels": "the guide's table lists none, which would leave a new Sharpen doing nothing until a channel is chosen; NodeBased starts on rgb"}
   },
   "Erode (filter)": {
    "nodebased": "ErodeFilter",
@@ -2529,7 +2533,8 @@
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["legacy_dirblur_knobs"], "kind": "extra", "reason": "NodeBased-only: graphs saved before DirBlur read UseTarget, Samples and Pixel offset keep their pictures; lane 9 step F"}
    ],
-   "skip_default": ["BlurCenter"]
+   "skip_default": ["BlurCenter", "holdout"],
+   "default_notes": {"holdout": "the guide's choices are none and the render layers; NodeBased's holdout is an off or on switch shared with the 3D nodes, and off is the same as none"}
   },
   "EdgeBlur": {
    "nodebased": "EdgeBlur",
@@ -2967,7 +2972,9 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
-   ]
+   ],
+   "skip_default": ["channels"],
+   "default_notes": {"channels": "the guide's table lists none, which would leave the node doing nothing until a channel is chosen; NodeBased starts on all"}
   },
   "VolumeRays": {
    "nodebased": "VolumeRays",
@@ -3045,7 +3052,8 @@
     {"nodebased": ["depth_math"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["zslice_output"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ],
-   "skip_default": ["center", "dof"]
+   "skip_default": ["center", "dof", "Zchan"],
+   "default_notes": {"Zchan": "the guide lists none; NodeBased's depth layer starts at depth.Z, the layer a depth pass uses, so a new node works on a depth input without picking a channel"}
   },
   "Bokeh": {
    "nodebased": null,
@@ -3591,7 +3599,8 @@
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["legacy_transform_edges"], "kind": "extra", "reason": "NodeBased-only: graphs saved before black outside and clamp followed the guide keep the older reading (black outside painted the outside opaque black, clamp extended the edge); lane 9 step B"},
     {"nodebased": ["legacy_shutter_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the shutter followed the guide keep start and end the other way round; lane 9 step B"},
-    {"nodebased": ["legacy_transform_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the directions followed Nuke keep a positive translate Y moving the picture down and a positive rotate turning it clockwise; lane 9 step B"}
+    {"nodebased": ["legacy_transform_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the directions followed Nuke keep a positive translate Y moving the picture down and a positive rotate turning it clockwise; lane 9 step B"},
+    {"nodebased": ["legacy_blur_samples"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Motion blur was the number of shutter samples keep it as a switch and read their Samples knob; lane 9 step W1"}
    ],
    "skip_default": ["translate", "center"]
   },
@@ -3680,7 +3689,8 @@
     {"nodebased": ["retrack_on_move"], "nuke": ["retrack_on_move"], "kind": "same"},
     {"nodebased": [], "nuke": ["keyframe_display"], "kind": "panel", "reason": "viewer display only; https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/tracker.html"},
     {"nodebased": [], "nuke": ["keyframe_size"], "kind": "panel", "reason": "viewer display only; https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/tracker.html"},
-    {"nodebased": [], "nuke": ["max_number_of_keyframe_tracks_to_display"], "kind": "panel", "reason": "viewer display only; https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/tracker.html"}
+    {"nodebased": [], "nuke": ["max_number_of_keyframe_tracks_to_display"], "kind": "panel", "reason": "viewer display only; https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/tracker.html"},
+    {"nodebased": ["legacy_blur_samples"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Motion blur was the number of shutter samples keep it as a switch and read their Samples knob; lane 9 step W1"}
    ],
    "skip_default": ["channels", "smoothT", "smoothR", "smoothS", "translate", "center", "skew_order", "livelink_transform", "show_error_on_track_links", "transform"],
    "default_notes": {"livelink_transform": "a new NodeBased Tracker's picture follows its tracks straight away (live link on, mode match_move), which is what the node and its overlay have always done; Nuke starts with the link off", "show_error_on_track_links": "NodeBased colours the track paths by their error, which the overlay has always done; the guide starts with it off", "transform": "NodeBased's older name for the same control; its choices are none, match_move and the guide's modes, with match_move as the starting mode so a new node moves its picture"}
@@ -3724,7 +3734,8 @@
     {"nodebased": ["black_outside"], "nuke": ["black_outside"], "kind": "same"},
     {"nodebased": ["legacy_reformat_layout"], "kind": "extra", "reason": "NodeBased-only: graphs saved before center off lined up the lower left corners and turn rotated counter-clockwise keep the older layout (top left corners lined up, turn as a transpose); lane 9 step B"}
    ],
-   "skip_default": ["box_width", "box_height"]
+   "skip_default": ["box_width", "box_height", "format"],
+   "default_notes": {"format": "Nuke's default is the project's format; NodeBased has no project format to follow and starts at HD 1080, which the document's format list changes"}
   },
   "CornerPin2D": {
    "nodebased": "CornerPin",
@@ -3760,7 +3771,8 @@
     {"nodebased": [], "nuke": ["set_to_input"], "kind": "panel", "reason": "the Set to input button of the CornerPin panel: the From points on the corners of the input's format"},
     {"nodebased": [], "nuke": ["copy_from_to#2"], "kind": "panel", "reason": "the Copy 'to' button of the CornerPin panel: the To points into the From points"},
     {"nodebased": ["legacy_shutter_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the shutter followed the guide keep start and end the other way round; lane 9 step B"},
-    {"nodebased": ["legacy_transform_edges"], "kind": "extra", "reason": "NodeBased-only: graphs saved before black outside off filled the whole format keep the moved picture's own window; lane 9 step B"}
+    {"nodebased": ["legacy_transform_edges"], "kind": "extra", "reason": "NodeBased-only: graphs saved before black outside off filled the whole format keep the moved picture's own window; lane 9 step B"},
+    {"nodebased": ["legacy_blur_samples"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Motion blur was the number of shutter samples keep it as a switch and read their Samples knob; lane 9 step W1"}
    ],
    "skip_default": ["to1", "to2", "to3", "to4", "from1", "from2", "from3", "from4"],
    "value_map": {"invert": {"forward": false, "inverse": true}}

@@ -485,14 +485,14 @@ SPECS = {
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
-                "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus"),
+                "params": {"defocus": 1.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Defocus"),
                            **_edgedefocusknobs.new_params("Defocus")}},
     "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask", "guide"],
                   "params": {"spatial_size": 3.0, "colour_sigma": 0.4, "mix": 1.0, **_bilateralknobs.NEW}},
     "Denoise": {"inputs": ["image"], "optional_inputs": ["mask", "noise", "motion"],
-                "params": {"denoise_strength": 0.2, "temporal": 0, "mix": 1.0, **_denoiseknobs.NEW}},
+                "params": {"denoise_strength": 1.0, "temporal": 0, "mix": 1.0, **_denoiseknobs.NEW}},
     "DegrainSimple": {"inputs": ["image"], "optional_inputs": ["mask"],
-                       "params": {"red_amount": 1.0, "green_amount": 1.0, "blue_amount": 1.0, "mix": 1.0}},
+                       "params": {"red_amount": 2.0, "green_amount": 2.0, "blue_amount": 5.0, "mix": 1.0}},
     "ZDefocus": {"inputs": ["image"], "optional_inputs": ["depth", "kernel", "mask"],
                   "params": {"depth_layer": "depth", "focal_plane": 0.0, "depth_of_field": 0.0,
                              "max_size": 50.0, "depth_math": "depth", "bokeh_shape": "disc",
@@ -509,9 +509,9 @@ SPECS = {
     # radial smears around it over a sweep of `angle` degrees. The centre is in canvas pixels
     # (default: the centre of the default 960x540 format).
     "DirBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
-                "params": {"blur_type": "linear", "angle": 0.0, "length": 20.0,
-                           "center_x": 480.0, "center_y": 270.0, "BlurLayer": "rgba", "holdout": "off",
-                           "target": "480,240", "UseTarget": 0, "Samples": 0, "PixelAspect": 1.0, "Quality": "high", "pixeloffset": 0.0,
+                "params": {"blur_type": "zoom", "angle": 45.0, "length": 5.0,
+                           "center_x": 480.0, "center_y": 270.0, "BlurLayer": "rgb", "holdout": "off",
+                           "target": "480,240", "UseTarget": 0, "Samples": 1, "PixelAspect": 1.0, "Quality": "high", "pixeloffset": 0.0,
                            "channels": "rgba", "mix": 1.0, **_filterbehaviour.new_params("DirBlur")}},
     # DropShadow (step 3b): the input's alpha, offset by `distance` along `angle` (degrees,
     # counter-clockwise from +x with y up; the default points down and to the right), blurred by
@@ -520,7 +520,7 @@ SPECS = {
     # Step H adds Nuke's `bg` input (last, so the mask keeps its slot), merged under the shadowed picture with `operation`, and the
     # enable switch, `inherit_input_color` and the shrink / expand of the shadow (`shrink_expand`, Nuke's `size`).
     "DropShadow": {"inputs": ["image"], "optional_inputs": ["mask", "bg"],
-                   "params": {"angle": 225.0, "distance": 10.0, "shadow_size": 5.0, "opacity": 0.5,
+                   "params": {"angle": 225.0, "distance": 5.0, "shadow_size": 0.0, "opacity": 0.7,
                               "red": 0.0, "green": 0.0, "blue": 0.0, "mix": 1.0, "enable_dropshadow_effect": 1,
                               "inherit_input_color": 0, "shrink_expand": 0.0, "operation": "over",
                               **_filterbehaviour.new_params("DropShadow")}},
@@ -544,7 +544,7 @@ SPECS = {
     # renamed because "diffuse" is a 0..1 LIMITS key on Relight. red/green/blue are the constant
     # highlight colour, used when use_constant_highlight is on.
     "LightWrap": {"inputs": ["fg", "bg"], "optional_inputs": ["mask"],
-                  "params": {"intensity": 1.0, "wrap_diffuse": 10.0, "fgblur": 1.0, "bgblur": 4.0,
+                  "params": {"intensity": 1.0, "wrap_diffuse": 15.0, "fgblur": 1.0, "bgblur": 0.0,
                              "wrap_threshold": 0.0, "highlight_merge": "plus", "use_constant_highlight": 0,
                              "red": 1.0, "green": 1.0, "blue": 1.0, "onlywrap": 0, "disableluma": 0, "enableglow": 0,
                              "saturation": 1.0, "LumaTolerance": 0.0, "white": 1.0, "gray": 0.18, "contrast": 1.0,
@@ -553,7 +553,7 @@ SPECS = {
     # Dither (step 5a): quantises to `bits` per channel with position-hashed triangular noise of
     # +/- `dither_amount` least-significant bits; `seed` picks the noise pattern.
     "Dither": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"bits": 8, "dither_amount": 1.0, "seed": 1, "channels": "rgb", "mix": 1.0, **_drawbehaviour.new_params("Dither")}},
+               "params": {"bits": 8, "dither_amount": 1.0, "seed": 1, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("Dither")}},
     # Grain (step 5b): synthetic film grain. Nuke's per-channel `size` and `intensity` knobs are
     # red_size/red_intensity etc. (Nuke's red_m is called red_intensity here); `seed` plus the
     # frame picks the pattern, so grain moves every frame and seed = -frame freezes it, as in Nuke.
@@ -658,7 +658,7 @@ SPECS = {
     "Reformat": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"reformat_type": "to_format", "format": "HD_1080",
                            "width": 1920, "height": 1080, "pixel_aspect": 1.0, "scale": 1.0,
-                           "resize_type": "fit", "center": 1, "flip": 0, "flop": 0, "turn": 0,
+                           "resize_type": "width", "center": 1, "flip": 0, "flop": 0, "turn": 0,
                            "filter": "cubic", "preserve_bbox": 0, "mix": 1.0, **_transformbehaviour.new_params("Reformat")}},
     # CornerPin2D: a projective (four-point) warp. Unlike Reformat it does not change the format --
     # like Transform/Tracker it only moves the data window, sharing their `_filter_window`/
@@ -689,20 +689,20 @@ SPECS = {
     # multichannel Render3D or EXR Read can drive the warp on its own; empty means "use the uv
     # input's beauty". u_channel/v_channel pick which channels of that raster are u and v.
     "STMap": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
-              "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G", "filter": "bilinear",
+              "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G", "filter": "cubic",
                          "uv_outside": "black", "mix": 1.0, **_keymixknobs.new_params("STMap")}},
     "IDistort": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                  "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                             "uv_scale_x": 1.0, "uv_scale_y": 1.0, "uv_offset_x": 0.0, "uv_offset_y": 0.0,
-                            "filter": "bilinear", "blur": "none", "blur_scale": 1.0, "maskChannel": "rgba.alpha", "premultiplied": 0, "channels": "all", "invert_mask": 0, "mix": 1.0,
+                            "filter": "cubic", "blur": "none", "blur_scale": 1.0, "maskChannel": "rgba.alpha", "premultiplied": 0, "channels": "all", "invert_mask": 0, "mix": 1.0,
                             **_filterbehaviour.new_params("IDistort")}},
     "SplineWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {"mix": 1.0, "curve_resolution": 12, "bbox": "source",
                               "root_warp": "A", "filter": "bilinear", "output": "image", **_warpknobs.new_params("SplineWarp")}},
     # GridWarp's `dst` and `bg` follow the mask so a saved edge into the mask keeps its slot (lane 9 step H).
     "GridWarp": {"inputs": ["image"], "optional_inputs": ["mask", "dst", "bg"],
-                 "params": {"mix": 1.0, "rows": 5, "columns": 5, "bbox": "source",
-                            "filter": "bilinear", **_warpknobs.new_params("GridWarp")}},
+                 "params": {"mix": 1.0, "rows": 5, "columns": 5, "bbox": "union",
+                            "filter": "cubic", **_warpknobs.new_params("GridWarp")}},
     "GridWarpTracker": {"inputs": ["image"], "optional_inputs": ["mask", "vectors"],
                         "params": {"drive": "tracker", "tracker_id": "", "track_indices": "0,1,2,3", "reference_frame": 1,
                                    "forward_layer": "smartvector.forward", "backward_layer": "smartvector.backward",
@@ -926,7 +926,7 @@ SPECS = {
               "flow_backend": "auto", **_retimeknobs.new_params("OFlow")}},
     "VectorToMotion": {"inputs": ["image"], "params": {"forward_layer": "smartvector.forward",
               "backward_layer": "smartvector.backward"}},
-    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask", "fgvecs", "bgvecs", "matte"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward", **_motionblurknobs.NEW}},
+    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask", "fgvecs", "bgvecs", "matte"], "params": {"shutter": 0.75, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 3, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward", **_motionblurknobs.NEW}},
     # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
     "SmartVector": {"inputs": ["image"], "optional_inputs": ["matte"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
@@ -941,7 +941,7 @@ SPECS = {
                                     "corner2_x": 100.0, "corner2_y": 0.0, "corner3_x": 100.0, "corner3_y": 100.0,
                                     "corner4_x": 0.0, "corner4_y": 100.0, "mix": 1.0, **_vectorcornerpinknobs.NEW}},
     "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte", "detail"],
-                "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "fillRegion": "Matte Alpha", "smoothness": 1.0, "LABColourSpace": 0, "stretchAmount": 0.0, "stretchDirection": 0.0, "detailSource": "Source", "detailAmount": 0.0, "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0, "center_x": 480.0, "center_y": 270.0, "channels": "rgb", "mix": 1.0}},
+                "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "fillRegion": "Source Alpha", "smoothness": 1.0, "LABColourSpace": 0, "stretchAmount": 0.0, "stretchDirection": 0.0, "detailSource": "Source", "detailAmount": 0.0, "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0, "center_x": 480.0, "center_y": 270.0, "channels": "rgb", "mix": 1.0}},
     "MarkerRemoval": {"inputs": ["image"], "params": {"enabled": 1, "mode": "bilinear", "linearsearch": 100, "ctrlMask": "rgba.alpha", "x_offset": 0, "y_offset": 0}},
     "DustBust": {"inputs": ["image"], "params": {"enable": 1, "frame_offset": 1, "edge_hardness": 0.5, "view_source": 0, "maskchannel": "none"}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.

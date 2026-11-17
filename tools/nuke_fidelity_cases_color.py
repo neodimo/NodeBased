@@ -1995,7 +1995,7 @@ def _resampling_cases():
             valid[:, 3:13, :3] = True
             return ref, valid
         return expected
-    stamp = {"plate": {"type": "Rectangle", "params": {"box_x": 0.0, "box_y": 0.0, "box_width": 8.0, "box_height": 12.0}}, "time": (1, 8), "frame": 2,
+    stamp = {"plate": {"type": "Rectangle", "params": {"softness": 0.0, "box_x": 0.0, "box_y": 0.0, "box_width": 8.0, "box_height": 12.0}}, "time": (1, 8), "frame": 2,
              "inputs": {"fgvecs": ("Constant", {"red": 1.0, "green": 0.0, "blue": 0.0, "alpha": 1.0})}}
     for name in ("Bilinear", "Lanczos4", "Lanczos6"):
         out.append(Case(id=f"kronos_resampling_{name.lower()}_half_pixel_step", nuke="Kronos", nuke_class="Kronos",

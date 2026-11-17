@@ -125,7 +125,7 @@ class LightWrapTests(unittest.TestCase):
 class DitherTests(unittest.TestCase):
     def test_mean_is_preserved_where_plain_quantising_is_not(self):
         flat = np.full((128, 128, 4), 0.3, np.float32)
-        out = kernel("Dither", flat, bits=4, seed=5)
+        out = kernel("Dither", flat, bits=4, seed=5, channels="rgb")
         self.assertAlmostEqual(float(out[..., :3].mean()), 0.3, delta=0.004)
         plain = np.round(0.3 * 15) / 15
         self.assertGreater(abs(plain - 0.3), 0.01)          # a plain 4-bit quantise is off by more

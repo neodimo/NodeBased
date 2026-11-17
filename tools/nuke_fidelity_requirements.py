@@ -241,6 +241,8 @@ def _inputs_for(kind, fx, size):
 # Starting values the probe uses in place of a kind's defaults where the defaults put the effect outside the 16 x 12 fixture. Nuke's own defaults stay
 # the defaults the `defaults` component compares; only the probe's starting point moves.
 PROBE_BASE = {
+    # Lane 9 step W1 (11/17): a new Blur starts at size 0 as Nuke's does, which blurs nothing; the probe sizes it at the older default of 8 so its filter, quality and crop show.
+    "Blur": {"radius": 8.0},
     # Lane 9 step Q (11/16): IDistort's blur scale scales the blur channel's values, so it acts only once a blur channel is named; the probe names the field's green.
     "IDistort": {"blur": "rgba.green"},
     # Lane 2 step R (11/16): the sampler's default line (0, 0) to (100, 100) lies partly off a 16 x 12 picture, where the samples clamp to its corner; a line
