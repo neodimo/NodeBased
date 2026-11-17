@@ -326,7 +326,7 @@ class GlintTests(unittest.TestCase):
         for masked in (False, True):
             g = Graph()
             g.add("plate", "Constant", dict(width=41, height=41, red=0.0, green=0.0, blue=0.0, alpha=1.0))
-            g.add("dot", "Rectangle", dict(width=41, height=41, box_x=20.0, box_y=20.0, box_width=1.0, box_height=1.0), image="plate")
+            g.add("dot", "Rectangle", dict(width=41, height=41, softness=0.0, box_x=20.0, box_y=20.0, box_width=1.0, box_height=1.0), image="plate")
             inputs = {"image": "dot"}
             if masked:
                 g.add("matte", "Constant", dict(width=41, height=41, red=1, green=1, blue=1, alpha=0.5))

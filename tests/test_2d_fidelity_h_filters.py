@@ -94,7 +94,7 @@ class CurveToolTests(unittest.TestCase):
 
     def test_max_luma_pixel_and_auto_crop(self):
         g = TimeGraph()
-        g.add("bar", "Rectangle", dict(width=N, height=N, legacy_draw_axes=1, box_x=3.0, box_y=5.0, box_width=6.0, box_height=4.0,
+        g.add("bar", "Rectangle", dict(width=N, height=N, legacy_draw_axes=1, softness=0.0, box_x=3.0, box_y=5.0, box_width=6.0, box_height=4.0,
                                        red=1.0, green=1.0, blue=1.0, alpha=1.0))
         g.add("ct", "CurveTool", dict(frame_start=1, frame_end=1, curve_type="Auto Crop"), image="bar")
         self.go(g)
@@ -315,7 +315,7 @@ class DropShadowTests(unittest.TestCase):
 
     def graph(self, operation="over", **params):
         g = Graph()
-        g.add("src", "Rectangle", dict(width=N, height=N, legacy_draw_axes=1, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
+        g.add("src", "Rectangle", dict(width=N, height=N, legacy_draw_axes=1, softness=0.0, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
                                        red=1.0, green=0.0, blue=0.0, alpha=1.0))
         constant(g, "bg", (0.5, 0.5, 0.5, 1.0))
         g.add("sh", "DropShadow", {**dict(angle=180.0, distance=4.0, shadow_size=0.0, opacity=1.0, operation=operation), **params},
@@ -337,7 +337,7 @@ class DropShadowTests(unittest.TestCase):
 
     def test_without_a_bg_the_operation_is_ignored(self):
         g = Graph()
-        g.add("src", "Rectangle", dict(width=N, height=N, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
+        g.add("src", "Rectangle", dict(width=N, height=N, softness=0.0, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
                                        red=1.0, green=0.0, blue=0.0, alpha=1.0))
         g.add("a", "DropShadow", dict(angle=0.0, distance=4.0, shadow_size=0.0, opacity=1.0, operation="over"), image="src")
         g.add("b", "DropShadow", dict(angle=0.0, distance=4.0, shadow_size=0.0, opacity=1.0, operation="plus"), image="src")
@@ -350,14 +350,14 @@ class DropShadowTests(unittest.TestCase):
                 g = self.graph("over", **params)
                 np.testing.assert_allclose(tiled(g, "sh", tile_edge=4), pixels(g, "sh"), atol=1e-6)
         mask = self.graph("over", mix=0.6)
-        mask.add("gate", "Rectangle", dict(width=N, height=N, box_x=0.0, box_y=0.0, box_width=8.0, box_height=float(N),
+        mask.add("gate", "Rectangle", dict(width=N, height=N, softness=0.0, box_x=0.0, box_y=0.0, box_width=8.0, box_height=float(N),
                                            red=1.0, green=1.0, blue=1.0, alpha=1.0))
         mask.d.execute({"op": "connect", "id": "sh", "input": "mask", "source": "gate"})
         np.testing.assert_allclose(tiled(mask, "sh", tile_edge=4), pixels(mask, "sh"), atol=1e-6)
 
     def test_an_older_dropshadow_draws_the_same_and_bypass_passes_the_input(self):
         g = Graph()
-        g.add("src", "Rectangle", dict(width=N, height=N, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
+        g.add("src", "Rectangle", dict(width=N, height=N, softness=0.0, box_x=2.0, box_y=4.0, box_width=4.0, box_height=4.0,
                                        red=1.0, green=0.0, blue=0.0, alpha=1.0))
         g.add("sh", "DropShadow", dict(angle=0.0, distance=4.0), image="src")
         before = pixels(g, "sh")
@@ -427,7 +427,7 @@ class GlowTests(unittest.TestCase):
 
     def test_crop_off_lets_the_window_grow_by_the_reach(self):
         g = Graph()
-        g.add("src", "Rectangle", dict(width=N, height=N, box_x=6.0, box_y=6.0, box_width=3.0, box_height=3.0, red=2.0, green=2.0,
+        g.add("src", "Rectangle", dict(width=N, height=N, softness=0.0, box_x=6.0, box_y=6.0, box_width=3.0, box_height=3.0, red=2.0, green=2.0,
                                        blue=2.0, alpha=1.0))
         g.add("glow", "Glow", dict(glow_threshold=0.0, glow_size=4.0, crop=0, mix=1.0), image="src")
         grown = render(g, "glow")
@@ -452,7 +452,7 @@ class GlowTests(unittest.TestCase):
 
     def test_the_width_channel_reads_a_channel_of_the_input(self):
         g = Graph()
-        g.add("src", "Rectangle", dict(width=N, height=N, box_x=7.0, box_y=7.0, box_width=2.0, box_height=2.0, red=2.0, green=2.0,
+        g.add("src", "Rectangle", dict(width=N, height=N, softness=0.0, box_x=7.0, box_y=7.0, box_width=2.0, box_height=2.0, red=2.0, green=2.0,
                                        blue=2.0, alpha=1.0))
         g.add("glow", "Glow", dict(glow_threshold=0.0, glow_size=3.0, kernel_filter="box", quality=1000.0), image="src")
         wide = pixels(g, "glow")
@@ -696,7 +696,7 @@ class KeyMixTests(unittest.TestCase):
         constant(g, "b", (0.0, 0.0, 1.0, 1.0))
         g.add("km", "Keymix", params, A="a", B="b")
         if mask:
-            g.add("m", "Rectangle", dict(width=N, height=N, box_x=0.0, box_y=0.0, box_width=8.0, box_height=float(N),
+            g.add("m", "Rectangle", dict(width=N, height=N, softness=0.0, box_x=0.0, box_y=0.0, box_width=8.0, box_height=float(N),
                                          red=0.0, green=0.0, blue=0.0, alpha=1.0))
             g.d.execute({"op": "connect", "id": "km", "input": "mask", "source": "m"})
         return g

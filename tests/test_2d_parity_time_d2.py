@@ -43,7 +43,7 @@ class TimeParityD2Tests(unittest.TestCase):
 
     def test_timeblur_samples_animated_transform_fractionally_with_conserved_energy(self):
         self.add("src", "Constant", {"width": 24, "height": 3, "alpha": 0, "red": 0, "green": 0, "blue": 0})
-        self.add("dot", "Rectangle", {"width": 24, "height": 3, "box_x": 7, "box_y": 1,
+        self.add("dot", "Rectangle", {"width": 24, "height": 3, "softness": 0.0, "box_x": 7, "box_y": 1,
                                          "box_width": 1, "box_height": 1, "red": 1, "green": 1, "blue": 1})
         self.add("move", "Transform", {"filter": "nearest"}, {"image": "dot"})
         self.add("blur", "TimeBlur", {"shutter": 1, "divisions": 10, "shutter_offset": "centred"}, {"image": "move"})
@@ -55,7 +55,7 @@ class TimeParityD2Tests(unittest.TestCase):
         self.assertAlmostEqual(float(alpha.sum()), 1.0, places=5)
 
     def test_timeecho_max_collects_current_and_two_previous_dots(self):
-        self.add("src", "Rectangle", {"width": 8, "height": 1, "box_x": 0, "box_y": 0,
+        self.add("src", "Rectangle", {"width": 8, "height": 1, "softness": 0.0, "box_x": 0, "box_y": 0,
                                         "box_width": 1, "box_height": 1, "red": 1, "green": 1, "blue": 1})
         self.add("move", "Transform", {"filter": "nearest"}, {"image": "src"})
         self.add("echo", "TimeEcho", {"frames": 3, "method": "max", "falloff": 1}, {"image": "move"})

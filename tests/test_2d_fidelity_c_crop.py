@@ -23,7 +23,7 @@ def source_pixels():
 def document(box=(4, 3, 10, 6), bypass=False, mask=None, **params):
     d = Dispatcher(empty_document())
     d.execute({"op": "create", "id": "src", "type": "Checker", "params": {"width": W, "height": H, "size": 3}})
-    d.execute({"op": "create", "id": "crop", "type": "Crop", "params": {"x": box[0], "y": box[1], "width": box[2], "height": box[3], **params}})
+    d.execute({"op": "create", "id": "crop", "type": "Crop", "params": {"x": box[0], "y": box[1], "width": box[2], "height": box[3], "intersect": 1, **params}})
     d.execute({"op": "connect", "id": "crop", "input": "image", "source": "src"})
     if mask is not None:
         d.execute({"op": "create", "id": "m", "type": "Constant", "params": {"width": W, "height": H, "red": 1, "green": 1, "blue": 1, "alpha": mask}})
@@ -42,7 +42,16 @@ def render(doc, target="crop"):
 class DefaultsTests(unittest.TestCase):
     def test_the_specs_carry_the_defaults(self):
         params = SPECS["Crop"]["params"]
-        self.assertEqual((params["crop_softness"], params["reformat"], params["intersect"], params["crop"]), (0.0, 0, 1, 1))
+        self.assertEqual((params["crop_softness"], params["reformat"], params["intersect"], params["crop"]), (0.0, 0, 0, 1))
+
+    def test_a_new_crop_lets_the_box_extend_past_the_picture_as_nukes_does(self):
+        """The guide's intersect is off by default (lane 9 step W1); the helper above turns it on to keep the older assertions."""
+        d = Dispatcher(empty_document())
+        d.execute({"op": "create", "id": "src", "type": "Checker", "params": {"width": W, "height": H, "size": 3}})
+        d.execute({"op": "create", "id": "crop", "type": "Crop", "params": {"x": -5, "y": -5, "width": 100, "height": 100}})
+        d.execute({"op": "connect", "id": "crop", "input": "image", "source": "src"})
+        d.execute({"op": "view", "id": "crop"})
+        self.assertEqual(render(d.document).data, Region(-5, -5, 100, 100))
 
     def test_default_crop_is_the_box_cut_from_the_picture(self):
         raster = render(document())

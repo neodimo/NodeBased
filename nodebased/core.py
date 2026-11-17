@@ -368,7 +368,7 @@ SPECS = {
         "highlights_curve": '{"interpolation":"smooth","points":[[0.5,0],[1,1]]}',
         "mix": 1.0, **_behaviour2d.new_params("ColorCorrect")}},
     # Blur, Sharpen and Soften take Nuke's filter shape, quality limit and "crop to format" (fidelity step E, nodebased/blurknobs.py).
-    "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 8.0, "mix": 1.0, **_blurknobs.new_params("Blur")}},
+    "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 0.0, "mix": 1.0, **_blurknobs.new_params("Blur")}},
     # Invert/Clamp/Multiply/Add/Gamma/Saturation are Nuke's Color-toolbar nodes that split a
     # single knob each out of Grade/ColorCorrect into its own scrub-friendly node. Multiply, Add
     # and Gamma deliberately reuse Grade's "multiply"/"offset" and ColorCorrect's "gamma" param
@@ -401,7 +401,7 @@ SPECS = {
     "Median": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"median_size": 3.0, "channels": "rgba", "mix": 1.0, "ignore_top_line": 0, **_filterbehaviour.new_params("Median")}},
     "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
-                "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0,
+                "params": {"sharpen_amount": 1.0, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0,
                            **_blurknobs.new_params("Sharpen")}},
     "Matrix": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"matrix_size": "3", "normalize": 0, **{f"weight{i}": (1.0 if i == 4 else 0.0) for i in range(49)}, "mix": 1.0,
@@ -424,7 +424,7 @@ SPECS = {
     # Glow's tint reuses the "red"/"green"/"blue" names Light3D and Relight already use for a
     # colour knob sharing their LIMITS, rather than inventing tint_red/tint_green/tint_blue.
     "Glow": {"inputs": ["image"], "optional_inputs": ["mask"],
-             "params": {"glow_threshold": 1.0, "glow_size": 8.0, "brightness": 1.0,
+             "params": {"glow_threshold": 0.0, "glow_size": 15.0, "brightness": 1.0,
                        "red": 1.0, "green": 1.0, "blue": 1.0, "channels": "rgb", "mix": 1.0,
                        # Step H (nodebased/glowknobs.py, blurknobs.py): saturation, the width channel, the non linear and effect
                        # only switches, and Blur's filter shape, quality limit and crop to format.
@@ -433,7 +433,7 @@ SPECS = {
     # Soften (step 3a) is Nuke's Filter-menu Soften: a Gaussian-leaning sibling of Blur's box
     # filter. Its own "soften_size" name for the same reason as the other padded filters.
     "Soften": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"soften_size": 4.0, "channels": "rgba", "mix": 1.0, **_blurknobs.new_params("Soften")}},
+               "params": {"soften_size": 1.0, "channels": "rgba", "mix": 1.0, **_blurknobs.new_params("Soften")}},
     # Exposure (step 3a) is Nuke's standalone Color-menu Exposure. Knob names follow the reference
     # guide (channels, blackpoint, gang, red/green/blue); Nuke's "mode" is `exposure_mode` here
     # because CHOICES is keyed globally by parameter name and "mode" already belongs to Tracker.
@@ -639,9 +639,9 @@ SPECS = {
                                                  "samples": 4, "center_x": 0.0, "center_y": 0.0,
                                                  "filter": "cubic", "mix": 1.0, **_transformbehaviour.new_params("Transform")}},
     # Crop's Nuke knobs (fidelity step C): crop_softness (the guide's `softness`; pixels, and apart from the 0..1 `softness` of the
-    # shapes), reformat, intersect (on here, which is what Crop always did; Nuke's default is off. Lane 9 step B left the default alone: three step C tests pin it) and crop ("black outside").
+    # shapes), reformat, intersect (off as in Nuke since lane 9 step W1; a saved Crop keeps the value it was saved with) and crop ("black outside").
     "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0,
-                                                                          "crop_softness": 0.0, "reformat": 0, "intersect": 1, "crop": 1}},
+                                                                          "crop_softness": 0.0, "reformat": 0, "intersect": 0, "crop": 1}},
     # Reformat is the lane's step 2c5 "real format model" (docs/PARITY_2D.md): unlike Transform/
     # Crop/Mirror it changes the *display* window itself, not just the data window -- see
     # `imaging.Evaluator._windowed_kernel`'s dedicated "Reformat" branch. The document-level named-
@@ -791,12 +791,12 @@ SPECS = {
     "Radial": {"inputs": [], "optional_inputs": ["image", "mask"],
                "params": {"width": 960, "height": 540,
                          "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
-                         "softness": 0.5, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
+                         "softness": 1.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
                          "mix": 1.0, **_drawbehaviour.new_params("Radial")}},
     "Rectangle": {"inputs": [], "optional_inputs": ["image", "mask"],
                   "params": {"width": 960, "height": 540,
                             "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
-                            "softness": 0.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
+                            "softness": 1.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
                             "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0,
                             "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0,
                             "mix": 1.0, **_drawbehaviour.new_params("Rectangle")}},
@@ -869,7 +869,7 @@ SPECS = {
     # machine running NodeBased, so an artist who relies on a specific typeface should confirm it
     # renders the same on every machine that will open the comp (docs/PARITY_2D.md records this).
     "Text": {"inputs": [], "optional_inputs": ["image", "mask"],
-             "params": {"width": 960, "height": 540, "message": "Text", "font": "", "font_size": 48.0,
+             "params": {"width": 960, "height": 540, "message": "", "font": "", "font_size": 100.0,
                        "box_x": 40.0, "box_y": 40.0, "box_width": 880.0, "box_height": 460.0,
                        "justify": "left", "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
                        "mix": 1.0, **_textknobs.new_params("Text")}},

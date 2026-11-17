@@ -55,7 +55,7 @@ def graph(items, *, mask=False, second=False, plate=(0.25, 0.25, 0.25), **params
                      {"op": "connect", "id": "paint", "input": "input2", "source": "second"}]
     if mask:
         commands += [{"op": "create", "id": "gate", "type": "Rectangle",
-                      "params": {"width": N, "height": N, "box_x": 0.0, "box_y": 0.0, "box_width": N / 2, "box_height": float(N),
+                      "params": {"width": N, "height": N, "softness": 0.0, "box_x": 0.0, "box_y": 0.0, "box_width": N / 2, "box_height": float(N),
                                  "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0}},
                      {"op": "connect", "id": "paint", "input": "mask", "source": "gate"}]
     for name, value in params.items():
@@ -352,7 +352,7 @@ class CloneTabTests(unittest.TestCase):
         """A plate with a vertical bar so that moving the clone source is visible."""
         d = graph([], plate=(0.0, 0.0, 0.0))
         d.execute({"op": "create", "id": "bar", "type": "Rectangle",
-                   "params": {"width": N, "height": N, "box_x": 20.0, "box_y": 4.0, "box_width": 4.0, "box_height": 24.0,
+                   "params": {"width": N, "height": N, "softness": 0.0, "box_x": 20.0, "box_y": 4.0, "box_width": 4.0, "box_height": 24.0,
                               "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0}})
         d.execute({"op": "create", "id": "merge", "type": "Merge"})
         d.execute({"op": "connect", "id": "merge", "input": "B", "source": "plate"})

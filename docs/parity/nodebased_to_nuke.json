@@ -496,7 +496,8 @@
     {"nodebased": ["shadow_softness"], "nuke": ["softness"], "kind": "renamed", "reason": "the shadow's softness (a blur size)"},
     {"nodebased": ["shadow_expand"], "nuke": ["shrink/expand"], "kind": "renamed", "reason": "the shadow's shrink or expand, in pixels"}
    ],
-   "skip_default": ["box"]
+   "skip_default": ["box", "font", "message"],
+   "default_notes": {"font": "Utopia is a font Nuke ships; NodeBased has no bundled font by that name, so an empty font name means the built-in face", "message": "the guide lists no default text (None); a new Nuke Text node has an empty message, which NodeBased now matches"}
   },
   "Rectangle": {
    "nodebased": "Rectangle",
@@ -2309,7 +2310,9 @@
     {"nodebased": ["quality"], "nuke": ["quailty"], "kind": "renamed", "reason": "the guide spells this knob `quailty`"},
     {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
     {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"}
-   ]
+   ],
+   "skip_default": ["channels"],
+   "default_notes": {"channels": "the guide's table lists channels as none; every Nuke build opens a new Sharpen on rgb (the page's own text says you can then pick the individual channels), so NodeBased keeps rgb"}
   },
   "Erode (filter)": {
    "nodebased": "ErodeFilter",
@@ -2393,7 +2396,9 @@
     {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
     {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"},
     {"nodebased": ["amount"], "nuke": ["amount"], "kind": "same"}
-   ]
+   ],
+   "skip_default": ["channels"],
+   "default_notes": {"channels": "the guide's table lists channels as none; a new Nuke Soften works on all its channels (the table's none would make the node do nothing), which rgba matches"}
   },
   "DropShadow": {
    "nodebased": "DropShadow",

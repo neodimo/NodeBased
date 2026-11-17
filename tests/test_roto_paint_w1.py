@@ -40,7 +40,7 @@ def graph(items, *, mask=False, second=False, mix=None):
     if mask:
         # Left half of the frame passes, right half is gated off.
         commands += [{"op": "create", "id": "gate", "type": "Rectangle",
-                      "params": {"width": SIZE, "height": SIZE, "box_x": 0.0, "box_y": 0.0,
+                      "params": {"width": SIZE, "height": SIZE, "softness": 0.0, "box_x": 0.0, "box_y": 0.0,
                                  "box_width": SIZE / 2, "box_height": float(SIZE),
                                  "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0}},
                      {"op": "connect", "id": "paint", "input": "mask", "source": "gate"}]
@@ -133,7 +133,7 @@ class ToolTests(unittest.TestCase):
         d.execute({"op": "batch", "commands": [
             {"op": "create", "id": "sq", "type": "Rectangle",
              "params": {"legacy_draw_axes": 1,   # y down: this test is about the clone, not the Rectangle
-                        "width": SIZE, "height": SIZE, "box_x": 4.0, "box_y": 4.0,
+                        "width": SIZE, "height": SIZE, "softness": 0.0, "box_x": 4.0, "box_y": 4.0,
                         "box_width": 12.0, "box_height": 12.0,
                         "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0}},
             {"op": "connect", "id": "sq", "input": "image", "source": "plate"},
