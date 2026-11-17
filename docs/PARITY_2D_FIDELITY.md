@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 97.2 / 100** (167 nodes scored, rank-weighted; 99.3 counting only the nodes NodeBased has).
+**Overall fidelity: 97.3 / 100** (170 nodes scored, rank-weighted; 99.3 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.1 (99.2 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.2 (99.2 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.3 (99.3 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.4 (99.4 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -34,19 +34,19 @@ Root is the one Nuke node scored against something that is not a node: the proje
 
 | Group | Rank-weighted | Plain mean | Previous formula | Nodes |
 |---|---|---|---|---|
-| Image | 97.6 | 97.2 | 98.1 | 6 |
+| Image | 98.2 | 97.9 | 98.6 | 6 |
 | Draw | 99.0 | 98.4 | 98.8 | 17 |
 | Time | 99.7 | 98.9 | 99.6 | 13 |
 | Channel | 99.8 | 99.7 | 99.8 | 5 |
 | Color | 98.2 | 95.2 | 97.8 | 34 |
 | Filter | 98.1 | 94.0 | 97.9 | 32 |
 | Keyer | 93.4 | 80.7 | 93.3 | 11 |
-| Merge | 99.8 | 99.5 | 99.7 | 12 |
+| Merge | 99.9 | 99.7 | 99.9 | 13 |
 | Transform | 98.8 | 96.1 | 98.5 | 20 |
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
-| Other | 81.5 | 45.2 | 81.5 | 12 |
+| Other | 83.7 | 53.0 | 83.7 | 14 |
 
-Behaviour checked: 118 of the 167 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 134 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
@@ -97,13 +97,13 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Read | `Read` | supported | 100.0 | 100.0 | 100 (32/32) | - | 100 | - | - | - | 100 | - | no fixture |
-| 2 | Write | `Write` | supported | 97.0 | 99.4 | 100 (27/27) | - | 96 | - | 100 | - | 86 | - | no fixture |
-| 3 | Viewer | `Viewer` | supported | 88.7 | 89.7 | 83 (20/24) | - | - | 100 | 100 | - | 82 | - | no fixture |
+| 1 | Read | `Read` | supported | 100.0 | 100.0 | 100 (32/32) | - | 100 | - | - | - | 100 | - | unmeasured |
+| 2 | Write | `Write` | supported | 97.9 | 99.5 | 100 (27/27) | - | 96 | - | 100 | 100 (1/1) | 86 | - | unmeasured |
+| 3 | Viewer | `Viewer` | supported | 92.0 | 92.6 | 83 (20/24) | - | - | 100 | 100 | 100 (1/1) | 82 | - | unmeasured |
 | 4 | Constant | `Constant` | supported | 97.6 | 97.2 | 100 (4/4) | 100 (2/2) | 75 | - | 100 | 100 (4/4) | 100 | - | unmeasured |
-| 5 | UDIM Import | - | missing | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 6 | CurveTool | `CurveTool` | supported | 100.0 | 100.0 | 100 (12/12) | - | 100 | 100 | 100 | - | 100 | - | no fixture |
-| 7 | Profile | `Profile` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | - | 100 | - | - | - | no fixture |
+| 5 | UDIM Import | - | missing | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
+| 6 | CurveTool | `CurveTool` | supported | 100.0 | 100.0 | 100 (12/12) | - | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 7 | Profile | `Profile` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | - | 100 | 100 (1/1) | - | - | unmeasured |
 
 ### Draw
 
@@ -259,12 +259,12 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 5 | Dissolve | `Dissolve` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | KeyMix | `Keymix` | supported | 100.0 | 100.0 | 100 (2/2) | - | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 7 | AddMix | `AddMix` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 8 | Blend | `Blend` | supported | 96.8 | 95.3 | 100 (2/2) | 100 (2/2) | 83 | 100 | 80 | 100 (3/3) | 100 | - | unmeasured |
-| 9 | CopyBBox | `CopyBBox` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
+| 8 | Blend | `Blend` | supported | 98.8 | 98.6 | 100 (2/2) | 100 (2/2) | 86 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
+| 9 | CopyBBox | `CopyBBox` | supported | 100.0 | 100.0 | - | - | - | - | - | 100 (1/1) | - | - | unmeasured |
 | 9 | CopyRectangle | `CopyRectangle` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
-| 10 | ContactSheet | `ContactSheet` | supported | 97.0 | 97.0 | 100 (11/11) | - | 82 | 100 | - | - | 100 | - | no fixture |
+| 10 | ContactSheet | `ContactSheet` | supported | 97.9 | 97.9 | 100 (11/11) | - | 82 | 100 | - | 100 (2/2) | 100 | - | unmeasured |
 | 11 | TimeDissolve | `TimeDissolve` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
-| 12 | ZMerge | `ZMerge` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | - | 100 | - | no fixture |
+| 12 | ZMerge | `ZMerge` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | - | 100 (3/3) | 100 | - | unmeasured |
 
 ### Transform
 
@@ -297,33 +297,33 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | ViewMetaData | `ViewMetaData` | supported | 100.0 | 100.0 | 100 (3/3) | - | - | 100 | - | - | 100 | - | no fixture |
-| 2 | ModifyMetaData | `ModifyMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | - | - | - | no fixture |
-| 3 | CopyMetaData | `CopyMetaData` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 4 | AddTimeCode | `AddTimeCode` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 5 | CompareMetaData | `CompareMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | - | - | - | no fixture |
+| 1 | ViewMetaData | `ViewMetaData` | supported | 100.0 | 100.0 | 100 (3/3) | - | - | 100 | - | 100 (1/1) | 100 | - | unmeasured |
+| 2 | ModifyMetaData | `ModifyMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
+| 3 | CopyMetaData | `CopyMetaData` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
+| 4 | AddTimeCode | `AddTimeCode` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | - | 100 (1/1) | 100 | - | unmeasured |
+| 5 | CompareMetaData | `CompareMetaData` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
 
 ### Other
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Dot | `Dot` | supported | 100.0 | 100.0 | - | - | - | 100 | - | - | - | - | no fixture |
-| 2 | NoOp | `NoOp` | supported | 100.0 | 100.0 | - | - | - | 100 | - | - | - | - | no fixture |
-| 3 | Backdrop | `Backdrop` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 4 | PostageStamp | `PostageStamp` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 5 | Group | `Group` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | - | 100 | - | no fixture |
-| 5 | Input | `Input` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 5 | Output | `Output` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 6 | BlinkScript | - | missing | 0.0 | 0.0 | 0 (0/19) | - | - | 0 | - | - | - | - | no fixture |
-| 7 | BurnIn | `BurnIn` | supported | 91.7 | 91.7 | 100 (18/18) | - | 50 | 100 | - | - | 100 | - | no fixture |
-| 8 | Link | - | missing | 0.0 | 0.0 | - | - | - | 0 | - | - | - | - | no fixture |
-| 8 | LiveGroup | - | missing | 0.0 | 0.0 | 0 (0/11) | - | - | 0 | - | - | - | - | no fixture |
-| 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | no fixture |
-| 8 | VariableGroup | - | missing | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | no fixture |
-| 10 | Precomp | `Precomp` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | - | - | - | 100 | - | no fixture |
-| 11 | Root | `time and settings` | partial | 50.7 | 51.2 | 53 (17/43) | - | 43 | - | - | - | - | - | no fixture |
-| 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | no fixture |
-| 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | no fixture |
+| 1 | Dot | `Dot` | supported | 100.0 | 100.0 | - | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
+| 2 | NoOp | `NoOp` | supported | 100.0 | 100.0 | - | - | - | 100 | - | 100 (1/1) | - | - | unmeasured |
+| 3 | Backdrop | `Backdrop` | supported | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
+| 4 | PostageStamp | `PostageStamp` | supported | 100.0 | 100.0 | - | - | - | - | - | 100 (1/1) | - | - | unmeasured |
+| 5 | Group | `Group` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | - | - | 100 | - | unmeasured |
+| 5 | Input | `Input` | supported | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
+| 5 | Output | `Output` | supported | 100.0 | 100.0 | - | - | - | - | - | 100 (1/1) | - | - | unmeasured |
+| 6 | BlinkScript | - | missing | 0.0 | 0.0 | 0 (0/19) | - | - | 0 | - | - | - | - | unmeasured |
+| 7 | BurnIn | `BurnIn` | supported | 91.7 | 91.7 | 100 (18/18) | - | 50 | 100 | - | - | 100 | - | unmeasured |
+| 8 | Link | - | missing | 0.0 | 0.0 | - | - | - | 0 | - | - | - | - | unmeasured |
+| 8 | LiveGroup | - | missing | 0.0 | 0.0 | 0 (0/11) | - | - | 0 | - | - | - | - | unmeasured |
+| 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | unmeasured |
+| 8 | VariableGroup | - | missing | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | unmeasured |
+| 10 | Precomp | `Precomp` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | - | - | - | 100 | - | unmeasured |
+| 11 | Root | `time and settings` | partial | 50.7 | 51.2 | 53 (17/43) | - | 43 | - | - | - | - | - | unmeasured |
+| 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
+| 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | unmeasured |
 
 ## Panel rows and widget types (two quarters of the layout component; 2026-11-04)
 
@@ -533,16 +533,16 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 4 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
 | 5 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
 | 6 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
-| 7 | Viewer (Image #3) | `Viewer` | 3.76 | 88.7 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 8 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 9 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 10 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 11 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 12 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 13 | Write (Image #2) | `Write` | 1.48 | 97.0 | nothing missing that the guide lists |
-| 14 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 15 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
-| 16 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 7 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 8 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 9 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 10 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 11 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
+| 12 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 13 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
+| 14 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
+| 15 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 16 | Write (Image #2) | `Write` | 1.05 | 97.9 | nothing missing that the guide lists |
 | 17 | ColorCorrect (Color #2) | `ColorCorrect` | 1.04 | 97.9 | 2 secondary knobs missing: `test`, `mix_luminance` |
 | 18 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
 | 19 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
@@ -552,11 +552,11 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 23 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
 | 24 | Retime (Time #3) | `Retime` | 0.41 | 98.8 | 1 secondary knob missing: `warp` |
 | 25 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
-| 26 | Blend (Merge #8) | `Blend` | 0.40 | 96.8 | node chrome missing: mask invert |
-| 27 | Exposure (Color #11) | `Exposure` | 0.40 | 95.7 | primary knobs missing: `colorspace` |
-| 28 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
-| 29 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
-| 30 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
+| 26 | Exposure (Color #11) | `Exposure` | 0.40 | 95.7 | primary knobs missing: `colorspace` |
+| 27 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
+| 28 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
+| 29 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
+| 30 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
 
 ## Formula cases
 
@@ -1582,6 +1582,40 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `notimeblur_floor_at_2.6` | guide | pass | within tolerance | - |
 | `notimeblur_ceil_at_2.4` | guide | pass | within tolerance | - |
 | `notimeblur_none_at_2.4` | guide | pass | within tolerance | - |
+| `dot_passes_input_unchanged` | guide | pass | within tolerance | - |
+| `noop_passes_input_unchanged` | guide | pass | within tolerance | - |
+| `viewmetadata_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `modifymetadata_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `copymetadata_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `comparemetadata_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `viewer_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `postagestamp_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `curvetool_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `profile_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `write_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `output_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `addtimecode_passes_input_unchanged` | convention | pass | within tolerance | - |
+| `zmerge_smaller_z_is_nearer` | guide | pass | within tolerance | - |
+| `zmerge_backwards_larger_z_is_nearer` | guide | pass | within tolerance | - |
+| `zmerge_alpha_blends_nearer_over_farther` | convention | pass | within tolerance | - |
+| `copybbox_keeps_the_b_stream_pixels` | guide | pass | within tolerance | - |
+| `contactsheet_one_cell_is_the_input` | convention | pass | within tolerance | - |
+| `contactsheet_left_right_column_order` | convention | pass | within tolerance | - |
+| `read_not_a_pixel_behaviour` | guide | not scored: Read reads a file from disk; the audit's fixture is an in-memory picture, so there is no file to compare (Read's decoding is checked against files by the Read test modules) | - | - |
+| `backdrop_not_a_pixel_behaviour` | guide | not scored: Backdrop is a box behind nodes on the graph with no input and no output | - | - |
+| `group_not_a_pixel_behaviour` | guide | not scored: a Group's picture is whatever the nodes inside it make; it has no behaviour of its own to state | - | - |
+| `input_not_a_pixel_behaviour` | guide | not scored: Input is a group's input socket: it has no input of its own in a case, and its picture is the group's caller's | - | - |
+| `precomp_not_a_pixel_behaviour` | guide | not scored: Precomp renders another script; a case would need a second document on disk | - | - |
+| `burnin_not_a_pixel_behaviour` | guide | not scored: BurnIn draws text in a font; the guide states no glyph shapes, so the drawn pixels cannot be written down without guessing | - | - |
+| `assert_not_a_pixel_behaviour` | guide | not scored: the guide states 'The Assert node does not alter the input image in any way', but NodeBased runs Assert's check in the graph evaluator, outside the per-node kernel the audit drives | - | - |
+| `udim_import_not_in_nodebased` | guide | not scored: NodeBased has no UDIM Import node | - | - |
+| `blinkscript_not_in_nodebased` | guide | not scored: NodeBased has no BlinkScript node | - | - |
+| `audioread_not_in_nodebased` | guide | not scored: NodeBased has no AudioRead node | - | - |
+| `link_not_in_nodebased` | guide | not scored: NodeBased has no Link node | - | - |
+| `livegroup_not_in_nodebased` | guide | not scored: NodeBased has no LiveGroup node | - | - |
+| `liveinput_not_in_nodebased` | guide | not scored: NodeBased has no LiveInput node | - | - |
+| `variablegroup_not_in_nodebased` | guide | not scored: NodeBased has no VariableGroup node | - | - |
+| `root_project_settings` | guide | not scored: Root is the project's settings (frame range, fps, formats, proxy); they live in the document, not in a node with pixels, and stay as they are this step | - | - |
 
 ## Requirements of 2026-11-02, per node
 
@@ -1645,13 +1679,10 @@ The guide's group pages list these nodes that no row of PARITY_2D.md covers, so 
 
 - UDIM Import (Image #5): the guide page lists no inputs and no knobs.
 - VectorToMotion (Time #8): the guide page lists no inputs and no knobs.
-- CopyBBox (Merge #9): the guide page lists no inputs and no knobs.
 - PlanarTracker (Transform #4): the guide page lists no inputs and no knobs.
 - Stabilize (Transform #8): the guide page lists no inputs and no knobs.
 - Backdrop (Other #3): the guide page lists no inputs and no knobs.
-- PostageStamp (Other #4): the guide page lists no inputs and no knobs.
 - Input (Other #5): the guide page lists no inputs and no knobs.
-- Output (Other #5): the guide page lists no inputs and no knobs.
 - Assert (Other #13): the guide page lists no inputs and no knobs.
 - Truelight (Color #22): n/a in PARITY_2D.md.
 - Absminus (Merge #13): n/a in PARITY_2D.md.
