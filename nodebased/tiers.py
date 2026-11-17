@@ -766,7 +766,102 @@ def input_regions(kind: str, params: dict, region: Region, arity: int, solved: d
     return rule(params, region, arity)
 
 
+# --- Size-changing kinds ------------------------------------------------------------------------
+#
+# The static size walks (`tileexec._canvas_size_for_chain`, `canvas_region`) give a filter its
+# first input's size unless they know better, and they know better for a few of NodeBased's own
+# kinds only (Reformat, TVIScale, Precomp). A kind whose picture is its first input enlarged --
+# one of NodeBased's later, or one a host application registers from outside, which these walks
+# have never heard of -- states it here instead, as data the walks, the region scheduler and the
+# tile executor all read (docs/EVALUATION_TIERS.md, "Size-changing kinds").
+
+
+@dataclass(frozen=True)
+class ScaleRule:
+    """A kind whose output is its first input enlarged by whole-number factors its knobs give.
+
+    * `factor(params) -> (sx, sy)`: whole numbers >= 1, from the node's params at the tier it
+      renders (`scale_params`'s result, so a proxy render asks with proxy params). The output is
+      `sx * width` by `sy * height` of whatever arrives, at every tier: a proxy input gives the
+      proxy of the full-size output.
+    * `support`: input pixels the kernel reads on each side beyond the ones under an output
+      pixel (0 for nearest, 1 for a bilinear or a 3x3 filter).
+    * `tiled`: the kernel gives the same pixels from a patch of its input (with `support` round
+      it) as from the whole picture, so the tile executor runs it patch by patch through
+      `region_rule`; False (the default) solves it whole on the full-frame evaluator.
+
+    The other input slots (a mask, say) are requested in the first input's space, the region the
+    first one is.
+    """
+
+    factor: object
+    support: int = 0
+    tiled: bool = False
+
+    def factors(self, params) -> tuple[int, int]:
+        sx, sy = self.factor(params)
+        if int(sx) != sx or int(sy) != sy or sx < 1 or sy < 1:
+            raise ValueError(f"a scale rule's factors are whole numbers of at least 1, not {sx!r} x {sy!r}")
+        return int(sx), int(sy)
+
+    def size(self, params, width: int, height: int) -> tuple[int, int]:
+        """The output size for a `width` x `height` first input."""
+        sx, sy = self.factors(params)
+        return int(width) * sx, int(height) * sy
+
+    def input_region(self, params, region: Region) -> Region:
+        """The first input's pixels an output `region` needs: `region` mapped back through the
+        scale, rounded outward, plus `support` on every side."""
+        if region.is_empty:
+            return region
+        sx, sy = self.factors(params)
+        x, y = region.x // sx, region.y // sy
+        right, bottom = -((-region.right) // sx), -((-region.bottom) // sy)
+        return Region(x, y, right - x, bottom - y).expand(int(self.support), int(self.support))
+
+    def output_region(self, params, region: Region) -> Region:
+        """Where the kernel's output for an input patch `region` lands in the output."""
+        sx, sy = self.factors(params)
+        return Region(region.x * sx, region.y * sy, region.width * sx, region.height * sy)
+
+    def region_rule(self, params, region, arity):
+        """The kind's `REGION_RULES` entry."""
+        return [self.input_region(params, region)] * arity
+
+
+SCALE_RULES: dict[str, ScaleRule] = {}
+
+
+def declare_scale(kind: str, rule: ScaleRule) -> None:
+    """State that `kind` enlarges its first input (`ScaleRule`): its size, its region rule (it
+    replaces any `REGION_RULES` entry the kind had) and whether its tiles are its own."""
+    if not isinstance(rule, ScaleRule):
+        raise TypeError("declare_scale takes a ScaleRule")
+    SCALE_RULES[kind] = rule
+    REGION_RULES[kind] = rule.region_rule
+
+
+def forget_scale(kind: str) -> None:
+    """Undo `declare_scale` (a host taking its kind out again); the kind's region rule goes with it."""
+    rule = SCALE_RULES.pop(kind, None)
+    if rule is not None and REGION_RULES.get(kind) == rule.region_rule:
+        del REGION_RULES[kind]
+
+
+def tiled_scale(kind: str) -> bool:
+    """True for a declared size-changing kind the tile executor renders patch by patch."""
+    rule = SCALE_RULES.get(kind)
+    return rule is not None and rule.tiled
+
+
 # --- Proxy tier ---------------------------------------------------------------------------------
+#
+# A kind named here is told the proxy tier it renders at: `scale_params` sets the named parameter
+# to the tier (1 at full resolution) on every evaluation path, so a kernel NodeBased does not know
+# (a host's) can tell a proxy render from a full one -- to run a cheaper model on a proxy, say --
+# while its pixel-unit knobs stay its own business. The value is part of the node's params, so it
+# is in every cache key the params are.
+PROXY_TIER_PARAMS: dict[str, str] = {}
 #
 # Parameters carrying pixel units, per node kind. Anything absent from this table is unitless
 # (exposure, gamma, mix, rotate, scale) and must NOT be touched by a tier change.
@@ -849,6 +944,9 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
     values keep their fractional part so sub-pixel transforms stay sub-pixel.
     """
     tier = int(tier)
+    told = PROXY_TIER_PARAMS.get(kind)
+    if told is not None:
+        params = {**params, told: tier}
     if tier == 1:
         return params
     if tier not in PROXY_TIERS:

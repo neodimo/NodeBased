@@ -120,6 +120,28 @@ The initial types are `image` and `matte`. The store must accept a new type
 without a schema break, because conditioning passes and model outputs are
 scheduled to become cache residents under the amended thesis.
 
+## Size-changing kinds
+
+The size walks (`tileexec._canvas_size_for_chain`, `TileExecutor.canvas_region`) give a filter its first
+input's size; Reformat, TVIScale and Precomp are special-cased there. Any other kind whose picture is its
+first input enlarged, NodeBased's own later or one a host application registers from outside (its kind in
+`SPECS` and the evaluator's kernel dispatch), states it as data in `nodebased/tiers.py`:
+
+- **`tiers.declare_scale(kind, tiers.ScaleRule(factor, support=0, tiled=False))`.** `factor(params)` gives
+  whole-number factors `(sx, sy)` >= 1 from the node's params at the tier it renders; the output is `sx *
+  width` by `sy * height` of whatever its first input is, so a proxy input gives the proxy of the full-size
+  output. The size walks, the Merge format check and `canvas_region` (a whole new window, like Reformat's)
+  use it; a disabled node is its input's size. The kind's `REGION_RULES` entry (clause C2) becomes the rule
+  mapping an output region back through the scale, rounded outward, plus `support` input pixels each side.
+  With `tiled` the kernel promises the same pixels from such a patch as from the whole picture, and the
+  tile executor runs it patch by patch: each tile reads only the input under it (its input clamped to the
+  input's own window), and the kernel's output is placed where the scale puts the patch. Without `tiled`
+  a graph holding it renders on the full-frame evaluator, at its own size. Named layers do not pass through
+  it on tiles. `tiers.forget_scale(kind)` takes it out again. Tested in `tests/test_declared_scale_kinds.py`.
+- **`tiers.PROXY_TIER_PARAMS[kind] = name`.** `scale_params` sets that parameter to the tier the node
+  renders at (1 at full resolution) on every evaluation path, so a kernel NodeBased does not know can tell a
+  proxy render from a full one. The value is in the node's params, so it is in every cache key they are.
+
 ## The viewer's ROI and proxy controls
 
 Two viewer controls drive the contract above (Lane 2, plan step V3). Both are saved in

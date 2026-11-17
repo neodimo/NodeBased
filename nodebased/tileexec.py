@@ -507,7 +507,7 @@ class TileExecutor:
         kind_seen = False
         for node_id in _all_ancestors(document, target):
             node = nodes[node_id]
-            if node["type"] not in SUPPORTED_TILED_KINDS:
+            if node["type"] not in SUPPORTED_TILED_KINDS and not tiers.tiled_scale(node["type"]):
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
@@ -780,7 +780,7 @@ class TileExecutor:
         """Return a buffered tile for `node_id` at `region`, populating the cache as a side effect."""
         node = document["nodes"][node_id]
         kind = node["type"]
-        if kind not in SUPPORTED_TILED_KINDS:
+        if kind not in SUPPORTED_TILED_KINDS and not tiers.tiled_scale(kind):
             self._fallback_nodes.add(kind)
             raster = self.evaluator.evaluate_raster(document, node_id, frame=frame, tier=tier)
             full, data = raster.pixels, raster.data
@@ -863,6 +863,8 @@ class TileExecutor:
                 lambda q, i: self._rotopaint_tile(document, node_id, node, q, i, frame, tier,
                                                   buffered_region, node_digests, cancel),
                 SPECS[kind], buffered_region)
+        elif tiers.tiled_scale(kind):
+            raw = _scaled_tile(kind, params, inputs, buffered_region, frame)
         else:
             raw = self._evaluate_tile_kernel(kind, params, inputs, buffered_region, frame)
         bh, bw = buffered_region.height, buffered_region.width
@@ -934,7 +936,8 @@ class TileExecutor:
             # ``Region.clamp(width, height)`` assumes an origin of (0, 0).  Tile requests are
             # permitted anywhere in a data window (including EXR overscan at negative coords),
             # so clamp against the explicit window instead of silently rebasing the request.
-            if kind == "CopyBBox":
+            if kind == "CopyBBox" or kind in tiers.SCALE_RULES:
+                # (a size-changing kind's input is on a canvas of its own, not the output's)
                 input_bounds = self.canvas_region(document, source_id, frame, tier)
                 clamp_bounds = tiers.Region(input_bounds.x, input_bounds.y,
                                             input_bounds.width, input_bounds.height)
@@ -1776,6 +1779,8 @@ def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
     }
     if disabled:
         pass
+    elif kind in tiers.SCALE_RULES:
+        layers = {}         # a size-changing kind's picture is its kernel's alone (its layers are in the input's space)
     elif kind == "Remove":
         from .smallnodes import remove_keeps, remove_names
         names = remove_names(params)
@@ -1934,6 +1939,28 @@ def _shuffle_tile(params, inputs, region, frame):
     return _run_full_kernel_on_array("Shuffle", params, [first, second], frame)
 
 
+def _scaled_tile(kind, params, inputs, region, frame):
+    """One tile of a declared size-changing kind (`tiers.ScaleRule` with `tiled`): the node's own kernel on the
+    patch of its input the region rule asked for (`_gather_inputs`), its output placed where the scale puts that
+    patch and cut to `region`. The other inputs are aligned to the first one's patch, as the evaluator aligns
+    them to its data window."""
+    from .raster import Raster
+    source = inputs[0] if inputs else None
+    if source is None:
+        return np.zeros((region.height, region.width, 4), np.float32)
+    patch = tiers.Region(source.region.x, source.region.y, source.region.width, source.region.height)
+    rasters = [None if artifact is None else
+               Raster(_align_array_to_region(artifact.pixels, artifact.region, patch), patch, patch)
+               for artifact in inputs]
+    result = Evaluator._windowed_kernel(kind, params, rasters, frame)
+    pixels = np.asarray(getattr(result, "pixels", result), dtype=np.float32)
+    placed = tiers.SCALE_RULES[kind].output_region(params, patch)
+    if pixels.shape[:2] != (placed.height, placed.width):
+        raise ValueError(f"{kind}: its kernel gave {pixels.shape[1]}x{pixels.shape[0]} for a "
+                         f"{patch.width}x{patch.height} patch; its scale rule says {placed.width}x{placed.height}")
+    return _align_array_to_region(pixels, placed, region)
+
+
 def _run_full_kernel_on_array(kind, params, inputs, frame):
     """Invoke the existing full-frame kernel as if it were on a full image, returning the array.
 
@@ -2042,6 +2069,15 @@ def _canvas_size_for_chain(document, target, frame, tier):
             upstream_w, upstream_h = _canvas_size_for_chain(document, upstream_id, frame, tier)
             factor = 2.0 ** int(node["params"].get("power", 0)) if node["params"].get("legacy_scale", 0) else 2.0
             return max(1, int(round(upstream_w * factor))), max(1, int(round(upstream_h * factor)))
+        scale = tiers.SCALE_RULES.get(node["type"])
+        if scale is not None and not node["disabled"]:
+            # A declared size-changing kind (tiers.ScaleRule): its first input's size, enlarged.
+            slots = list(SPECS[node["type"]]["inputs"])
+            upstream_id = node["inputs"].get(slots[0]) if slots else None
+            if upstream_id is None:
+                raise _no_source_error(document, cursor, f"{node['type']}: connect an image")
+            upstream_w, upstream_h = _canvas_size_for_chain(document, upstream_id, frame, tier)[:2]
+            return scale.size(tiers.scale_params(node["type"], node["params"], tier), upstream_w, upstream_h)
         # Pick the next upstream node through the relevant branch.
         if node["disabled"] and not tile_bypass_self_resolves(node["type"]):
             cursor = _bypass_source(node)
@@ -2109,6 +2145,9 @@ def _first_generator(document, target, frame=1):
         last = cursor
         node = nodes[cursor]
         if is_tile_source_kind(node["type"]) or node["type"] in ("Reformat", "Roto") or node["type"] in DRAW_KINDS:
+            return cursor
+        if node["type"] in tiers.SCALE_RULES and not node["disabled"]:
+            # Like Reformat: a declared size-changing kind states a new window, its whole output.
             return cursor
         if node["disabled"]:
             # The branch that is actually evaluated: a bypassed Merge never looks at A.
