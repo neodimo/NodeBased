@@ -15,7 +15,7 @@ from unittest import mock
 import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtWidgets import QMessageBox, QToolButton, QDoubleSpinBox
+from PySide6.QtWidgets import QLabel, QMessageBox, QToolButton, QDoubleSpinBox  # noqa: F401
 
 from nodebased import core, knobs
 from nodebased.core import (Dispatcher, SCHEMA_VERSION, SPECS, SPLITTABLE, demo_document, load_document, atomic_save,
@@ -305,17 +305,18 @@ class SplitPanelTests(unittest.TestCase):
             APP.processEvents()
             self.assertEqual(self.param(), [0.0, 2.5, 0.0, 0.0])
 
-    def test_collapsing_different_entries_asks_and_keeps_the_first(self):
+    def test_closing_different_entries_keeps_them_and_folds_the_fields(self):
+        # Nuke's channel selector: "click the channel selector button again to close and save your settings" (17.0 User
+        # Guide, Using the Color Controls). Lane 10 (11/16) replaced the old ask-and-keep-the-first collapse.
         with split_registered():
             self.window.command({"op": "set", "id": "g", "param": "exposure", "value": [2.0, 3.0, 4.0, 1.0]})
-            panel = self.panel()
-            with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as ask:
-                panel = self.click(panel)
-                ask.assert_called_once()
-            self.assertEqual(self.param(), [2.0, 3.0, 4.0, 1.0])                   # declined: nothing changed
-            with mock.patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
-                self.click(panel)
-            self.assertEqual(self.param(), 2.0)
+            panel = self.click(self.panel())
+            self.assertEqual(self.param(), [2.0, 3.0, 4.0, 1.0])
+            self.assertIsNotNone(panel.findChild(QLabel, "exposure-split-summary"))
+            self.assertIsNone(panel.findChild(QDoubleSpinBox, "exposure-g-field"))
+            panel = self.click(panel)                                   # open again: the fields, with the kept values
+            self.assertEqual(panel.findChild(QDoubleSpinBox, "exposure-g-field").value(), 3.0)
+            self.assertEqual(self.param(), [2.0, 3.0, 4.0, 1.0])
 
     def test_an_animated_knob_cannot_be_split_and_says_why(self):
         with split_registered():

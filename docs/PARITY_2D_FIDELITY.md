@@ -52,14 +52,14 @@ Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**25 of 26 documented knob-widget behaviours work as Nuke's do** (10 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**26 of 26 documented knob-widget behaviours work as Nuke's do** (10 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
 | number | 8 / 8 | - | `typed_outside_slider_range` |
 | color | 7 / 7 | - | - |
 | animation | 6 / 6 | - | `copy_paste`, `set_to_default` |
-| split | 2 / 3 | `close_keeps_values` | `collapsed_display` |
+| split | 3 / 3 | - | `collapsed_display` |
 | node tab | 2 / 2 | - | - |
 | enumeration | 0 / 0 | - | `pick` |
 | checkbox | 0 / 0 | - | `toggle` |

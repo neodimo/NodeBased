@@ -73,8 +73,9 @@ class Bench:
 
     def child(self, name, cls=None):
         from PySide6.QtWidgets import QWidget
-        found = [w for w in self.window.properties_dock.findChildren(cls or QWidget, name)]
-        return found[0] if found else None
+        found = [w for w in self.window.properties_dock.findChildren(cls or QWidget, name)
+                 if w.window() is self.window and not w.isHidden()]   # a rebuilt panel's old widgets wait for deletion
+        return found[-1] if found else None
 
     def field(self, param):
         from PySide6.QtWidgets import QAbstractSpinBox
@@ -561,17 +562,17 @@ def _split_edit(bench):
 def _split_close(bench):
     from PySide6.QtTest import QTest
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QMessageBox
+    from PySide6.QtWidgets import QAbstractSpinBox, QLabel
     key = bench.node("Grade", {"multiply": [1.0, 2.0, 1.0, 1.0]})
-    original = QMessageBox.question
-    QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
-    try:
-        QTest.mouseClick(bench.child("multiply-split"), Qt.MouseButton.LeftButton)
-        bench.settle()
-    finally:
-        QMessageBox.question = original
-    value = bench.params(key)["multiply"]
-    return value == [1.0, 2.0, 1.0, 1.0], f"after closing the channel fields the knob stores {value!r}"
+    bench.child("multiply-split").click()
+    bench.settle()
+    closed = bench.params(key)["multiply"]
+    folded = bench.child("multiply-split-summary", QLabel) is not None and bench.child("multiply-g-field", QAbstractSpinBox) is None
+    bench.child("multiply-split").click()
+    bench.settle()
+    reopened = bench.child("multiply-g-field", QAbstractSpinBox)
+    ok = closed == [1.0, 2.0, 1.0, 1.0] and folded and reopened is not None and reopened.value() == 2.0
+    return ok, f"after closing the knob stores {closed!r}, fields folded {folded}; reopened g field shows {reopened.value() if reopened else None}"
 
 
 # -- node tab --------------------------------------------------------------------------------------------------------------

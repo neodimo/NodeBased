@@ -21,7 +21,6 @@ import nuke_panel_interactions as interactions  # noqa: E402
 from nodebased.app import evaluate_field_formula  # noqa: E402
 
 KNOWN_GAPS = {
-    "split.close_keeps_values": "closing differing channels keeps only the first value",
 }
 
 

@@ -43,10 +43,14 @@ Other fixes in the same step:
   click on the swatch turns it off. A plain click in the viewer still does what it always did. The "Pick" button beside
   the swatch opens the colour picker (wheel, RGB, HSV and TMI sliders), which the swatch used to open.
 - A colour swatch dragged onto another colour swatch copies the colour (one undo step).
+- Closing a split knob's channel fields keeps every channel's value, as the guide says ("click the channel selector
+  button again to close and save your settings"). Channels that hold different values fold into one line that lists
+  them; clicking the button again shows the fields. Equal values still close to one value. Before, closing asked and then
+  kept only the first channel.
 
 ## Open gaps
 
-- Closing a split knob whose channels differ keeps only the first value (after asking); the guide says closing the
-  channel selector keeps the per-channel values.
+- Every documented behaviour now passes. What the folded line of a split knob shows is NodeBased's own choice: the guide
+  does not say what Nuke displays there.
 - Enumeration, check box, channel and layer pickers, XY, file, and the mask/mix rows have no interaction rule on the
   User Guide pages read, so they are listed as undocumented.

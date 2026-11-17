@@ -14952,6 +14952,25 @@ class Window(QMainWindow):
                     split_toggle.setEnabled(split_now or not animated_now)
                     split_toggle.clicked.connect(
                         lambda checked=False, k=key, p=param, n=len(split_names), w=split_toggle: self.toggle_split(k, p, n, w))
+                    if split_now and (key, param) in getattr(self, "split_folded", ()):
+                        # Closed with different values per channel: the values stay, the fields fold into one line.
+                        split_toggle.setChecked(False)
+                        split_toggle.setText(str(len(split_names)))
+                        split_toggle.setToolTip("The channels hold different values. Click to show one field per channel.")
+                        summary = QLabel("  ".join(f"{channel} {float(entry):g}" for channel, entry in zip(split_names, value)))
+                        summary.setObjectName(f"{param}-split-summary")
+                        summary.setToolTip("Per-channel values, kept while the fields are closed")
+                        split_row = QWidget()
+                        split_row.setObjectName(f"{param}-split-row")
+                        split_layout = QHBoxLayout(split_row)
+                        split_layout.setContentsMargins(0, 0, 0, 0)
+                        split_layout.setSpacing(4)
+                        split_layout.addWidget(summary, 1)
+                        split_layout.addWidget(split_toggle, 0, Qt.AlignmentFlag.AlignTop)
+                        for box in companion_boxes(group):
+                            split_layout.addWidget(box, 0, Qt.AlignmentFlag.AlignTop)
+                        form.addRow(group.label, split_row)
+                        continue
                     if split_now:
                         units = []
                         for index, channel in enumerate(split_names):
@@ -18452,14 +18471,23 @@ class Window(QMainWindow):
 
     def toggle_split(self, key, param, n, button):
         """The split button of a per-channel knob: one value becomes n equal entries, or the entries become one value. One command,
-        so one undo step. Entries that differ collapse to the first one, after asking."""
+        so one undo step. Closing channels that hold different values keeps every value and only folds the fields away,
+        as Nuke's channel selector does (17.0 User Guide, Using the Color Controls: "click the channel selector button again
+        to close and save your settings"); clicking a folded knob's button opens its fields again."""
         value = self.graph_nodes()[key]["params"][param]
+        folded = getattr(self, "split_folded", None)
+        if folded is None:
+            folded = self.split_folded = set()
         if isinstance(value, list):
-            if len(set(value)) > 1 and QMessageBox.question(
-                    self, "Collapse to one value",
-                    f"The channels hold different values. Keep only the first ({value[0]:g}) for all of them?"
-            ) != QMessageBox.StandardButton.Yes:
-                button.setChecked(True)
+            # Folding changes no data, so no command: rebuild this node's panel (or the pinned stack) to show it.
+            rebuild = (self.rebuild_properties_dock if self.pinned_panels else (lambda k=key: self.inspect(k)))
+            if (key, param) in folded:
+                folded.discard((key, param))
+                QTimer.singleShot(0, rebuild)
+                return
+            if len(set(value)) > 1:
+                folded.add((key, param))
+                QTimer.singleShot(0, rebuild)
                 return
             new = float(value[0])
         else:
