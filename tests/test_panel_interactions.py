@@ -21,9 +21,6 @@ import nuke_panel_interactions as interactions  # noqa: E402
 from nodebased.app import evaluate_field_formula  # noqa: E402
 
 KNOWN_GAPS = {
-    "color.swatch_eyedropper": "the swatch opens the colour picker; Nuke's swatch turns on the eye dropper",
-    "color.ctrl_click_sample": "not probed yet: the eye dropper samples on a plain click, Nuke uses Ctrl/Cmd+click",
-    "color.region_average": "not probed yet: no region-average sampling",
     "split.close_keeps_values": "closing differing channels keeps only the first value",
 }
 

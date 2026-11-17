@@ -2248,6 +2248,8 @@ class Viewer(PanZoomView):
         self.survey_picking = None   # the CameraSolve3D node whose Survey a click adds a pick to
         self.zdefocus_picking = None
         self.color_sampling = None     # a colour picker's eyedropper: called with the linear pixel clicked
+        self.knob_sampling = None      # a colour knob's eye dropper, armed from its swatch: ((node, params), callback)
+        self.knob_sample_region = None  # scene point where a Ctrl+Shift region sample started
         self.focus_picking = None   # the Camera3D node whose focus distance a click sets
         # A/B compare. The wipe geometry is display state only (not in the document): the split
         # is a fraction of the format rectangle plus an angle, see compare.py. `wipe_pixmap` is
@@ -2440,6 +2442,24 @@ class Viewer(PanZoomView):
             return
         self.fit()
         self._initial_fit_pending = False
+
+    def linear_region_average(self, a, b):
+        """The mean linear RGBA of the shown frame's pixels between two scene points (inclusive), or None off the image."""
+        frame = self.window._float_frame_on_demand()
+        if frame is None or self.last_frame_size is None or not hasattr(frame, "shape"):
+            return None
+        scale = max(float(self.last_scale), 1.0)
+        region = self.last_render_region
+        origin_x, origin_y = (0.0, 0.0) if region is None else (region.x * scale, region.y * scale)
+        xs = sorted(math.floor((p.x() - origin_x) / scale) for p in (a, b))
+        ys = sorted(math.floor((p.y() - origin_y) / scale) for p in (a, b))
+        x0, x1 = max(0, xs[0]), min(frame.shape[1] - 1, xs[1])
+        y0, y1 = max(0, ys[0]), min(frame.shape[0] - 1, ys[1])
+        if x0 > x1 or y0 > y1:
+            return None
+        block = np.asarray(frame[y0:y1 + 1, x0:x1 + 1], dtype=np.float64)
+        values = [float(v) for v in block.reshape(-1, block.shape[-1]).mean(axis=0)]
+        return (values + [1.0] * 4)[:4]
 
     def linear_pixel_at(self, scene_pos):
         """The shown frame's linear float RGBA under a scene point, or None off the image. This is the
@@ -5198,6 +5218,13 @@ class Viewer(PanZoomView):
 
     def hit_release(self, scene_pos, button, modifiers, pressure=1.0):
         """A release at a scene point. True when it ended or finished a drag."""
+        if button == Qt.MouseButton.LeftButton and self.knob_sample_region is not None:
+            start, self.knob_sample_region = self.knob_sample_region, None
+            value = self.linear_region_average(start, scene_pos)
+            if value is not None and self.knob_sampling is not None:
+                self.knob_sampling[1](value)
+            self.viewport().update()
+            return True
         self._cancel_drag_preview()
         if button == Qt.MouseButton.LeftButton:
             graph = getattr(self.window, "graph", None)
@@ -6203,6 +6230,18 @@ class Viewer(PanZoomView):
     def hit_press(self, scene_pos, button, modifiers, pressure=1.0):
         """A press at a scene point. True when a handle, pick or drag took it; the Viewer and the direct
         picture both call this, so a click lands on the same handle on either surface."""
+        if (button == Qt.MouseButton.LeftButton and self.knob_sampling is not None
+                and modifiers & Qt.KeyboardModifier.ControlModifier):
+            # A colour knob's eye dropper, armed from its swatch (Nuke 17.0 User Guide, Using the Color Controls):
+            # Ctrl+click samples one pixel, Ctrl+Shift+drag the average of a region. It stays on until the swatch is
+            # clicked again, so the artist can sample again; a plain click still does what it always does.
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                self.knob_sample_region = scene_pos
+                return True
+            value = self.linear_pixel_at(scene_pos)
+            if value is not None:
+                self.knob_sampling[1](value)
+            return True
         if button == Qt.MouseButton.LeftButton and self.color_sampling is not None:
             value = self.linear_pixel_at(scene_pos)
             if value is None and getattr(self.window, "_display_only_key", None) is not None:
@@ -6599,6 +6638,8 @@ class Viewer(PanZoomView):
 
     def hit_move(self, scene_pos, modifiers, pressure=1.0):
         """A move to a scene point while a handle is held. True when a drag took it."""
+        if self.knob_sample_region is not None:
+            return True
         if self.paint_size_drag is not None:
             drag = self.paint_size_drag
             delta = scene_pos.x() - drag["start"].x()
@@ -14841,7 +14882,40 @@ class Window(QMainWindow):
                                 self.command({"op": "batch", "commands": commands})
                         self.open_color_picker(current, f"{self.graph_nodes()[k]['name']} · {label_text}", accept)
 
-                    swatch.clicked.connect(pick_color)
+                    picker_button = QToolButton()
+                    picker_button.setObjectName("color-picker-button")
+                    picker_button.setText("Pick")
+                    picker_button.setToolTip("Open the colour picker: wheel and RGB, HSV and TMI sliders")
+                    picker_button.clicked.connect(lambda _checked=False, pick=pick_color: pick())
+                    target = (key, tuple(group.params))
+                    armed = (self.viewer.knob_sampling or (None,))[0] == target
+                    swatch.setProperty("sampling", armed)
+                    swatch.setToolTip("Eye dropper on: Ctrl+click the viewer to sample a pixel, Ctrl+Shift+drag to average "
+                                      "a region. Click the swatch again to turn it off." if armed else
+                                      "Click to turn on the eye dropper (then Ctrl+click the viewer to sample, Ctrl+Shift+drag "
+                                      "for a region average). Drag onto another colour swatch to copy the colour.")
+
+                    def show_armed(on, s=swatch):
+                        s.setProperty("sampling", on)
+                        sheet = s.styleSheet()
+                        border_off, border_on = "border: 1px solid #777;", f"border: 2px solid {TOKENS['acc']};"
+                        s.setStyleSheet(sheet.replace(border_off, border_on) if on else sheet.replace(border_on, border_off))
+
+                    def toggle_eyedropper(t=target):
+                        if (self.viewer.knob_sampling or (None,))[0] == t:
+                            self.viewer.knob_sampling = None
+                            self.viewer.unsetCursor()
+                        else:
+                            def sampled(rgba, k=t[0], params=t[1]):
+                                knob = self.graph_nodes()[k]["params"]
+                                commands = [{"op": "set", "id": k, "param": p, "value": float(v)}
+                                            for p, v in zip(params, rgba) if float(v) != float(knob[p])]
+                                if commands:
+                                    self.defer_command({"op": "batch", "commands": commands})
+                            self.viewer.knob_sampling = (t, sampled)
+                            self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+                        show_armed(self.viewer.knob_sampling is not None)
+                    swatch.clicked.connect(toggle_eyedropper)
                     swatch.color_getter = (lambda k=key, params=group.params:
                                            [float(self.graph_nodes()[k]["params"][p]) for p in params])
 
@@ -14854,7 +14928,8 @@ class Window(QMainWindow):
                             self.defer_command({"op": "batch", "commands": commands})
                     swatch.colorDropped.connect(drop_color)
                     set_swatch()
-                    form.addRow(group.label, WrappingRow([swatch, *color_fields], spacing=3))
+                    show_armed(armed)
+                    form.addRow(group.label, WrappingRow([swatch, picker_button, *color_fields], spacing=3))
                     continue
                 param = group.params[0]
                 value = node["params"][param]

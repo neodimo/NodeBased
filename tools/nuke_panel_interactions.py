@@ -261,10 +261,10 @@ def _open_swatch(bench):
     from PySide6.QtTest import QTest
     from PySide6.QtCore import Qt
     key = bench.node("Constant")
-    swatch = bench.child("color-swatch")
-    if swatch is None:
+    button = bench.child("color-picker-button") or bench.child("color-swatch")
+    if button is None:
         return key, None
-    QTest.mouseClick(swatch, Qt.MouseButton.LeftButton)
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton)
     bench.settle()
     from nodebased.colorpicker import LinearColorPicker
     pickers = [w for w in bench.window.findChildren(LinearColorPicker) if w.isVisible()]
@@ -279,13 +279,98 @@ def _close_pickers(bench):
     bench.settle()
 
 
+def _click_swatch(bench):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    QTest.mouseClick(bench.child("color-swatch"), Qt.MouseButton.LeftButton)
+    bench.settle()
+
+
+def _armed(bench):
+    return getattr(bench.window.viewer, "knob_sampling", None) is not None
+
+
 @probe("color.swatch_eyedropper")
 def _swatch_eyedropper(bench):
-    _key, picker = _open_swatch(bench)
-    sampling = getattr(bench.window.viewer, "color_sampling", None) is not None
+    from nodebased.colorpicker import LinearColorPicker
+    bench.node("Constant")
+    _click_swatch(bench)
+    on = _armed(bench)
+    picker = any(w.isVisible() for w in bench.window.findChildren(LinearColorPicker))
+    _click_swatch(bench)
+    off = not _armed(bench)
     _close_pickers(bench)
-    return sampling, ("a swatch click turned the eye dropper on" if sampling
-                      else "a swatch click opens the colour picker; the eye dropper is a button inside it")
+    ok = on and off and not picker
+    return ok, f"swatch click: eye dropper on {on}, picker opened {picker}; second click turns it off {off}"
+
+
+def _ramp_and_target(bench):
+    """View a 64 x 32 horizontal 0 to 1 ramp, open a Constant's panel and arm its eye dropper. Returns the Constant and
+    the ramp's float frame as the viewer holds it."""
+    import time
+    import numpy as np
+    target = bench.node("Constant")
+    ramp = bench.node("Ramp", {"width": 64, "height": 32, "p1_x": 63.0})
+    bench.window.command({"op": "view", "id": ramp})
+    frame = None
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        bench.settle(1)
+        shown = bench.window._float_frame_on_demand()
+        if shown is not None and getattr(shown, "shape", (0, 0))[:2] == (32, 64):
+            frame = np.array(shown, copy=True)
+            break
+        time.sleep(0.01)
+    bench.show(target)
+    _click_swatch(bench)
+    return target, frame
+
+
+def _viewer_press(bench, x, y, modifiers, release_at=None):
+    from PySide6.QtCore import QPointF, Qt
+    viewer = bench.window.viewer
+    scale = max(float(viewer.last_scale or 1.0), 1.0)
+    viewer.hit_press(QPointF(x * scale, y * scale), Qt.MouseButton.LeftButton, modifiers)
+    if release_at is not None:
+        end = QPointF(release_at[0] * scale, release_at[1] * scale)
+        viewer.hit_move(end, modifiers)
+        viewer.hit_release(end, Qt.MouseButton.LeftButton, modifiers)
+    bench.settle()
+
+
+@probe("color.ctrl_click_sample")
+def _ctrl_click(bench):
+    from PySide6.QtCore import Qt
+    target, frame = _ramp_and_target(bench)
+    if frame is None:
+        return False, "the ramp never reached the viewer"
+    if not _armed(bench):
+        return False, "the swatch did not arm an eye dropper"
+    before = float(bench.params(target)["red"])
+    _viewer_press(bench, 32.5, 10.5, Qt.KeyboardModifier.NoModifier)
+    plain = float(bench.params(target)["red"])
+    _viewer_press(bench, 32.5, 10.5, Qt.KeyboardModifier.ControlModifier)
+    sampled = float(bench.params(target)["red"])
+    expected = float(frame[10, 32, 0])
+    bench.window.viewer.knob_sampling = None
+    ok = plain == before and expected is not None and abs(sampled - expected) < 1e-6
+    return ok, f"plain click left red at {plain:g}; Ctrl+click sampled {sampled:g} (pixel {expected})"
+
+
+@probe("color.region_average")
+def _region(bench):
+    from PySide6.QtCore import Qt
+    target, frame = _ramp_and_target(bench)
+    if frame is None:
+        return False, "the ramp never reached the viewer"
+    mods = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+    expected = float(frame[:, :, 0].mean())
+    _viewer_press(bench, 0.5, 0.5, mods, release_at=(63.5, 31.5))
+    sampled = float(bench.params(target)["red"])
+    bench.window.viewer.knob_sampling = None
+    # A single pixel of the ramp would read anywhere from 0 to 1; the region's mean is about 0.5.
+    ok = expected is not None and abs(sampled - expected) < 1e-3
+    return ok, f"Ctrl+Shift+drag over the whole ramp gave red {sampled:.4f} (frame mean {expected})"
 
 
 @probe("color.picker_button")

@@ -33,15 +33,19 @@ picks a colour, keys or resets a knob.
   is committed once, on release, as one undo step.
 - `=` still opens the expression editor below the knob, which then marks the knob as expression-driven.
 
-Other fixes in the same step: the knob's animation menu "Clear animation" now keeps the value the knob had on the current
-frame (Nuke's No animation), the panel menu gained "Set key on all knobs" (one undo step), and a colour swatch dragged
-onto another colour swatch copies the colour.
+Other fixes in the same step:
+
+- The knob's animation menu "Clear animation" now keeps the value the knob had on the current frame (Nuke's No
+  animation), in one undo step.
+- The panel menu gained "Set key on all knobs" (one undo step).
+- A colour knob's swatch now works as Nuke's: a click turns on the eye dropper (the swatch gets an accent border), Ctrl+click
+  in the viewer samples one linear pixel into the knob, Ctrl+Shift+drag samples the average of a region, and a second
+  click on the swatch turns it off. A plain click in the viewer still does what it always did. The "Pick" button beside
+  the swatch opens the colour picker (wheel, RGB, HSV and TMI sliders), which the swatch used to open.
+- A colour swatch dragged onto another colour swatch copies the colour (one undo step).
 
 ## Open gaps
 
-- A colour swatch click opens the picker; in Nuke it turns on the eye dropper, which then samples on Ctrl/Cmd+click and
-  averages a region on Ctrl/Cmd+Shift+drag. NodeBased's eye dropper is a button in the picker and samples on a plain
-  click, one pixel only.
 - Closing a split knob whose channels differ keeps only the first value (after asking); the guide says closing the
   channel selector keeps the per-channel values.
 - Enumeration, check box, channel and layer pickers, XY, file, and the mask/mix rows have no interaction rule on the

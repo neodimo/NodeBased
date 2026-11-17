@@ -91,13 +91,16 @@ class PickerInWindowTests(unittest.TestCase):
     def constant_key(self):
         return next(k for k, n in self.window.graph_nodes().items() if n["type"] == "Constant")
 
-    def test_colour_knob_swatch_opens_the_linear_picker_and_commits_floats(self):
+    def test_colour_knob_picker_button_opens_the_linear_picker_and_commits_floats(self):
+        # As in Nuke, the swatch arms the eye dropper and the button beside it opens the picker (lane 10, 11/16;
+        # tests/test_panel_interactions.py covers the swatch).
+        from PySide6.QtWidgets import QToolButton
         w = self.window
         key = self.constant_key()
         w.inspect(key)
         APP.processEvents()
-        swatch = w.properties.widget().findChild(QFrame, "color-swatch")
-        QTest.mouseClick(swatch, Qt.MouseButton.LeftButton)
+        button = w.properties.widget().findChild(QToolButton, "color-picker-button")
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
         picker = w.color_picker
         self.assertIsInstance(picker, LinearColorPicker)
         params = w.graph_nodes()[key]["params"]
