@@ -20,7 +20,9 @@ VISIBLE = {'Grade': dict(exposure=2.0), 'ColorCorrect': dict(saturation=0.0), 'B
            'EdgeDetect': dict(edge_type='Sobel'), 'Emboss': dict(width=2.0),
            'BumpBoss': dict(light_angle=30.0), 'ErodeFilter': dict(filter_size=2.0),
            'Transform': dict(translate_x=17.0), 'Premult': {}, 'Unpremult': {}, 'Shuffle': dict(red_from='A'),
-           'Crop': dict(x=8, y=8, width=32, height=32)}
+           'Crop': dict(x=8, y=8, width=32, height=32),
+           # DirBlur opens on Nuke's zoom type since lane 9 step W1; the linear type is the one the tile path runs.
+           'DirBlur': dict(blur_type='linear', length=5.0)}
 
 
 def evaluator_pixels(document, target):

@@ -197,7 +197,8 @@ class BilateralTests(unittest.TestCase):
         self.assertIn("guide", SPECS["Bilateral"]["optional_inputs"])
 
     def test_the_main_tab_lists_the_knobs_in_nukes_order(self):
-        self.assertEqual(labels("Bilateral")[:5], ["Guide channels", "Size", "Positional sigma", "Colour sigma", "Filter"])
+        # The guide's table lists Channels before Guide Channels (lane 9 step W1 put Channels first on ten filter panels).
+        self.assertEqual(labels("Bilateral")[:6], ["Channels", "Guide channels", "Size", "Positional sigma", "Colour sigma", "Filter"])
         kept, total = layout_order("Bilateral")[0]
         self.assertEqual(kept, total)
         self.assertEqual(layout_order("Bilateral")[2], [])

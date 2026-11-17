@@ -121,6 +121,8 @@ class Track3DNodeTests(unittest.TestCase):
         dispatch.execute({"op": "set", "id": "rec", "param": "image_height", "value": 48})
         dispatch.execute({"op": "set", "id": "plate", "param": "width", "value": 64})
         dispatch.execute({"op": "set", "id": "plate", "param": "height", "value": 48})
+        # Bilinear's one-pixel margin is what the shape check assumes; a new Tracker opens on Nuke's cubic (lane 9 step W1).
+        dispatch.execute({"op": "set", "id": "tracker", "param": "filter", "value": "bilinear"})
         evaluator = Evaluator()
         result = evaluator.evaluate_raster(dispatch.document, "tracker", frame=2, tier=1)
         source = evaluator.evaluate_raster(dispatch.document, "plate", frame=2, tier=1)

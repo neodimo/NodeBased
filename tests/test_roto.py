@@ -824,6 +824,8 @@ class RenderTests(unittest.TestCase):
             {"op": "create", "id": "c", "type": "Constant"},
             *sets("c", width=64, height=64),
             {"op": "create", "id": "t", "type": "Tracker"},
+            # Bilinear, whose one-pixel margin the window checks below assume; a new Tracker opens on Nuke's cubic (lane 9 step W1).
+            {"op": "set", "id": "t", "param": "filter", "value": "bilinear"},
             {"op": "connect", "id": "t", "input": "image", "source": "c"},
             {"op": "set_tracks", "id": "t", "tracks": [
                 track("a", keyed(10.0, [(1, 10.0), (2, 20.0)]),
