@@ -49,11 +49,44 @@ Other fixes in the same step:
   them; clicking the button again shows the fields. Equal values still close to one value. Before, closing asked and then
   kept only the first channel.
 
+## Channel pickers (lane 10, step T2, 2026-11-17)
+
+Source: Calling Channels (Nuke 17.0 User Guide),
+<https://learn.foundry.com/nuke/17.0/content/comp_environment/channels/calling_channels.html>.
+
+- **Channel set** (a node's `channels` knob, and Merge's A channels, B channels and output, a Draw node's output): a
+  layer menu (rgb, rgba, alpha, all, none, or a typed layer name) followed by one check box per channel of the chosen
+  layer, as the guide says ("The layer's channels appear with check boxes. Deselect those channels which you don't wish
+  to process"). Unticking a box stores the channels left ticked (`rgba.red rgba.blue`); with every box ticked the knob
+  stores the layer's own word again. The panel then shows the rgba layer with the left-out channel unticked: the guide
+  does not show how Nuke names such a set in its menu.
+- With the menu at none, a channel field appears on the right, the guide's "right most channel field", and picking a
+  channel there processes that one channel (`rgba.alpha`).
+- **Single channel** (the mask channel, unpremult by, premult by, and the other knobs that take one channel): a layer
+  menu and a channel menu side by side, as Nuke draws `rgba` and `alpha`, stored as `layer.channel`. At none the channel
+  part is greyed out; choosing the rgba layer picks alpha, the guide's default matte.
+- The document stores what it stored before (a word, a layer name or a channel list the renderer already read), so old
+  documents load unchanged and no schema change was needed. Copy's and ChannelMerge's channel menus store their own
+  `A.a`-style values and keep their one-menu widget for now.
+
+## One mask strip (lane 10, step T2)
+
+Every node with Nuke's mask controls draws them the same way, from one builder (`knobs.panel_layout`): a row with the mask
+box, the mask channel picker (layer and channel), and the Inject, Invert and Fringe boxes each carrying its name; a second
+row with (Un)premult by and its Invert box; then Mix. The words and order are the guide's knob tables' (mask, inject,
+invert, fringe, (un)premult by, invert, mix), and a node whose page words a knob differently keeps the page's word
+(Keymix and STMap: Mask channel; HistEQ: Invert mask; Grain: Invert alpha). Ticking the mask box picks the alpha channel;
+unticking sets the mask to none.
+
+## Node tab (lane 10, step T2)
+
+In the order the Properties Panels page lists it: label; font, with bold, italic, size and the text colour on the font's
+row; hide input; cached; disable; dope sheet; bookmark; postage stamp; static frame; lifetime range (start, end, use
+lifetime). The node colour and the Viewer highlight colour, which sit in Nuke's panel header, stay at the end of the tab.
+
 ## Open gaps
 
-- Channel pickers (Calling Channels page): choosing a layer in a node's channels field should show that layer's channels
-  with check boxes so one can be left out, and with channels set to none a right-most channel field should pick a single
-  channel. NodeBased's channels knob is one menu with neither. Both need a change to what the channels knob stores.
+- None among the documented behaviours read so far (31 of 31 pass). Not documented, so not scored:
 - What the folded line of a split knob shows is NodeBased's own choice: the guide does not say what Nuke displays there.
 - Enumeration, check box, XY and file knobs, the mask fringe box, a typed value outside the slider range, and the
   Animation menu's Copy/Paste and Set to default have no interaction rule on the User Guide pages read, so they are listed

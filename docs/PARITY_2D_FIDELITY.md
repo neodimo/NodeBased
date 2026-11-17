@@ -52,7 +52,7 @@ Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**28 of 30 documented knob-widget behaviours work as Nuke's do** (9 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**31 of 31 documented knob-widget behaviours work as Nuke's do** (9 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -60,10 +60,10 @@ Knobs that act: 445 of the 446 paired knobs probed change the output pixels; 1 c
 | color | 8 / 8 | - | - |
 | animation | 6 / 6 | - | `copy_paste`, `set_to_default` |
 | split | 3 / 3 | - | `collapsed_display` |
-| node tab | 2 / 2 | - | - |
+| node tab | 3 / 3 | - | - |
 | enumeration | 0 / 0 | - | `pick` |
 | checkbox | 0 / 0 | - | `toggle` |
-| channel | 0 / 2 | `layer_check_boxes`, `single_channel` | - |
+| channel | 2 / 2 | - | - |
 | xy | 0 / 0 | - | `drag` |
 | file | 0 / 0 | - | `browse` |
 | mask mix | 1 / 1 | - | `fringe` |

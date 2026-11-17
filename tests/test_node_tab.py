@@ -23,11 +23,10 @@ APP.setStyle('Fusion')
 APP.setStyleSheet(STYLE)
 
 # Nuke's order, and the object names the panel gives them.
-EXPECTED_CONTROLS = ['node-label', 'node-font', 'node-font-size', 'node-bold', 'node-italic', 'node-font-color',
-                     'node-font-color-clear', 'node-tile-color', 'node-tile-color-clear', 'node-highlight-color',
-                     'node-highlight-color-clear', 'node-thumbnail', 'node-postage-stamp-frame',
-                     'node-hide-input', 'node-cached', 'node-disable', 'node-dope-sheet', 'node-bookmark',
-                     'node-use-lifetime', 'node-lifetime-start', 'node-lifetime-end']
+EXPECTED_CONTROLS = ['node-label', 'node-font', 'node-bold', 'node-italic', 'node-font-size', 'node-font-color',
+                     'node-font-color-clear', 'node-hide-input', 'node-cached', 'node-disable', 'node-dope-sheet', 'node-bookmark',
+                     'node-thumbnail', 'node-postage-stamp-frame', 'node-lifetime-start', 'node-lifetime-end', 'node-use-lifetime',
+                     'node-tile-color', 'node-tile-color-clear', 'node-highlight-color', 'node-highlight-color-clear']
 
 
 class DocumentTests(unittest.TestCase):

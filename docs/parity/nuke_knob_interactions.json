@@ -72,6 +72,8 @@
 
     {"id": "node_tab.controls", "widget": "node_tab", "status": "documented", "source": "properties",
      "nuke": "The Node tab carries label, font, hide input, cached, disable, dope sheet, bookmark, postage stamp, static frame and lifetime range.", "quote": "On the Node tab, you can usually adjust the following controls: label ... font ... hide input ... cached ... disable ... dope sheet ... bookmark ... postage stamp ... static frame ... lifeteme range"},
+    {"id": "node_tab.order", "widget": "node_tab", "status": "documented", "source": "properties",
+     "nuke": "The Node tab lists label, font (with bold, italic, size and text colour), hide input, cached, disable, dope sheet, bookmark, postage stamp, static frame and lifetime range, in that order.", "quote": "label ... font ... Bolds any text ... Emphasizes any text ... font size ... color of any text ... hide input ... cached ... disable ... dope sheet ... bookmark ... postage stamp ... static frame ... lifeteme range"},
     {"id": "node_tab.disable", "widget": "node_tab", "status": "documented", "source": "properties",
      "nuke": "The disable box disables the node; unchecking re-enables it.", "quote": "Check this to disable the node. Uncheck to re-enable."},
 

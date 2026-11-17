@@ -607,6 +607,22 @@ def _node_tab(bench):
     return not missing, f"missing {missing}" if missing else "every Node tab control is there"
 
 
+# The guide's Node-tab order (Properties Panels): every control on one line of this list, in order.
+NODE_TAB_ORDER = ("node-label", "node-font", "node-bold", "node-italic", "node-font-size", "node-font-color", "node-hide-input",
+                  "node-cached", "node-disable", "node-dope-sheet", "node-bookmark", "node-thumbnail", "node-postage-stamp-frame",
+                  "node-lifetime-start", "node-lifetime-end")
+
+
+@probe("node_tab.order")
+def _node_tab_order(bench):
+    from PySide6.QtCore import QObject
+    key = bench.node("Grade")
+    page = bench.window.node_tab(key, bench.window.graph_nodes()[key])
+    names = [child.objectName() for child in page.findChildren(QObject) if child.objectName() in NODE_TAB_ORDER]
+    page.deleteLater()
+    return tuple(names) == NODE_TAB_ORDER, f"the Node tab reads {names}"
+
+
 @probe("node_tab.disable")
 def _node_disable(bench):
     key = bench.node("Grade")
