@@ -274,7 +274,7 @@ class TransformShutterTests(unittest.TestCase):
         return Evaluator().evaluate_raster(dict(g.doc, view="node"), target="node", frame=frame)
 
     def test_motion_blur_averages_the_transform_over_the_shutter(self):
-        g = self.moving(motionblur=1, samples=2, shutter=2.0, shutter_offset="start")
+        g = self.moving(motionblur=1, samples=2, legacy_blur_samples=1, shutter=2.0, shutter_offset="start")
         blurred = self.raster(g, 5)
         sharp = self.moving()
         # samples=2 over frames 5 to 7 (start opens the shutter at the frame): sampled at 5.5 and 6.5, translate 4.5 and 5.5

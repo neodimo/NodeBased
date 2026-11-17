@@ -171,7 +171,7 @@ class MotionBlurTests(unittest.TestCase):
         np.testing.assert_allclose(a.pixels, b.pixels, atol=1e-6)
 
     def test_on_the_frame_is_the_mean_of_the_shutter_samples(self):
-        g = self.moving(motionblur=1, samples=4, shutter=2.0, shutter_offset="centred")
+        g = self.moving(motionblur=1, samples=4, legacy_blur_samples=1, shutter=2.0, shutter_offset="centred")
         blurred = raster(g, 6)
         sharp = self.moving()
         low, high = 5.0, 7.0

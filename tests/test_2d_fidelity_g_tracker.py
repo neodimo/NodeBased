@@ -356,7 +356,7 @@ class PixelTests(unittest.TestCase):
         self.assertFalse(np.array_equal(black.pixels, plain.pixels))
 
     def test_motion_blur_is_the_mean_of_the_shutter_samples(self):
-        g = build(SLIDING, motionblur=1, samples=4, shutter=1.0, shutter_offset="centred")
+        g = build(SLIDING, motionblur=1, samples=4, legacy_blur_samples=1, shutter=1.0, shutter_offset="centred")
         blurred = at_frame(g, 2)
         sharp = build(SLIDING)
         frames = [1.5 + (i + 0.5) * 1.0 / 4 for i in range(4)]

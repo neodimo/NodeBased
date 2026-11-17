@@ -91,8 +91,8 @@ class PanelSweepTests(unittest.TestCase):
         self.widget(panel, "custom_offset-field", QDoubleSpinBox)
         self.assertOneRow(panel, "translate_x-field", "translate_y-field")
         self.widget(panel, "shutter-field", QDoubleSpinBox)
-        # The guide's motionblur is a number; NodeBased keeps its on/off switch (a kernel change to give it a quality value is out of scope).
-        self.widget(panel, "motionblur-switch", QCheckBox)
+        # The guide's motionblur is a number (the shutter samples; lane 9 step W1).
+        self.widget(panel, "motionblur-field", QSpinBox)
 
     def test_framehold_first_frame_is_an_integer_field(self):
         panel = self.panel("FrameHold")
@@ -172,8 +172,8 @@ class PanelSweepTests(unittest.TestCase):
         for name in ("grab_interval-field", "jitter_period-field", "smoothing-field", "pattern_radius-field", "search_radius-field", "reference_frame-field"):
             self.widget(panel, name, QSpinBox)
             self.assertNoSlider(panel, name)
-        # The guide's motionblur is a number; NodeBased keeps its on/off switch (a kernel change to give it a quality value is out of scope).
-        self.widget(panel, "motionblur-switch", QCheckBox)
+        # The guide's motionblur is a number (the shutter samples; lane 9 step W1).
+        self.widget(panel, "motionblur-field", QSpinBox)
 
     def test_viewer_knob_controls_match_the_audit_table(self):
         window = self.window
@@ -269,10 +269,10 @@ class PanelSweepTests(unittest.TestCase):
         self.assertOneRow(panel, "shutter_offset-choice", "custom_offset-field")
         self.widget(panel, "shutter_offset-choice", QComboBox)
         self.widget(panel, "custom_offset-field", QDoubleSpinBox)
-        for name in ("enable1-switch", "clamp-switch", "black_outside-switch", "motionblur-switch"):
+        for name in ("enable1-switch", "clamp-switch", "black_outside-switch"):
             self.widget(panel, name, QCheckBox)
-        # Invert is a check box over the stored direction text. The guide gives motionblur as a number; NodeBased keeps its on/off
-        # switch beside the samples count (as Tracker and Transform do), because one number would change what is stored and rendered.
+        self.widget(panel, "motionblur-field", QSpinBox)           # the guide's motionblur is a number: the shutter samples (lane 9 step W1)
+        # Invert is a check box over the stored direction text.
         self.assertFalse(self.has_menu(panel, "forward", "inverse"))
         box = self.widget(panel, "direction-switch", QCheckBox)
         self.assertFalse(box.isChecked())

@@ -29,8 +29,8 @@ BLUR = {"motionblur": 0, "samples": 4, "shutter": 0.5, "shutter_offset": "start"
 # What a new CornerPin gets (Nuke's defaults where the guide states them) and what an older document's CornerPin gets, which is
 # what it did before the knobs existed. Only the shutter's default differs between the two, and it has no effect while the
 # blur is off.
-NEW = {**{f"enable{i}": 1 for i in CORNERS}, **IDENTITY, "clamp": 0, "black_outside": 1, **BLUR}
-OLD = dict(NEW, shutter=1.0, shutter_offset="centred")
+NEW = {**{f"enable{i}": 1 for i in CORNERS}, **IDENTITY, "clamp": 0, "black_outside": 1, **BLUR, "legacy_blur_samples": 0}
+OLD = dict(NEW, shutter=1.0, shutter_offset="centred", legacy_blur_samples=1)
 KINDS = ("CornerPin",)
 # Entries of the extra matrix that hold a position (pixels) or a perspective term (1 / pixel): they scale with the proxy tier.
 POSITION_ENTRIES = ("extra_matrix_02", "extra_matrix_12")

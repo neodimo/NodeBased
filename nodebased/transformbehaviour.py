@@ -43,16 +43,16 @@ from __future__ import annotations
 import numpy as np
 
 LEGACY = {
-    "Transform": {"legacy_transform_edges": 1, "legacy_shutter_window": 1, "legacy_transform_axes": 1},
-    "CornerPin": {"legacy_shutter_window": 1, "legacy_transform_edges": 1},
+    "Transform": {"legacy_transform_edges": 1, "legacy_shutter_window": 1, "legacy_transform_axes": 1, "legacy_blur_samples": 1},
+    "CornerPin": {"legacy_shutter_window": 1, "legacy_transform_edges": 1, "legacy_blur_samples": 1},
     "Reformat": {"legacy_reformat_layout": 1},
     "Mirror": {"legacy_mirror_window": 1},
     "Position": {"legacy_position": 1},
     "AdjustBBox": {"legacy_adjustbbox": 1},
 }
 NEW = {
-    "Transform": {"legacy_transform_edges": 0, "legacy_shutter_window": 0, "legacy_transform_axes": 0},
-    "CornerPin": {"legacy_shutter_window": 0, "legacy_transform_edges": 0},
+    "Transform": {"legacy_transform_edges": 0, "legacy_shutter_window": 0, "legacy_transform_axes": 0, "legacy_blur_samples": 0},
+    "CornerPin": {"legacy_shutter_window": 0, "legacy_transform_edges": 0, "legacy_blur_samples": 0},
     "Reformat": {"legacy_reformat_layout": 0, "box_fixed": 0, "clamp": 0, "black_outside": 1},
     "Mirror": {"legacy_mirror_window": 0},
     "Position": {"legacy_position": 0},
@@ -111,6 +111,16 @@ def reformat_box_shape(src_w, src_h, box_w, box_h, resize_type, turn):
         ow, oh = sw * scale, sh * scale
     ow, oh = max(1, int(round(ow))), max(1, int(round(oh)))
     return (oh, ow) if turn else (ow, oh)
+
+
+def blur_sample_count(p):
+    """How many shutter samples a Transform, CornerPin or Tracker blurs over: 0 when `motionblur` is 0 (off). Nuke's `motionblur` is
+    the number of samples; a node saved before that (`legacy_blur_samples`, and a missing flag reads as an older node) took `motionblur`
+    as a switch and the count from its `samples` knob."""
+    switch = int(p.get("motionblur", 0))
+    if switch <= 0:
+        return 0
+    return max(1, min(256, int(p.get("samples", 4)) if int(p.get("legacy_blur_samples", 1)) else switch))
 
 
 def is_legacy(kind, p, name):

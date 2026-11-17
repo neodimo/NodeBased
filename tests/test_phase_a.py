@@ -479,7 +479,7 @@ class SpecAndChoicesTests(unittest.TestCase):
                           "scale_x", "scale_y", "skew_x", "skew_y", "skew_order", "invert",
                           "clamp", "black_outside", "motionblur", "shutter", "shutter_offset",
                           "custom_offset", "samples", "center_x", "center_y", "filter", "mix",
-                          "legacy_transform_edges", "legacy_shutter_window", "legacy_transform_axes"})
+                          "legacy_transform_edges", "legacy_shutter_window", "legacy_transform_axes", "legacy_blur_samples"})
         self.assertEqual(params["filter"], "cubic")
         self.assertTrue({"nearest", "bilinear", "cubic"} <= set(CHOICES["filter"]))   # and the guide's other filters (tests/test_2d_behaviour_transform.py)
         for name in ("translate_x", "translate_y", "rotate", "scale", "scale_x", "scale_y",

@@ -2856,7 +2856,8 @@ class Evaluator:
                     timewarp_weights = weights
                     fingerprint = ["time-warp", target_frame, lookup_filter, float(params.get("lookup_length", 1.0)), *(d for _, d in samples)]
                 elif kind in ("TimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
-                    count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
+                    count = (_transformbehaviour.blur_sample_count(params) if transform_blur else
+                             max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"]))))
                     shutter = float(params["shutter"])
                     offset = params["shutter_offset"]
                     if kind == "TimeBlur":
