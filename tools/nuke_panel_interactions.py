@@ -1124,7 +1124,75 @@ def _link_button_drag(bench):
 
 @probe("link.link_menu")
 def _link_menu(bench):
-    return False, "channel, layer and format knobs have no Link menu: expressions drive number knobs only"
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QApplication, QToolButton, QWidget
+    from nodebased.animation import resolve_document
+    window = bench.window
+    doc = lambda: window.dispatcher.document
+    linked = lambda key, param: (doc().get("expressions") or {}).get(key, {}).get(param)
+    # Set link from the channels knob's Link menu.
+    source = bench.node("Grade", {"channels": "rgba"})
+    target = bench.node("Grade")
+    button = bench.child("channels-link-menu", QToolButton)
+    menu = window.build_link_menu(target, "channels")
+    set_menu = next((a.menu() for a in menu.actions() if a.menu() is not None and a.menu().objectName() == "link-menu-set"), None)
+    entry = [a for a in (set_menu.actions() if set_menu else []) if a.data() == window.knob_reference(source, "channels")]
+    names = sorted(a.objectName() for a in menu.actions() if a.objectName())
+    if entry:
+        entry[0].trigger()
+    bench.settle(8)
+    stored = linked(target, "channels")
+    follows = resolve_document(doc(), 1)["nodes"][target]["params"]["channels"] == "rgba"
+    window.command({"op": "set", "id": source, "param": "channels", "value": "alpha"})
+    still = resolve_document(doc(), 1)["nodes"][target]["params"]["channels"] == "alpha"
+    bench.show(target)
+    row_control = bench.child("channels-link-row", QWidget)
+    locked = row_control is not None and not row_control.layout().itemAt(0).widget().isEnabled()
+    window.command({"op": "undo"})
+    window.command({"op": "undo"})
+    undone = linked(target, "channels") is None
+    window.command({"op": "redo"})
+    # Edit link and Remove link.
+    other = bench.node("Grade", {"channels": "rgb"})
+    window.edit_word_link(target, "channels", window.knob_reference(other, "channels"))
+    edited = linked(target, "channels") == window.knob_reference(other, "channels")
+    remove = [a for a in window.build_link_menu(target, "channels").actions() if a.objectName() == "link-menu-remove"]
+    if remove:
+        remove[0].trigger()
+    bench.settle(8)
+    removed = linked(target, "channels") is None
+    # Ctrl+drag of a Merge's A channels Link menu onto its B channels knob.
+    merge = bench.node("Merge", {"Achannels": "rgb", "Bchannels": "rgba"})
+    drag_from, drop_on = bench.child("Achannels-link-menu", QToolButton), bench.child("Bchannels-link-row", QWidget)
+    dragged = False
+    if drag_from is not None and drop_on is not None:
+        ctrl = Qt.KeyboardModifier.ControlModifier
+        start = QPointF(drag_from.rect().center())
+        end = QPointF(drag_from.mapFromGlobal(drop_on.mapToGlobal(drop_on.rect().center())))
+        for kind, local, buttons in ((QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton),
+                                     (QEvent.Type.MouseMove, end, Qt.MouseButton.LeftButton),
+                                     (QEvent.Type.MouseButtonRelease, end, Qt.MouseButton.NoButton)):
+            QApplication.sendEvent(drag_from, QMouseEvent(kind, local, QPointF(drag_from.mapToGlobal(local.toPoint())),
+                                                          Qt.MouseButton.LeftButton, buttons, ctrl))
+        bench.settle(8)
+        dragged = linked(merge, "Bchannels") == window.knob_reference(merge, "Achannels") and \
+            resolve_document(doc(), 1)["nodes"][merge]["params"]["Bchannels"] == "rgb"
+    # A format knob: the linked Reformat takes the other's format and its size.
+    first = bench.node("Reformat", {"format": "HD_720"})
+    second = bench.node("Reformat")
+    fmt_button = bench.child("format-link-menu", QToolButton)
+    window.set_word_link(second, "format", window.knob_reference(first, "format"))
+    out = resolve_document(doc(), 1)["nodes"][second]["params"]
+    formats = fmt_button is not None and out["format"] == "HD_720" and (out["width"], out["height"]) == (1280, 720)
+    ok = (button is not None and bool(entry) and names == ["link-menu-edit", "link-menu-remove"] and stored is not None
+          and follows and still and locked and undone and edited and removed and dragged and formats)
+    return ok, (f"the channels knob has a Link menu button: {button is not None}; Set link lists the other Grade's channels: "
+                f"{bool(entry)}, with Edit link and Remove link beside it: {names}; choosing it stores {stored!r} and the knob "
+                f"follows the other's channels, also after they change: {follows and still}; the linked knob is locked in the "
+                f"panel: {locked}; one undo per edit: {undone}; Edit link retargets: {edited}; Remove link clears: {removed}; "
+                f"Ctrl+drag of A channels' Link menu onto B channels links B to A: {dragged}; a Reformat's format links with "
+                f"its size: {formats}")
 
 
 @probe("link.tracker_link_to")

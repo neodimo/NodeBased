@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import nuke_panel_interactions as interactions  # noqa: E402
 
 PASSING = ("link.add_expression", "link.reference_other", "link.ctrl_drag", "link.turns_blue", "link.graph_arrow",
-           "link.edit_expression", "link.ctrl_drag_animation_button", "link.tracker_link_to")
+           "link.edit_expression", "link.ctrl_drag_animation_button", "link.tracker_link_to", "link.link_menu")
 
 
 class LinkingTests(unittest.TestCase):
@@ -33,8 +33,10 @@ class LinkingTests(unittest.TestCase):
             with self.subTest(behaviour=behaviour):
                 self.assertEqual(self.results[behaviour]["result"], "pass", self.results[behaviour]["detail"])
 
-    def test_link_menu_is_still_open(self):
-        self.assertNotEqual(self.results["link.link_menu"]["result"], "pass")
+    def test_every_linking_behaviour_passes(self):
+        # link.link_menu landed in the T6 finish: linking is 9 of 9.
+        documented = sorted(k for k, v in self.results.items() if v["status"] == "documented")
+        self.assertEqual(documented, sorted(PASSING))
 
 
 if __name__ == "__main__":

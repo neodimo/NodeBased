@@ -21,10 +21,7 @@ import nuke_panel_interactions as interactions  # noqa: E402
 from nodebased.app import evaluate_field_formula  # noqa: E402
 
 KNOWN_GAPS = {
-    # Step T4 (the Properties bin and linking): documented by the guide, not built yet.
-    "link.link_menu": "channel, layer and format knobs cannot be linked",
-    # Step T5 (the Node Graph): documented by the guide, still open.
-    "graph.clone": "no Clone with an active link (Alt+C is an independent copy)",
+    # Step T6 finish closed the last two (the channel/format Link menu and Clone): every documented behaviour passes.
 }
 
 

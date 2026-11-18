@@ -4556,7 +4556,7 @@ class Dispatcher:
         spec_default = SPECS[node["type"]]["params"].get(param)
         if spec_default is None:
             raise ValueError(f"expression edit {op!r}: {node['type']!r} has no parameter {param!r}")
-        if isinstance(spec_default, str) or isinstance(spec_default, bool):
+        if (isinstance(spec_default, str) and expr.link_family(param, spec_default) is None) or isinstance(spec_default, bool):
             raise ValueError(f"expression edit {op!r}: parameter {param!r} is not numeric "
                              f"({type(spec_default).__name__})")
         if op == "set_expression" and is_split(node["params"], param):

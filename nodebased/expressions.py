@@ -376,6 +376,33 @@ def evaluate(expression, frame, lookup):
 # --- Document-level wiring ----------------------------------------------------------------------
 
 
+# Nuke's Link menu on channel, layer and format knobs (lane 10, step T6 finish): such a knob holds a word, so its "expression"
+# is a plain link, the bare `Node.knob` reference, and it may only read a knob of the same family. The channel sets mirror
+# `channelpicker.CHANNEL_SET_PARAMS` and `SINGLE_CHANNEL_PARAMS` (that module needs Qt; tests keep the two in step).
+LINK_FAMILIES = {
+    "channels": frozenset({"channels", "output", "Achannels", "Bchannels", "merge_output"}),
+    "channel": frozenset({"maskChannelInput", "unpremult", "premult", "premult_by", "width_channel", "blur_channel",
+                          "filter_channel", "ctrlMask"}),
+    "format": frozenset({"format", "lens_format", "lens_scaling_format"}),
+}
+
+
+def link_family(param, default):
+    """The Link-menu family of a word-valued knob (`"channels"`, `"channel"`, `"format"`), or None when it has no Link menu."""
+    if not isinstance(default, str):
+        return None
+    return next((family for family, params in LINK_FAMILIES.items() if param in params), None)
+
+
+def bare_reference(expression):
+    """The one `(node, param)` a parsed expression reads when it is nothing but that reference, else None."""
+    body = expression.tree.body
+    if len(expression.references) == 1 and (isinstance(body, ast.Attribute) or (
+            isinstance(body, ast.Call) and isinstance(body.func, ast.Name) and body.func.id == REFERENCE_FUNCTION)):
+        return expression.references[0]
+    return None
+
+
 def iter_expressions(section):
     """Yield `(node_id, param, text)` over an `expressions` section, in a deterministic order."""
     for node_id in sorted(section):
@@ -441,7 +468,7 @@ def validate_expressions(section, nodes, spec_params_for):
     """
     if not isinstance(section, dict):
         raise ValueError("expressions must be an object keyed by node id")
-    parsed = {}
+    parsed, words = {}, set()
     for node_id, params in sorted(section.items()):
         if node_id not in nodes:
             raise ValueError(f"expressions[{node_id!r}] does not name a node in this document")
@@ -454,12 +481,21 @@ def validate_expressions(section, nodes, spec_params_for):
             default = spec.get(param)
             if default is None:
                 raise ValueError(f"{where}: {nodes[node_id]['type']} has no parameter {param!r}")
-            if isinstance(default, str) or isinstance(default, bool):
+            family = link_family(param, default)
+            if (isinstance(default, str) and family is None) or isinstance(default, bool):
                 raise ValueError(f"{where}: only numeric parameters can be expression-driven")
             try:
                 parsed[(node_id, param)] = parse(text)
             except ExpressionError as error:
                 raise ValueError(f"{where}: {error}") from None
+            if family is not None:
+                linked = bare_reference(parsed[(node_id, param)])
+                if linked is None:
+                    raise ValueError(f"{where}: a {family} knob takes a link to another knob (Node.knob), not a formula")
+                target_default = spec_params_for(nodes[linked[0]]["type"]).get(linked[1]) if linked[0] in nodes else None
+                if target_default is not None and link_family(linked[1], target_default) != family:
+                    raise ValueError(f"{where}: a {family} knob can only link to another {family} knob")
+                words.add((node_id, param))
 
     for (node_id, param), expression in parsed.items():
         where = f"expressions[{node_id!r}][{param!r}]"
@@ -472,7 +508,7 @@ def validate_expressions(section, nodes, spec_params_for):
             if default is None:
                 raise ValueError(f"{where} references {target}.{target_param}, which "
                                  f"{nodes[target]['type']} does not have")
-            if isinstance(default, str) or isinstance(default, bool):
+            if ((isinstance(default, str) and (node_id, param) not in words) or isinstance(default, bool)):
                 raise ValueError(f"{where} references {target}.{target_param}, which is not "
                                  f"numeric and has no value an expression could read")
 
@@ -496,17 +532,20 @@ def resolve_nodes(nodes, section, frame, spec_params_for, coerce):
     """
     if not section:
         return nodes
-    parsed = {}
+    parsed, words = {}, {}
     for node_id, param, text in iter_expressions(section):
         node = nodes.get(node_id)
         if node is None or param not in node["params"]:
             continue
         # Same eligibility rule curves use: numeric spec defaults only, bool excluded.
         spec_default = spec_params_for(node["type"]).get(param)
+        if link_family(param, spec_default) is not None:
+            words[(node_id, param)] = parse(text)
+            continue
         if not isinstance(spec_default, (int, float)) or isinstance(spec_default, bool):
             continue
         parsed[(node_id, param)] = parse(text)
-    if not parsed:
+    if not parsed and not words:
         return nodes
 
     resolved = dict(nodes)
@@ -526,6 +565,13 @@ def resolve_nodes(nodes, section, frame, spec_params_for, coerce):
         except (KeyError, TypeError, ValueError):
             raise ExpressionError(f"Reference to {target}.{param}: not a numeric parameter") from None
 
+    # A linked channel or format knob copies the word its target holds (following a chain of links), before the numbers.
+    for target in resolve_order(words):
+        node_id, param = target
+        source = bare_reference(words[target])
+        node = resolved.get(source[0]) if source else None
+        if node is not None and isinstance(node["params"].get(source[1]), str):
+            resolved[node_id] = {**resolved[node_id], "params": {**resolved[node_id]["params"], param: node["params"][source[1]]}}
     for target in resolve_order(parsed):
         node_id, param = target
         value = evaluate(parsed[target], frame, lookup)

@@ -40,6 +40,7 @@ from . import __version__
 from .roto_settings import TOOL_CONTROLS, GLOBAL_SETTINGS
 from .updater import Updater
 from .core import _downstream_of, fast_copy
+from . import expressions as expressions_module
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail, node_tab_pixels, node_tab_value, bookmarked_nodes, dope_sheet_rows, NODE_TAB_DEFAULTS, NODE_TAB_FONTS, NODE_TAB_FONT_SIZE, NODE_TAB_FRAME,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
@@ -727,6 +728,36 @@ def key_button_link_drag():
     if not _KEY_BUTTON_LINK_DRAG:
         _KEY_BUTTON_LINK_DRAG.append(KeyButtonLinkDrag())
     return _KEY_BUTTON_LINK_DRAG[0]
+
+
+class LinkMenuButton(QToolButton):
+    """Nuke's Link menu beside a channel, layer or format knob (17.0 User Guide, Linking Expressions): a click opens Set link,
+    Edit link and Remove link; Ctrl/Cmd+drag of the button onto another such knob links that knob to this one."""
+
+    def __init__(self, window, key, param, parent=None):
+        super().__init__(parent)
+        self.owner, self.key, self.param = window, key, param
+        self.setText("\u26d3")
+        self.setAutoRaise(True)
+        self.setObjectName(f"{param}-link-menu")
+        self.setToolTip("Link menu: Set link, Edit link, Remove link. Ctrl+drag onto another knob to link it to this one.")
+        self._drag_from = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._drag_from = event.globalPosition().toPoint()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._drag_from is not None:
+            start, self._drag_from = self._drag_from, None
+            if (event.globalPosition().toPoint() - start).manhattanLength() >= QApplication.startDragDistance():
+                self.owner.link_word_drop(self, event.globalPosition().toPoint())
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
 
 class FloatSliderControl(QWidget):
@@ -15096,6 +15127,24 @@ class Window(QMainWindow):
                 enter.clicked.connect(lambda checked=False, k=key: self.enter_group(k))
                 form.addRow(enter)
             def add_legacy_param(param, value, kind=None, label=None):
+                """Render one knob; a channel, layer or format knob gets Nuke's Link menu beside it."""
+                rows = form.rowCount()
+                _add_legacy_param(param, value, kind, label)
+                if (expressions_module.link_family(param, SPECS[node["type"]]["params"].get(param)) is None
+                        or form.rowCount() != rows + 1):
+                    return
+                field = form.itemAt(rows, QFormLayout.ItemRole.FieldRole)
+                if field is None or field.widget() is None:
+                    return
+                taken = form.takeRow(rows)
+                caption = taken.labelItem.widget() if taken.labelItem is not None else None
+                wrapped = self.link_menu_row(key, param, field.widget(), expressions.get(param), resolved.get(param))
+                if caption is not None:
+                    form.addRow(caption, wrapped)
+                else:
+                    form.addRow(label or param.replace("_", " ").title(), wrapped)
+
+            def _add_legacy_param(param, value, kind=None, label=None):
                 """Render one member of an unimplemented multi-param knob unchanged."""
                 dynamic_ocio = {
                     "OCIOColorspace": {"src", "dst"},
@@ -19543,6 +19592,109 @@ class Window(QMainWindow):
         if key.isidentifier() and not keyword.iskeyword(key) and param.isidentifier():
             return f"{key}.{param}"
         return f"knob({json.dumps(key)}, {json.dumps(param)})"
+
+    def link_menu_row(self, key, param, control, linked, shown=None):
+        """`control` with Nuke's Link menu button beside it; a linked knob shows the value it follows and its link, and cannot
+        be edited by hand."""
+        if linked and isinstance(shown, str):
+            blocked = control.blockSignals(True)
+            if hasattr(control, "set_value"):
+                control.set_value(shown)
+            elif isinstance(control, QComboBox):
+                control.setCurrentText(shown)
+            control.blockSignals(blocked)
+        row = QWidget()
+        row.setObjectName(f"{param}-link-row")
+        row.setProperty("nodebased_link_node", key)
+        row.setProperty("nodebased_link_param", param)
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        layout.addWidget(control, 1)
+        button = LinkMenuButton(self, key, param)
+        button.clicked.connect(lambda checked=False, b=button: self.show_link_menu(b))
+        layout.addWidget(button)
+        if linked:
+            control.setEnabled(False)
+            control.setToolTip(f"Linked to {linked}. Use the Link menu to edit or remove the link.")
+            button.setStyleSheet(f"color: {EXPRESSION_COLOR}")
+        return row
+
+    def link_candidates(self, key, param):
+        """Every knob on another node of this graph that `key`'s `param` may link to (the same family of knob)."""
+        nodes = self.graph_nodes()
+        family = expressions_module.link_family(param, SPECS[nodes[key]["type"]]["params"].get(param))
+        found = []
+        for other, node in nodes.items():
+            for name, default in SPECS[node["type"]]["params"].items():
+                if (other, name) != (key, param) and expressions_module.link_family(name, default) == family:
+                    found.append((other, name))
+        return found
+
+    def build_link_menu(self, key, param):
+        """Nuke's Link menu: Set link (a submenu of the knobs it may follow), Edit link, Remove link."""
+        menu = QMenu(self)
+        menu.setObjectName("link-menu")
+        linked = (self.graph_document().get("expressions") or {}).get(key, {}).get(param)
+        set_menu = menu.addMenu("Set link")
+        set_menu.setObjectName("link-menu-set")
+        nodes = self.graph_nodes()
+        for other, name in self.link_candidates(key, param):
+            action = set_menu.addAction(f"{nodes[other]['name']}.{name}")
+            action.setObjectName("link-menu-target")
+            action.setData(self.knob_reference(other, name))
+            action.triggered.connect(lambda checked=False, text=action.data(): self.set_word_link(key, param, text))
+        set_menu.setEnabled(bool(set_menu.actions()))
+        edit = menu.addAction("Edit link…")
+        edit.setObjectName("link-menu-edit")
+        edit.setEnabled(bool(linked))
+        edit.triggered.connect(lambda checked=False: self.edit_word_link(key, param))
+        remove = menu.addAction("Remove link")
+        remove.setObjectName("link-menu-remove")
+        remove.setEnabled(bool(linked))
+        remove.triggered.connect(lambda checked=False: self.command({"op": "clear_expression", "id": key, "param": param}))
+        return menu
+
+    def show_link_menu(self, button):
+        menu = self.build_link_menu(button.key, button.param)
+        menu.aboutToHide.connect(menu.deleteLater)
+        menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
+
+    def set_word_link(self, key, param, text):
+        """Link `key`'s channel or format knob to the knob `text` names, in one undo step."""
+        if (self.graph_document().get("expressions") or {}).get(key, {}).get(param) == text:
+            return True
+        return self.command({"op": "set_expression", "id": key, "param": param, "expression": text}) is not None
+
+    def edit_word_link(self, key, param, text=None):
+        """Edit link: type the knob to follow (Node.knob). `text` skips the dialog (scripts and tests)."""
+        current = (self.graph_document().get("expressions") or {}).get(key, {}).get(param, "")
+        if text is None:
+            text, accepted = QInputDialog.getText(self, "Edit link", "Link to (Node.knob):", text=current)
+            if not accepted:
+                return False
+        text = text.strip()
+        if not text:
+            return self.command({"op": "clear_expression", "id": key, "param": param}) is not None if current else False
+        return self.set_word_link(key, param, text)
+
+    def link_word_drop(self, source, global_pos):
+        """Finish a Ctrl/Cmd+drag of a Link menu button: the channel or format knob under `global_pos` follows the source knob."""
+        root = self.properties.widget()
+        target = None
+        for row in root.findChildren(QWidget, options=Qt.FindChildOption.FindChildrenRecursively) if root is not None else []:
+            if row.property("nodebased_link_param") is None or not row.isVisibleTo(root):
+                continue
+            if row.rect().contains(row.mapFromGlobal(global_pos)):
+                target = row
+                break
+        if target is None:
+            self.statusBar().showMessage("Drop the Link menu on another channel or format knob to link it", 3000)
+            return False
+        to_key, to_param = target.property("nodebased_link_node"), target.property("nodebased_link_param")
+        if (to_key, to_param) == (source.key, source.param):
+            return False
+        return self.set_word_link(to_key, to_param, self.knob_reference(source.key, source.param))
 
     def link_knob_drop(self, source, global_pos):
         """Finish a Ctrl/Cmd+drag from the knob field `source`: the knob field under `global_pos` (in any panel of this

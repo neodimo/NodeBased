@@ -224,6 +224,14 @@ def resolve_document(document, frame):
                                    lambda kind: SPECS[kind]["params"], coerce)
         if after is not before:
             resolved_nodes = after
+            # A Reformat whose format knob is linked takes that format's size, as a "set" of the knob would.
+            from .core import _resolve_reformat_format
+            for node_id, linked in expression_section.items():
+                node = resolved_nodes.get(node_id)
+                if "format" in linked and node is not None and node["type"] == "Reformat":
+                    params = dict(node["params"])
+                    _resolve_reformat_format(params, document)
+                    resolved_nodes[node_id] = {**node, "params": params}
 
     for node_id in context_nodes:
         node = (resolved_nodes or nodes)[node_id]
