@@ -1,5 +1,40 @@
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5), Lane 11 (Review book, Claude Opus 5.5) (4:05 PM on 2026-11-17 PDT)
+
+`main` moved `52857cbb` -> `a178ccbc` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a178ccbc` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-1529.log`, started 3:29 PM): **Ran 10175 tests in 1693.905 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step W2 (Tue 11/17): the rest of the filter and draw worklist.** Commits:
+  - `df5b2152` VectorBlur keeps motion amount 1 and offset 0 (the guide table's 0 and -0.5 recorded as default notes until a Nuke render confirms them; 0 would make a new node blur nothing); Glint's w channel reads W channel; report and worklist rebuilt
+  - `2d94917c` Fidelity report and worklist rebuilt after rebasing onto main
+  - `d4045b57` Lane 9 step W2 (salvaged after the worker stopped): filter and draw panel rows from the worklist; use_input_channels read as the guide's check box in the reference builder; new panel tests in test_2d_behaviour_panels_w2_filter.py
+  Diff: 17 files changed, 337 insertions(+), 109 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T3 (Tue 11/17): Viewer on-screen controls work like Nuke's, measured per node (finish 1).** Commits:
+  - `258508dd` Lane 10 step T3 finish notes: on-screen controls report table at 16 of 16, PANEL_INTERACTIONS section, review worklist regenerated
+  - `0fc40c88` Viewer on-screen controls like Nuke's, finished: the Transform jack's left/right and top/bottom points scale one axis (split scale), rotate snaps to 45-degree values unless Shift, a skew bar, the invert handle; Crop's box edges and Text's box and Ctrl-drag centre; the Tracker anchor grabs at its centre when zoomed out; GridWarp's transformation overlay; probes for all 16 documented controls pass
+  Diff: 11 files changed, 772 insertions(+), 68 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+- **Lane 11 (Review book, Claude Opus 5.5), step B4 (Tue 11/17): the Transform group's worklist, and CopyBBox's inputs.** Commits:
+  - `28141f63` VectorCornerPin's blur size declared a pixel-unit param for proxy tiers
+  - `9d79ef9c` Fidelity report and worklist rebuilt after rebasing onto main
+  - `b065ae49` Lane 11 step B4 (salvaged after the worker stopped): VectorCornerPin and Transform-group rows, report and worklist
+  - `fe59d1b8` Decision list for DiMo: parity items that need a product decision, by fidelity cost; lane 11 step B4 notes
+  - `c6fde9fe` Transform group's review rows: SplineWarp root warp, Tile, STMap, IDistort, VectorCornerPin
+  - `c762115a` CopyBBox takes Nuke's input roles: A gives the bounding box, B the picture
+  Diff: 27 files changed, 368 insertions(+), 112 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #11.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 All 16 on-screen controls Nuke's guide pages document for 2D nodes now pass the probes in `tools/nuke_viewer_controls.py`
 (5 before this pass): the Transform jack's one-axis scale points (split scale), rotate snap to 45-degree values with Shift
 to turn it off, skew bar and invert handle; Crop's box edges; Text's box and Ctrl-drag centre; the Tracker anchor (its

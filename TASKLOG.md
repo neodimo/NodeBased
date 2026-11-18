@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step W2 (Tue 11/17): the rest of the filter and draw worklist, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T3 (Tue 11/17): Viewer on-screen controls work like Nuke's, measured per node (finish 1), Lane 11 (Review book, Claude Opus 5.5) step B4 (Tue 11/17): the Transform group's worklist, and CopyBBox's inputs (integrator tick)
+
+- **What was done:** `main` `52857cbb` -> `a178ccbc` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a178ccbc`: Ran 10175 tests in 1693.905 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step W2 (Tue 11/17): the rest of the colour and time worklist, then behaviour cases where it lists none (integrator tick)
 
 - **What was done:** `main` `f9c91e91` -> `5e71c941` plus this docs commit. Evidence and per-lane commit
