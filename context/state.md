@@ -1,5 +1,27 @@
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
+## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (10:15 PM on 2026-11-17 PDT)
+
+`main` moved `0e712973` -> `19dd070b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `19dd070b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-2138.log`, started 9:39 PM): **Ran 10204 tests in 1720.343 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T6 (Tue 11/17): the rest of the Node Graph, and the last linking case (finish 1).** Commits:
+  - `e5ace43b` Linking tests run the bin probes first, as the T4 module does: linking alone left the docked bin unlaid on GitHub's runners (fields not visible, the graph arrow without a path), so Desktop conformance was red on main
+  - `00e9d081` Lane 10 step T6 finish notes: Node Graph 25 of 25 and linking 9 of 9 in the fidelity report; Clone and the channel/format Link menu described
+  - `a3b08bc5` Linking: channel, layer and format knobs carry Nuke's Link menu (Set link, Edit link, Remove link, Ctrl+drag the button onto another knob); a linked knob follows the word its target holds, and a linked Reformat format brings its size; links live in the expressions section, so older documents load unchanged
+  - `174efb03` Node Graph: Edit > Clone (Alt+K) makes a copy that shares every knob with its parent, joined by an orange line; Declone (Alt+Shift+K); a knob edit on either member changes both in one undo step; clone links are kept in an optional settings section, so older documents load unchanged
+  Diff: 14 files changed, 699 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (7:45 PM on 2026-11-17 PDT)
 
 `main` moved `e8a35da3` -> `21a3991a` (lane commits cherry-picked onto main in lane order) and then to this

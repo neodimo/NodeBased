@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T6 (Tue 11/17): the rest of the Node Graph, and the last linking case (finish 1) (integrator tick)
+
+- **What was done:** `main` `0e712973` -> `19dd070b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `19dd070b`: Ran 10204 tests in 1720.343 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T6 (Tue 11/17): the rest of the Node Graph, and the last linking case (integrator tick)
 
 - **What was done:** `main` `e8a35da3` -> `21a3991a` plus this docs commit. Evidence and per-lane commit
