@@ -20,7 +20,9 @@ class LinkingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         ref = interactions.reference()
-        mine = [e for e in ref["behaviours"] if e["widget"] == "linking"]
+        # The bin probes run first, as in test_l10_t4_bin_linking: they open and lay out the docked bin. Linking alone
+        # left the bin unlaid on GitHub's runners (fields not visible, the graph arrow without a path), red on 11/17.
+        mine = [e for e in ref["behaviours"] if e["widget"] in ("properties_bin", "linking")]
         original = interactions.reference
         interactions.reference = lambda: dict(ref, behaviours=mine)
         try:
@@ -35,7 +37,7 @@ class LinkingTests(unittest.TestCase):
 
     def test_every_linking_behaviour_passes(self):
         # link.link_menu landed in the T6 finish: linking is 9 of 9.
-        documented = sorted(k for k, v in self.results.items() if v["status"] == "documented")
+        documented = sorted(k for k, v in self.results.items() if v["status"] == "documented" and k.startswith("link."))
         self.assertEqual(documented, sorted(PASSING))
 
 
