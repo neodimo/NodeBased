@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T5 (Tue 11/17): the rest of knob linking, then the Node Graph works like Nuke's (integrator tick)
+
+- **What was done:** `main` `99d97970` -> `0b3dd6dd` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `0b3dd6dd`: Ran 10185 tests in 1708.000 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T4 (Tue 11/17): the Properties bin and knob linking work like Nuke's (integrator tick)
 
 - **What was done:** `main` `a85259c1` -> `31fc2844` plus this docs commit. Evidence and per-lane commit
