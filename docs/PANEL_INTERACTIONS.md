@@ -233,6 +233,24 @@ language).
   its input on.
 - **No shortcut taken away.** Shift+click on a wire still toggles its selection (now decided on release, so a drag can start); the
   Tab menu's plain Return is unchanged.
-- **Still open:** Clone (Nuke's Alt+K: a copy whose knobs stay shared with the original both ways). NodeBased's expressions drive
-  one knob from another in one direction only, and a two-way link needs a document change of its own. Linking stays at 8 of 9:
-  the Link menu of channel, layer and format knobs needs expressions that carry names, which the document does not hold yet.
+- **Closed in the finish pass below:** Clone, and the Link menu of channel, layer and format knobs.
+
+## Clone and the Link menu (lane 10, step T6 finish, 2026-11-17)
+
+- **Node Graph, 25 of 25 documented (24 before). Linking, 9 of 9 (8 before).**
+- **Clone.** Edit > Clone and Alt+K make a copy of each selected node that keeps an active link to its parent, as the guide
+  says; a solid orange line joins each clone to its parent in the Node Graph. Every knob edit on any member of a clone group
+  (a typed value, a key, a curve, an expression, bypass) is applied to all of them in the same undo step, so their knobs stay
+  identical. A clone of a clone joins the same parent. Edit > Declone and Alt+Shift+K make the selected nodes independent
+  again, keeping their values; deleting a parent hands the group to its first clone, and moving a clone into a Group drops its
+  link. The links are kept in an optional `clones` entry of the project settings (clone id to parent id), so older documents
+  load unchanged and the schema stays where it was. Groups, Viewers and Dots are not cloned.
+- **Link menu.** Channel set, single channel and format knobs (`channels`, `maskChannelInput`, `format`, a lens format and
+  the rest of their families) carry a Link menu button beside them: Set link lists every knob of the same family in the
+  graph, Edit link takes a typed `Node.knob`, Remove link brings back the knob's own value, and Ctrl/Cmd+drag of the button
+  onto another such knob links that knob to this one. A linked knob follows the word its target holds (through a chain of
+  links), shows it greyed out, and draws the green expression arrow in the Node Graph; a Reformat whose format is linked takes
+  that format's size. The link is stored as a bare reference in the document's expressions section, so it shares their
+  cycle check and one undo step; a formula, or a link to a knob of another family, is refused by name.
+- **No shortcut taken away.** Alt+K and Alt+Shift+K were free in the Node Graph.
+- **Tests:** `tests/test_l10_t6_clone.py` and `tests/test_l10_t6_link_menu.py`.
