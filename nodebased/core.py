@@ -3465,7 +3465,7 @@ def empty_document():
 def validate_settings(settings):
     # "formats" is the additive registry section (lane L2 step 4c); a hand-built document without it
     # still validates and falls back to the built-in list through `document_formats`.
-    if not isinstance(settings, dict) or not {"color", "viewer"} <= set(settings) <= {"color", "viewer", "formats", "project"}:
+    if not isinstance(settings, dict) or not {"color", "viewer"} <= set(settings) <= {"color", "viewer", "formats", "project", "clones"}:
         raise ValueError("settings must define color and viewer")
     color = settings["color"]
     if not isinstance(color, dict) or set(color) != {"config", "working_space", "display", "view"}:
@@ -3556,6 +3556,60 @@ def _validate_split(doc, node_id, kind, name, value):
         raise ValueError(f"{name} is animated: a split value cannot be animated yet; clear its curve first")
     if name in (doc.get("expressions") or {}).get(node_id, {}):
         raise ValueError(f"{name} is driven by an expression: a split value cannot be driven yet; clear the expression first")
+
+
+CLONE_OPS = frozenset({"set", "disable", "set_key", "set_curve", "delete_key", "clear_curve", "set_expression",
+                       "clear_expression"})
+
+
+def clone_parents(doc):
+    """{clone id: parent id} from the optional `settings["clones"]` section (Nuke's Edit > Clone, lane 10 T6).
+
+    A clone shares every knob with its parent: an edit on any member of the group is applied to all of them in the same
+    undo step, so their stored params, curves and expressions stay identical. A parent is never itself a clone."""
+    return doc["settings"].get("clones") or {}
+
+
+def clone_group(doc, key):
+    """Every node sharing knobs with `key`, `key` included (just `[key]` when it is not cloned)."""
+    parents = clone_parents(doc)
+    root = parents.get(key, key)
+    members = [root] + sorted(child for child, parent in parents.items() if parent == root)
+    return members if key in members and len(members) > 1 else [key]
+
+
+def validate_clones(doc):
+    clones = doc["settings"].get("clones")
+    if clones is None:
+        return
+    nodes = doc["nodes"]
+    if not isinstance(clones, dict) or not clones:
+        raise ValueError("settings.clones must be a non-empty object of clone id to parent id; drop it instead of emptying it")
+    for child, parent in clones.items():
+        if child not in nodes or not isinstance(parent, str) or parent not in nodes:
+            raise ValueError(f"settings.clones[{child!r}] must name two nodes in this document")
+        if child == parent or parent in clones:
+            raise ValueError(f"settings.clones[{child!r}]: a clone's parent cannot itself be a clone")
+        if nodes[child]["type"] != nodes[parent]["type"]:
+            raise ValueError(f"settings.clones[{child!r}]: a clone has its parent's type")
+
+
+def _drop_clone(doc, key):
+    """Make `key` independent (Nuke's Declone). When `key` is a parent, its first remaining clone becomes the parent."""
+    clones = doc["settings"].get("clones")
+    if not clones:
+        return False
+    changed = clones.pop(key, None) is not None
+    children = sorted(child for child, parent in clones.items() if parent == key)
+    if children:
+        changed = True
+        heir = children[0]
+        clones.pop(heir)
+        for child in children[1:]:
+            clones[child] = heir
+    if not clones:
+        doc["settings"].pop("clones", None)
+    return changed
 
 
 def validate(doc, _depth=0, _trusted=None):
@@ -3711,6 +3765,7 @@ def validate(doc, _depth=0, _trusted=None):
                     raise ValueError(f"Input {slot!r} on {node['name']!r} expects {' or '.join(expected_type)}, "
                                      f"got {actual_type} from {nodes[source]['name']!r}")
     shapes.validate_node_data(doc["node_data"], nodes, None if _trusted is None else (_trusted["node_data"], _trusted["nodes"]))
+    validate_clones(doc)
     expr.validate_expressions(doc["expressions"], nodes, lambda kind: SPECS[kind]["params"])
     # One driver per parameter. A curve and an expression on the same knob is rejected rather than
     # resolved by a precedence rule, because a silent precedence rule is the bug where an artist
@@ -3955,6 +4010,16 @@ class Dispatcher:
                                 "group", "ungroup"})
 
     def _edit(self, doc, cmd):
+        result = self._edit_one(doc, cmd)
+        # A clone shares its knobs: run the same knob edit on every other member of its group (one draft, one undo step).
+        if (cmd["op"] in CLONE_OPS and "path" not in cmd and not cmd.get("_clone_echo")
+                and len(members := clone_group(doc, cmd["id"])) > 1):
+            for member in members:
+                if member != cmd["id"]:
+                    self._edit_one(doc, {**cmd, "id": member, "_clone_echo": True})
+        return result
+
+    def _edit_one(self, doc, cmd):
         op = cmd["op"]
         if "path" in cmd:
             return self._edit_in_group(doc, cmd)
@@ -3962,6 +4027,8 @@ class Dispatcher:
             from .groups import make_group
             key = cmd.get("id", uuid.uuid4().hex[:12])
             make_group(doc, cmd.get("ids"), key, cmd.get("name", "Group"))
+            for gone in [k for pair in (doc["settings"].get("clones") or {}).items() for k in pair if k not in doc["nodes"]]:
+                _drop_clone(doc, gone)
             return {"id": key}
         if op == "ungroup":
             from .groups import ungroup
@@ -4126,6 +4193,34 @@ class Dispatcher:
             validate_time(time)
             doc["time"] = time
             return dict(time)
+        if op == "clone":
+            # Nuke's Edit > Clone: a copy that keeps an active link to its parent (lane 10 T6).
+            parent_id = cmd.get("id")
+            if parent_id not in nodes:
+                raise ValueError(f"clone: unknown node id {parent_id!r}")
+            if nodes[parent_id]["type"] in ("Group", "Viewer"):
+                raise ValueError(f"clone: a {nodes[parent_id]['type']} cannot be cloned")
+            root = clone_parents(doc).get(parent_id, parent_id)
+            key = cmd.get("new_id", uuid.uuid4().hex[:12])
+            if key in nodes:
+                raise ValueError("Node ID already exists")
+            source = nodes[root]
+            nodes[key] = {"type": source["type"], "name": cmd.get("name", source["name"]),
+                          "params": copy.deepcopy(source["params"]),
+                          "inputs": {slot: None for slot in source["inputs"]},
+                          "pos": cmd.get("pos", [source["pos"][0] + 30, source["pos"][1] + 30]),
+                          "disabled": source["disabled"]}
+            for section in (doc["animation"]["curves"], doc["node_data"], doc["expressions"]):
+                if root in section:
+                    section[key] = copy.deepcopy(section[root])
+            doc["settings"].setdefault("clones", {})[key] = root
+            return {"id": key, "parent": root}
+        if op == "declone":
+            if cmd.get("id") not in nodes:
+                raise ValueError(f"declone: unknown node id {cmd.get('id')!r}")
+            if not _drop_clone(doc, cmd["id"]):
+                raise ValueError(f"declone: {cmd['id']!r} is not a clone")
+            return {}
         if op == "format":
             return _edit_format(doc, cmd)
         if op == "settings":
@@ -4308,6 +4403,7 @@ class Dispatcher:
                 raise ValueError(
                     f"delete: {key!r} is referenced by the expression on "
                     f"{', '.join(dependents)}; clear those expressions first")
+            _drop_clone(doc, key)
             del nodes[key]
             for other in nodes.values():
                 other["inputs"] = {slot: None if value == key else value for slot, value in other["inputs"].items()}

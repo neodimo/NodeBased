@@ -202,7 +202,8 @@ SHORTCUT_SECTIONS = (
                     ("Ctrl+Alt+drag across wires", "knife: cut every wire the line crosses (Esc cancels)"),
                     ("Right-click an input socket", "disconnect it"),
                     ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
-                    ("Alt+C", "duplicate"), ("Ctrl+G", "group the selected nodes"),
+                    ("Alt+C", "duplicate"), ("Alt+K", "clone: a copy that shares its knobs with the original (orange line)"),
+                    ("Alt+Shift+K", "declone: make the selected clones independent"), ("Ctrl+G", "group the selected nodes"),
                     ("Ctrl+Shift+G", "ungroup the selected group"),
                     ("Double-click a group", "enter it (the Root > Group bar above the graph goes back)"),
                     ("Hold Q", "radial menu: flick to a slice and release to run it, or tap to keep it open and click"),
@@ -9701,6 +9702,7 @@ class Graph(PanZoomView):
                 self.cancel_wire()
 
     EXPRESSION_LINK_COLOR = "#5fcf6a"
+    CLONE_LINK_COLOR = "#ff9a1f"
 
     def add_expression_links(self, doc):
         """Nuke draws a green arrow between nodes linked by an expression (17.0 User Guide, Linking Expressions): one dashed
@@ -9719,6 +9721,21 @@ class Graph(PanZoomView):
                     if (source, target) not in pairs and source != target and source in self.items_by_id \
                             and target in self.items_by_id:
                         pairs.append((source, target))
+        # Nuke's clone link: a solid orange line from each clone to its parent (17.0 User Guide, Cloning Nodes).
+        for clone, parent in ((doc.get("settings") or {}).get("clones") or {}).items():
+            if clone in self.items_by_id and parent in self.items_by_id:
+                link = QGraphicsPathItem()
+                pen = QPen(QColor(self.CLONE_LINK_COLOR), 2.0, Qt.PenStyle.SolidLine)
+                pen.setCosmetic(True)
+                link.setPen(pen)
+                link.setZValue(-3)
+                link.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+                link.setAcceptHoverEvents(False)
+                link.expression_link = (parent, clone)
+                link.clone_link = True
+                link.setToolTip("Clone: shares every knob with its parent")
+                self.scene().addItem(link)
+                self.expression_links.append(link)
         for source, target in pairs:
             link = QGraphicsPathItem()
             pen = QPen(QColor(self.EXPRESSION_LINK_COLOR), 1.6, Qt.PenStyle.DashLine)
@@ -9738,7 +9755,9 @@ class Graph(PanZoomView):
             start, end = source.sceneBoundingRect().center(), target.sceneBoundingRect().center()
             line = QLineF(start, end)
             path = QPainterPath(start)
-            if line.length() > 1:
+            if getattr(link, "clone_link", False):
+                path.lineTo(end)
+            elif line.length() > 1:
                 # Stop at the target node's edge, with a small arrowhead there.
                 rect = target.sceneBoundingRect()
                 tip = end
@@ -10295,6 +10314,10 @@ class Graph(PanZoomView):
             self.window.command({"op": "batch", "commands": edits})
         elif event.key() == Qt.Key.Key_C and modifiers == Qt.KeyboardModifier.AltModifier:
             self._paste_nodes(self._selected_node_data())
+        elif event.key() == Qt.Key.Key_K and modifiers == Qt.KeyboardModifier.AltModifier:
+            self.clone_selection()
+        elif event.key() == Qt.Key.Key_K and modifiers == (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier):
+            self.declone_selection()
         elif event.key() == Qt.Key.Key_G and modifiers == Qt.KeyboardModifier.ControlModifier:
             self.group_selection()
         elif event.key() == Qt.Key.Key_G and modifiers == (Qt.KeyboardModifier.ControlModifier
@@ -10362,6 +10385,33 @@ class Graph(PanZoomView):
         for key in found:
             if key in self.items_by_id:
                 self.items_by_id[key].setSelected(True)
+
+    def clone_selection(self):
+        """Nuke's Edit > Clone (Alt+K, 17.0 User Guide, Working with Nodes > Cloning Nodes): "Nuke clones the node(s), while
+        maintaining an active link to the parental node(s)." One undo step; the clones are selected afterwards, and an
+        orange line joins each clone to its parent. Editing a knob on either changes both."""
+        keys = [key for key in self.selected_ids() if key in self.items_by_id
+                and self.window.graph_nodes().get(key, {}).get("type") not in ("Group", "Viewer", "Dot")]
+        if not keys:
+            return
+        nodes = self.window.graph_nodes()
+        made = [uuid.uuid4().hex[:12] for _ in keys]
+        commands = [{"op": "clone", "id": key, "new_id": new,
+                     "pos": [nodes[key]["pos"][0] + 40, nodes[key]["pos"][1] + 40]} for key, new in zip(keys, made)]
+        if self.window.command({"op": "batch", "commands": commands}) is None:
+            return
+        self.scene().clearSelection()
+        for key in made:
+            if key in self.items_by_id:
+                self.items_by_id[key].setSelected(True)
+        self.reveal([key for key in made if key in self.items_by_id])
+
+    def declone_selection(self):
+        """Nuke's Edit > Declone (Alt+Shift+K): the selected clones keep their values and stop following each other."""
+        clones = self.window.dispatcher.document["settings"].get("clones") or {}
+        keys = [key for key in self.selected_ids() if key in clones or key in clones.values()]
+        if keys:
+            self.window.command({"op": "batch", "commands": [{"op": "declone", "id": key} for key in keys]})
 
     def set_snap_to_grid(self, on):
         self.snap_to_grid = bool(on)
@@ -12951,6 +13001,12 @@ class Window(QMainWindow):
         snap_action.setChecked(self.graph.snap_to_grid)
         snap_action.toggled.connect(self.graph.set_snap_to_grid)
         edit.addAction(snap_action)
+        for label, name, fn in (("Clone\tAlt+K", "clone-action", lambda: self.graph.clone_selection()),
+                                ("Declone\tAlt+Shift+K", "declone-action", lambda: self.graph.declone_selection())):
+            clone_action = QAction(label, self)
+            clone_action.setObjectName(name)
+            clone_action.triggered.connect(lambda checked=False, f=fn: f())
+            edit.addAction(clone_action)
         connected_action = QAction("Select connected nodes\tCtrl+Alt+A", self)
         connected_action.setObjectName("select-connected-action")
         connected_action.triggered.connect(lambda checked=False: self.graph.select_connected())

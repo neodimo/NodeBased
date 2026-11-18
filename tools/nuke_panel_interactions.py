@@ -1719,7 +1719,42 @@ def _graph_snap(bench):
 
 @probe("graph.clone")
 def _graph_clone(bench):
-    return False, "there is no Clone: Alt+C makes an independent copy, with no active link to its parent"
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QAction
+    _graph_fresh(bench)
+    parent = _graph_node(bench, "Grade", 0, 0, {"gamma": 1.3})
+    _graph_select(bench, parent)
+    before = len(bench.window.dispatcher.document["nodes"])
+    _graph_key(bench, Qt.Key.Key_K, Qt.KeyboardModifier.AltModifier)
+    doc = bench.window.dispatcher.document
+    clones = doc["settings"].get("clones") or {}
+    made = [key for key, value in clones.items() if value == parent]
+    clone = made[0] if len(made) == 1 else None
+    made_one = clone is not None and len(doc["nodes"]) == before + 1 and doc["nodes"][clone]["type"] == "Grade" \
+        and doc["nodes"][clone]["params"]["gamma"] == 1.3
+    selected = bench.window.graph.selected_ids() == [clone]
+    graph = bench.window.graph
+    orange = [link for link in getattr(graph, "expression_links", ()) if getattr(link, "clone_link", False)
+              and link.expression_link == (parent, clone)
+              and link.pen().color().name() == graph.CLONE_LINK_COLOR]
+    shared = False
+    if clone:
+        bench.window.command({"op": "set", "id": parent, "param": "gamma", "value": 1.8})
+        follows = bench.params(clone)["gamma"] == 1.8
+        bench.window.command({"op": "set", "id": clone, "param": "white", "value": 0.5})
+        back = bench.params(parent)["white"] == 0.5
+        bench.window.command({"op": "undo"})
+        one_step = bench.params(parent)["white"] == 1.0 and bench.params(clone)["white"] == 1.0
+        shared = follows and back and one_step
+    bench.window.command({"op": "undo"})
+    bench.window.command({"op": "undo"})
+    undone = len(bench.window.dispatcher.document["nodes"]) == before and \
+        not bench.window.dispatcher.document["settings"].get("clones")
+    menu = all(bench.window.findChild(QAction, name) is not None for name in ("clone-action", "declone-action"))
+    ok = made_one and selected and bool(orange) and shared and undone and menu
+    return ok, (f"Alt+K on a Grade makes one Grade clone with its knobs: {made_one}; the clone is selected: {selected}; an "
+                f"orange line joins it to its parent: {bool(orange)}; a knob edit on either changes both, undone in one "
+                f"step: {shared}; one undo removes the clone and its link: {undone}; Edit > Clone and Declone: {menu}")
 
 
 # -- run -------------------------------------------------------------------------------------------------------------------

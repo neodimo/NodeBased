@@ -89,6 +89,7 @@ def scope_document(doc, graph):
     settings = copy.deepcopy(doc["settings"])
     for name in VIEWER_STATE_KEYS + VIEWER_EXTRA_KEYS:
         settings["viewer"].pop(name, None)
+    settings.pop("clones", None)  # clones link top-level nodes only
     return {"version": doc["version"], "nodes": graph["nodes"], "view": None, "time": doc["time"],
             "animation": graph["animation"], "settings": settings,
             "node_data": graph["node_data"], "expressions": {}, "references": []}

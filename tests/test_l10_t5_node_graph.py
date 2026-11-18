@@ -15,8 +15,8 @@ import nuke_panel_interactions as interactions  # noqa: E402
 
 PASSING = ("graph.tab_create", "graph.tab_last_node", "graph.tab_weighting", "graph.add_connects_selected", "graph.disable_d",
            "graph.rename_n", "graph.select_all", "graph.shift_click_select", "graph.copy_paste", "graph.cut",
-           "graph.ctrl_d_disconnect", "graph.autocolor", "graph.tile_color", "graph.backdrop_moves_contents")
-OPEN = ("graph.clone",)
+           "graph.ctrl_d_disconnect", "graph.autocolor", "graph.tile_color", "graph.backdrop_moves_contents", "graph.clone")
+OPEN = ()  # graph.clone landed in the T6 finish
 
 
 class NodeGraphTests(unittest.TestCase):
