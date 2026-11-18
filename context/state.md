@@ -1,5 +1,25 @@
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
+## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (5:15 PM on 2026-11-17 PDT)
+
+`main` moved `a85259c1` -> `31fc2844` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `31fc2844` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-1645.log`, started 4:46 PM): **Ran 10180 tests in 1715.820 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T4 (Tue 11/17): the Properties bin and knob linking work like Nuke's.** Commits:
+  - `9b8c4f63` Floating panels, the Properties bin's lock and the green Node Graph arrow for expression links, as in Nuke 17.0's User Guide
+  - `edf12a1f` Properties bin and knob linking work like Nuke's: Return and Ctrl+click open a panel, Alt/Ctrl+click on close, Ctrl+drag links knobs, linked knobs turn blue; measured against the 17.0 User Guide
+  Diff: 9 files changed, 884 insertions(+), 20 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5), Lane 11 (Review book, Claude Opus 5.5) (4:05 PM on 2026-11-17 PDT)
 
 `main` moved `52857cbb` -> `a178ccbc` (lane commits cherry-picked onto main in lane order) and then to this

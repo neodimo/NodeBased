@@ -1,3 +1,9 @@
+## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T4 (Tue 11/17): the Properties bin and knob linking work like Nuke's (integrator tick)
+
+- **What was done:** `main` `a85259c1` -> `31fc2844` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `31fc2844`: Ran 10180 tests in 1715.820 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step W2 (Tue 11/17): the rest of the filter and draw worklist, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T3 (Tue 11/17): Viewer on-screen controls work like Nuke's, measured per node (finish 1), Lane 11 (Review book, Claude Opus 5.5) step B4 (Tue 11/17): the Transform group's worklist, and CopyBBox's inputs (integrator tick)
 
 - **What was done:** `main` `52857cbb` -> `a178ccbc` plus this docs commit. Evidence and per-lane commit
