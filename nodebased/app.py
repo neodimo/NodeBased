@@ -7742,6 +7742,15 @@ class NodeItem(QGraphicsRectItem):
                 if item is not self and area.contains(item.sceneBoundingRect().center())]
 
     def mousePressEvent(self, event):
+        if (event.button() == Qt.MouseButton.LeftButton
+                and event.modifiers() == Qt.KeyboardModifier.ShiftModifier):
+            # Nuke 17.0 User Guide (Working with Nodes > Selecting Nodes): "press Shift while clicking on each node you want to
+            # select". Qt adds to the selection on Ctrl only, so Shift+click adds this node here and keeps the others.
+            self.setSelected(True)
+            self._shift_select = True
+            event.accept()
+            return
+        self._shift_select = False
         super().mousePressEvent(event)
         if self.is_backdrop and event.button() == Qt.MouseButton.LeftButton:
             self.graph.primary_id = self.key
@@ -7753,6 +7762,13 @@ class NodeItem(QGraphicsRectItem):
             for item in self.enclosed_items():
                 item.setSelected(True)
             scene.blockSignals(False)
+
+    def mouseReleaseEvent(self, event):
+        if getattr(self, "_shift_select", False):
+            self._shift_select = False     # Qt's release would clear the rest of the selection
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event):
         """Right-click a node on the graph: "What is this?" (`Window.show_node_help`), the same
@@ -8490,6 +8506,11 @@ class NodeToolbar(QWidget):
 
 class NodeSearch(QDialog):
     """Small keyboard-first node picker, intentionally close to Nuke's Tab menu."""
+    # Nuke 17.0 User Guide (Using the Tab Menu, Working with Nodes): "Commonly used nodes are weighted so that they appear higher
+    # up the list", and "To add the last node created using this method, simply press Tab and then Return". Only nodes made from
+    # the Tab menu count (a keyboard shortcut such as B "does not affect node weighting"). Kept for the session.
+    usage = {}
+    last_kind = None
     def __init__(self, parent, choices, global_pos, extras=()):
         """`choices` are node types. `extras` are further results for the top bar's one search
         box: (label, group, callable) for menu commands and settings; choosing one returns its
@@ -8560,7 +8581,13 @@ class NodeSearch(QDialog):
         entries += [(label, f"{label}  ·  {group}", action) for label, group, action in self.extras]
         ranked = [(rank(label, isinstance(payload, str)), index, text, payload)
                   for index, (label, text, payload) in enumerate(entries)]
-        matches = sorted((entry for entry in ranked if entry[0] is not None), key=lambda e: (e[0], e[1]))
+        usage, last = NodeSearch.usage, NodeSearch.last_kind
+        def order(entry):
+            tier, index, _text, payload = entry
+            if not needle and isinstance(payload, str) and payload == last:
+                return (-1, 0, index)         # Tab then Return makes the last node again
+            return (tier, -usage.get(payload, 0) if isinstance(payload, str) else 0, index)
+        matches = sorted((entry for entry in ranked if entry[0] is not None), key=order)
         self.list.clear()
         for _tier, _index, text, payload in matches:
             item = QListWidgetItem(text)
@@ -8573,12 +8600,17 @@ class NodeSearch(QDialog):
         item = self.list.currentItem()
         if item:
             self.selected_kind = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(self.selected_kind, str) and not self.extras:
+                NodeSearch.usage[self.selected_kind] = NodeSearch.usage.get(self.selected_kind, 0) + 1
+                NodeSearch.last_kind = self.selected_kind
             self.accept()
 
     @classmethod
     def choose(cls, parent, choices, global_pos, extras=()):
         picker = cls(parent, choices, global_pos, extras)
-        return picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
+        chosen = picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
+        picker.deleteLater()          # a closed popup left alive would make the next Tab look like a press inside a popup
+        return chosen
 
 
 class KeyboardShortcutsDialog(QDialog):
@@ -10141,12 +10173,19 @@ class Graph(PanZoomView):
 
     def _paste_nodes(self, node_data):
         commands, pasted = [], []
+        # Nuke 17.0 User Guide (Working with Nodes > Editing Nodes): "When you paste nodes, Nuke automatically connects them to
+        # the node that is selected before the paste operation." The first pasted node's first input takes the selected node.
+        target = self.selected_id()
         for node in node_data:
             key = __import__("uuid").uuid4().hex[:12]
             x, y = node["pos"]
             commands.append({"op": "create", "id": key, "type": node["type"],
                              "params": copy.deepcopy(node["params"]), "pos": [x + 40, y + 40]})
             pasted.append(key)
+        if target is not None and pasted:
+            first = SPECS[node_data[0]["type"]].get("inputs") or []
+            if first and OUTPUT_TYPES.get(self.window.graph_nodes()[target]["type"]) != "none":
+                commands.append({"op": "connect", "id": pasted[0], "input": first[0], "source": target})
         if not commands or self.window.command({"op": "batch", "commands": commands}) is None:
             return
         self.scene().clearSelection()
@@ -10220,6 +10259,14 @@ class Graph(PanZoomView):
             self.window.command({"op": "viewer_input", "slot": event.key() - Qt.Key.Key_0, "id": key})
         elif event.key() == Qt.Key.Key_D and not modifiers and key:
             self.window.command({"op": "disable", "id": key, "value": not self.window.graph_nodes()[key]["disabled"]})
+        elif event.key() == Qt.Key.Key_N and not modifiers and key:
+            self.start_rename(key)
+        elif event.key() == Qt.Key.Key_D and modifiers == Qt.KeyboardModifier.ControlModifier and self.selected_ids():
+            # Nuke 17.0 User Guide (Working with Nodes > Connecting Nodes): "selecting the lower node in the tree and pressing
+            # Ctrl/Cmd+D" disconnects it. Every input of every selected node, one undo step.
+            nodes = self.window.graph_nodes()
+            self.disconnect_wires(sorted((ident, slot) for ident in self.selected_ids() if ident in nodes
+                                        for slot, source in (nodes[ident].get("inputs") or {}).items() if source))
         elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers and self.selected_wires:
             self.disconnect_wires(sorted(self.selected_wires))
         elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers:
@@ -10235,6 +10282,40 @@ class Graph(PanZoomView):
                                    Qt.Key.Key_W: "Write"}[event.key()])
         else:
             super().keyPressEvent(event)
+
+    def start_rename(self, key):
+        """Nuke's N (17.0 User Guide, Working with Nodes > Renaming Nodes): "Enter a new name for the node in the rename field
+        that appears on top of the node." Return renames in one undo step; Escape or leaving the field keeps the old name."""
+        item = self.items_by_id.get(key)
+        if item is None:
+            return None
+        editor = QLineEdit(self.viewport())
+        editor.setObjectName("node-rename")
+        editor.setText(self.window.graph_nodes()[key].get("name") or key)
+        editor.selectAll()
+        top = self.mapFromScene(item.sceneBoundingRect().topLeft())
+        width = max(120, self.mapFromScene(item.sceneBoundingRect().topRight()).x() - top.x())
+        editor.setGeometry(top.x(), max(0, top.y() - 26), width, 24)
+        done = []
+        def finish(commit):
+            if done:
+                return
+            done.append(True)
+            text = editor.text().strip()
+            editor.hide()
+            editor.deleteLater()
+            self.setFocus()
+            if commit and text and text != (self.window.graph_nodes().get(key, {}).get("name") or key):
+                self.window.command({"op": "rename", "id": key, "name": text})
+        editor.returnPressed.connect(lambda: finish(True))
+        editor.editingFinished.connect(lambda: finish(False))
+        escape = QShortcut(QKeySequence(Qt.Key.Key_Escape), editor)
+        escape.setContext(Qt.ShortcutContext.WidgetShortcut)
+        escape.activated.connect(lambda: finish(False))
+        editor.show()
+        editor.setFocus()
+        self.rename_editor = editor
+        return editor
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
@@ -19594,6 +19675,13 @@ class Window(QMainWindow):
             graph_point = self.graph.viewport().mapFromGlobal(QCursor.pos())
             if self.graph.viewport().rect().contains(graph_point):
                 self.graph.last_click_scene_pos = self.graph.mapToScene(graph_point)
+                self.node_search()
+                return True
+            # Nuke opens the Tab menu "when the Node Graph has either click or mouse focus" (17.0 User Guide, Using the Tab
+            # Menu): with the pointer elsewhere, a focused graph still takes Tab, unless the pointer is over the Viewer.
+            stack = self.view_stack
+            over_viewer = stack.isVisible() and stack.rect().contains(stack.mapFromGlobal(QCursor.pos()))
+            if not over_viewer and watched in (self.graph, self.graph.viewport()) and self.graph.hasFocus():
                 self.node_search()
                 return True
             # Nuke's rule: Tab over the viewer swaps its 2D and 3D views. The node graph keeps

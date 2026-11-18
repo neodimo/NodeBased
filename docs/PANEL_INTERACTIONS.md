@@ -24,6 +24,9 @@ picks a colour, keys or resets a knob.
   <https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/animating_parameters.html>
 - Linking Expressions (Nuke 17.0 User Guide):
   <https://learn.foundry.com/nuke/17.0/content/comp_environment/expressions/linking_expressions.html>
+- Working with Nodes and Using the Tab Menu (Nuke 17.0 User Guide), for the Node Graph:
+  <https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/working_nodes.html>,
+  <https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/tab_menu.html>
 
 ## What the number field now does (lane 10, 2026-11-16)
 
@@ -187,3 +190,28 @@ language).
 - Enumeration, check box, XY and file knobs, the mask fringe box, a typed value outside the slider range, and the
   Animation menu's Copy/Paste and Set to default have no interaction rule on the User Guide pages read, so they are listed
   as undocumented.
+
+## Knob linking finished and the Node Graph (lane 10, step T5, 2026-11-17)
+
+- **Reference:** the `linking` and `node_graph` entries of `docs/parity/nuke_knob_interactions.json`. The Node Graph entries
+  quote the 17.0 User Guide's [Working with Nodes](https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/working_nodes.html)
+  and [Using the Tab Menu](https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/tab_menu.html) pages, the
+  [Backdrop](https://learn.foundry.com/nuke/17.0/content/reference_guide/other_nodes/backdrop.html) Reference Guide page and the
+  Node Graph preferences in [Appendix A](https://learn.foundry.com/nuke/17.0/content/misc/available_preferences_studio.html).
+  Each probe in `tools/nuke_panel_interactions.py` sends real key and mouse events to the built window's Node Graph and reads the
+  document, the undo step and the selection; `tests/test_l10_t5_node_graph.py` and `tests/test_l10_t5_linking.py` assert them.
+- **Linking, 8 of 9 (6 before):** Ctrl/Cmd+drag of one knob's animation button onto another's links the whole knob (every
+  channel of an r g b a knob) in one undo step; the knob menu's Link to lists every Tracker and links the knob to its translate x
+  or y. Left: the Link menu of channel, layer and format knobs (those knobs hold names, which expressions do not drive yet), and
+  split knobs have no animation button, so a split knob cannot be the drop target.
+- **Node Graph, 14 of 25 documented (7 before):** fixed here: Tab opens the Tab menu whenever the graph has focus (before, only with
+  the pointer over it); Tab then Return makes the last node made from the Tab menu, and nodes used often from it list first
+  (keyboard shortcuts such as B do not count, as the guide says); N opens a rename field on top of the node (Return renames in one
+  undo step, Escape keeps the name); Ctrl/Cmd+D disconnects the selected nodes; Shift+click adds a node to the selection (before
+  it replaced it; Ctrl+click still adds, so nothing was lost); a paste connects to the node selected before it. Already like Nuke:
+  creating a node connects it to the selected one, D, Ctrl/Cmd+A, Ctrl/Cmd+X, colours by class and the tile colour, a Backdrop
+  carrying the nodes on it.
+- **Still open:** Clone with an active link (NodeBased's Alt+C makes an independent copy), Ctrl/Cmd+Alt+A Select Connected Nodes,
+  and not yet probed: Shift to start a new branch, Ctrl/Cmd to replace, inserting by dragging onto a pipe, dragging a pipe's end to
+  connect or disconnect, Shift+drag to duplicate a pipe, Ctrl/Cmd+click to add a Dot, Ctrl/Cmd+drag to select upstream, snap to
+  grid. Undocumented on the pages read: swapping inputs with Shift, a downstream-only selection, an Alt+C duplicate.

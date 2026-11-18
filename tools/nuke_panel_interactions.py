@@ -1147,6 +1147,297 @@ def _link_tracker(bench):
         f"Link to > {entries[0].text()} on Transform's translate x stores {stored!r}")
 
 
+# Node Graph (Nuke 17.0 User Guide, Working with Nodes and Using the Tab Menu)
+
+def _graph_fresh(bench):
+    """An empty graph with focus, so each probe sees only its own nodes."""
+    _bin_reset(bench)
+    doc = bench.window.dispatcher.document
+    # Earlier probes leave expression links; a node another one reads cannot be deleted, so the links go first.
+    links = [{"op": "clear_expression", "id": key, "param": param}
+             for key, params in (doc.get("expressions") or {}).items() for param in params]
+    if links:
+        bench.window.command({"op": "batch", "commands": links})
+    for key in list(doc["nodes"]):
+        if key in bench.window.dispatcher.document["nodes"]:
+            bench.window.command({"op": "delete", "id": key})
+    bench.settle()
+    bench.window.graph.setFocus()
+    return bench.window.graph
+
+
+def _graph_node(bench, kind, x=0, y=0, params=None):
+    bench.count += 1
+    key = f"graph_{bench.count}"
+    command = {"op": "create", "id": key, "type": kind, "pos": [x, y]}
+    if params:
+        command["params"] = params
+    bench.window.command(command)
+    bench.settle()
+    return key
+
+
+def _graph_select(bench, *keys):
+    graph = bench.window.graph
+    graph.scene().clearSelection()
+    for key in keys:
+        graph.items_by_id[key].setSelected(True)
+    bench.settle()
+
+
+def _graph_key(bench, key, modifiers=None):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    QTest.keyClick(bench.window.graph, key, modifiers or Qt.KeyboardModifier.NoModifier)
+    bench.settle(6)
+
+
+def _tab_choose(bench, text, enter=True):
+    """Press Tab in the Node Graph, type `text` into the Tab menu that opens and press Return."""
+    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+    from nodebased.app import NodeSearch
+    seen = {}
+    def drive():
+        pickers = [w for w in QApplication.topLevelWidgets() if isinstance(w, NodeSearch) and w.isVisible()]
+        if not pickers:
+            QTimer.singleShot(20, drive)
+            return
+        picker = pickers[-1]
+        if text:
+            QTest.keyClicks(picker.query, text)
+        seen["first"] = picker.list.item(0).data(Qt.ItemDataRole.UserRole) if picker.list.count() else None
+        QTest.keyClick(picker.query, Qt.Key.Key_Return if enter else Qt.Key.Key_Escape)
+    QTimer.singleShot(0, drive)
+    QApplication.setActiveWindow(bench.window)     # an earlier probe's floating panel may hold the active window
+    bench.window.graph.setFocus()
+    bench.settle()
+    seen["focus"] = bench.window.graph.hasFocus()
+    _graph_key(bench, Qt.Key.Key_Tab)
+    bench.tab_focus = seen.get("focus")
+    return seen.get("first")
+
+
+def _new_nodes(bench, before):
+    nodes = bench.window.dispatcher.document["nodes"]
+    return [key for key in nodes if key not in before]
+
+
+@probe("graph.tab_create")
+def _graph_tab_create(bench):
+    _graph_fresh(bench)
+    grade = _graph_node(bench, "Grade")
+    _graph_select(bench, grade)
+    before, undo = set(bench.window.dispatcher.document["nodes"]), bench.undo_count()
+    _tab_choose(bench, "Blur")
+    new = _new_nodes(bench, before)
+    nodes = bench.window.dispatcher.document["nodes"]
+    made = [k for k in new if nodes[k]["type"] == "Blur"]
+    wired = bool(made) and grade in (nodes[made[0]].get("inputs") or {}).values()
+    bench.window.command({"op": "undo"})          # the new node and its wire are one undo step (the stack may be capped)
+    bench.settle()
+    steps = 1 if made and made[0] not in bench.window.dispatcher.document["nodes"] and grade in bench.window.dispatcher.document["nodes"] else 0
+    return bool(made) and wired and steps == 1, f"Tab, Blur, Return made {[nodes[k]['type'] for k in new]}; wired to the Grade: {wired}; undo steps {steps}; graph focused: {getattr(bench, 'tab_focus', None)}"
+
+
+@probe("graph.tab_last_node")
+def _graph_tab_last(bench):
+    _graph_fresh(bench)
+    grade = _graph_node(bench, "Grade")
+    _graph_select(bench, grade)
+    _tab_choose(bench, "Sharpen")
+    from PySide6.QtCore import QEvent
+    bench.app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    bench.settle(6)
+    before = set(bench.window.dispatcher.document["nodes"])
+    first = _tab_choose(bench, "")
+    new = [bench.window.dispatcher.document["nodes"][k]["type"] for k in _new_nodes(bench, before)]
+    return new == ["Sharpen"], f"after making a Sharpen from the Tab menu, Tab then Return makes {new} (the menu listed {first!r} first)"
+
+
+@probe("graph.tab_weighting")
+def _graph_tab_weighting(bench):
+    from nodebased.app import NodeSearch, SPECS
+    _graph_fresh(bench)
+    for _ in range(3):
+        _tab_choose(bench, "Erode")
+    picker = NodeSearch(bench.window, SPECS, bench.window.mapToGlobal(bench.window.rect().center()))
+    picker.update_matches("e")
+    from PySide6.QtCore import Qt
+    first = picker.list.item(0).data(Qt.ItemDataRole.UserRole) if picker.list.count() else None
+    picker.deleteLater()
+    return isinstance(first, str) and first.startswith("Erode"), f"after three Erodes from the Tab menu, typing e lists {first!r} first"
+
+
+@probe("graph.add_connects_selected")
+def _graph_add_connects(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    grade = _graph_node(bench, "Grade")
+    _graph_select(bench, grade)
+    before = set(bench.window.dispatcher.document["nodes"])
+    _graph_key(bench, Qt.Key.Key_B)
+    nodes = bench.window.dispatcher.document["nodes"]
+    new = _new_nodes(bench, before)
+    wired = bool(new) and grade in (nodes[new[0]].get("inputs") or {}).values()
+    return wired, f"B with the Grade selected made {[nodes[k]['type'] for k in new]}, wired to it: {wired}"
+
+
+@probe("graph.disable_d")
+def _graph_disable(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    grade = _graph_node(bench, "Grade")
+    _graph_select(bench, grade)
+    _graph_key(bench, Qt.Key.Key_D)
+    off = bench.window.dispatcher.document["nodes"][grade]["disabled"]
+    _graph_key(bench, Qt.Key.Key_D)
+    on = not bench.window.dispatcher.document["nodes"][grade]["disabled"]
+    return off and on, f"D disables the Grade: {off}; D again enables it: {on}"
+
+
+@probe("graph.rename_n")
+def _graph_rename(bench):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLineEdit
+    _graph_fresh(bench)
+    grade = _graph_node(bench, "Grade")
+    _graph_select(bench, grade)
+    _graph_key(bench, Qt.Key.Key_N)
+    editors = [e for e in bench.window.graph.viewport().findChildren(QLineEdit, "node-rename") if e.isVisible()]
+    if not editors:
+        return False, "N opens no rename field on the node"
+    editors[-1].selectAll()
+    QTest.keyClicks(editors[-1], "KeyGrade")
+    QTest.keyClick(editors[-1], Qt.Key.Key_Return)
+    bench.settle(6)
+    name = bench.window.dispatcher.document["nodes"][grade].get("name")
+    return name == "KeyGrade", f"N, typing KeyGrade and Return names the node {name!r}"
+
+
+@probe("graph.select_all")
+def _graph_select_all(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    keys = [_graph_node(bench, "Grade", 0, 0), _graph_node(bench, "Blur", 200, 0)]
+    _graph_key(bench, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    chosen = sorted(bench.window.graph.selected_ids())
+    return chosen == sorted(keys), f"Ctrl+A selects {chosen}"
+
+
+@probe("graph.shift_click_select")
+def _graph_shift_click(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    first, second = _graph_node(bench, "Grade", 0, 0), _graph_node(bench, "Blur", 300, 0)
+    bench.window.graph.frame_nodes()
+    bench.settle()
+    _graph_click(bench, first)
+    _graph_click(bench, second, Qt.KeyboardModifier.ShiftModifier)
+    chosen = sorted(bench.window.graph.selected_ids())
+    return chosen == sorted([first, second]), f"click then Shift+click selects {chosen}"
+
+
+@probe("graph.copy_paste")
+def _graph_copy_paste(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    blur, grade = _graph_node(bench, "Blur", 0, 0), _graph_node(bench, "Grade", 300, 0)
+    _graph_select(bench, blur)
+    _graph_key(bench, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    _graph_select(bench, grade)
+    before = set(bench.window.dispatcher.document["nodes"])
+    _graph_key(bench, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+    nodes = bench.window.dispatcher.document["nodes"]
+    new = _new_nodes(bench, before)
+    wired = bool(new) and grade in (nodes[new[0]].get("inputs") or {}).values()
+    return bool(new) and nodes[new[0]]["type"] == "Blur" and wired, (
+        f"Ctrl+C, select the Grade, Ctrl+V pastes {[nodes[k]['type'] for k in new]}, wired to the Grade: {wired}")
+
+
+@probe("graph.cut")
+def _graph_cut(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    blur = _graph_node(bench, "Blur")
+    _graph_select(bench, blur)
+    _graph_key(bench, Qt.Key.Key_X, Qt.KeyboardModifier.ControlModifier)
+    gone = blur not in bench.window.dispatcher.document["nodes"]
+    return gone, f"Ctrl+X removes the node: {gone}"
+
+
+@probe("graph.ctrl_d_disconnect")
+def _graph_ctrl_d(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    grade = _graph_node(bench, "Grade", 0, 0)
+    blur = _graph_node(bench, "Blur", 0, 150)
+    bench.window.command({"op": "connect", "id": blur, "input": "image", "source": grade})
+    _graph_select(bench, blur)
+    _graph_key(bench, Qt.Key.Key_D, Qt.KeyboardModifier.ControlModifier)
+    inputs = {k: v for k, v in (bench.window.dispatcher.document["nodes"][blur].get("inputs") or {}).items() if v}
+    bench.window.command({"op": "undo"})
+    back = (bench.window.dispatcher.document["nodes"][blur].get("inputs") or {}).get("image") == grade
+    return not inputs and back, f"Ctrl+D leaves the Blur's inputs {inputs}; one undo reconnects it: {back}"
+
+
+@probe("graph.autocolor")
+def _graph_autocolor(bench):
+    _graph_fresh(bench)
+    grade, blur, merge = _graph_node(bench, "Grade"), _graph_node(bench, "Blur", 200), _graph_node(bench, "Merge", 400)
+    items = bench.window.graph.items_by_id
+    colours = {items[k].brush().color().name() for k in (grade, blur, merge)}
+    return len(colours) == 3, f"Grade, Blur and Merge draw in {sorted(colours)}"
+
+
+@probe("graph.tile_color")
+def _graph_tile_color(bench):
+    _graph_fresh(bench)
+    grade = _graph_node(bench, "Grade")
+    before = bench.window.graph.items_by_id[grade].brush().color().name()
+    bench.window.command({"op": "node_tab", "id": grade, "name": "tile_color", "value": "#ff0000"})
+    bench.settle()
+    after = bench.window.graph.items_by_id[grade].brush().color()
+    hue = after.hslHue()
+    red = hue >= 340 or 0 <= hue <= 20
+    return after.name() != before and red, (f"a red tile colour turns the node from {before} to {after.name()} (hue {hue}; the graph "
+                                            "draws tiles darkened for its dark theme)")
+
+
+@probe("graph.backdrop_moves_contents")
+def _graph_backdrop(bench):
+    from PySide6.QtCore import QEvent, Qt
+    _graph_fresh(bench)
+    backdrop = _graph_node(bench, "Backdrop", 0, 0)
+    inside = _graph_node(bench, "Grade", 40, 60)
+    graph = bench.window.graph
+    graph.frame_nodes()
+    bench.settle()
+    item = graph.items_by_id[backdrop]
+    rect = item.sceneBoundingRect()
+    start = graph.mapFromScene(rect.left() + 12, rect.top() + 8)
+    end = start + __import__("PySide6.QtCore", fromlist=["QPoint"]).QPoint(60, 0)
+    view = graph.viewport()
+    _mouse(view, QEvent.Type.MouseButtonPress, (start.x(), start.y()), Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+           Qt.KeyboardModifier.NoModifier)
+    for step in (20, 40, 60):
+        _mouse(view, QEvent.Type.MouseMove, (start.x() + step, start.y()), Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton,
+               Qt.KeyboardModifier.NoModifier)
+    _mouse(view, QEvent.Type.MouseButtonRelease, (end.x(), end.y()), Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton,
+           Qt.KeyboardModifier.NoModifier)
+    bench.settle(6)
+    nodes = bench.window.dispatcher.document["nodes"]
+    moved_b, moved_g = nodes[backdrop]["pos"][0] != 0, nodes[inside]["pos"][0] != 40
+    return moved_b and moved_g, f"dragging the Backdrop moves it: {moved_b}; the Grade on it moves too: {moved_g}"
+
+
+@probe("graph.clone")
+def _graph_clone(bench):
+    return False, "there is no Clone: Alt+C makes an independent copy, with no active link to its parent"
+
+
 # -- run -------------------------------------------------------------------------------------------------------------------
 
 def probe_all():
