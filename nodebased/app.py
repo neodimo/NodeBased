@@ -693,6 +693,41 @@ class KnobDoubleSpinBox(FittedDoubleSpinBox):
         return super().eventFilter(watched, event)
 
 
+class KeyButtonLinkDrag(QObject):
+    """Ctrl/Cmd+drag of one knob's animation (key) button onto another's links every value of the knob at once, as Nuke 17.0's
+    User Guide (Linking Expressions) describes: "Ctrl/Cmd+drag the animation button next to the source parameters on top of the
+    animation button next to the destination parameters". The drop is resolved by the window's link_key_button_drop."""
+
+    def eventFilter(self, watched, event):
+        kind = event.type()
+        if (kind == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton
+                and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            watched._link_drag = event.globalPosition().toPoint()
+            return True
+        if kind == QEvent.Type.MouseMove and getattr(watched, "_link_drag", None) is not None:
+            watched.setCursor(Qt.CursorShape.DragLinkCursor)
+            return True
+        if kind == QEvent.Type.MouseButtonRelease and getattr(watched, "_link_drag", None) is not None:
+            start, watched._link_drag = watched._link_drag, None
+            watched.unsetCursor()
+            end = event.globalPosition().toPoint()
+            link = getattr(watched.window(), "link_key_button_drop", None)
+            if (end - start).manhattanLength() >= QApplication.startDragDistance() and callable(link):
+                link(watched, end)
+            return True
+        return False
+
+
+_KEY_BUTTON_LINK_DRAG = []
+
+
+def key_button_link_drag():
+    """The one shared filter object (kept alive for the whole session)."""
+    if not _KEY_BUTTON_LINK_DRAG:
+        _KEY_BUTTON_LINK_DRAG.append(KeyButtonLinkDrag())
+    return _KEY_BUTTON_LINK_DRAG[0]
+
+
 class FloatSliderControl(QWidget):
     """A float spin box paired with a soft-range ruler slider."""
 
@@ -19193,6 +19228,9 @@ class Window(QMainWindow):
                                   f"Right-click for the animation menu.")
             self.style_animated_field(control, curve, keyed_here)
         if on_toggle is None:
+            button.setProperty("nodebased_node_id", key)
+            button.setProperty("nodebased_param", param)
+            button.installEventFilter(key_button_link_drag())
             button.clicked.connect(
                 lambda checked=False, k=key, p=param, w=control, on=keyed_here:
                     self.toggle_key(k, p, w, on))
@@ -19294,6 +19332,46 @@ class Window(QMainWindow):
         return self.command({"op": "set_expression", "id": to_key, "param": to_param,
                              "expression": self.knob_reference(from_key, from_param)})
 
+    def link_key_button_drop(self, source, global_pos):
+        """Finish a Ctrl/Cmd+drag from one knob's animation button: the knob whose animation button is under `global_pos` is
+        linked to the source knob, all of its values at once (a whole r g b a or w h knob, not one channel), in one undo step.
+        A knob split into channels is collapsed into one linked knob, since the link carries the source's every value."""
+        from_key, from_param = source.property("nodebased_node_id"), source.property("nodebased_param")
+        root = self.properties.widget()
+        target = None
+        for button in root.findChildren(QPushButton, "key-button") if root is not None else []:
+            if button is source or not button.isVisibleTo(root) or not button.property("nodebased_node_id"):
+                continue
+            if button.rect().contains(button.mapFromGlobal(global_pos)):
+                target = button
+                break
+        if target is None:
+            self.statusBar().showMessage("Drop on another knob's animation button to link it to this one", 3000)
+            return False
+        to_key, to_param = target.property("nodebased_node_id"), target.property("nodebased_param")
+        if (to_key, to_param) == (from_key, from_param):
+            return False
+        commands = []
+        value = self.graph_nodes()[to_key]["params"].get(to_param)
+        if isinstance(value, (list, tuple)):
+            commands.append({"op": "set", "id": to_key, "param": to_param, "value": float(value[0])})
+        commands.append({"op": "set_expression", "id": to_key, "param": to_param,
+                         "expression": self.knob_reference(from_key, from_param)})
+        return self.command(commands[0] if len(commands) == 1 else {"op": "batch", "commands": commands})
+
+    def tracker_link_targets(self, key, param):
+        """[(tracker id, tracker param)] for Link to > Tracker: an x knob follows a Tracker's translate x, a y knob its translate
+        y, any other knob the Tracker's knob of the same name when it has one."""
+        nodes = self.graph_nodes()
+        if param.endswith("_x") or param == "x":
+            wanted = "translate_x"
+        elif param.endswith("_y") or param == "y":
+            wanted = "translate_y"
+        else:
+            wanted = param
+        return [(ident, wanted) for ident, node in nodes.items()
+                if ident != key and node["type"] == "Tracker" and wanted in SPECS["Tracker"]["params"]]
+
     def install_expression_shortcut(self, field, key, param, control):
         """Make ``=`` open the expression editor without changing the numeric field."""
         field._expression_target = (key, param, control)
@@ -19365,6 +19443,20 @@ class Window(QMainWindow):
         if expression is not None:
             menu.addAction("Clear expression", lambda: self.defer_command(
                 {"op": "clear_expression", "id": key, "param": param}))
+        # Nuke's Animation menu: Link to > Tracker linking dialog (17.0 User Guide, Animating Parameters). The submenu lists every
+        # Tracker in the script; choosing one links this knob to that Tracker's track (translate x or y) with an expression.
+        link_to = menu.addMenu("Link to")
+        link_to.setObjectName("link-to")
+        trackers = self.tracker_link_targets(key, param)
+        for tracker, tracker_param in trackers:
+            name = self.graph_nodes()[tracker].get("name") or tracker
+            action = link_to.addAction(
+                f"Tracker {name} ({tracker_param.replace('_', ' ')})",
+                lambda t=tracker, tp=tracker_param: self.defer_command(
+                    {"op": "set_expression", "id": key, "param": param, "expression": self.knob_reference(t, tp)}))
+            action.setObjectName("link-to-tracker")
+        if not trackers:
+            link_to.addAction("No Tracker in the script").setEnabled(False)
         menu.addSeparator()
         menu.addAction(f"Set key at frame {frame}",
                        lambda: self.defer_command({"op": "set_key", "id": key, "param": param,

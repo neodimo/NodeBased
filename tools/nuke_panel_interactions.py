@@ -1077,9 +1077,49 @@ def _link_edit(bench):
     return text == f"{source}.gamma", f"Edit expression opens an editor holding {text!r}"
 
 
+def _bin_key_button(bench, key, param):
+    from PySide6.QtWidgets import QPushButton
+    root = bench.window.properties.widget()
+    for button in root.findChildren(QPushButton, "key-button") if root is not None else []:
+        if (button.property("nodebased_node_id"), button.property("nodebased_param")) == (key, param) and button.isVisibleTo(root):
+            return button
+    return None
+
+
 @probe("link.ctrl_drag_animation_button")
 def _link_button_drag(bench):
-    return False, "Ctrl+drag between animation buttons is not built; split knobs cannot carry expressions yet"
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QApplication
+    _bin_reset(bench)
+    source, target = _bin_node(bench), _bin_node(bench)
+    bench.window.command({"op": "set", "id": source, "param": "gamma", "value": 1.7})
+    bench.window.command({"op": "set", "id": target, "param": "gamma", "value": 1.2})   # one value for all of r g b a
+    _graph_click(bench, target, double=True)
+    _graph_click(bench, source, double=True)
+    from_button, to_button = _bin_key_button(bench, source, "gamma"), _bin_key_button(bench, target, "gamma")
+    if from_button is None or to_button is None:
+        return False, "no animation buttons beside the two gamma knobs"
+    ctrl = Qt.KeyboardModifier.ControlModifier
+    start = QPointF(from_button.rect().center())
+    end = QPointF(from_button.mapFromGlobal(to_button.mapToGlobal(to_button.rect().center())))
+    def send(kind, local, buttons, button=Qt.MouseButton.LeftButton):
+        QApplication.sendEvent(from_button, QMouseEvent(kind, local, QPointF(from_button.mapToGlobal(local.toPoint())), button,
+                                                        buttons, ctrl))
+    send(QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton)
+    send(QEvent.Type.MouseMove, end, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton)
+    send(QEvent.Type.MouseButtonRelease, end, Qt.MouseButton.NoButton)
+    bench.settle(8)
+    stored = (bench.window.dispatcher.document.get("expressions") or {}).get(target, {}).get("gamma")
+    whole = not isinstance(bench.params(target)["gamma"], list) and bench.window.dispatcher.evaluated_param(target, "gamma") == 1.7 \
+        if hasattr(bench.window.dispatcher, "evaluated_param") else not isinstance(bench.params(target)["gamma"], list)
+    bench.window.command({"op": "undo"})
+    bench.settle(8)
+    undone = bench.params(target)["gamma"] == 1.2 and not (
+        (bench.window.dispatcher.document.get("expressions") or {}).get(target, {}).get("gamma"))
+    ok = stored is not None and source in stored and whole and undone
+    return ok, (f"Ctrl+drag of one gamma's animation button onto the other's stores {stored!r} for the whole "
+                f"r g b a knob: {whole}; one undo brings the old value back: {undone}")
 
 
 @probe("link.link_menu")
@@ -1089,11 +1129,22 @@ def _link_menu(bench):
 
 @probe("link.tracker_link_to")
 def _link_tracker(bench):
-    key = bench.node("Grade")
-    menu = bench.window.build_curve_menu(key, "gamma", bench.field("gamma"))
-    texts = [action.text() for action in menu.actions()]
+    from PySide6.QtWidgets import QMenu
+    tracker = bench.node("Tracker")
+    bench.window.command({"op": "set", "id": tracker, "param": "translate_x", "value": 12.5})
+    key = bench.node("Transform")
+    menu = bench.window.build_curve_menu(key, "translate_x", bench.field("translate_x"))
+    link_to = [a.menu() for a in menu.actions() if a.text() == "Link to" and a.menu() is not None]
+    entries = [a for a in link_to[0].actions() if a.objectName() == "link-to-tracker"] if link_to else []
+    if not entries:
+        menu.deleteLater()
+        return False, "the knob menu has no Link to > Tracker entry"
+    entries[0].trigger()
+    bench.settle(8)
     menu.deleteLater()
-    return any(t.startswith("Link to") for t in texts), "the knob menu has no Link to entry" if not any(t.startswith("Link to") for t in texts) else "Link to is there"
+    stored = (bench.window.dispatcher.document.get("expressions") or {}).get(key, {}).get("translate_x")
+    return stored is not None and tracker in stored and "translate_x" in stored, (
+        f"Link to > {entries[0].text()} on Transform's translate x stores {stored!r}")
 
 
 # -- run -------------------------------------------------------------------------------------------------------------------

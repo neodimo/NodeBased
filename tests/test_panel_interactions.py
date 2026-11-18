@@ -22,9 +22,7 @@ from nodebased.app import evaluate_field_formula  # noqa: E402
 
 KNOWN_GAPS = {
     # Step T4 (the Properties bin and linking): documented by the guide, not built yet.
-    "link.ctrl_drag_animation_button": "split knobs cannot carry expressions",
     "link.link_menu": "channel, layer and format knobs cannot be linked",
-    "link.tracker_link_to": "no Link to > Tracker linking dialog",
 }
 
 
