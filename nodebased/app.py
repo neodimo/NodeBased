@@ -9570,6 +9570,7 @@ class Graph(PanZoomView):
                     self.edges_by_node.setdefault(source, []).append(record)
                     if key != source:
                         self.edges_by_node.setdefault(key, []).append(record)
+        self.add_expression_links(doc)
         self.update_edges()
         live = {self.wire_key(record) for record in self.edges}
         self.selected_wires &= live
@@ -9585,9 +9586,68 @@ class Graph(PanZoomView):
             else:
                 self.cancel_wire()
 
+    EXPRESSION_LINK_COLOR = "#5fcf6a"
+
+    def add_expression_links(self, doc):
+        """Nuke draws a green arrow between nodes linked by an expression (17.0 User Guide, Linking Expressions): one dashed
+        green arrow from each node an expression reads to the node it drives. The arrows take no clicks, so wires, ports
+        and nodes under them behave as before."""
+        from .expressions import parse as parse_expression
+        self.expression_links = []
+        pairs = []
+        for target, by_param in (doc.get("expressions") or {}).items():
+            for text in (by_param or {}).values():
+                try:
+                    references = parse_expression(text).references
+                except Exception:   # a formula the document refused never reaches here; be safe while drawing
+                    continue
+                for source, _param in references:
+                    if (source, target) not in pairs and source != target and source in self.items_by_id \
+                            and target in self.items_by_id:
+                        pairs.append((source, target))
+        for source, target in pairs:
+            link = QGraphicsPathItem()
+            pen = QPen(QColor(self.EXPRESSION_LINK_COLOR), 1.6, Qt.PenStyle.DashLine)
+            pen.setCosmetic(True)
+            link.setPen(pen)
+            link.setZValue(-3)
+            link.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            link.setAcceptHoverEvents(False)
+            link.expression_link = (source, target)
+            link.setToolTip("Linked by an expression")
+            self.scene().addItem(link)
+            self.expression_links.append(link)
+
+    def route_expression_links(self):
+        for link in getattr(self, "expression_links", ()):
+            source, target = (self.items_by_id[key] for key in link.expression_link)
+            start, end = source.sceneBoundingRect().center(), target.sceneBoundingRect().center()
+            line = QLineF(start, end)
+            path = QPainterPath(start)
+            if line.length() > 1:
+                # Stop at the target node's edge, with a small arrowhead there.
+                rect = target.sceneBoundingRect()
+                tip = end
+                for edge in (QLineF(rect.topLeft(), rect.topRight()), QLineF(rect.topRight(), rect.bottomRight()),
+                             QLineF(rect.bottomRight(), rect.bottomLeft()), QLineF(rect.bottomLeft(), rect.topLeft())):
+                    kind, point = line.intersects(edge)
+                    if kind == QLineF.IntersectionType.BoundedIntersection:
+                        tip = point
+                        break
+                path.lineTo(tip)
+                back = QLineF(tip, start)
+                back.setLength(9)
+                for turn in (25, -25):
+                    wing = QLineF(back)
+                    wing.setAngle(back.angle() + turn)
+                    path.moveTo(tip)
+                    path.lineTo(wing.p2())
+            link.setPath(path)
+
     def update_edges(self, keys=None):
         """Route the wires: all of them, or with `keys` only those attached to these nodes (a node
         moved). A wire whose ends did not move keeps its path (`Edge.set_route`)."""
+        self.route_expression_links()
         if keys is None:
             records = self.edges
         elif len(keys) == 1:
@@ -9785,6 +9845,12 @@ class Graph(PanZoomView):
             if item is not None:
                 if self.window.graph_nodes()[item.key]["type"] == "Group":
                     self.window.enter_group(item.key)
+                    event.accept()
+                    return
+                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    # Nuke: Ctrl/Cmd+double-click opens the panel in a floating window (17.0 User Guide, Properties Panels).
+                    self._ctrl_open = None
+                    self.window.float_panel(item.key)
                     event.accept()
                     return
                 self.window.pin_panel(item.key)
@@ -11099,6 +11165,8 @@ class Window(QMainWindow):
         self.properties_tab = 0
         self.pinned_panels = []  # node keys, most-recent-first; independent of graph selection
         self.collapsed_panels = set()  # node keys whose panel shows only its header row
+        self.floating_panels = {}      # node key -> its floating panel window (Nuke's floated properties panel)
+        self.bin_locked = False        # the Properties bin's lock: new panels open in floating windows
         self.panel_cap = self.preferences.max_properties_panels()
         self.rendered_identity = None
         # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
@@ -14604,6 +14672,10 @@ class Window(QMainWindow):
                             {"op": "batch", "commands": [
                                 {"op": "set", "id": k, "param": param, "value": value}
                                 for param, value in defaults.items()]}), in_menu=True)
+            floating = key in getattr(self, "floating_panels", {})
+            icon_button("float-panel", "Dock this panel back in the Properties bin" if floating else "Float this panel",
+                        lambda _=False, k=key: self.dock_panel(k) if k in self.floating_panels else self.float_panel(k),
+                        in_menu=True)
             close_button = icon_button("close-knobs", "Close this node's properties (Alt: close all, Ctrl: close the others)",
                                        lambda _=False, k=key: self.close_panel_clicked(
                                            k, close_button.click_modifiers), in_menu=True)
@@ -16849,8 +16921,11 @@ class Window(QMainWindow):
         if hasattr(self, "viewport"):
             self.viewport.refresh_sim_stats()
         if not self.pinned_panels:
-            self._show_cached_panel(key, reuse)
+            # A floating panel is not shown a second time in the bin.
+            self._show_cached_panel(None if key in self.floating_panels else key, reuse)
             self._refresh_artist_tools(key)
+            if self.floating_panels and not reuse:
+                self.refresh_floating_panels()       # an edit: floating panels follow it as the bin does
             return
         if key is not None and key in self.pinned_panels:
             self.pinned_panels.remove(key)
@@ -17005,6 +17080,13 @@ class Window(QMainWindow):
     def pin_panel(self, key):
         if key is None or key not in self.graph_nodes():
             return
+        if key in self.floating_panels:
+            self.floating_panels[key].raise_()
+            self.floating_panels[key].activateWindow()
+            return
+        if self.bin_locked and key not in self.pinned_panels:
+            self.float_panel(key)          # Nuke's lock: the bin stays as it is and new panels float
+            return
         if key in self.pinned_panels:
             self.pinned_panels.remove(key)
         self.pinned_panels.insert(0, key)
@@ -17020,11 +17102,73 @@ class Window(QMainWindow):
         self.pinned_panels = []
         self.rebuild_properties_dock()
 
+    def set_bin_locked(self, locked):
+        self.bin_locked = bool(locked)
+
+    def float_panel(self, key):
+        """Open `key`'s panel in its own floating window, taking it out of the bin (Nuke's float button and
+        Ctrl/Cmd+double-click, 17.0 User Guide, Properties Panels). The window follows edits like the bin does."""
+        if key is None or key not in self.graph_nodes():
+            return None
+        window = self.floating_panels.get(key)
+        if window is None:
+            window = QWidget(self, Qt.WindowType.Tool)
+            window.setObjectName("floating-properties-panel")
+            window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            box = QVBoxLayout(window)
+            box.setContentsMargins(0, 0, 0, 0)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setObjectName("floating-properties-scroll")
+            box.addWidget(scroll)
+            window.destroyed.connect(lambda _=None, k=key: self.floating_panels.pop(k, None))
+            self.floating_panels[key] = window
+            window.resize(max(360, self.properties_dock.width()), 560)
+        if key in self.pinned_panels:
+            self.pinned_panels.remove(key)
+        self.rebuild_properties_dock()     # fills the new window too (refresh_floating_panels)
+        window.show()
+        window.raise_()
+        return window
+
+    def dock_panel(self, key):
+        """The float button of a floating panel: close the window and put the panel back in the bin."""
+        window = self.floating_panels.pop(key, None)
+        if window is not None:
+            window.close()
+        if key in self.graph_nodes() and key not in self.pinned_panels:
+            self.pinned_panels.insert(0, key)
+            self.pinned_panels = self.pinned_panels[:self.panel_cap]
+        self.rebuild_properties_dock()
+
+    def _fill_floating_panel(self, key):
+        window = self.floating_panels.get(key)
+        if window is None:
+            return
+        scroll = window.findChild(QScrollArea, "floating-properties-scroll")
+        panel = self.build_node_panel(key)
+        make_fluid(panel)
+        old = scroll.takeWidget()
+        if old is not None:
+            old.deleteLater()
+        scroll.setWidget(panel)
+        window.setWindowTitle(self.graph_nodes()[key]["name"])
+
+    def refresh_floating_panels(self):
+        for key in list(self.floating_panels):
+            if key not in self.graph_nodes():
+                self.floating_panels.pop(key).close()
+            else:
+                self._fill_floating_panel(key)
+
     def close_panel_clicked(self, key, modifiers=None):
         """The panel's close button, as Nuke's (17.0 User Guide, Properties Panels): a click closes this panel, Alt+click
         closes every panel in the bin, Ctrl/Cmd+click closes all the others."""
         if modifiers is None:
             modifiers = QApplication.keyboardModifiers()   # chosen from the panel's menu with a modifier held
+        if key in self.floating_panels and not modifiers & (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ControlModifier):
+            self.floating_panels.pop(key).close()
+            return
         if modifiers & Qt.KeyboardModifier.AltModifier:
             self.clear_panels()
         elif modifiers & Qt.KeyboardModifier.ControlModifier:
@@ -17047,6 +17191,8 @@ class Window(QMainWindow):
     def rebuild_properties_dock(self):
         with self._panel_build_quiet():
             self._rebuild_properties_dock_now()
+            if self.floating_panels:
+                self.refresh_floating_panels()
 
     def _rebuild_properties_dock_now(self):
         self._cancel_panel_rebuild()
@@ -17059,6 +17205,8 @@ class Window(QMainWindow):
         ArtifactStore().reference(f"session:{id(self)}", sorted(live_ids))
         if not self.pinned_panels:
             selected = self.graph.selected_id()
+            if selected in self.floating_panels:
+                selected = None             # it has its own floating window
             self.set_properties_widget(self.build_node_panel(selected))
             self._note_panel_shown(selected)
             return
@@ -17075,6 +17223,14 @@ class Window(QMainWindow):
         cap_spin.setValue(self.panel_cap)
         cap_spin.valueChanged.connect(self.set_panel_cap)
         header.addWidget(cap_spin)
+        lock = QToolButton()
+        lock.setObjectName("lock-properties-bin")
+        lock.setText("Lock")
+        lock.setCheckable(True)
+        lock.setChecked(self.bin_locked)
+        lock.setToolTip("Lock the Properties bin: new panels open in floating windows")
+        lock.toggled.connect(self.set_bin_locked)
+        header.addWidget(lock)
         clear_all = QPushButton("Clear all")
         clear_all.setObjectName("clear-all-panels")
         clear_all.clicked.connect(self.clear_panels)

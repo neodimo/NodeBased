@@ -17,9 +17,11 @@ import nuke_panel_interactions as interactions  # noqa: E402
 
 from nodebased.app import EXPRESSION_COLOR, Window  # noqa: E402
 
-PASSING = ("bin.insert_opens", "bin.double_click_opens", "bin.ctrl_click_opens", "bin.return_opens", "bin.max_panels",
-           "bin.remove_all", "bin.close", "bin.alt_close_all", "bin.ctrl_close_others", "bin.hide_pages",
-           "link.add_expression", "link.reference_other", "link.ctrl_drag", "link.turns_blue", "link.edit_expression")
+PASSING = ("bin.insert_opens", "bin.double_click_opens", "bin.ctrl_click_opens", "bin.return_opens", "bin.float_open",
+           "bin.max_panels", "bin.lock", "bin.remove_all", "bin.close", "bin.alt_close_all", "bin.ctrl_close_others",
+           "bin.float_button", "bin.hide_pages",
+           "link.add_expression", "link.reference_other", "link.ctrl_drag", "link.turns_blue", "link.graph_arrow",
+           "link.edit_expression")
 
 
 class BinAndLinkingTests(unittest.TestCase):
@@ -43,6 +45,30 @@ class BinAndLinkingTests(unittest.TestCase):
         for behaviour, row in self.results.items():
             if row["status"] == "documented":
                 self.assertNotEqual(row["result"], "not probed", behaviour)
+
+
+class FloatingPanelTests(unittest.TestCase):
+    def test_a_floating_panel_follows_edits_and_closes_with_its_node(self):
+        from PySide6.QtWidgets import QAbstractSpinBox, QApplication
+        window = Window()
+        try:
+            window.command({"op": "create", "id": "floaty", "type": "Grade", "name": "Floaty"})
+            floating = window.float_panel("floaty")
+            QApplication.processEvents()
+            window.command({"op": "set", "id": "floaty", "param": "gamma", "value": 1.4})
+            QApplication.processEvents()
+            fields = [f for f in floating.findChildren(QAbstractSpinBox, "gamma-field")
+                      if f.property("nodebased_node_id") == "floaty" and f.isVisibleTo(floating)]
+            self.assertTrue(fields)
+            self.assertAlmostEqual(fields[-1].value(), 1.4)
+            self.assertEqual(window.pinned_panels, [])
+            window.command({"op": "delete", "id": "floaty"})
+            QApplication.processEvents()
+            self.assertNotIn("floaty", window.floating_panels)
+        finally:
+            window.saved_document = window.dispatcher.document
+            window.close()
+            window.deleteLater()
 
 
 class LinkTextTests(unittest.TestCase):

@@ -838,10 +838,21 @@ def _bin_max(bench):
 def _bin_lock(bench):
     from PySide6.QtWidgets import QAbstractButton
     _bin_reset(bench)
-    key = _bin_node(bench)
-    _graph_click(bench, key, double=True)
-    lock = bench.child("lock-panels", QAbstractButton)
-    return lock is not None, "the bin has a lock button" if lock is not None else "the bin has no lock button"
+    first, second = _bin_node(bench), _bin_node(bench)
+    _graph_click(bench, first, double=True)
+    lock = bench.child("lock-properties-bin", QAbstractButton)
+    if lock is None:
+        return False, "the bin has no lock button"
+    lock.click()
+    bench.settle()
+    _graph_click(bench, second, double=True)
+    shown, floating = _open_panels(bench), _floating_panels(bench)
+    bench.window.set_bin_locked(False)
+    for key in list(bench.window.floating_panels):
+        bench.window.floating_panels.pop(key).close()
+    bench.settle()
+    ok = shown == [first] and second in floating
+    return ok, f"locked, double-clicking a second node leaves the bin showing {shown} and floats {floating}"
 
 
 @probe("bin.remove_all")
@@ -902,8 +913,22 @@ def _bin_float_button(bench):
     _bin_reset(bench)
     key = _bin_node(bench)
     _graph_click(bench, key, double=True)
-    button = bench.child("float-panel", QToolButton)
-    return button is not None, "each panel has a float button" if button is not None else "no float button on the panel"
+    root = bench.window.properties.widget()
+    button = root.findChild(QToolButton, "float-panel") if root is not None else None   # it sits in the panel's menu
+    if button is None:
+        return False, "no float button on the panel"
+    button.click()
+    bench.settle(8)
+    floated, bin_after = _floating_panels(bench), _open_panels(bench)
+    window = bench.window.floating_panels.get(key)
+    again = window.findChild(QToolButton, "float-panel") if window is not None else None
+    if again is None:
+        return False, f"float moved the panel to {floated}; no float button on the floating panel"
+    again.click()
+    bench.settle(8)
+    docked = _open_panels(bench)
+    ok = floated == [key] and key not in bin_after and docked == [key] and not bench.window.floating_panels
+    return ok, f"float: floating {floated}, bin {bin_after}; clicking it again docks it: bin {docked}"
 
 
 @probe("bin.hide_pages")
@@ -1029,7 +1054,8 @@ def _link_graph_arrow(bench):
     if not links:
         return False, "the Node Graph draws nothing between nodes linked by an expression"
     color = links[0].pen().color()
-    return color.hslHue() in range(80, 160), f"one link drawn, colour {color.name()}"
+    drawn = links[0].path().length() > 0
+    return color.hslHue() in range(80, 160) and drawn, f"{len(links)} link drawn, colour {color.name()}, path drawn: {drawn}"
 
 
 @probe("link.edit_expression")

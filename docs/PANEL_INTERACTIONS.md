@@ -156,21 +156,25 @@ What the guide states and NodeBased now does: inserting a node shows its panel; 
 a node and pressing Return opens its panel in the bin (newest on top); the Max panels field in the bin caps how many stay
 open; Clear all empties the bin; a panel's close closes it, Alt+click closes every panel, Ctrl/Cmd+click every other panel
 (the close entry sits in the panel's menu, so Alt or Ctrl is held while choosing it); the header arrow hides a panel's pages.
+Ctrl/Cmd+double-click on a node opens its panel in a floating window, and the panel menu's Float moves a panel out of the bin
+into one (choosing it again in the floating window docks it back); a floating panel follows edits like the bin and closes
+when its node is deleted. The bin's Lock button keeps the bin as it is: every panel opened while it is on floats.
 Right-click > Add expression (or =) opens the expression editor; `Node.knob` links one knob to another; Ctrl/Cmd+dragging a
 knob's number field onto another knob's field links the second to the first, stored as an expression (`grade1.gamma`, or
 `knob("id", "gamma")` for an id that is not a plain name), in one undo step. A linked knob is drawn light blue, lighter than
-the key blue, so linked and keyed knobs stay apart. Edit expression shows the link.
+the key blue, so linked and keyed knobs stay apart. The Node Graph draws a dashed green arrow from each node an expression
+reads to the node it drives (it takes no clicks, so wires and nodes under it behave as before). Edit expression shows the
+link.
 
 Fixed in this step: Return and Ctrl/Cmd+click open a panel (Return did nothing and Ctrl+click only toggled the selection);
-Alt+click and Ctrl/Cmd+click on close; the menu entry reads Add expression as in Nuke (it read Enter expression); Ctrl/Cmd+drag
-linking (it did not exist); linked knobs turn blue (they were purple). Before the step 6 of the 13 documented bin behaviours
-and 2 of the 9 documented linking behaviours worked like Nuke's; after it, 10 of 13 and 5 of 9. Older documents load unchanged:
-the document format is the same.
+Alt+click and Ctrl/Cmd+click on close; floating panels, the float entry and the bin's lock (none existed); the menu entry reads
+Add expression as in Nuke (it read Enter expression); Ctrl/Cmd+drag linking (it did not exist); linked knobs turn blue (they
+were purple); the green Node Graph arrow (there was none). Before the step 6 of the 13 documented bin behaviours and 2 of the
+9 documented linking behaviours worked like Nuke's; after it, 13 of 13 and 6 of 9. Older documents load unchanged: the
+document format is the same. Ctrl/Cmd+Alt+click, the guide's other way to float a panel, stays NodeBased's wire-cutting knife.
 
-Not yet like Nuke: floating panels (Ctrl/Cmd+double-click, the float button) and the bin's lock, which sends new panels to
-floating windows; the green Node Graph arrow between linked nodes; Ctrl/Cmd+drag between animation buttons to link several
-values at once (split knobs cannot carry an expression yet); the Link menu of channel, layer and format knobs; and Link to >
-Tracker linking dialog. Undocumented, so not scored: where a new panel goes in the bin, the field's default and which panel
+Not yet like Nuke: Ctrl/Cmd+drag between animation buttons to link several values at once (split knobs cannot carry an
+expression yet); the Link menu of channel, layer and format knobs; and Link to > Tracker linking dialog. Undocumented, so not scored: where a new panel goes in the bin, the field's default and which panel
 the limit closes, pinning a single panel, removing a link from a number knob (NodeBased: Clear expression on the knob menu),
 copying and pasting a knob's value or animation from the panel, and reading another frame in a link (part of the expression
 language).
