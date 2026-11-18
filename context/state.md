@@ -1,5 +1,25 @@
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
+## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (7:45 PM on 2026-11-17 PDT)
+
+`main` moved `e8a35da3` -> `21a3991a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `21a3991a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1117-1915.log`, started 7:16 PM): **Ran 10188 tests in 1712.184 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T6 (Tue 11/17): the rest of the Node Graph, and the last linking case.** Commits:
+  - `1a044153` Lane 10 step T6 notes: Node Graph 24 of 25, Clone and the channel/format Link menu left
+  - `3c580047` The rest of the Node Graph works like Nuke 17.0's: Shift/Ctrl+Return in the Tab menu make a new branch or replace the selection, Shift+drag duplicates a pipe, Ctrl+drag takes the upstream nodes along, Ctrl+Alt+A selects connected nodes, Edit > Snap to grid; a Dot's body drags the Dot; 24 of 25 documented behaviours
+  Diff: 9 files changed, 550 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## 2026-11-17 7:25 PM — Lane 10 step T6: the rest of the Node Graph (PARTIAL)
 
 - **What was done:** Node Graph 24 of 25 documented User Guide behaviours (14 before), each probed in
