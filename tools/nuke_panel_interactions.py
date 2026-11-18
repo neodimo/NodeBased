@@ -551,8 +551,8 @@ def _set_key_all(bench):
 @probe("animation.edit_expression")
 def _edit_expression(bench):
     key = bench.node("Grade")
-    _menu, action = _menu_action(bench, key, "gamma", "Enter expression")
-    return action is not None, "the animation menu offers Enter expression" if action else "no expression entry"
+    _menu, action = _menu_action(bench, key, "gamma", "Add expression")
+    return action is not None, "the animation menu offers Add expression" if action else "no expression entry"
 
 
 # -- split (channel selector) ----------------------------------------------------------------------------------------------
@@ -678,6 +678,396 @@ def _mask_controls(bench):
              "mix": "mix-field"}
     missing = [label for label, name in names.items() if bench.child(name) is None]
     return not missing, f"missing {missing}" if missing else "mask menu, inject, invert and mix slider are all there"
+
+
+# -- the Properties bin and knob linking (lane 10, step T4, 2026-11-17) -----------------------------------------------------
+
+def _bin_reset(bench):
+    bench.window.clear_panels()
+    bench.window.graph.scene().clearSelection()
+    bench.settle()
+
+
+def _bin_node(bench, kind="Grade"):
+    """A node made through the window, so the Node Graph shows it, with no panel opened by the probe."""
+    bench.count += 1
+    key = f"interaction_{bench.count}"
+    bench.window.command({"op": "create", "id": key, "type": kind, "name": f"{kind}Bin{bench.count}",
+                          "pos": [bench.count * 140, 400]})
+    bench.settle()
+    return key
+
+
+def _open_panels(bench):
+    """Node keys whose panels the docked bin shows, top first."""
+    from PySide6.QtWidgets import QLineEdit
+    dock = bench.window.properties.widget()
+    names = {node["name"]: key for key, node in bench.window.dispatcher.document["nodes"].items()}
+    found = [w for w in dock.findChildren(QLineEdit, "node-name-header") if w.isVisibleTo(dock)] if dock is not None else []
+    found.sort(key=lambda w: w.mapTo(dock, w.rect().topLeft()).y())
+    return [names.get(w.text()) for w in found]
+
+
+def _floating_panels(bench):
+    from PySide6.QtWidgets import QApplication, QLineEdit
+    names = {node["name"]: key for key, node in bench.window.dispatcher.document["nodes"].items()}
+    out = []
+    for top in QApplication.topLevelWidgets():
+        if top is bench.window or not top.isVisible():
+            continue
+        out += [names.get(w.text()) for w in top.findChildren(QLineEdit, "node-name-header")]
+    return out
+
+
+def _graph_point(bench, key):
+    graph = bench.window.graph
+    item = graph.items_by_id[key]
+    return graph.mapFromScene(item.sceneBoundingRect().center())
+
+
+def _graph_click(bench, key, modifiers=None, double=False):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    graph = bench.window.graph
+    graph.centerOn(graph.items_by_id[key])
+    bench.settle()
+    point = _graph_point(bench, key)
+    modifiers = modifiers or Qt.KeyboardModifier.NoModifier
+    if double:
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, modifiers, point)
+        QTest.mouseDClick(graph.viewport(), Qt.MouseButton.LeftButton, modifiers, point)
+    else:
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, modifiers, point)
+    bench.settle(8)
+
+
+def _close_button(bench, key):
+    from PySide6.QtWidgets import QLineEdit, QToolButton
+    name = bench.window.dispatcher.document["nodes"][key]["name"]
+    root = bench.window.properties.widget()
+    for header in root.findChildren(QLineEdit, "node-name-header") if root is not None else []:
+        if header.text() == name and header.isVisibleTo(root):
+            top = header.parentWidget()
+            return top.findChild(QToolButton, "close-knobs")
+    return None
+
+
+@probe("bin.insert_opens")
+def _bin_insert(bench):
+    _bin_reset(bench)
+    bench.window.add_node("Blur")
+    bench.settle(8)
+    key = bench.window.graph.selected_id()
+    shown = _open_panels(bench)
+    return key is not None and shown == [key], f"inserting a Blur selects {key!r}; the bin shows {shown}"
+
+
+@probe("bin.double_click_opens")
+def _bin_double_click(bench):
+    _bin_reset(bench)
+    first, second = _bin_node(bench), _bin_node(bench)
+    _graph_click(bench, first, double=True)
+    _graph_click(bench, second, double=True)
+    shown = _open_panels(bench)
+    return shown == [second, first], f"double-clicking two nodes leaves the bin showing {shown} (newest first)"
+
+
+@probe("bin.ctrl_click_opens")
+def _bin_ctrl_click(bench):
+    from PySide6.QtCore import Qt
+    _bin_reset(bench)
+    first, second = _bin_node(bench), _bin_node(bench)
+    _graph_click(bench, first, double=True)
+    _graph_click(bench, second, Qt.KeyboardModifier.ControlModifier)
+    shown = _open_panels(bench)
+    return second in shown and first in shown, f"with one panel open, Ctrl+click on another node leaves the bin showing {shown}"
+
+
+@probe("bin.return_opens")
+def _bin_return(bench):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    _bin_reset(bench)
+    first, second = _bin_node(bench), _bin_node(bench)
+    _graph_click(bench, first, double=True)
+    graph = bench.window.graph
+    graph.scene().clearSelection()
+    graph.items_by_id[second].setSelected(True)      # selecting is not what is measured; Return is
+    bench.settle()
+    graph.setFocus()
+    QTest.keyClick(graph, Qt.Key.Key_Return)
+    bench.settle(8)
+    shown = _open_panels(bench)
+    return shown == [second, first], f"selecting a second node and pressing Return leaves the bin showing {shown}"
+
+
+@probe("bin.float_open")
+def _bin_float_open(bench):
+    from PySide6.QtCore import Qt
+    _bin_reset(bench)
+    key = _bin_node(bench)
+    _graph_click(bench, key, Qt.KeyboardModifier.ControlModifier, double=True)
+    floating = _floating_panels(bench)
+    for top in list(bench.window.floating_panels.values()) if hasattr(bench.window, "floating_panels") else []:
+        top.close()
+    bench.settle()
+    return key in floating, f"Ctrl+double-click opens floating panels for {floating}"
+
+
+@probe("bin.max_panels")
+def _bin_max(bench):
+    from PySide6.QtWidgets import QSpinBox
+    _bin_reset(bench)
+    keys = [_bin_node(bench) for _ in range(3)]
+    old_cap = bench.window.panel_cap
+    _graph_click(bench, keys[0], double=True)
+    cap = bench.child("panel-cap-spin", QSpinBox)
+    if cap is None:
+        return False, "no maximum-panels field on the bin"
+    cap.setValue(2)
+    bench.settle()
+    for key in keys[1:]:
+        _graph_click(bench, key, double=True)
+    shown = _open_panels(bench)
+    stored = bench.window.preferences.max_properties_panels()
+    bench.window.set_panel_cap(old_cap)
+    return shown == [keys[2], keys[1]] and stored == 2, f"field set to 2, three nodes opened: the bin shows {shown}; the preference holds {stored}"
+
+
+@probe("bin.lock")
+def _bin_lock(bench):
+    from PySide6.QtWidgets import QAbstractButton
+    _bin_reset(bench)
+    key = _bin_node(bench)
+    _graph_click(bench, key, double=True)
+    lock = bench.child("lock-panels", QAbstractButton)
+    return lock is not None, "the bin has a lock button" if lock is not None else "the bin has no lock button"
+
+
+@probe("bin.remove_all")
+def _bin_remove_all(bench):
+    from PySide6.QtWidgets import QPushButton
+    _bin_reset(bench)
+    first, second = _bin_node(bench), _bin_node(bench)
+    _graph_click(bench, first, double=True)
+    _graph_click(bench, second, double=True)
+    before = _open_panels(bench)
+    button = bench.child("clear-all-panels", QPushButton)
+    if button is None:
+        return False, "no remove-all button"
+    button.click()
+    bench.settle()
+    return len(before) == 2 and not bench.window.pinned_panels, f"{len(before)} panels open; after Clear all the bin holds {bench.window.pinned_panels}"
+
+
+def _close_with(bench, modifiers):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    _bin_reset(bench)
+    keys = [_bin_node(bench) for _ in range(3)]
+    for key in keys:
+        _graph_click(bench, key, double=True)
+    button = _close_button(bench, keys[1])
+    if button is None:
+        return keys, None
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton, modifiers)
+    bench.settle(8)
+    return keys, list(bench.window.pinned_panels)
+
+
+@probe("bin.close")
+def _bin_close(bench):
+    from PySide6.QtCore import Qt
+    keys, left = _close_with(bench, Qt.KeyboardModifier.NoModifier)
+    return left == [keys[2], keys[0]], f"closing the middle of three panels leaves {left}"
+
+
+@probe("bin.alt_close_all")
+def _bin_alt_close(bench):
+    from PySide6.QtCore import Qt
+    keys, left = _close_with(bench, Qt.KeyboardModifier.AltModifier)
+    return left == [], f"Alt+click on one panel's close leaves {left}"
+
+
+@probe("bin.ctrl_close_others")
+def _bin_ctrl_close(bench):
+    from PySide6.QtCore import Qt
+    keys, left = _close_with(bench, Qt.KeyboardModifier.ControlModifier)
+    return left == [keys[1]], f"Ctrl+click on the middle panel's close leaves {left}"
+
+
+@probe("bin.float_button")
+def _bin_float_button(bench):
+    from PySide6.QtWidgets import QToolButton
+    _bin_reset(bench)
+    key = _bin_node(bench)
+    _graph_click(bench, key, double=True)
+    button = bench.child("float-panel", QToolButton)
+    return button is not None, "each panel has a float button" if button is not None else "no float button on the panel"
+
+
+@probe("bin.hide_pages")
+def _bin_hide_pages(bench):
+    from PySide6.QtWidgets import QWidget
+    _bin_reset(bench)
+    key = _bin_node(bench)
+    _graph_click(bench, key, double=True)
+    arrow = bench.child("panel-collapse-arrow")
+    body = bench.child("node-panel-content", QWidget)
+    if arrow is None or body is None:
+        return False, "no collapse arrow on the panel header"
+    arrow.click()
+    bench.settle()
+    hidden = not body.isVisibleTo(bench.window)
+    header_kept = _open_panels(bench) == [key]
+    arrow.click()
+    bench.settle()
+    return hidden and header_kept, f"the header arrow hides the pages: {hidden}; the header stays: {header_kept}"
+
+
+# Linking
+
+def _two_grades_in_bin(bench):
+    _bin_reset(bench)
+    source, target = _bin_node(bench), _bin_node(bench)
+    bench.window.command({"op": "set", "id": source, "param": "gamma", "value": 1.7})
+    _graph_click(bench, target, double=True)
+    _graph_click(bench, source, double=True)
+    return source, target
+
+
+def _bin_field(bench, key, param):
+    from PySide6.QtWidgets import QAbstractSpinBox
+    root = bench.window.properties.widget()
+    for field in root.findChildren(QAbstractSpinBox, f"{param}-field") if root is not None else []:
+        if field.property("nodebased_node_id") == key and field.isVisibleTo(root):
+            return field
+    return None
+
+
+@probe("link.add_expression")
+def _link_add_expression(bench):
+    key = bench.node("Grade")
+    menu = bench.window.build_curve_menu(key, "gamma", bench.field("gamma"))
+    texts = [action.text() for action in menu.actions()]
+    menu.deleteLater()
+    return any(t.startswith("Add expression") for t in texts), f"the knob menu offers {texts[:2]} (= on the field is probed under number.equals_expression)"
+
+
+@probe("link.reference_other")
+def _link_reference(bench):
+    from PySide6.QtWidgets import QLineEdit, QPushButton
+    source, target = _two_grades_in_bin(bench)
+    editor = bench.window.open_expression_editor(target, "gamma", _bin_field(bench, target, "gamma"))
+    if editor is None:
+        return False, "no expression editor"
+    editor.setText(f"{source}.gamma")
+    editor.returnPressed.emit()
+    bench.settle(8)
+    stored = (bench.window.dispatcher.document.get("expressions") or {}).get(target, {}).get("gamma")
+    field = _bin_field(bench, target, "gamma")
+    shown = field.value() if field is not None else None
+    return stored == f"{source}.gamma" and shown == 1.7, f"typing {source}.gamma stores {stored!r}; the linked field shows {shown}"
+
+
+def _ctrl_drag(bench, source_field, target_field):
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QApplication
+    edit = source_field.lineEdit()
+    start = QPointF(edit.rect().center())
+    target_global = target_field.mapToGlobal(target_field.rect().center())
+    ctrl = Qt.KeyboardModifier.ControlModifier
+    def send(kind, local, buttons, button=Qt.MouseButton.LeftButton):
+        event = QMouseEvent(kind, local, QPointF(edit.mapToGlobal(local.toPoint())), button, buttons, ctrl)
+        QApplication.sendEvent(edit, event)
+    send(QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton)
+    mid = QPointF(edit.mapFromGlobal(target_global))
+    send(QEvent.Type.MouseMove, (start + mid) / 2, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton)
+    send(QEvent.Type.MouseMove, mid, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton)
+    send(QEvent.Type.MouseButtonRelease, mid, Qt.MouseButton.NoButton)
+    bench.settle(8)
+
+
+@probe("link.ctrl_drag")
+def _link_ctrl_drag(bench):
+    source, target = _two_grades_in_bin(bench)
+    _ctrl_drag(bench, _bin_field(bench, source, "gamma"), _bin_field(bench, target, "gamma"))
+    expressions = lambda: (bench.window.dispatcher.document.get("expressions") or {}).get(target, {}).get("gamma")
+    stored = expressions()
+    field = _bin_field(bench, target, "gamma")
+    shown = field.value() if field is not None else None
+    source_gamma = bench.params(source)["gamma"]
+    bench.window.command({"op": "undo"})          # the link is one undo step: one undo takes it away whole
+    bench.settle(8)
+    undone = expressions() is None and bench.params(target)["gamma"] == 1.0
+    ok = stored is not None and source in stored and undone and shown == 1.7 and source_gamma == 1.7
+    return ok, f"Ctrl+drag of the first Grade's gamma onto the second's stores {stored!r}; it shows {shown}; one undo removes it: {undone}"
+
+
+@probe("link.turns_blue")
+def _link_blue(bench):
+    from PySide6.QtGui import QColor
+    import re
+    source, target = _two_grades_in_bin(bench)
+    bench.window.command({"op": "set_expression", "id": target, "param": "gamma", "expression": f"{source}.gamma"})
+    bench.settle(8)
+    field = _bin_field(bench, target, "gamma")
+    match = re.search(r"color:\s*(#[0-9a-fA-F]{6})", field.styleSheet() if field else "")
+    if match is None:
+        return False, "the linked field has no colour of its own"
+    hue = QColor(match.group(1)).hslHue()
+    return 190 <= hue <= 250, f"the linked field is {match.group(1)} (hue {hue}; blue is about 190 to 250)"
+
+
+@probe("link.graph_arrow")
+def _link_graph_arrow(bench):
+    source, target = _two_grades_in_bin(bench)
+    bench.window.command({"op": "set_expression", "id": target, "param": "gamma", "expression": f"{source}.gamma"})
+    bench.settle(8)
+    links = [item for item in bench.window.graph.scene().items() if getattr(item, "expression_link", None) == (source, target)]
+    if not links:
+        return False, "the Node Graph draws nothing between nodes linked by an expression"
+    color = links[0].pen().color()
+    return color.hslHue() in range(80, 160), f"one link drawn, colour {color.name()}"
+
+
+@probe("link.edit_expression")
+def _link_edit(bench):
+    from PySide6.QtWidgets import QLineEdit
+    source, target = _two_grades_in_bin(bench)
+    bench.window.command({"op": "set_expression", "id": target, "param": "gamma", "expression": f"{source}.gamma"})
+    bench.settle(8)
+    field = _bin_field(bench, target, "gamma")
+    menu = bench.window.build_curve_menu(target, "gamma", field)
+    edit = [a for a in menu.actions() if a.text().startswith("Edit expression")]
+    if not edit:
+        return False, "no Edit expression entry on a linked knob"
+    edit[0].trigger()
+    bench.settle()
+    editors = [e for e in bench.window.properties_dock.findChildren(QLineEdit, "expression-editor") if e.isVisibleTo(bench.window)]
+    menu.deleteLater()
+    text = editors[-1].text() if editors else None
+    return text == f"{source}.gamma", f"Edit expression opens an editor holding {text!r}"
+
+
+@probe("link.ctrl_drag_animation_button")
+def _link_button_drag(bench):
+    return False, "Ctrl+drag between animation buttons is not built; split knobs cannot carry expressions yet"
+
+
+@probe("link.link_menu")
+def _link_menu(bench):
+    return False, "channel, layer and format knobs have no Link menu: expressions drive number knobs only"
+
+
+@probe("link.tracker_link_to")
+def _link_tracker(bench):
+    key = bench.node("Grade")
+    menu = bench.window.build_curve_menu(key, "gamma", bench.field("gamma"))
+    texts = [action.text() for action in menu.actions()]
+    menu.deleteLater()
+    return any(t.startswith("Link to") for t in texts), "the knob menu has no Link to entry" if not any(t.startswith("Link to") for t in texts) else "Link to is there"
 
 
 # -- run -------------------------------------------------------------------------------------------------------------------

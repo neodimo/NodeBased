@@ -20,7 +20,16 @@ import nuke_panel_interactions as interactions  # noqa: E402
 
 from nodebased.app import evaluate_field_formula  # noqa: E402
 
-KNOWN_GAPS = {}
+KNOWN_GAPS = {
+    # Step T4 (the Properties bin and linking): documented by the guide, not built yet.
+    "bin.float_open": "no floating panel windows yet",
+    "bin.lock": "no lock button on the bin",
+    "bin.float_button": "no float button on a panel",
+    "link.graph_arrow": "the Node Graph does not draw expression links",
+    "link.ctrl_drag_animation_button": "split knobs cannot carry expressions",
+    "link.link_menu": "channel, layer and format knobs cannot be linked",
+    "link.tracker_link_to": "no Link to > Tracker linking dialog",
+}
 
 
 class ReferenceTests(unittest.TestCase):

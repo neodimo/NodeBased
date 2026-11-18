@@ -22,6 +22,8 @@ picks a colour, keys or resets a knob.
   <https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/using_color_controls.html>
 - Animating Parameters (Nuke 17.0 User Guide):
   <https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/animating_parameters.html>
+- Linking Expressions (Nuke 17.0 User Guide):
+  <https://learn.foundry.com/nuke/17.0/content/comp_environment/expressions/linking_expressions.html>
 
 ## What the number field now does (lane 10, 2026-11-16)
 
@@ -138,9 +140,45 @@ Finished in the step's finish pass (all 16 documented controls now pass):
 
 Every drag is one undo step and keys an animated knob at the current frame.
 
+## The Properties bin and linking knobs (lane 10, step T4, 2026-11-17)
+
+- **Reference:** the `properties_bin` and `linking` entries of `docs/parity/nuke_knob_interactions.json`, quoting the User
+  Guide's [Properties Panels](https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/properties_panels.html)
+  page (opening a panel, the maximum-panels field, lock, remove all panels, a panel's close, float and hide buttons) and its
+  [Linking Expressions](https://learn.foundry.com/nuke/17.0/content/comp_environment/expressions/linking_expressions.html) page
+  (Add expression, Node.knob references, Ctrl/Cmd+drag, the blue knob and green Node Graph arrow, the Link menu), plus the
+  Animating Parameters page's Link to > Tracker linking dialog.
+- **Probes:** the same `tools/nuke_panel_interactions.py`, now clicking and double-clicking nodes in the real Node Graph,
+  pressing Return there, clicking a panel's close button with Alt and Ctrl, and Ctrl-dragging one knob's field onto another's.
+  `tests/test_l10_t4_bin_linking.py` asserts every passing one by name.
+
+What the guide states and NodeBased now does: inserting a node shows its panel; double-click, Ctrl/Cmd+click, or selecting
+a node and pressing Return opens its panel in the bin (newest on top); the Max panels field in the bin caps how many stay
+open; Clear all empties the bin; a panel's close closes it, Alt+click closes every panel, Ctrl/Cmd+click every other panel
+(the close entry sits in the panel's menu, so Alt or Ctrl is held while choosing it); the header arrow hides a panel's pages.
+Right-click > Add expression (or =) opens the expression editor; `Node.knob` links one knob to another; Ctrl/Cmd+dragging a
+knob's number field onto another knob's field links the second to the first, stored as an expression (`grade1.gamma`, or
+`knob("id", "gamma")` for an id that is not a plain name), in one undo step. A linked knob is drawn light blue, lighter than
+the key blue, so linked and keyed knobs stay apart. Edit expression shows the link.
+
+Fixed in this step: Return and Ctrl/Cmd+click open a panel (Return did nothing and Ctrl+click only toggled the selection);
+Alt+click and Ctrl/Cmd+click on close; the menu entry reads Add expression as in Nuke (it read Enter expression); Ctrl/Cmd+drag
+linking (it did not exist); linked knobs turn blue (they were purple). Before the step 6 of the 13 documented bin behaviours
+and 2 of the 9 documented linking behaviours worked like Nuke's; after it, 10 of 13 and 5 of 9. Older documents load unchanged:
+the document format is the same.
+
+Not yet like Nuke: floating panels (Ctrl/Cmd+double-click, the float button) and the bin's lock, which sends new panels to
+floating windows; the green Node Graph arrow between linked nodes; Ctrl/Cmd+drag between animation buttons to link several
+values at once (split knobs cannot carry an expression yet); the Link menu of channel, layer and format knobs; and Link to >
+Tracker linking dialog. Undocumented, so not scored: where a new panel goes in the bin, the field's default and which panel
+the limit closes, pinning a single panel, removing a link from a number knob (NodeBased: Clear expression on the knob menu),
+copying and pasting a knob's value or animation from the panel, and reading another frame in a link (part of the expression
+language).
+
 ## Open gaps
 
-- None among the documented behaviours read so far (31 of 31 pass). Not documented, so not scored:
+- Knob widgets: none among the documented behaviours read so far (31 of 31 pass). The bin and linking gaps are listed
+  in the section above. Not documented, so not scored:
 - What the folded line of a split knob shows is NodeBased's own choice: the guide does not say what Nuke displays there.
 - Enumeration, check box, XY and file knobs, the mask fringe box, a typed value outside the slider range, and the
   Animation menu's Copy/Paste and Set to default have no interaction rule on the User Guide pages read, so they are listed

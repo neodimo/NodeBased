@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushBut
                                QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox,
                                QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget, QToolButton,
                                QFormLayout, QScrollArea, QListWidget, QSlider, QSpinBox)
-from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
+from nodebased.app import (Window, EXPRESSION_COLOR, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel, NODE_KIND_MIME_TYPE, NodeHelpDialog,
                            FAVOURITES_CATEGORY, RECENT_CATEGORY, PropertiesIconButton)
 import nodebased.app as nodebased_app_module
@@ -2805,7 +2805,7 @@ class KnobLayoutTests(unittest.TestCase):
         QTest.mouseClick(panel.findChild(QPushButton, 'set-expression'), Qt.MouseButton.LeftButton)
         self.assertTrue(wait_until(lambda: self.window.dispatcher.document['expressions']['grade']['exposure'] == 'frame * 0.5'))
         spin = first_knob(self.window.properties.widget())
-        self.assertIn('#c58cff', spin.styleSheet())
+        self.assertIn(EXPRESSION_COLOR, spin.styleSheet())
         menu = self.window.build_curve_menu('grade', 'exposure', spin)
         actions = [action.text() for action in menu.actions()]
         self.assertIn('Edit expression…', actions)

@@ -9,6 +9,7 @@ import contextlib
 import copy
 import dataclasses
 import json
+import keyword
 import math
 import numpy as np
 import os
@@ -266,6 +267,11 @@ def _lifetime_for_mode(mode, current, frame, *, shape=False):
     return {"mode": "all"}
 
 
+# A knob driven by an expression (a link to another knob) is drawn in this light blue: Nuke's linked knobs "turn blue"
+# (17.0 User Guide, Linking Expressions). It is lighter than the key blue, so a linked knob and a keyed one stay apart.
+EXPRESSION_COLOR = "#7cc4ff"
+
+
 class PropertiesIconButton(QToolButton):
     """Compact, high-DPI vector icons for the properties-panel action cluster."""
 
@@ -276,6 +282,14 @@ class PropertiesIconButton(QToolButton):
         self.setFixedSize(28, 28)
         self.setCheckable(icon_name == "reference-node")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.click_modifiers = None   # the keyboard modifiers of the mouse click that pressed it (None: a key or menu)
+
+    def mouseReleaseEvent(self, event):
+        self.click_modifiers = event.modifiers()
+        try:
+            super().mouseReleaseEvent(event)
+        finally:
+            self.click_modifiers = None
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -642,6 +656,25 @@ class KnobDoubleSpinBox(FittedDoubleSpinBox):
     def eventFilter(self, watched, event):
         if watched is self.lineEdit() and self.isEnabled():
             kind = event.type()
+            # Ctrl/Cmd+drag onto another knob links that knob to this one (Nuke 17.0 User Guide, Linking Expressions).
+            # Only a knob field (one that names its node and param) starts a link; the drop is resolved by the window.
+            if (kind == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton
+                    and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                    and not event.modifiers() & Qt.KeyboardModifier.AltModifier
+                    and self.property("nodebased_node_id") and self.property("nodebased_param")):
+                self._link_drag = event.globalPosition().toPoint()
+                return True
+            if kind == QEvent.Type.MouseMove and getattr(self, "_link_drag", None) is not None:
+                self.setCursor(Qt.CursorShape.DragLinkCursor)
+                return True
+            if kind == QEvent.Type.MouseButtonRelease and getattr(self, "_link_drag", None) is not None:
+                start, self._link_drag = self._link_drag, None
+                self.unsetCursor()
+                end = event.globalPosition().toPoint()
+                link = getattr(self.window(), "link_knob_drop", None)
+                if (end - start).manhattanLength() >= QApplication.startDragDistance() and callable(link):
+                    link(self, end)
+                return True
             if kind == QEvent.Type.MouseButtonPress and (
                     event.button() == Qt.MouseButton.MiddleButton
                     or (event.button() == Qt.MouseButton.LeftButton
@@ -9708,6 +9741,16 @@ class Graph(PanZoomView):
                 self.start_dot_insert(edge, self.mapToScene(event.position().toPoint()))
                 event.accept()
                 return
+        self._ctrl_open = None
+        if (event.button() == Qt.MouseButton.LeftButton
+                and event.modifiers() == Qt.KeyboardModifier.ControlModifier):
+            # Nuke opens a node's panel on Ctrl/Cmd+click (17.0 User Guide, Properties Panels); it opens on the release,
+            # so a Ctrl+drag that moves the pointer is left to the view.
+            node_item = self.itemAt(event.position().toPoint())
+            while node_item is not None and not isinstance(node_item, NodeItem):
+                node_item = node_item.parentItem()
+            if node_item is not None:
+                self._ctrl_open = (node_item.key, event.position().toPoint())
         if event.button() == Qt.MouseButton.LeftButton:
             self.last_click_scene_pos = self.mapToScene(event.position().toPoint())
         if (self.wire_source or self.wire_input) and event.button() == Qt.MouseButton.LeftButton and self.port_item_at(event.position().toPoint()) is None:
@@ -9822,6 +9865,11 @@ class Graph(PanZoomView):
 
     def mouseReleaseEvent(self, event):
         self.set_fast_wires(False)
+        ctrl_open, self._ctrl_open = getattr(self, "_ctrl_open", None), None
+        if (ctrl_open is not None and event.button() == Qt.MouseButton.LeftButton
+                and (event.position().toPoint() - ctrl_open[1]).manhattanLength() < QApplication.startDragDistance()
+                and ctrl_open[0] in self.window.graph_nodes()):
+            QTimer.singleShot(0, lambda k=ctrl_open[0]: k in self.window.graph_nodes() and self.window.pin_panel(k))
         if self.pan is not None:
             PanZoomView.mouseReleaseEvent(self, event)
             return
@@ -10048,6 +10096,9 @@ class Graph(PanZoomView):
         elif event.key() == Qt.Key.Key_G and modifiers == (Qt.KeyboardModifier.ControlModifier
                                                            | Qt.KeyboardModifier.ShiftModifier):
             self.ungroup_selection()
+        elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not modifiers and key:
+            # Nuke: select the node and press Return to open its panel (17.0 User Guide, Properties Panels).
+            self.window.pin_panel(key)
         elif event.key() == Qt.Key.Key_Tab and not modifiers:
             self.window.node_search()
         elif event.key() == Qt.Key.Key_F and not modifiers:
@@ -14553,9 +14604,9 @@ class Window(QMainWindow):
                             {"op": "batch", "commands": [
                                 {"op": "set", "id": k, "param": param, "value": value}
                                 for param, value in defaults.items()]}), in_menu=True)
-            icon_button("close-knobs", "Close this node's properties",
-                        lambda _=False, k=key: self.close_panel(k) if k in self.pinned_panels
-                        else self.inspect(None), in_menu=True)
+            close_button = icon_button("close-knobs", "Close this node's properties (Alt: close all, Ctrl: close the others)",
+                                       lambda _=False, k=key: self.close_panel_clicked(
+                                           k, close_button.click_modifiers), in_menu=True)
             key_all = properties_menu.addAction("Set key on all knobs")
             key_all.setObjectName("set-key-all-knobs")
             key_all.triggered.connect(lambda _=False, k=key: self.set_key_on_all_knobs(k))
@@ -14904,7 +14955,7 @@ class Window(QMainWindow):
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
-                        control.setStyleSheet("color: #c58cff")
+                        control.setStyleSheet(f"color: {EXPRESSION_COLOR}")
                     control.setKeyboardTracking(False)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
@@ -14929,7 +14980,7 @@ class Window(QMainWindow):
                 if param in expressions:
                     control.setEnabled(False)
                     control.setToolTip("Driven by an expression. Edit the formula below.")
-                    control.setStyleSheet("color: #c58cff")
+                    control.setStyleSheet(f"color: {EXPRESSION_COLOR}")
                 control.setKeyboardTracking(False)
                 control.editingFinished.connect(
                     lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
@@ -15357,7 +15408,7 @@ class Window(QMainWindow):
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
-                        control.spin.setStyleSheet("color: #c58cff")
+                        control.spin.setStyleSheet(f"color: {EXPRESSION_COLOR}")
                     control.spin.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
                     control.slider.sliderReleased.connect(
@@ -16968,6 +17019,21 @@ class Window(QMainWindow):
     def clear_panels(self):
         self.pinned_panels = []
         self.rebuild_properties_dock()
+
+    def close_panel_clicked(self, key, modifiers=None):
+        """The panel's close button, as Nuke's (17.0 User Guide, Properties Panels): a click closes this panel, Alt+click
+        closes every panel in the bin, Ctrl/Cmd+click closes all the others."""
+        if modifiers is None:
+            modifiers = QApplication.keyboardModifiers()   # chosen from the panel's menu with a modifier held
+        if modifiers & Qt.KeyboardModifier.AltModifier:
+            self.clear_panels()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier:
+            self.pinned_panels = [key] if key in self.graph_nodes() else []
+            self.rebuild_properties_dock()
+        elif key in self.pinned_panels:
+            self.close_panel(key)
+        else:
+            self.inspect(None)
 
     def set_panel_cap(self, value):
         value = max(1, int(value))
@@ -18952,7 +19018,7 @@ class Window(QMainWindow):
             button.setProperty("keyState", "expression")
             button.setText("ƒ")
             button.setEnabled(False)
-            button.setStyleSheet("color: #c58cff; border: none; font-size: 14px")
+            button.setStyleSheet(f"color: {EXPRESSION_COLOR}; border: none; font-size: 14px")
             button.setToolTip("Expression-driven. Clear the expression before keying this knob.")
         else:
             state = "keyed" if keyed_here else ("between" if curve is not None else "none")
@@ -19043,6 +19109,35 @@ class Window(QMainWindow):
             {"op": "clear_expression", "id": key, "param": param}))
         return row
 
+    @staticmethod
+    def knob_reference(key, param):
+        """The expression text that reads node `key`'s `param`: the short `node.param` form when the id is a plain name
+        (as Nuke's Node.knob), else the canonical knob("id", "param")."""
+        if key.isidentifier() and not keyword.iskeyword(key) and param.isidentifier():
+            return f"{key}.{param}"
+        return f"knob({json.dumps(key)}, {json.dumps(param)})"
+
+    def link_knob_drop(self, source, global_pos):
+        """Finish a Ctrl/Cmd+drag from the knob field `source`: the knob field under `global_pos` (in any panel of this
+        window) gets an expression reading the source knob, in one undo step, as Nuke's Ctrl/Cmd+drag link does."""
+        from_key, from_param = source.property("nodebased_node_id"), source.property("nodebased_param")
+        root = self.properties.widget()
+        target = None
+        for field in root.findChildren(QAbstractSpinBox) if root is not None else []:
+            if field is source or not field.isVisibleTo(root) or not field.property("nodebased_node_id"):
+                continue
+            if field.rect().contains(field.mapFromGlobal(global_pos)):
+                target = field
+                break
+        if target is None:
+            self.statusBar().showMessage("Drop on another knob to link it to this one", 3000)
+            return False
+        to_key, to_param = target.property("nodebased_node_id"), target.property("nodebased_param")
+        if (to_key, to_param) == (from_key, from_param):
+            return False
+        return self.command({"op": "set_expression", "id": to_key, "param": to_param,
+                             "expression": self.knob_reference(from_key, from_param)})
+
     def install_expression_shortcut(self, field, key, param, control):
         """Make ``=`` open the expression editor without changing the numeric field."""
         field._expression_target = (key, param, control)
@@ -19109,7 +19204,7 @@ class Window(QMainWindow):
         curve = self.node_curve(key, param)
         expression = (self.graph_document().get("expressions") or {}).get(key, {}).get(param)
         menu = QMenu(self)
-        menu.addAction("Edit expression…" if expression is not None else "Enter expression…",
+        menu.addAction("Edit expression…" if expression is not None else "Add expression…",
                        lambda: self.open_expression_editor(key, param, control))
         if expression is not None:
             menu.addAction("Clear expression", lambda: self.defer_command(

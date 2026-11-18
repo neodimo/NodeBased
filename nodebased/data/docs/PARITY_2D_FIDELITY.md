@@ -52,7 +52,7 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**31 of 31 documented knob-widget behaviours work as Nuke's do** (9 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**46 of 53 documented knob-widget behaviours work as Nuke's do** (15 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -67,6 +67,8 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 | xy | 0 / 0 | - | `drag` |
 | file | 0 / 0 | - | `browse` |
 | mask mix | 1 / 1 | - | `fringe` |
+| properties bin | 10 / 13 | `float_open`, `lock`, `float_button` | `new_panel_on_top`, `limit_default`, `pin_one_panel` |
+| linking | 5 / 9 | `graph_arrow`, `ctrl_drag_animation_button`, `link_menu`, `tracker_link_to` | `remove`, `copy_paste_knob`, `time_offset` |
 
 ## On-screen controls that work like Nuke
 
