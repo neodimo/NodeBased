@@ -1,5 +1,18 @@
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
+## 2026-11-17 7:25 PM — Lane 10 step T6: the rest of the Node Graph (PARTIAL)
+
+- **What was done:** Node Graph 24 of 25 documented User Guide behaviours (14 before), each probed in
+  `tools/nuke_panel_interactions.py` and asserted in `tests/test_l10_t6_node_graph.py`. Built: Tab menu Shift+Return (new branch)
+  and Ctrl+Return (replace, `Window.replace_node`), Shift+drag on a wire duplicates it, Ctrl+drag on a node selects and moves its
+  upstream, Ctrl+Alt+A / Edit > Select connected nodes, Edit > Snap to grid (preference, off by default). Fixed: a press on a
+  Dot's body started a wire, so Dots could not be dragged. Measured as already working: pipe-end drag connect and disconnect,
+  dropping a free node onto a wire, Ctrl+click Dot.
+- **Not done:** Clone (needs a two-way knob link in the document); linking stays 8 of 9 (Link menu on channel/format knobs needs
+  string-valued links). Visual QA not done.
+- **Next owner:** Gonzo, for the Clone and Link menu design (both need a document schema decision).
+
+
 ## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (6:55 PM on 2026-11-17 PDT)
 
 `main` moved `99d97970` -> `0b3dd6dd` (lane commits cherry-picked onto main in lane order) and then to this
