@@ -1,3 +1,36 @@
+# NodeBased 0.59.0-preview.1
+
+Preview build of 0.59.0: the packaged app was checked to install and launch on Linux and Windows; the full test run happens in the 0.59.0 release that follows.
+
+## What changed since 0.58.0
+
+- **The Node Graph works like Nuke's: 24 of the 25 behaviours Nuke 17.0's User Guide documents** (7 before). Tab opens the node menu whenever the graph has focus, Tab then Return makes the last node again and often-used nodes list first; Shift+Return adds a node as a new branch, Ctrl+Return replaces the selected node, wires and all. N renames in place, Ctrl+D disconnects, Shift+click adds to the selection, a paste connects to the selected node. Shift+drag a wire onto another node to add a second connection, Ctrl+drag a node to take every node feeding it along, Ctrl+Alt+A selects everything wired to the selection, Edit > Snap to grid lines nodes up while dragging, and a Dot's body drags the Dot. No shortcut was taken away.
+- **The Properties bin and knob linking work like Nuke's** (bin 13 of 13 behaviours, linking 8 of 9). Return, double-click or Ctrl+click opens a panel, newest on top up to Max panels; Alt+click on a close shuts them all, Ctrl+click shuts the others. Panels can float in their own window, and the bin's Lock sends new panels there. Ctrl+drag one knob onto another to link it, or Ctrl+drag an animation button to link the whole knob; Link to > Tracker is in the knob menu. Linked knobs turn blue and the Node Graph draws a green arrow between the nodes.
+- **Knob widgets behave like Nuke's** (all documented behaviours for number, colour, split, animation, channel, mask and Node tab widgets). Number fields work out typed sums, arrow keys and the wheel step the digit under the cursor, Alt-drag or middle-drag scrubs. A colour swatch arms Nuke's eye dropper (Ctrl+click samples, Ctrl+Shift+drag averages an area, Ctrl+right-click undoes it), and a Pick button opens the picker. Clear animation keeps the current frame's value; Set key on all knobs is in the panel menu.
+- **Channel pickers and one mask strip like Nuke's.** A channels field is a layer menu with one tick box per channel; single-channel fields are a layer and a channel menu side by side. Every node with a mask shows Nuke's strip: mask, inject, invert, fringe; (un)premult by; mix. The Node tab follows the guide's order.
+- **Every on-screen control the guide documents for a 2D node works in the Viewer, 16 of 16** (3 before): the Transform jack's one-axis scale points, 45-degree rotate snapping, skew bar, invert handle and Ctrl-drag pivot; Crop's and Text's boxes; the Tracker anchor zoomed out; GridWarp's whole-grid overlay.
+- **Panels read and start as Nuke's do across colour, keying, channel, time, filter, draw, transform, image and merge nodes.** A new Blur starts at size 0, Crop's intersect is off, Invert, Multiply, Add, Gamma, Clamp and Posterize start on all channels, and dozens of labels and orders follow the guide. Transform, CornerPin and Tracker take motion blur as a number of shutter samples. Copy and ChannelMerge gain Set bbox to; CopyBBox takes Nuke's input roles; Blend gains Invert. ColorCorrect has Test and Mix luminance, Retime a Warp curve, Exposure a Colorspace, GenerateLUT the 3dl format. ZDefocus gains its bladed and image bokeh knobs, and Kronos and OFlow their Resampling filters, luminance weights and Reset. Saved projects keep their pictures and values.
+- **A Nuke review book**: one command builds a browser page per scored node with Nuke's knob table beside NodeBased's real panel, every difference marked, and each behaviour case on readable plates; 663 cases export as Nuke `.nk` scripts so a Nuke render can be compared later. A worklist and a decision list (DECISIONS.md) come with it.
+- **Fidelity to Nuke: 97.4 overall** (96.7 at 0.58.0), 99.4 counting only the nodes NodeBased has; behaviour checked on 136 of 170 scored nodes (113 of 167 before).
+- **Pipeline:** a Read's canvas size comes from its file header, so a large Read no longer decodes its whole picture before the first tile; ReadSplat3D reads padded sequences (`cloud.####.ply`) frame by frame; size-changing node kinds, including ones registered from outside, declare their scale rule for proxy tiers.
+
+## Known limits
+
+- Clone and the Link menu on channel and format knobs are not there yet: both need links the project file cannot store.
+- Still no comparison with a real Nuke render; the review book's exported scripts wait for someone with Nuke to render them.
+- About 2.2 fidelity points sit on product decisions listed in DECISIONS.md (BlinkScript, Primatte, Ultimatte, AudioRead, Bokeh, project settings); 87 of colour's open worklist rows are Ultimatte and Primatte knobs.
+- LensDistortion's grid detect and solve, and Reconcile3D's picture output, stay unsupported.
+- The display-only GPU playback switch stays off (better frame rate, worse slowest frames on the RTX).
+- The carried fluid swirl does not yet make smoke curl, and a 128-sample fluid frame still takes more than 0.75 s.
+- On Windows, OpenImageIO reads the last alpha sample of a little-endian 10-bit DPX row as 0.
+
+## Moved to 0.60.0
+
+- Clone and channel/format linking, once the document can store those links.
+- The rest of the filter, draw and Transform-group worklist rows.
+- Rendering the review book's scripts in Nuke and reading the results back.
+- GPU playback profiling and smoke that curls (both parked until the parity sprint ends).
+
 # NodeBased 0.58.0 — Keyers and filters checked
 
 ## What changed since 0.57.0
