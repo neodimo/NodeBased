@@ -25,16 +25,6 @@ KNOWN_GAPS = {
     "link.link_menu": "channel, layer and format knobs cannot be linked",
     # Step T5 (the Node Graph): documented by the guide, still open.
     "graph.clone": "no Clone with an active link (Alt+C is an independent copy)",
-    "graph.shift_new_branch": "not probed yet",
-    "graph.ctrl_replace": "not probed yet",
-    "graph.insert_between": "not probed yet",
-    "graph.drag_pipe_disconnect": "not probed yet",
-    "graph.drag_pipe_connect": "not probed yet",
-    "graph.shift_drag_duplicate_pipe": "not probed yet",
-    "graph.ctrl_click_dot": "not probed yet",
-    "graph.ctrl_drag_upstream": "not probed yet",
-    "graph.select_connected": "no Ctrl/Cmd+Alt+A Select Connected Nodes yet",
-    "graph.snap_to_grid": "not probed yet",
 }
 
 

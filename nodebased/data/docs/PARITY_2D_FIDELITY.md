@@ -52,7 +52,7 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**66 of 78 documented knob-widget behaviours work as Nuke's do** (18 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**76 of 78 documented knob-widget behaviours work as Nuke's do** (18 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -69,7 +69,7 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 | mask mix | 1 / 1 | - | `fringe` |
 | properties bin | 13 / 13 | - | `new_panel_on_top`, `limit_default`, `pin_one_panel` |
 | linking | 8 / 9 | `link_menu` | `remove`, `copy_paste_knob`, `time_offset` |
-| node graph | 14 / 25 | `shift_new_branch` (not probed), `ctrl_replace` (not probed), `insert_between` (not probed), `drag_pipe_disconnect` (not probed), `drag_pipe_connect` (not probed), `shift_drag_duplicate_pipe` (not probed), `ctrl_click_dot` (not probed), `ctrl_drag_upstream` (not probed), `select_connected` (not probed), `clone`, `snap_to_grid` (not probed) | `swap_inputs_shift`, `select_downstream`, `duplicate_alt_c` |
+| node graph | 24 / 25 | `clone` | `swap_inputs_shift`, `select_downstream`, `duplicate_alt_c` |
 
 ## On-screen controls that work like Nuke
 

@@ -1433,6 +1433,290 @@ def _graph_backdrop(bench):
     return moved_b and moved_g, f"dragging the Backdrop moves it: {moved_b}; the Grade on it moves too: {moved_g}"
 
 
+def _graph_drag(bench, start, end, modifiers=None, steps=6):
+    """A left-button drag on the Node Graph from viewport point `start` to `end`, with `modifiers` held throughout."""
+    from PySide6.QtCore import QEvent, Qt
+    mods = modifiers or Qt.KeyboardModifier.NoModifier
+    view = bench.window.graph.viewport()
+    left = Qt.MouseButton.LeftButton
+    _mouse(view, QEvent.Type.MouseButtonPress, (start.x(), start.y()), left, left, mods)
+    for i in range(1, steps + 1):
+        x = start.x() + (end.x() - start.x()) * i / steps
+        y = start.y() + (end.y() - start.y()) * i / steps
+        _mouse(view, QEvent.Type.MouseMove, (x, y), Qt.MouseButton.NoButton, left, mods)
+    _mouse(view, QEvent.Type.MouseButtonRelease, (end.x(), end.y()), left, Qt.MouseButton.NoButton, mods)
+    bench.settle(8)
+
+
+def _scene_to_view(bench, point):
+    return bench.window.graph.mapFromScene(point)
+
+
+def _chain(bench, *kinds, spacing=150):
+    """Nodes of `kinds` in a column, each wired to the one above; the graph framed on them."""
+    keys = []
+    for index, kind in enumerate(kinds):
+        key = _graph_node(bench, kind, 0, index * spacing)
+        if keys:
+            slot = "input" if kind == "Dot" else ("B" if kind == "Merge" else "image")
+            bench.window.command({"op": "connect", "id": key, "input": slot, "source": keys[-1]})
+        keys.append(key)
+    bench.settle()
+    bench.window.graph.frame_nodes()
+    bench.settle()
+    return keys
+
+
+def _inputs(bench, key):
+    return {k: v for k, v in ((bench.window.dispatcher.document["nodes"].get(key) or {}).get("inputs") or {}).items() if v}
+
+
+def _undo(bench):
+    bench.window.command({"op": "undo"})
+    bench.settle(6)
+
+
+def _tab_with(bench, text, modifier):
+    """The Tab menu, typing `text` and pressing Return with `modifier` held."""
+    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+    from nodebased.app import NodeSearch
+    def drive():
+        pickers = [w for w in QApplication.topLevelWidgets() if isinstance(w, NodeSearch) and w.isVisible()]
+        if not pickers:
+            QTimer.singleShot(20, drive)
+            return
+        QTest.keyClicks(pickers[-1].query, text)
+        QTest.keyClick(pickers[-1].query, Qt.Key.Key_Return, modifier)
+    QTimer.singleShot(0, drive)
+    QApplication.setActiveWindow(bench.window)
+    bench.window.graph.setFocus()
+    bench.settle()
+    _graph_key(bench, Qt.Key.Key_Tab)
+
+
+@probe("graph.shift_new_branch")
+def _graph_shift_branch(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    grade, blur = _chain(bench, "Grade", "Blur")
+    _graph_select(bench, grade)
+    before = set(bench.window.dispatcher.document["nodes"])
+    _tab_with(bench, "Sharpen", Qt.KeyboardModifier.ShiftModifier)
+    new = _new_nodes(bench, before)
+    branch = bool(new) and _inputs(bench, new[0]).get("image") == grade
+    kept = _inputs(bench, blur).get("image") == grade
+    selected = bench.window.graph.selected_ids() == new
+    _undo(bench)
+    one_step = bool(new) and new[0] not in bench.window.dispatcher.document["nodes"] and _inputs(bench, blur).get("image") == grade
+    return branch and kept and selected and one_step, (
+        f"Shift+Return in the Tab menu with the Grade selected makes a Sharpen on the Grade: {branch}; the Blur below still reads "
+        f"the Grade: {kept}; the new node is the selection: {selected}; one undo removes it: {one_step}")
+
+
+@probe("graph.ctrl_replace")
+def _graph_ctrl_replace(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    grade, blur, sharpen = _chain(bench, "Grade", "Blur", "Sharpen")
+    _graph_select(bench, blur)
+    before = set(bench.window.dispatcher.document["nodes"])
+    _tab_with(bench, "Erode", Qt.KeyboardModifier.ControlModifier)
+    nodes = bench.window.dispatcher.document["nodes"]
+    new = _new_nodes(bench, before)
+    gone = blur not in nodes
+    wired = bool(new) and grade in _inputs(bench, new[0]).values() and _inputs(bench, sharpen).get("image") == new[0]
+    selected = bench.window.graph.selected_ids() == new
+    _undo(bench)
+    back = blur in bench.window.dispatcher.document["nodes"] and _inputs(bench, sharpen).get("image") == blur
+    return gone and wired and selected and back, (
+        f"Ctrl+Return in the Tab menu with the Blur selected removes the Blur: {gone}; the Erode takes its place between the Grade "
+        f"and the Sharpen: {wired}; the Erode is the selection: {selected}; one undo brings the Blur and its wires back: {back}")
+
+
+@probe("graph.insert_between")
+def _graph_insert_between(bench):
+    from PySide6.QtCore import QPointF
+    _graph_fresh(bench)
+    grade, blur = _chain(bench, "Grade", "Blur", spacing=300)
+    free = _graph_node(bench, "Sharpen", 400, 150)
+    graph = bench.window.graph
+    graph.frame_nodes()
+    bench.settle()
+    record = next(r for r in graph.edges if r[1] == grade and r[2] == blur)
+    middle = record[0].path().pointAtPercent(0.5)
+    item = graph.items_by_id[free]
+    grab = item.sceneBoundingRect().center()
+    _graph_select(bench, free)
+    _graph_drag(bench, _scene_to_view(bench, grab), _scene_to_view(bench, QPointF(middle.x(), middle.y())))
+    bench.settle(8)
+    spliced = _inputs(bench, free).get("image") == grade and _inputs(bench, blur).get("image") == free
+    _undo(bench)
+    back = _inputs(bench, blur).get("image") == grade and not _inputs(bench, free)
+    return spliced and back, (f"dragging a free Sharpen onto the Grade to Blur wire places it between them: {spliced}; one undo "
+                              f"restores the wire and the Sharpen's place: {back}")
+
+
+def _input_port_view(bench, key, slot="image"):
+    return _scene_to_view(bench, bench.window.graph.items_by_id[key].inputs[slot].scenePos())
+
+
+@probe("graph.drag_pipe_disconnect")
+def _graph_drag_disconnect(bench):
+    from PySide6.QtCore import QPoint
+    _graph_fresh(bench)
+    grade, blur = _chain(bench, "Grade", "Blur")
+    start = _input_port_view(bench, blur)
+    _graph_drag(bench, start, start + QPoint(-260, 10))
+    gone = not _inputs(bench, blur)
+    _undo(bench)
+    back = _inputs(bench, blur).get("image") == grade
+    return gone and back, f"dragging the Blur's input end to empty space disconnects it: {gone}; one undo reconnects: {back}"
+
+
+@probe("graph.drag_pipe_connect")
+def _graph_drag_connect(bench):
+    _graph_fresh(bench)
+    grade, blur = _chain(bench, "Grade", "Blur")
+    other = _graph_node(bench, "Constant", 300, -40)
+    graph = bench.window.graph
+    graph.frame_nodes()
+    bench.settle()
+    start = _input_port_view(bench, blur)
+    centre = _scene_to_view(bench, graph.items_by_id[other].sceneBoundingRect().center())
+    _graph_drag(bench, start, centre)
+    moved = _inputs(bench, blur).get("image") == other
+    _undo(bench)
+    back = _inputs(bench, blur).get("image") == grade
+    return moved and back, (f"dragging the Blur's input end onto the middle of a Constant connects the Blur to it: {moved}; one undo "
+                            f"puts it back on the Grade: {back}")
+
+
+@probe("graph.shift_drag_duplicate_pipe")
+def _graph_shift_duplicate(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    grade, blur = _chain(bench, "Grade", "Blur")
+    sharpen = _graph_node(bench, "Sharpen", 320, 150)
+    graph = bench.window.graph
+    graph.frame_nodes()
+    bench.settle()
+    record = next(r for r in graph.edges if r[1] == grade and r[2] == blur)
+    on_wire = _scene_to_view(bench, record[0].path().pointAtPercent(0.5))
+    target = _scene_to_view(bench, graph.items_by_id[sharpen].inputs["image"].scenePos())
+    _graph_drag(bench, on_wire, target, Qt.KeyboardModifier.ShiftModifier)
+    both = _inputs(bench, sharpen).get("image") == grade and _inputs(bench, blur).get("image") == grade
+    _undo(bench)
+    back = not _inputs(bench, sharpen) and _inputs(bench, blur).get("image") == grade
+    return both and back, (f"Shift+dragging the Grade to Blur wire onto a Sharpen wires the Grade into the Sharpen and keeps the "
+                           f"Blur on it: {both}; one undo removes only the new wire: {back}")
+
+
+@probe("graph.ctrl_click_dot")
+def _graph_ctrl_dot(bench):
+    from PySide6.QtCore import QEvent, QPoint, Qt
+    _graph_fresh(bench)
+    grade, blur = _chain(bench, "Grade", "Blur", spacing=300)
+    graph = bench.window.graph
+    record = next(r for r in graph.edges if r[1] == grade and r[2] == blur)
+    handle = getattr(record[0], "handle", None) or record[0].path().pointAtPercent(0.5)
+    point = _scene_to_view(bench, handle)
+    ctrl = Qt.KeyboardModifier.ControlModifier
+    view, left = graph.viewport(), Qt.MouseButton.LeftButton
+    _mouse(view, QEvent.Type.MouseButtonPress, (point.x(), point.y()), left, left, ctrl)
+    _mouse(view, QEvent.Type.MouseButtonRelease, (point.x(), point.y()), left, Qt.MouseButton.NoButton, ctrl)
+    bench.settle(8)
+    nodes = bench.window.dispatcher.document["nodes"]
+    dots = [k for k, n in nodes.items() if n["type"] == "Dot"]
+    passes = bool(dots) and _inputs(bench, dots[0]).get("input") == grade and _inputs(bench, blur).get("image") == dots[0]
+    moved = False
+    if dots:
+        bench.settle()
+        start = _scene_to_view(bench, graph.items_by_id[dots[0]].sceneBoundingRect().center())
+        old = list(nodes[dots[0]]["pos"])
+        _graph_select(bench, dots[0])
+        _graph_drag(bench, start, start + QPoint(60, 0))
+        moved = bench.window.dispatcher.document["nodes"][dots[0]]["pos"] != old and _inputs(bench, blur).get("image") == dots[0]
+        _undo(bench)
+    _undo(bench)
+    back = not [k for k, n in bench.window.dispatcher.document["nodes"].items() if n["type"] == "Dot"] and _inputs(bench, blur).get("image") == grade
+    return passes and moved and back, (f"Ctrl+click on the wire's yellow handle adds a Dot that takes the Grade and feeds the Blur: "
+                                       f"{passes}; the Dot can be dragged and keeps its wires: {moved}; undo removes it: {back}")
+
+
+@probe("graph.ctrl_drag_upstream")
+def _graph_ctrl_upstream(bench):
+    from PySide6.QtCore import QPoint, Qt
+    _graph_fresh(bench)
+    grade, blur, sharpen = _chain(bench, "Grade", "Blur", "Sharpen")
+    loose = _graph_node(bench, "Constant", 400, 0)
+    graph = bench.window.graph
+    graph.frame_nodes()
+    bench.settle()
+    _graph_select(bench, loose)
+    old = {k: list(bench.window.dispatcher.document["nodes"][k]["pos"]) for k in (grade, blur, sharpen, loose)}
+    start = _scene_to_view(bench, graph.items_by_id[sharpen].sceneBoundingRect().center())
+    _graph_drag(bench, start, start + QPoint(80, 0), Qt.KeyboardModifier.ControlModifier)
+    chosen = sorted(graph.selected_ids())
+    nodes = bench.window.dispatcher.document["nodes"]
+    moved = [k for k in old if nodes[k]["pos"] != old[k]]
+    _undo(bench)
+    back = all(bench.window.dispatcher.document["nodes"][k]["pos"] == old[k] for k in old)
+    want = sorted([grade, blur, sharpen])
+    return chosen == want and sorted(moved) == want and back, (
+        f"Ctrl+dragging the Sharpen selects {len(chosen)} nodes (it and the two feeding it: {chosen == want}) and moves "
+        f"{len(moved)} of them together, the unconnected Constant left behind; one undo puts them back: {back}")
+
+
+@probe("graph.select_connected")
+def _graph_select_connected(bench):
+    from PySide6.QtCore import Qt
+    _graph_fresh(bench)
+    grade, blur, sharpen = _chain(bench, "Grade", "Blur", "Sharpen")
+    loose = _graph_node(bench, "Constant", 400, 0)
+    _graph_select(bench, blur)
+    _graph_key(bench, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)
+    chosen = sorted(bench.window.graph.selected_ids())
+    want = sorted([grade, blur, sharpen])
+    menu = bench.window.findChild(__import__("PySide6.QtGui", fromlist=["QAction"]).QAction, "select-connected-action")
+    return chosen == want and menu is not None, (f"Ctrl+Alt+A with the Blur selected selects the Grade, Blur and Sharpen and leaves "
+                                                 f"the loose Constant: {chosen == want}; Edit menu entry present: {menu is not None}")
+
+
+@probe("graph.snap_to_grid")
+def _graph_snap(bench):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QAction
+    _graph_fresh(bench)
+    action = bench.window.findChild(QAction, "snap-to-grid-action")
+    graph = bench.window.graph
+    was = graph.snap_to_grid
+    if action is None:
+        return False, "there is no Snap to grid setting"
+    action.setChecked(True)
+    key = _graph_node(bench, "Grade", 5, 7)
+    graph.frame_nodes()
+    bench.settle()
+    _graph_select(bench, key)
+    start = _scene_to_view(bench, graph.items_by_id[key].sceneBoundingRect().center())
+    _graph_drag(bench, start, start + QPoint(37, 23))
+    pos = bench.window.dispatcher.document["nodes"][key]["pos"]
+    step = type(graph).GRID_STEP
+    on_grid = all(abs(v / step - round(v / step)) < 1e-6 for v in pos)
+    action.setChecked(False)
+    free = _graph_node(bench, "Blur", 5, 300)
+    bench.settle()
+    _graph_select(bench, free)
+    start = _scene_to_view(bench, graph.items_by_id[free].sceneBoundingRect().center())
+    _graph_drag(bench, start, start + QPoint(37, 23))
+    off = bench.window.dispatcher.document["nodes"][free]["pos"]
+    loose = not all(abs(v / step - round(v / step)) < 1e-6 for v in off)
+    action.setChecked(was)
+    return on_grid and loose, (f"with Edit > Snap to grid on, a dragged Grade lands at {pos} on the {step}-unit grid: {on_grid}; "
+                               f"with it off, a Blur stops where it is dropped ({off}): {loose}")
+
+
 @probe("graph.clone")
 def _graph_clone(bench):
     return False, "there is no Clone: Alt+C makes an independent copy, with no active link to its parent"

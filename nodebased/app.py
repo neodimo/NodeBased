@@ -1035,6 +1035,7 @@ class Preferences:
     VIEWER_AUTO_3D = "interface/viewer_auto_3d"
     WIRE_MODE = "interface/wire_mode"
     GRAPH_OPENGL = "interface/graph_opengl"
+    SNAP_TO_GRID = "interface/graph_snap_to_grid"
     LOCK_PANELS = "interface/lock_panels"
     DIRECT_EDIT = "interface/direct_picture_edit"
     DIRECT_MAIN = "interface/direct_picture_main"
@@ -1075,6 +1076,15 @@ class Preferences:
         if forced in ("0", "1"):
             return forced == "1"
         return self._store.value(self.GRAPH_OPENGL, False) not in (False, "false", "0", 0, None)
+
+    def graph_snap_to_grid(self):
+        """Nuke's Node Graph preference "snap to grid" (17.0 User Guide, Preferences > Panels > Node Graph): "When enabled, nodes
+        snap into positions (while dragging them) that line them up with the grid." Off by default, as in Nuke."""
+        return self._store.value(self.SNAP_TO_GRID, False) not in (False, "false", "0", 0, None)
+
+    def set_graph_snap_to_grid(self, enabled):
+        self._store.setValue(self.SNAP_TO_GRID, bool(enabled))
+        self._store.sync()
 
     def set_graph_opengl(self, enabled):
         self._store.setValue(self.GRAPH_OPENGL, bool(enabled))
@@ -7692,6 +7702,11 @@ class NodeItem(QGraphicsRectItem):
                               NODE_HEIGHT + (THUMB_HEIGHT - pixmap.height()) / 2)
 
     def itemChange(self, change, value):
+        if (change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and getattr(self.graph, "snap_to_grid", False)
+                and self.graph.scene().mouseGrabberItem() is not None):
+            # Snap to grid while a drag is under way: the card's corner lands on the grid the graph draws.
+            step = Graph.GRID_STEP
+            return QPointF(round(value.x() / step) * step, round(value.y() / step) * step)
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and hasattr(self, "output"):
             self.graph.update_edges((self.key,))
         elif change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged and getattr(self, "halo", None):
@@ -7751,6 +7766,10 @@ class NodeItem(QGraphicsRectItem):
             event.accept()
             return
         self._shift_select = False
+        # Nuke 17.0 User Guide (Working with Nodes > Selecting Nodes): "Press Ctrl/Cmd while dragging a node. Nuke selects all nodes
+        # that feed data to the selected node." The upstream selection waits for the drag, so a Ctrl+click still opens the panel.
+        self._ctrl_upstream = (event.scenePos() if event.button() == Qt.MouseButton.LeftButton
+                               and event.modifiers() == Qt.KeyboardModifier.ControlModifier and not self.is_backdrop else None)
         super().mousePressEvent(event)
         if self.is_backdrop and event.button() == Qt.MouseButton.LeftButton:
             self.graph.primary_id = self.key
@@ -7763,7 +7782,22 @@ class NodeItem(QGraphicsRectItem):
                 item.setSelected(True)
             scene.blockSignals(False)
 
+    def mouseMoveEvent(self, event):
+        start = getattr(self, "_ctrl_upstream", None)
+        if start is not None and (event.scenePos() - start).manhattanLength() * self.graph.view_scale() >= QApplication.startDragDistance():
+            self._ctrl_upstream = None
+            scene = self.graph.scene()
+            scene.blockSignals(True)
+            scene.clearSelection()
+            for key in {self.key} | upstream_of(self.graph.window.graph_nodes(), self.key):
+                if key in self.graph.items_by_id:
+                    self.graph.items_by_id[key].setSelected(True)
+            scene.blockSignals(False)
+            self.graph.selection_changed()
+        super().mouseMoveEvent(event)
+
     def mouseReleaseEvent(self, event):
+        self._ctrl_upstream = None
         if getattr(self, "_shift_select", False):
             self._shift_select = False     # Qt's release would clear the rest of the selection
             event.accept()
@@ -8542,6 +8576,10 @@ class NodeSearch(QDialog):
         # Up/Down move the highlighted row without handing the line edit's focus to the list,
         # so typing can continue right after; Enter still creates whatever row is highlighted.
         if obj is self.query and event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                # Shift+Return makes a new branch and Ctrl/Cmd+Return replaces the selected node (Nuke 17.0 User Guide,
+                # Working with Nodes > Adding Nodes and Replacing Nodes): remember which, for `Window.node_search`.
+                NodeSearch.chosen_modifiers = event.modifiers()
             if event.key() == Qt.Key.Key_Down:
                 self.move_selection(1)
                 return True
@@ -8605,8 +8643,11 @@ class NodeSearch(QDialog):
                 NodeSearch.last_kind = self.selected_kind
             self.accept()
 
+    chosen_modifiers = Qt.KeyboardModifier.NoModifier
+
     @classmethod
     def choose(cls, parent, choices, global_pos, extras=()):
+        NodeSearch.chosen_modifiers = Qt.KeyboardModifier.NoModifier
         picker = cls(parent, choices, global_pos, extras)
         chosen = picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
         picker.deleteLater()          # a closed popup left alive would make the next Tab look like a press inside a popup
@@ -9101,6 +9142,7 @@ def upstream_of(nodes, key):
 
 class Graph(PanZoomView):
     GRID_BLOCK = 1024
+    GRID_STEP = 32           # the spacing of the dots drawBackground draws, and of snap to grid
     _grid_points = None
 
     def __init__(self, window):
@@ -9120,6 +9162,8 @@ class Graph(PanZoomView):
             self.setViewport(surface)
         self.setBackgroundBrush(QColor(TOKENS["bg0"]))
         self.wire_mode = window.preferences.wire_mode()
+        self.snap_to_grid = window.preferences.graph_snap_to_grid()
+        self._shift_wire = None     # a Shift+press on a wire: a drag duplicates it, a click toggles its selection
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setAcceptDrops(True)
         self.setSceneRect(-5000, -5000, 10000, 10000)
@@ -9343,8 +9387,11 @@ class Graph(PanZoomView):
         """The socket a press at `scene_pos` starts a wire from, or None. Near a socket is enough: a press
         on its label, on the card edge beside it or on empty space within GRAB_REACH screen pixels grabs the
         nearest one, and a press in the bottom band of a card grabs its output. Deep inside a card the press
-        is a node drag, as ever."""
+        is a node drag, as ever. A press on a Dot's body is always a Dot drag (Nuke 17.0 User Guide, Working with Nodes:
+        a Dot is moved like any node); its wires start from its rim."""
         scale = self.view_scale()
+        if self.dot_at(scene_pos) is not None:
+            return None
         nodes = [node for node in self.items_by_id.values() if not node.is_backdrop]
         for node in nodes:
             for port in node.inputs.values():
@@ -9986,6 +10033,15 @@ class Graph(PanZoomView):
             self.update_dot_preview(self.mapToScene(event.position().toPoint()))
             event.accept()
             return
+        if self._shift_wire is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            record, press, _key = self._shift_wire
+            if (event.position().toPoint() - press).manhattanLength() >= QApplication.startDragDistance():
+                self._shift_wire = None
+                _edge, source, _destination, _slot, output = record
+                self.start_wire(source, output=output or "rgba")
+                self.wire_press, self.wire_grabbed = press, True
+            event.accept()
+            return
         super().mouseMoveEvent(event)
         if self.wire_source or self.wire_input:
             self.set_hot_port(None)
@@ -10005,6 +10061,12 @@ class Graph(PanZoomView):
             QTimer.singleShot(0, lambda k=ctrl_open[0]: k in self.window.graph_nodes() and self.window.pin_panel(k))
         if self.pan is not None:
             PanZoomView.mouseReleaseEvent(self, event)
+            return
+        if self._shift_wire is not None and event.button() == Qt.MouseButton.LeftButton:
+            _record, _press, key = self._shift_wire
+            self._shift_wire = None
+            self.select_wires(self.selected_wires ^ {key})
+            event.accept()
             return
         if self.knife is not None and event.button() == Qt.MouseButton.LeftButton:
             self.move_knife(self.mapToScene(event.position().toPoint()))
@@ -10220,6 +10282,8 @@ class Graph(PanZoomView):
             self.scene().clearSelection()
             for item in self.items_by_id.values():
                 item.setSelected(True)
+        elif event.key() == Qt.Key.Key_A and modifiers == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier):
+            self.select_connected()
         elif event.key() == Qt.Key.Key_C and modifiers == Qt.KeyboardModifier.ControlModifier:
             QApplication.clipboard().setText(json.dumps(self._selected_node_data()))
         elif event.key() == Qt.Key.Key_V and modifiers == Qt.KeyboardModifier.ControlModifier:
@@ -10282,6 +10346,26 @@ class Graph(PanZoomView):
                                    Qt.Key.Key_W: "Write"}[event.key()])
         else:
             super().keyPressEvent(event)
+
+    def select_connected(self):
+        """Nuke's Edit > Select Connected Nodes (Ctrl/Cmd+Alt+A, 17.0 User Guide, Working with Nodes > Selecting Nodes): every
+        node joined to the selection by wires, upstream or downstream."""
+        nodes = self.window.graph_nodes()
+        found, pending = set(), [key for key in self.selected_ids() if key in nodes]
+        while pending:
+            key = pending.pop()
+            if key in found:
+                continue
+            found.add(key)
+            pending.extend(source for source in (nodes[key].get("inputs") or {}).values() if source)
+            pending.extend(other for other, node in nodes.items() if key in (node.get("inputs") or {}).values())
+        for key in found:
+            if key in self.items_by_id:
+                self.items_by_id[key].setSelected(True)
+
+    def set_snap_to_grid(self, on):
+        self.snap_to_grid = bool(on)
+        self.window.preferences.set_graph_snap_to_grid(self.snap_to_grid)
 
     def start_rename(self, key):
         """Nuke's N (17.0 User Guide, Working with Nodes > Renaming Nodes): "Enter a new name for the node in the rename field
@@ -10394,7 +10478,10 @@ class Graph(PanZoomView):
         key = self.wire_key(record)
         self.setFocus()
         if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
-            self.select_wires(self.selected_wires ^ {key})
+            # Nuke 17.0 User Guide (Connecting Nodes): "To duplicate a connecting arrow, hold Shift and drag the connecting arrow on
+            # top of the node you want to create a connection to." A Shift+drag starts a second wire from the same output; a
+            # Shift+click without moving still adds the wire to the selection or takes it out.
+            self._shift_wire = (record, pos, key)
         else:
             self.scene().clearSelection()
             self.select_wires({key})
@@ -10482,7 +10569,7 @@ class Graph(PanZoomView):
         # The dots every 32 units, drawn a block of 32 x 32 at a time from one prepared set of points.
         block = Graph.GRID_BLOCK
         if Graph._grid_points is None:
-            Graph._grid_points = QPolygonF([QPointF(x, y) for x in range(0, block, 32) for y in range(0, block, 32)])
+            Graph._grid_points = QPolygonF([QPointF(x, y) for x in range(0, block, Graph.GRID_STEP) for y in range(0, block, Graph.GRID_STEP)])
         for bx in range(math.floor(rect.left() / block) * block, int(math.ceil(rect.right())), block):
             for by in range(math.floor(rect.top() / block) * block, int(math.ceil(rect.bottom())), block):
                 painter.translate(bx, by)
@@ -12859,6 +12946,15 @@ class Window(QMainWindow):
             action.setObjectName("step-increment-back" if direction < 0 else "step-increment-forward")
             action.triggered.connect(lambda checked=False, d=direction: self.step_increment(d))
             time_menu.addAction(action)
+        snap_action = QAction("Snap to grid", self, checkable=True)
+        snap_action.setObjectName("snap-to-grid-action")
+        snap_action.setChecked(self.graph.snap_to_grid)
+        snap_action.toggled.connect(self.graph.set_snap_to_grid)
+        edit.addAction(snap_action)
+        connected_action = QAction("Select connected nodes\tCtrl+Alt+A", self)
+        connected_action.setObjectName("select-connected-action")
+        connected_action.triggered.connect(lambda checked=False: self.graph.select_connected())
+        edit.addAction(connected_action)
         settings_action = QAction("Viewer settings…", self)
         settings_action.setObjectName("viewer-settings-action")
         settings_action.triggered.connect(lambda checked=False: self.open_viewer_settings())
@@ -19600,7 +19696,10 @@ class Window(QMainWindow):
         if kind:
             # With a node selected the new one follows the selection (wired or beside it), as
             # the create shortcuts do; the click position only places a node on an empty graph.
-            self.add_node(kind, position=None if self.graph.selected_id() else graph_pos)
+            held = NodeSearch.chosen_modifiers
+            mode = ("replace" if held & Qt.KeyboardModifier.ControlModifier
+                    else "branch" if held & Qt.KeyboardModifier.ShiftModifier else None)
+            self.add_node(kind, position=None if self.graph.selected_id() else graph_pos, mode=mode)
 
     def graph_center(self):
         """The scene point at the middle of the visible graph, where the NODES dock lands a node
@@ -19725,11 +19824,17 @@ class Window(QMainWindow):
             pos = QPointF(round(blocker.right() - 12 + NODE_GAP), pos.y())
         return pos
 
-    def add_node(self, kind=None, params=None, position=None):
+    def add_node(self, kind=None, params=None, position=None, mode=None):
+        """Add a `kind` node after the selection. `mode` "branch" (Shift held, Nuke 17.0 User Guide: "Hold down Shift and create
+        the node ... to add a node in a new branch") wires it to the selection beside the stream, leaving the nodes below alone;
+        "replace" (Ctrl/Cmd held: "To replace a node in Nuke, simply hold down Ctrl/Cmd and create a new node") puts it in the
+        selected node's place, with its connections, in one undo step."""
         if not kind:
             kind, ok = QInputDialog.getItem(self, "Create node", "Node (type to search)", list(SPECS), 0, True)
             if not ok:
                 return
+        if mode == "replace" and self.graph.selected_id():
+            return self.replace_node(self.graph.selected_id(), kind, params)
         # A selected node with a real input slot takes priority over click position: the new
         # node lands in its branch, wired from its output, rather than wherever Tab/hotkey
         # last recorded a click. Generators (Read/Constant/Checker) have no input slot, so
@@ -19756,7 +19861,7 @@ class Window(QMainWindow):
             selected = self.graph.items_by_id[source].sceneBoundingRect()
             width = node_size({"type": kind}, self.show_thumbnails)[0]
             anchor = QPointF(selected.center().x() - width / 2, selected.bottom() + NODE_GAP)
-            if kind == "Write" or OUTPUT_TYPES.get(kind, "image") != produced:
+            if kind == "Write" or OUTPUT_TYPES.get(kind, "image") != produced or mode == "branch":
                 # A branch-off (a Write, a tap of another type) goes below and to the side, so
                 # the stream under the selection keeps its column.
                 anchor.setX(selected.center().x() + width / 2 + NODE_GAP / 2)
@@ -19770,7 +19875,7 @@ class Window(QMainWindow):
         # Nodes that read from the selection and take the new node's place downstream, with
         # everything below them: they make room instead of the new node sliding sideways.
         downstream = []
-        if source and OUTPUT_TYPES.get(kind, "image") == produced and kind != "Write":
+        if source and OUTPUT_TYPES.get(kind, "image") == produced and kind != "Write" and mode != "branch":
             downstream = [(dest, name) for dest, node in self.graph_nodes().items()
                           for name, src in node["inputs"].items() if src == source]
         pushed = self.downstream_closure({dest for dest, _ in downstream})
@@ -19819,6 +19924,41 @@ class Window(QMainWindow):
             self.node_toolbar.note_added(kind)
             if kind == "Read" and not params:
                 self.browse_read(key)
+
+    def replace_node(self, old, kind, params=None):
+        """Put a new `kind` node where `old` stands: it takes `old`'s inputs (slot by slot where the names match, the first
+        input otherwise), everything that read `old` reads it instead, and `old` goes, in one batch."""
+        from .core import INPUT_TYPES, OUTPUT_TYPES
+        nodes = self.graph_nodes()
+        node = nodes[old]
+        key = __import__("uuid").uuid4().hex[:12]
+        commands = [{"op": "create", "id": key, "type": kind, "pos": list(node["pos"]), "params": params or {}}]
+        slots = list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs") or [])
+        taken = set()
+        for index, (slot, source) in enumerate((node.get("inputs") or {}).items()):
+            if not source:
+                continue
+            target = slot if slot in slots else (slots[index] if index < len(slots) else None)
+            if target is None or target in taken:
+                continue
+            produced = OUTPUT_TYPES.get(nodes[source]["type"], "image")
+            if produced not in INPUT_TYPES.get(target, ("image",)):
+                continue
+            taken.add(target)
+            commands.append({"op": "connect", "id": key, "input": target, "source": source})
+        if OUTPUT_TYPES.get(kind, "image") == OUTPUT_TYPES.get(node["type"], "image"):
+            commands.extend({"op": "connect", "id": dest, "input": name, "source": key}
+                            for dest, other in nodes.items() if dest != old
+                            for name, src in (other.get("inputs") or {}).items() if src == old)
+            if not self.graph_path and self.dispatcher.document.get("view") == old:
+                commands.append({"op": "view", "id": key})
+        commands.append({"op": "delete", "id": old})
+        if self.command({"op": "batch", "commands": commands}) is not None:
+            self.graph.scene().clearSelection()
+            if key in self.graph.items_by_id:
+                self.graph.items_by_id[key].setSelected(True)
+            self.node_toolbar.note_added(kind)
+        return key
 
     def browse_read(self, key):
         chosen = SequenceBrowser.choose(self, self.last_browse_directory)

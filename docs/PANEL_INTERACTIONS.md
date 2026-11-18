@@ -215,3 +215,24 @@ language).
   and not yet probed: Shift to start a new branch, Ctrl/Cmd to replace, inserting by dragging onto a pipe, dragging a pipe's end to
   connect or disconnect, Shift+drag to duplicate a pipe, Ctrl/Cmd+click to add a Dot, Ctrl/Cmd+drag to select upstream, snap to
   grid. Undocumented on the pages read: swapping inputs with Shift, a downstream-only selection, an Alt+C duplicate.
+
+## The rest of the Node Graph (lane 10, step T6, 2026-11-17)
+
+- **Probes:** ten more in `tools/nuke_panel_interactions.py`, each dragging or keying the built window's Node Graph and checking the
+  document's wires, the single undo step and the selection; `tests/test_l10_t6_node_graph.py` asserts them.
+- **Node Graph, 24 of 25 documented (14 before).** Built here: Shift+Return in the Tab menu adds the node as a new branch off the
+  selection and leaves the nodes below wired as they were; Ctrl/Cmd+Return replaces the selected node, the new one taking its
+  inputs and everything that read it, in one undo step; Shift+drag on a wire draws a second wire from the same output onto
+  another node and keeps the first (a Shift+click without moving still adds the wire to the selection); Ctrl/Cmd+drag on a node
+  selects it and every node feeding it and moves them together (a Ctrl/Cmd+click still opens the panel); Ctrl/Cmd+Alt+A and
+  Edit > Select connected nodes select every node wired to the selection, up or down; Edit > Snap to grid (off by default, as in
+  Nuke) lands a dragged node on the graph's 32-unit dot grid. Fixed: pressing the middle of a Dot started a wire from its socket,
+  so a Dot could not be dragged; the Dot's body now always moves it and its wires start from its rim. Already like Nuke, now
+  measured: dragging a pipe's input end to empty space disconnects it and onto the middle of another node reconnects it,
+  dropping a free node onto a wire places it between the two nodes, and Ctrl/Cmd+click on a wire's handle adds a Dot that passes
+  its input on.
+- **No shortcut taken away.** Shift+click on a wire still toggles its selection (now decided on release, so a drag can start); the
+  Tab menu's plain Return is unchanged.
+- **Still open:** Clone (Nuke's Alt+K: a copy whose knobs stay shared with the original both ways). NodeBased's expressions drive
+  one knob from another in one direction only, and a two-way link needs a document change of its own. Linking stays at 8 of 9:
+  the Link menu of channel, layer and format knobs needs expressions that carry names, which the document does not hold yet.
