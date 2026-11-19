@@ -119,6 +119,14 @@ class Bench:
         self.settle()
         return taken
 
+    def idle(self, timeout=30.0):
+        """Wait until no render is running or queued, so the Viewer's format is the one for the current knobs."""
+        from tests.waiting import wait_until
+        window = self.window
+        wait_until(lambda: not window.busy and not len(window.preview_queue) and window.viewer.format_rect is not None,
+                   timeout)
+        self.settle()
+
     def undo_steps(self):
         return len(self.window.dispatcher.undo_stack)
 
@@ -383,15 +391,18 @@ def _colortransfer_roi(bench):
     bench.drag((300, top + 150), (340, top + 130))                        # inside: the whole box moves (40 right, 20 up)
     body = _roi(bench) == (140.0, 120.0, 540.0, 420.0) and bench.undo_steps() == 1
     bench.focus("ct", roi_x=0.0, roi_y=0.0, roi_r=0.0, roi_t=0.0)         # the default: the whole of A, its left edge at 0
+    bench.idle()                                                          # the frame for these knobs is shown before the press
+    width, height = bench.window.viewer.format_rect.width(), bench.window.viewer.format_rect.height()
     bench.drag((0, height / 2), (50, height / 2))
-    width = bench.window.viewer.format_rect.width()
-    default = _roi(bench) == (50.0, 0.0, float(width), float(height))
+    stored = _roi(bench)
+    default = stored == (50.0, 0.0, float(width), float(height))
     bench.focus("ct", **roi)
     keyed = _keyed_drag(bench, "ct", "roi_r", (500, top + 150), (540, top + 150), 540.0)
     bench.focus("ct", roi_x=0.0, roi_y=0.0, roi_r=0.0, roi_t=0.0)
     ok = edge and corner and body and default and keyed
-    return ok, (f"right edge {edge}, corner {corner}, body move {body}, the default box covers the frame {default}, "
-                f"animated r keyed in one step {keyed}")
+    return ok, (f"right edge {edge}, corner {corner}, body move {body}, the default box covers the frame {default}"
+                + ("" if default else f" (stored {stored}, frame {width} by {height})")
+                + f", animated r keyed in one step {keyed}")
 
 
 @probe("ColorTransfer.roi_on_input_a")

@@ -3422,16 +3422,25 @@ class Viewer(PanZoomView):
         values = self._analysis_params(key)
         drag = self.box_drag
         if drag is not None and drag["key"] == key:
-            sx, sy = self._transform_data_point(drag["start"])
-            cx, cy = self._transform_data_point(drag["scene"])
+            if "origin" in drag:                # scene to data with the format origin of the press
+                ox, oy = drag["origin"]
+                sx, sy = drag["start"].x() + ox, drag["start"].y() + oy
+                cx, cy = drag["scene"].x() + ox, drag["scene"].y() + oy
+            else:
+                sx, sy = self._transform_data_point(drag["start"])
+                cx, cy = self._transform_data_point(drag["scene"])
             original = drag["original"]
             if drag["part"] == "center":
                 values["center_x"] = float(original["center_x"]) + cx - sx
                 values["center_y"] = float(original["center_y"]) + cy - sy
             else:
                 kind = node["type"]
-                box = handles2d.box_drag(self._box_rect(kind, original), drag["part"], cx - sx, cy - sy)
-                for name, value in handles2d.knobs_from_box(kind, box, self._box_size()[1]).items():
+                # The box and the frame height as they were at the press: a frame that lands mid-drag (another size,
+                # a moved format origin) must not move the box the artist grabbed, above all the default whole-frame ROI.
+                rect = drag.get("rect") or self._box_rect(kind, original)
+                height = drag.get("height", self._box_size()[1])
+                box = handles2d.box_drag(rect, drag["part"], cx - sx, cy - sy)
+                for name, value in handles2d.knobs_from_box(kind, box, height).items():
                     values[name] = int(round(value)) if isinstance(original[name], int) else float(value)
         return key, node["type"], values
 
@@ -7036,7 +7045,9 @@ class Viewer(PanZoomView):
                 if part is not None:
                     touched = ("center_x", "center_y") if part == "center" else handles2d.BOX_NODES[kind]
                     self.box_drag = {"key": key, "part": part, "start": scene_pos, "scene": scene_pos, "moved": False,
-                                     "original": {name: values[name] for name in touched}}
+                                     "original": {name: values[name] for name in touched},
+                                     "rect": self._box_rect(kind, values), "height": self._box_size()[1],
+                                     "origin": self._transform_data_point(QPointF(0.0, 0.0))}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     return True
         if button == Qt.MouseButton.LeftButton:
