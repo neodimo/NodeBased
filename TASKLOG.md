@@ -1,3 +1,16 @@
+## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X2 finish (Thu 11/19): the defocus speed pass, pixels and FFT
+
+- **What was done:** (1) Pixels: the grouped gather matches a float64 truth to 3e-8 on a 1080p ramp strip; the old per-pixel loop is 6.6e-6 (size 20) and 1.9e-5 (size 50)
+  away from that truth, so the difference to the loop is the loop's float32 accumulation, not a radius or ordering change. Kept the faster path.
+  Bit-exact saved-node hash tests (`tests.test_2d_behaviour_zdefocus_s.SavedNodeTests`) now hash the reference loop (still bit for bit) and check the new path against it to 1e-5.
+  (2) Speed: `defocusgather._fft_group` correlates (picture x occlusion mask) with the filter by numpy FFT for every set of pixels sharing a blur radius AND a depth (the occlusion mask is then the same for the set); chosen per set by a cost model
+  (`FFT_GAIN` 1.0: time flat from gain 0.05 to 1, lost from 3). scipy is not a dependency, numpy.fft is used. Pixels whose visible weight sum rounds to nothing fall back to the gather; FFT noise below 1e-13 of the largest sum is zeroed.
+  Frame times at 1080p on a depth ramp (`tools/benchmark_defocus_gather.py`; old = per-pixel loop on a strip, scaled): ZDefocus 20: 33.1 s -> gather 6.39 s -> FFT 3.22 s; ZDefocus 50: 89.8 s -> 38.4 s -> 7.98 s;
+  Bokeh 20: 86.6 s -> 15.9 s -> 1.15 s; Bokeh 50: about 540 s -> about 66 s (first worker's number) -> 11.5 s. FFT against gather on the same frame: 6e-8 (float32 rounding of the output).
+  Tests: tests.test_l9_x2_defocus_gather (38 with zdefocus_s), every module grepping ZDefocus or Bokeh, test_tiles, test_nuke_fidelity_audit: OK.
+- **Not done / limits:** The FFT needs identical depth within a set. A continuous ramp makes each column a set (still faster, as above); real continuous depth with a unique value per pixel gets the gather only. Bokeh size-50 gather-only time was not re-measured (the rerun was killed by the shell session); the 66 s is the first worker's.
+  Not run: the full suite, visual QA.
+
 ## 2026-11-19 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X3 (Thu 11/19): Project Settings, part 2: the OCIO config menu and the Views tab (integrator tick)
 
 - **What was done:** `main` `6efa8714` -> `9c96e1c6` plus this docs commit. Evidence and per-lane commit
