@@ -50,7 +50,14 @@ NORMALISATIONS = ("Maximum", "Width", "Height", "Diagonal")
 PROJECTIONS = ("None (Rectilinear)", "Stereographic", "Equidistant", "Equisolid", "Orthographic")
 
 KINDS = ("Undistort", "Redistort")
-_COMMON = {"distortionModelPreset": CLASSIC, "lens_type": "Spherical", "distortionNumerator0": 0.0, "distortionNumerator1": 0.0,
+# The Analysis tab's settings (Nuke 17.0 Reference Guide, LensDistortion: Grid Detect, Settings, Feature Linking, Solve and Overlay), at the guide's defaults.
+# NodeBased has no grid detector or solver (the coefficients are typed in), so these are held on the node for a reviewer's side-by-side and change no pixel;
+# the buttons (detect, solve, reject, the line drawing modes) have nothing to run and are not here (lane 9 step X5).
+ANALYSIS = {"detectionFrameType": "Current Frame", "preview": 0, "numFeatures": 5000, "patchSize": 9, "featureSeparation": 15, "detectionThreshold": 100.0,
+            "angleThreshold": 8.0, "distanceThreshold": 30.0, "peakThreshold": 20.0, "solveError": 0.0, "errorThreshold": 10.0, "overlayType": "All"}
+DETECTION_FRAME_TYPES = ("Current Frame", "Every N Frames")
+OVERLAY_TYPES = ("None", "Features", "Links", "All")
+_COMMON = {**ANALYSIS, "distortionModelPreset": CLASSIC, "lens_type": "Spherical", "distortionNumerator0": 0.0, "distortionNumerator1": 0.0,
            "distortionDenominator0": 0.0, "distortionDenominator1": 0.0, "centre_x": 0.0, "centre_y": 0.0,
            "distortionModelDirection": "Forward", "bboxType": "Auto", "bbox_x": 0.0, "bbox_y": 0.0, "bbox_r": 1920.0, "bbox_t": 1080.0,
            "outputFormatType": "Input", "lens_format": "HD_1080", "distortionScalingType": "Scale to Input Format",

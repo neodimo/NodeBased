@@ -2456,6 +2456,10 @@ LIMITS.update({"anamorphicTwist": (-180.0, 180.0), "anamorphicScale_x": (0.01, 1
                "distortionExponent_x": (1, 8), "distortionExponent_y": (1, 8),
                "focal": (0.1, 1000.0), "sensorSize_x": (0.1, 1000.0), "sensorSize_y": (0.1, 1000.0),
                "beamSplitterDirection": (-180.0, 180.0), "beamSplitterBending": (-1.0, 1.0)})
+CHOICES.update({"detectionFrameType": list(_lensdistortion.DETECTION_FRAME_TYPES), "overlayType": list(_lensdistortion.OVERLAY_TYPES)})
+LIMITS.update({"preview": (0, 1), "numFeatures": (1, 100000), "patchSize": (3, 99), "featureSeparation": (1, 1000), "detectionThreshold": (0.0, 1000.0),
+               "angleThreshold": (0.0, 180.0), "distanceThreshold": (0.0, 1000.0), "peakThreshold": (0.0, 1000.0), "solveError": (0.0, 1000.0),
+               "errorThreshold": (0.0, 1000.0)})
 CHOICES["upres_factor"] = ["1", "2", "4"]
 CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
 CHOICES["whitewater_backend"] = ["auto", "cpu", "gpu"]
