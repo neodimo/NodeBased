@@ -1885,7 +1885,7 @@ LIMITS = {"input_number": (1, 64), "enabled": (0, 1), "splat_write_overwrite": (
           "legacy_godrays": (0, 1), "rays_translate_x": (-1000000.0, 1000000.0), "rays_translate_y": (-1000000.0, 1000000.0), "rays_rotate": (-100000.0, 100000.0),
           "rays_scale": (0.001, 1000.0), "rays_skew": (-100.0, 100.0), "rays_from_color": (-1000.0, 1000.0), "rays_to_color": (-1000.0, 1000.0),
           "rays_gamma": (0.01, 100.0), "rays_max": (0, 1),
-          "comp_me": (0, 1), "pre_blur": (0.0, 500.0), "chk_radial": (0, 1), "radial_size": (0.001, 100000.0), "rad_softness": (0.0, 100.0), "luma_tol": (0.0, 100.0), "chk_desat": (0, 1), "CCorrect1_gamma": (0.01, 100.0), "CCorrect1_gain": (0.0, 1000.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
+          "comp_me": (0, 1), "chk_flicker": (0, 1), "xform_flicker": (0, 1), "chk_use_mask": (0, 1), "chk_xform_mask": (0, 1), "pre_blur": (0.0, 500.0), "chk_radial": (0, 1), "radial_size": (0.001, 100000.0), "rad_softness": (0.0, 100.0), "luma_tol": (0.0, 100.0), "chk_desat": (0, 1), "CCorrect1_gamma": (0.01, 100.0), "CCorrect1_gain": (0.0, 1000.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (0, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
