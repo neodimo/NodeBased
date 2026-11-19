@@ -1,3 +1,9 @@
+## 2026-11-19 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X2 (Wed 11/18): a speed pass on the defocus gather loop Bokeh and ZDefocus share, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T8 (Wed 11/18): the Viewer works like Nuke's, and ColorTransfer's ROI box (integrator tick)
+
+- **What was done:** `main` `d23997e4` -> `194ba5b6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `194ba5b6`: Ran 10346 tests in 1924.039 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X2 finish (Thu 11/19): the defocus speed pass, pixels and FFT
 
 - **What was done:** (1) Pixels: the grouped gather matches a float64 truth to 3e-8 on a 1080p ramp strip; the old per-pixel loop is 6.6e-6 (size 20) and 1.9e-5 (size 50)

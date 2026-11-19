@@ -1,5 +1,33 @@
 ## Lane 2 step X3 (11/19): OCIO config menu and the Views tab of Project Settings
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (3:06 AM on 2026-11-19 PDT)
+
+`main` moved `d23997e4` -> `194ba5b6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `194ba5b6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1119-0226.log`, started 2:28 AM): **Ran 10346 tests in 1924.039 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step X2 (Wed 11/18): a speed pass on the defocus gather loop Bokeh and ZDefocus share.** Commits:
+  - `00694448` TASKLOG: lane 9 step X2 finish note (defocus gather FFT, pixel cause, frame times)
+  - `ab5c8280` ZDefocus and Bokeh: an FFT correlation for the pixels of one blur radius that share a depth, the saved-node golden test pinned to the reference loop (lane 9, step X2 finish)
+  - `adbcd0e6` ZDefocus and Bokeh: the defocus gather grouped by blur radius and vectorised (lane 9, step X2)
+  Diff: 6 files changed, 578 insertions(+), 33 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T8 (Wed 11/18): the Viewer works like Nuke's, and ColorTransfer's ROI box.** Commits:
+  - `215c50df` The Viewer's info bar samples like Nuke's: Ctrl+click holds a pixel, Ctrl+Shift+drag a region's average, Ctrl+right-click lets it follow the pointer again; Viewer 12 of 21 (lane 10 step T8 finish)
+  - `a8cf54db` Fidelity report regenerated after the Viewer step: Viewer 8 of 21 documented behaviours in the panels table (lane 10 step T8 finish)
+  - `a20a96fd` The Viewer measured against Nuke 17.0's Viewer pages: 21 documented behaviours, + and - zoom and Up/Down input cycling fixed (lane 10 step T8 part 2)
+  - `b775fd68` ColorTransfer's ROI box in the Viewer: corner, edge and body grips, keyed drags, shown on input A too (lane 10 step T8 part 1)
+  Diff: 13 files changed, 670 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (2:16 AM on 2026-11-19 PDT)
 
 `main` moved `6efa8714` -> `9c96e1c6` (lane commits cherry-picked onto main in lane order) and then to this
