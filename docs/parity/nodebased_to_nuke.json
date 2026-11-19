@@ -2055,8 +2055,16 @@
    "skip_default": ["slope", "power", "offset", "sourceRefFrames", "targetRefFrames"]
   },
   "ColorTransfer": {
-   "nodebased": null,
-   "reason": "covered by MatchGrade, no separate node (PARITY_2D.md Color #16)"
+   "nodebased": "ColorTransfer",
+   "inputs": [
+    {"nodebased": "A", "nuke": "A", "kind": "mapped"},
+    {"nodebased": "B", "nuke": "B", "kind": "mapped"},
+    {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
+   ],
+   "knobs": [
+    {"nodebased": ["roi_x", "roi_y", "roi_r", "roi_t"], "nuke": ["ROI"], "kind": "components", "reason": "NodeBased stores the region as x, y, r, t like Nuke's one ROI value: pixels from the bottom left of input A, all zero for the whole input; it limits where input A's colours are measured"},
+    {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
+   ]
   },
   "Expression": {
    "nodebased": "Expression",

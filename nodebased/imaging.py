@@ -4516,6 +4516,15 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display, source.layers, source.meta)
+        if kind == "ColorTransfer":
+            a, b = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if a is None or b is None:
+                raise ValueError("ColorTransfer needs inputs A (the colours to match) and B (the picture to change)")
+            out = b.data
+            graded = Evaluator._color_transfer(a.pixels, b.fit(out), p)
+            pixels = Evaluator._apply_mask_mix(b.fit(out), graded, None if mask is None else mask.fit(out), p.get("mix", 1.0))
+            return Raster(pixels, out, b.display, b.layers, b.meta)
         if kind == "MatchGrade":
             source, target = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
@@ -9478,6 +9487,51 @@ class Evaluator:
         return image[y, x].copy()
 
     @staticmethod
+    def _channel_stats(channel_values, w=None):
+        """(mean, standard deviation) of one channel, weighted by `w` when given: the statistics MatchGrade and ColorTransfer match."""
+        if w is None:
+            return float(np.mean(channel_values)), float(np.std(channel_values))
+        total = max(float(w.sum()), 1e-12)
+        mean = float((channel_values * w).sum() / total)
+        return mean, float(np.sqrt((((channel_values - mean) ** 2) * w).sum() / total))
+
+    @staticmethod
+    def _std_ratio(target_std, source_std):
+        """The gain that gives a channel of spread `source_std` the spread `target_std`; 1 for a flat channel."""
+        return target_std / source_std if source_std > 1e-12 else 1.0
+
+    @staticmethod
+    def _roi_rows_cols(shape, p):
+        """ColorTransfer's ROI as (rows, columns) slices of an array of `shape`. Nuke measures x, y, r, t in pixels from the bottom
+        left of input A, so row 0 (the top) is `height - t`. All four zero is the guide's default, the whole input; a box that
+        is empty or reversed also reads the whole input rather than nothing."""
+        height, width = shape[0], shape[1]
+        x, y, r, t = (float(p.get(f"roi_{k}", 0.0)) for k in "xyrt")
+        if r <= x or t <= y:
+            return slice(0, height), slice(0, width)
+        left, right = max(0, int(np.floor(x))), min(width, int(np.ceil(r)))
+        bottom, top = max(0, int(np.floor(y))), min(height, int(np.ceil(t)))
+        if right <= left or top <= bottom:
+            return slice(0, height), slice(0, width)
+        return slice(height - top, height - bottom), slice(left, right)
+
+    @staticmethod
+    def _color_transfer(a, b, p):
+        """ColorTransfer: B takes the colour statistics of the ROI of A.
+
+        The Nuke 17.0 Reference Guide documents only the ROI ("the area in input A with the colors to match") and gives no formula, so the
+        match is the published convention of Reinhard, Ashikhmin, Gooch and Shirley, "Color Transfer between Images" (IEEE Computer
+        Graphics and Applications 21(5), 2001): each channel of B is shifted to the mean and scaled to the standard deviation that
+        channel has inside A's ROI. It runs on the working RGB values, MatchGrade's statistics (_channel_stats); alpha is left as it is."""
+        rows, cols = Evaluator._roi_rows_cols(a.shape, p)
+        out = b.copy()
+        for c in range(3):
+            tm, ts = Evaluator._channel_stats(a[rows, cols, c].astype(np.float64))
+            sm, ss = Evaluator._channel_stats(b[..., c].astype(np.float64))
+            out[..., c] = (b[..., c] - sm) * Evaluator._std_ratio(ts, ss) + tm
+        return out
+
+    @staticmethod
     def _match_grade(source, target, p):
         # target is None once the node is baked (match_analyzed) and the reference is
         # disconnected: the measured gain/offset already live in the knobs, Nuke's baked-knob
@@ -9498,12 +9552,7 @@ class Evaluator:
             weights = region(source)
             target_weights = weights if (target is None or p.get("match_task", "Match Graded Source") == "Match Graded Source") else region(target)
 
-        def stats(channel_values, w):
-            if w is None:
-                return float(np.mean(channel_values)), float(np.std(channel_values))
-            total = max(float(w.sum()), 1e-12)
-            mean = float((channel_values * w).sum() / total)
-            return mean, float(np.sqrt((((channel_values - mean) ** 2) * w).sum() / total))
+        stats = Evaluator._channel_stats
 
         for c, channel in enumerate("rgb"):
             s = source[..., c]

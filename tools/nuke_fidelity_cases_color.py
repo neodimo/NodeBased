@@ -2140,9 +2140,6 @@ def _w1_cases():
                                        f"(r, g, b) to (r / 2, g, 1 - b) turns the plate ({red:g}, {green:g}, {blue:g}) into ({red / 2:g}, {green:g}, {1 - blue:g}). "
                                        f"The table is affine, so {interpolation} interpolation returns it exactly; the file is written by the case")))
     unscored = (
-        ("ColorTransfer", "color_nodes/colortransfer.html", "color_transfer_roi_colours",
-         "ColorTransfer matches the colours of input B to the region of input A",
-         "the guide documents the region of interest (x, y, r, t) and gives no formula for the match, so no number can be written down"),
         ("MatchGrade", "color_nodes/matchgrade.html", "match_grade_matches_a_clip",
          "MatchGrade analyses a source clip and a target clip and grades the source to look like the target",
          "the guide describes the analysis (tasks, reference frames, transform choices) without a formula, and a clip matched to itself is not stated to be left alone"),
@@ -2191,6 +2188,56 @@ def _generated_lut_file(multiply):
 
 
 _CINEON_STEP = 0.6 / (0.002 * 1023.0)       # code value (over 1023) of a factor of ten at gamma 0.6: Log2Lin's slope with ignore on
+
+
+# ------------------------------------------------------------------------------------------------ ColorTransfer (step X1)
+def _color_transfer_cases():
+    """ColorTransfer: the colours of input B take the statistics (per-channel mean and standard deviation) of the ROI of input A.
+
+    The guide's page (color_nodes/colortransfer.html) states only the ROI: 'the area in input A with the colors to match', x and y
+    the distances from A's left and bottom edges to the ROI's left and bottom, r and t those to its right and top, 'by default ... the entire
+    input'. It gives no formula, so the match is the published convention of Reinhard et al., 'Color Transfer between Images', IEEE
+    Computer Graphics and Applications 21(5), 2001: shift each channel to the target mean and scale it to the target standard deviation,
+    here on the working RGB values. Alpha is B's own. The references below are written out channel by channel with numpy and share no code with the node."""
+    page = "https://learn.foundry.com/nuke/17.0/content/reference_guide/color_nodes/colortransfer.html"
+    convention = (f"ColorTransfer ({page}) documents only the ROI; the match is the per-channel mean and standard deviation transfer of "
+                  "Reinhard, Ashikhmin, Gooch and Shirley, 'Color Transfer between Images' (IEEE Computer Graphics and Applications 21(5), 2001), on the working RGB values")
+
+    def transfer(colours, picture, box=None):
+        """B's picture moved to the mean and spread A's colours have inside `box` (x, y, r, t from the bottom left; None is all of A)."""
+        a = colours.astype(np.float64)
+        b = picture.astype(np.float64)
+        h = a.shape[0]
+        region = a if box is None else a[h - box[3]:h - box[1], box[0]:box[2]]
+        out = b.copy()
+        for c in range(3):
+            target = region[..., c].ravel()
+            mine = b[..., c].ravel()
+            tm, ts = target.sum() / target.size, np.sqrt(((target - target.sum() / target.size) ** 2).sum() / target.size)
+            sm, ss = mine.sum() / mine.size, np.sqrt(((mine - mine.sum() / mine.size) ** 2).sum() / mine.size)
+            out[..., c] = (b[..., c] - sm) * (ts / ss if ss > 1e-12 else 1.0) + tm
+        return out
+
+    def case(case_id, nuke_knobs, params, inputs, box, statement, fixtures=("A", "B")):
+        def expected(fx):
+            ref = transfer(fx[inputs[0]], fx[inputs[1]], box)
+            return ref, np.ones(ref.shape, bool)
+        return Case(id=case_id, nuke="ColorTransfer", nuke_class="ColorTransfer", nuke_knobs=nuke_knobs, nuke_inputs=inputs, nb_kind="ColorTransfer",
+                    nb_params=params, nb_inputs=inputs, expected=expected, source="convention", tolerance=1e-5,
+                    statement=f"{statement}. {convention}")
+    h = 12
+    return [
+        case("color_transfer_whole_input_takes_the_statistics", (), {}, ("A", "B"), None,
+             "By default the ROI covers the whole of input A, and input B comes out with A's per-channel mean and standard deviation"),
+        case("color_transfer_identical_inputs_return_the_picture", (), {}, ("A", "A"), None,
+             "With the same picture on A and B the statistics already agree, so B comes back unchanged"),
+        case("color_transfer_roi_measures_only_the_region", (("ROI", "2 3 11 9"),), {"roi_x": 2.0, "roi_y": 3.0, "roi_r": 11.0, "roi_t": 9.0},
+             ("A", "B"), (2, 3, 11, 9),
+             "The ROI (x 2, y 3, r 11, t 9, counted from the bottom left of A) limits where A's colours are measured, so the result follows only that region"),
+        case("color_transfer_roi_counts_rows_from_the_bottom", (("ROI", "0 0 16 4"),), {"roi_x": 0.0, "roi_y": 0.0, "roi_r": 16.0, "roi_t": 4.0},
+             ("A", "B"), (0, 0, 16, 4),
+             f"A ROI that is the bottom 4 of A's {h} rows reads those rows, the last four of the array, as Nuke's y counts up from the bottom edge"),
+    ]
 
 
 def _w2_cases():
@@ -2294,4 +2341,4 @@ def cases():
             + _posterize_cases() + _log2lin_cases() + _ploglin_cases() + _colorspace_cases() + _color_lookup_cases() + _expression_cases() + _crosstalk_cases() + _histeq_cases() + _mincolor_cases()
             + _keyer_cases() + _hue_keyer_cases() + _difference_cases() + _chroma_keyer_cases() + _screen_keyer_cases() + _ibk_cases()
             + _chroma_keyer_behaviour_cases() + _screen_keyer_behaviour_cases() + _ibk_behaviour_cases() + _shuffle_copy_cases() + _remove_cases()
-            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases() + _retime_weight_cases() + _analysis_cases() + _w1_cases() + _w2_cases())
+            + _copy_cases() + _channel_merge_cases() + _shuffle_cases() + _ocio_cases() + _retime_weight_cases() + _analysis_cases() + _w1_cases() + _w2_cases() + _color_transfer_cases())

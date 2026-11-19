@@ -929,6 +929,10 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("pixeldelta",), label="Delta", help="The delta Analyze (Find Pixel Delta) calculated: the target minus the darkest value over the frame range."),
         KnobGroup("int", ("frame_start",), label="Frame start"), KnobGroup("int", ("frame_end",), label="Frame end"), KnobGroup("enum", ("mincolor_mode",), label="Find"), KnobGroup("xy", ("box_x", "box_y"), label="Box origin"), KnobGroup("xy", ("box_width", "box_height"), label="Box size"), *[KnobGroup("float", (f"mincolor_{c}",), label=f"Result {c.upper()}") for c in "rgba"]),
     "Sampler": _groups(KnobGroup("enum", ("sample_channels",), label="Channels"), KnobGroup("int", ("frame_start",), label="Frame start"), KnobGroup("int", ("frame_end",), label="Frame end"), KnobGroup("xy", ("sample_x0", "sample_y0"), label="Start"), KnobGroup("xy", ("sample_x1", "sample_y1"), label="End"), KnobGroup("bool", ("normalize_x",), label="Normalize X", help="On, the readout's x axis runs 0 to 1 along the line; off, in pixels from the start. The image passes through either way."), *[KnobGroup("float", (f"sample_{c}",), label=f"Average {c.upper()}") for c in "rgba"]),
+    "ColorTransfer": _groups(
+        KnobGroup("xy", ("roi_x", "roi_y", "roi_r", "roi_t"), label="ROI", captions=("x", "y", "r", "t"),
+                  help="The area of input A that holds the colours to match, in pixels from A's bottom left corner (x and y the lower left, r and t the right and top). All four at 0 is the whole of A."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "MatchGrade": _groups(
         KnobGroup("enum", ("match_task",), label="Task", help="Match Graded Source matches the source with a graded version of the same clip (the target). Match Different Clip matches the colours of one clip with another. The first reads only the Source's alpha for the mask, the second the alpha of both inputs."),
         KnobGroup("enum", ("match_analysis",), label="Analysis", help="Analyze Reference Frames fixes one global grade from the reference frames (the Analyzed switch bakes it); Auto-analyze Per Frame measures every frame as it shows. NodeBased's live match measures the frame it shows, so both read it."),
@@ -2659,7 +2663,7 @@ NUKE_LABELS = {
 }
 
 
-STEP_D_NEW_KINDS = ("Clamp", "Exposure", "ShuffleCopy", "MatchGrade", "OCIOColorspace", "OCIOLookTransform", "OCIODisplay", "OCIOFileTransform", "AddMix", "Vectorfield")
+STEP_D_NEW_KINDS = ("Clamp", "Exposure", "ShuffleCopy", "MatchGrade", "ColorTransfer", "OCIOColorspace", "OCIOLookTransform", "OCIODisplay", "OCIOFileTransform", "AddMix", "Vectorfield")
 # Step D (11/2): the main tab of the nodes the audit still found out of Nuke's order or label (docs/PARITY_2D_FIDELITY.md, "Layout differences").
 # Where the guide shows no order for a knob NodeBased added, it keeps its place after these (config, the older-behaviour flags).
 NUKE_LAYOUT.update({
@@ -2668,6 +2672,7 @@ NUKE_LAYOUT.update({
     "Vectorfield": ("cube_path", "reload", "vector_file_type", "interpolation", "colorspace_in", "colorspace_out", "vector_output_bitdepth", "vector_normalize_output"),
     "Exposure": ("channels", "exposure_colorspace", "blackpoint", "exposure_mode", "gang", "red", "green", "blue"),
     "ShuffleCopy": ("layer1", "layer2", *[f"out{o}_{c}" for o in (1, 2) for c in "rgba"]),
+    "ColorTransfer": ("roi_x",),
     "MatchGrade": ("match_task", "match_analysis", "grade_mask", "apply_to_mask", "match_output", "match_crop_target", "match_source_frames", "match_target_frames",
                    "match_transform", "match_prelut", "match_lut_res", "match_colorspace", "match_iterations",
                    *(f"grade_gain_{channel}" for channel in "rgb"), "match_lock_slope", *(f"grade_offset_{channel}" for channel in "rgb"),

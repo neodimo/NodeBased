@@ -38,7 +38,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "MarkerRemoval", "DustBust", "RotoPaint",
-                                       "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
+                                       "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ColorTransfer", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -476,6 +476,10 @@ SPECS = {
     "Sampler": {"inputs": ["image"], "params": {"sample_channels": "rgb", "frame_start": 1, "frame_end": 100, "sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0, "sample_r": 0.0, "sample_g": 0.0, "sample_b": 0.0, "sample_a": 0.0, "normalize_x": 1}},
     # reference is optional so a baked (match_analyzed=1) node keeps working once Analyze has
     # measured and written grade_gain_*/grade_offset_*, exactly as Nuke's baked-knob workflow does.
+    # ColorTransfer (step X1): Nuke's Color-menu node. Input A holds the colours to match, measured inside the ROI (x, y, r, t from A's
+    # bottom left; all zero means the whole of A, the guide's default); the picture it recolours is input B.
+    "ColorTransfer": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+                      "params": {"roi_x": 0.0, "roi_y": 0.0, "roi_r": 0.0, "roi_t": 0.0, "mix": 1.0}},
     "MatchGrade": {"inputs": ["image"], "optional_inputs": ["reference", "mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "match_task": "Match Graded Source", "match_analysis": "Analyze Reference Frames",
                                            "grade_mask": "None", "apply_to_mask": 1, "match_output": "Matched",
                                            # Ref frames, transform, CDL, locks and export (step K finish); the defaults leave an older document as it was.
@@ -1895,6 +1899,7 @@ LIMITS = {"input_number": (1, 64), "enabled": (0, 1), "splat_write_overwrite": (
           "dustbust_sensitivity": (0.0, 1.0), "dustbust_patch_blend": (0.0, 1.0),
           "weight0": (-100.0, 100.0), "weight1": (-100.0, 100.0), "weight2": (-100.0, 100.0), "weight3": (-100.0, 100.0),
           "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0), "weight8": (-100.0, 100.0),
+          "roi_x": (-16384.0, 16384.0), "roi_y": (-16384.0, 16384.0), "roi_r": (-16384.0, 16384.0), "roi_t": (-16384.0, 16384.0),
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
           "uv_scale_x": (-1000.0, 1000.0), "uv_scale_y": (-1000.0, 1000.0),
           "uv_offset_x": (-10000.0, 10000.0), "uv_offset_y": (-10000.0, 10000.0),

@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 97.4 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
+**Overall fidelity: 97.5 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.3 (99.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.4 (99.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.4 (99.5 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.5 (99.5 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -38,7 +38,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Draw | 99.0 | 98.8 | 98.9 | 17 |
 | Time | 99.8 | 99.0 | 99.8 | 13 |
 | Channel | 99.8 | 99.7 | 99.8 | 5 |
-| Color | 98.6 | 95.8 | 98.6 | 34 |
+| Color | 99.5 | 98.7 | 99.4 | 34 |
 | Filter | 98.1 | 94.1 | 97.9 | 32 |
 | Keyer | 93.4 | 80.7 | 93.3 | 11 |
 | Merge | 99.9 | 99.7 | 99.9 | 13 |
@@ -46,7 +46,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 83.7 | 53.0 | 83.7 | 14 |
 
-Behaviour checked: 136 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 137 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
@@ -186,7 +186,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 100.0 | 100.0 | 100 (14/14) | 100 (4/4) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
 | 15 | PLogLin | `PLogLin` | supported | 97.1 | 96.7 | 100 (5/5) | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | 100 | - | unmeasured |
-| 16 | ColorTransfer | - | supported | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | unmeasured |
+| 16 | ColorTransfer | `ColorTransfer` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (4/4) | - | - | unmeasured |
 | 16 | MatchGrade | `MatchGrade` | supported | 99.0 | 100.0 | 100 (33/33) | - | 100 | 100 | - | - | 94 | - | unmeasured |
 | 17 | Expression | `Expression` | supported | 94.7 | 100.0 | 100 (16/16) | - | 100 | 100 | 100 | 100 (15/15) | 50 | - | unmeasured |
 | 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
@@ -542,26 +542,26 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 8 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 9 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 10 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 11 | ColorTransfer (Color #16) | - | 3.12 | 0.0 | covered by MatchGrade, no separate node (PARITY_2D.md Color #16) |
-| 12 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 13 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 14 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
-| 15 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
-| 16 | Write (Image #2) | `Write` | 1.05 | 97.9 | nothing missing that the guide lists |
-| 17 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
-| 18 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
-| 19 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
-| 20 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
-| 21 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
-| 22 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
-| 23 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
-| 24 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
-| 25 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
-| 26 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
-| 27 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
-| 28 | SplineWarp (Transform #14) | `SplineWarp` | 0.32 | 91.1 | 4 secondary knobs missing: `transform_matrix`, `boundary_curverez`, `previewrez`, `rbf`; sockets missing: `B` |
-| 29 | Expression (Color #17) | `Expression` | 0.31 | 94.7 | nothing missing that the guide lists |
-| 30 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 0.30 | 99.4 | nothing missing that the guide lists |
+| 11 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 12 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
+| 13 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
+| 14 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 15 | Write (Image #2) | `Write` | 1.05 | 97.9 | nothing missing that the guide lists |
+| 16 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
+| 17 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
+| 18 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
+| 19 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
+| 20 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
+| 21 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
+| 22 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
+| 23 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
+| 24 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
+| 25 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
+| 26 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
+| 27 | SplineWarp (Transform #14) | `SplineWarp` | 0.32 | 91.1 | 4 secondary knobs missing: `transform_matrix`, `boundary_curverez`, `previewrez`, `rbf`; sockets missing: `B` |
+| 28 | Expression (Color #17) | `Expression` | 0.31 | 94.7 | nothing missing that the guide lists |
+| 29 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 0.30 | 99.4 | nothing missing that the guide lists |
+| 30 | VectorDistort (Transform #16) | `VectorDistort` | 0.30 | 90.5 | primary knobs missing: `frameDistance` |
 
 ## Formula cases
 
@@ -930,7 +930,6 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `vectorfield_trilinear_applies_the_lut_0.9_0.1_0.4` | convention | pass | within tolerance | - |
 | `vectorfield_tetrahedral_applies_the_lut_0.2_0.5_0.8` | convention | pass | within tolerance | - |
 | `vectorfield_tetrahedral_applies_the_lut_0.9_0.1_0.4` | convention | pass | within tolerance | - |
-| `color_transfer_roi_colours` | guide | not scored: the guide documents the region of interest (x, y, r, t) and gives no formula for the match, so no number can be written down | - | - |
 | `match_grade_matches_a_clip` | guide | not scored: the guide describes the analysis (tasks, reference frames, transform choices) without a formula, and a clip matched to itself is not stated to be left alone | - | - |
 | `generate_lut_writes_the_file` | guide | not scored: the guide states the node's output as a LUT file made when Generate is pressed, not a picture; the table's values are the downstream nodes' own | - | - |
 | `smart_vector_writes_vectors` | guide | not scored: the vectors come from motion estimation across frames, and the guide gives no number a pixel case could check | - | - |
@@ -950,6 +949,10 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `ibk_color_darks_lights_red_green_blue` | guide | not scored: the guide's table types IBKColor's darks and lights number_list (red, green, blue), and the page the guide links is a keyer walk-through that never says what the three entries do to the clean plate, so no per-channel value can be written down; NodeBased's one number clamps the screen channel | - | - |
 | `hsv_tool_output_conversion` | guide | not scored: the guide's table gives the Conversion menu (label 'is', beside the output channel) only its default, hue, and states neither its choices nor what it does to the written channel, so no value can be written down; NodeBased's Output to alpha menu holds the matte choices and the raw hue, saturation and value in one | - | - |
 | `generate_lut_writes_what_the_nodes_upstream_do` | guide | pass | within tolerance | - |
+| `color_transfer_whole_input_takes_the_statistics` | convention | pass | within tolerance | - |
+| `color_transfer_identical_inputs_return_the_picture` | convention | pass | within tolerance | - |
+| `color_transfer_roi_measures_only_the_region` | convention | pass | within tolerance | - |
+| `color_transfer_roi_counts_rows_from_the_bottom` | convention | pass | within tolerance | - |
 | `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
 | `blur_box_1` | convention | pass | within tolerance | - |
 | `blur_box_2` | convention | pass | within tolerance | - |

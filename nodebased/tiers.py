@@ -585,7 +585,7 @@ REGION_RULES = {
     "HueCorrect": _identity, "ColorLookup": _identity,
     "ColorMatrix": _identity,
     "Log2Lin": _identity, "PLogLin": _identity, "CrossTalk": _identity, "Toe": _identity, "Expression": _identity,
-    "Histogram": _identity, "HistEQ": _identity, "MinColor": _identity, "Sampler": _identity, "MatchGrade": _identity,
+    "Histogram": _identity, "HistEQ": _identity, "MinColor": _identity, "Sampler": _identity, "MatchGrade": _identity, "ColorTransfer": _identity,
     "Keyer": _identity,
     "HueKeyer": _identity,
     "ChromaKeyer": _identity,

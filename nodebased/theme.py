@@ -33,7 +33,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "ConditionedRead": "#d9b87
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
           # TVIScale (2D parity plan 15, step F2) is a Transform-menu scaler, Transform's family.
           "TVIScale": "#84a3e6",
-          "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorLookup": "#76cbb4", "ColorMatrix": "#8fcfbd", "Log2Lin": "#82cbb7", "PLogLin": "#76c2ab", "CrossTalk": "#8bc6a9", "Toe": "#90d0ad", "Expression": "#73bfa4", "Histogram": "#77c9a8", "HistEQ": "#77c9a8", "MinColor": "#77c9a8", "Sampler": "#77c9a8", "MatchGrade": "#77c9a8", "Mirror": "#7ba3e8",
+          "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorLookup": "#76cbb4", "ColorMatrix": "#8fcfbd", "Log2Lin": "#82cbb7", "PLogLin": "#76c2ab", "CrossTalk": "#8bc6a9", "Toe": "#90d0ad", "Expression": "#73bfa4", "Histogram": "#77c9a8", "HistEQ": "#77c9a8", "MinColor": "#77c9a8", "Sampler": "#77c9a8", "MatchGrade": "#77c9a8", "ColorTransfer": "#6fc4a4", "Mirror": "#7ba3e8",
           # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
           "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
           # Ramp/Radial/Rectangle/Noise/Text are Draw-menu siblings of Roto, so they stay in the

@@ -99,6 +99,7 @@ NODE_CATEGORIES = {
         "MinColor": "Finds the minimum or maximum image colour.",
         "Sampler": "Plots image values along a sampled line.",
         "MatchGrade": "Matches source colour statistics to a target image.",
+        "ColorTransfer": "Matches the colour statistics of input B to a region of input A.",
         "Posterize": "Reduces the image to a fixed number of levels per channel.",
         "SoftClip": "Compresses highlights above a threshold instead of clipping them.",
         "HSVTool": "Adjusts hue, saturation and brightness within chosen ranges.",
