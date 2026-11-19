@@ -1,5 +1,26 @@
 ## Lane 2 step X1 (11/18 8:35 PM): ColorTransfer and the colour group's label and widget-type rows
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:56 PM on 2026-11-18 PDT)
+
+`main` moved `ca71aee2` -> `71beb266` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `71beb266` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1118-2116.log`, started 9:17 PM): **Ran 10237 tests in 1849.250 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X1 (Wed 11/18): a ColorTransfer node, then the colour group's remaining layout rows.** Commits:
+  - `fd219890` TASKLOG and state notes for lane 2 step X1 (ColorTransfer, colour label and widget rows)
+  - `6441bb69` Review book: label and widget-type marks follow the audit's own rules, closing 16 of lane 2's open worklist rows
+  - `5924c654` ColorTransfer node: input B takes the per-channel mean and spread of an ROI of input A, with scored cases, docs and fidelity report
+  Diff: 19 files changed, 539 insertions(+), 110 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 `ColorTransfer` is a node (5924c654): A holds the colours, measured in the ROI (x, y, r, t from A's bottom left, zeros = whole A); B takes their per-channel mean and standard
 deviation (Reinhard et al. 2001, a stated convention; the guide gives no formula). Shared statistics helper `Evaluator._channel_stats`; MatchGrade pixels unchanged. Not tiled
 (global statistics). Four scored cases. The review book's label and widget rules now mirror the audit's (6441bb69): lane 2 open rows 111 to 94. Color 98.6 to 99.5, overall

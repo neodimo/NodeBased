@@ -1,3 +1,9 @@
+## 2026-11-18 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X1 (Wed 11/18): a ColorTransfer node, then the colour group's remaining layout rows (integrator tick)
+
+- **What was done:** `main` `ca71aee2` -> `71beb266` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `71beb266`: Ran 10237 tests in 1849.250 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-18 8:35 PM — Lane 2 step X1: ColorTransfer, then the colour group's label and widget-type rows (DONE)
 
 - **What was done:** `ColorTransfer` (`openclaw/nb-2d-parity`, commit 5924c654): a node of its own, where `docs/parity/nodebased_to_nuke.json` said "covered by
