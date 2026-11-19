@@ -1,5 +1,29 @@
 ## Lane 2 step X4 (11/19): missing knobs on Reconcile3D, MotionBlur3D, VolumeRays and Reformat
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (7:45 AM on 2026-11-19 PDT)
+
+`main` moved `8916a30d` -> `ab5b31fa` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `ab5b31fa` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1119-0705.log`, started 7:07 AM): **Ran 10374 tests in 1821.972 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X4 (Thu 11/19): the missing knobs on Reconcile3D, MotionBlur3D, VolumeRays and Reformat.** Commits:
+  - `19a4d9c1` VolumeRays: global limits for the four new check boxes so the cache-key check can flip them
+  - `4a3baf7a` Reconcile3D, MotionBlur3D, VolumeRays and Reformat get the knobs the Nuke 17.0 guide lists
+  Diff: 23 files changed, 690 insertions(+), 131 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T8 (Wed 11/18): the Viewer works like Nuke's, and ColorTransfer's ROI box (finish 1).** Commits:
+  - `4ee7f3ed` The Viewer's last nine Nuke behaviours: M alpha overlay, middle-click re-centre, middle plus left drag zoom, Alt+Z prevent auto zoom, { and } toolbars, gain and gamma toggle buttons, U refresh, Alt+G go to frame, the frame field's +/-20 measured; Viewer 21 of 21 (lane 10 step T8 finish 2)
+  Diff: 9 files changed, 417 insertions(+), 27 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Reconcile3D has the seven 2D-transform resampling knobs (carried on the track as `transform_settings`; no pixel changes), MotionBlur3D has Output UV, Z input and distance (the uv layer, depth source and constant-depth fallback act), Reformat's `box_pixel_aspect` is paired with `pixel_aspect`, VolumeRays has all 13 knobs with Ray Length, Quality, Enable Mask and Mask Blur acting and the rest listed as changing no pixel. Schema stays 37. Fidelity: Reconcile3D 76.7 to 99.5, MotionBlur3D 75.0 to 100, VolumeRays 80.5 to 99.5, Reformat 98.0 to 100, overall 97.7 to 97.8. Open: the MotionBlur2D/3D shutter offset reads opposite to the guide; Alpha Edges and Shadow Making, flicker noise and the volume colour ramp are not built. Tests: `tests/test_l2_x4_*.py`.
 
 ## Lane 2 step X3 (11/19): OCIO config menu and the Views tab of Project Settings
