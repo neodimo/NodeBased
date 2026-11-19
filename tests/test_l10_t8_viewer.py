@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import nuke_panel_interactions as interactions  # noqa: E402
 
-OPEN = {"viewer.luminance_y": "Y toggles luminance and RGB; NodeBased's Viewer has no luminance display"}
+OPEN = {}   # Y (luminance) closed in step T9's finish: the Viewer shows luminance as its sixth channel choice
 
 
 class ViewerTests(unittest.TestCase):

@@ -24,8 +24,6 @@ KNOWN_GAPS = {
     # Step T6 finish closed the last two (the channel/format Link menu and Clone): every documented behaviour passes.
     # Step T7 (the Curve Editor and the Dope Sheet) left these open; tests/test_l10_t7_curves.py names each one.
     # Step T8 and its two finish steps closed the Viewer: every documented Viewer behaviour passes.
-    # Step T9 read the Keyboard Shortcuts page: Y needs a luminance display the Viewer's channel choices do not have yet.
-    "viewer.luminance_y": "Y toggles luminance and RGB; NodeBased's Viewer has no luminance display",
 }
 
 

@@ -52,7 +52,7 @@ Knobs that act: 461 of the 462 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**135 of 136 documented knob-widget behaviours work as Nuke's do** (24 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**136 of 136 documented knob-widget behaviours work as Nuke's do** (24 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -72,7 +72,7 @@ Knobs that act: 461 of the 462 paired knobs probed change the output pixels; 1 c
 | node graph | 25 / 25 | - | `swap_inputs_shift`, `select_downstream`, `duplicate_alt_c` |
 | curve editor | 21 / 21 | - | `delete_key`, `undo_step` |
 | dope sheet | 12 / 12 | - | `drag_keys`, `scale_keys`, `time_ruler` |
-| viewer | 24 / 25 | `luminance_y` | `wheel_zoom` |
+| viewer | 25 / 25 | - | `wheel_zoom` |
 
 ## On-screen controls that work like Nuke
 

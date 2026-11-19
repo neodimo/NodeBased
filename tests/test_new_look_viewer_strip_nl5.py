@@ -81,7 +81,7 @@ class StripControlTests(Base):
         self.assertLess(strip.geometry().top(), 24)
         for name in ("2d", "3d"):
             self.assertTrue(strip.isAncestorOf(w.viewer_mode_buttons[name]))
-        self.assertEqual([w.channels.itemText(i) for i in range(w.channels.count())], ["RGB", "R", "G", "B", "A"])
+        self.assertEqual([w.channels.itemText(i) for i in range(w.channels.count())], ["RGB", "R", "G", "B", "A", "Y"])   # Y: luminance (lane 10 step T9)
         for widget in (w.channels, w.exposure, w.gamma, w.roi_button, strip.display_button, strip.fit_button,
                        strip.more_button):
             self.assertTrue(strip.isAncestorOf(widget) and widget.isVisible(), widget.objectName())

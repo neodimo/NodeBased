@@ -27,7 +27,7 @@ STRIP_TOP = 14        # distance from the top of the viewer, as in the mockup
 STRIP_SIDE = 12       # smallest gap between the strip and the viewer's side edges
 CORNER_SIDE = 18      # corner readouts sit this far from the sides and ...
 CORNER_BOTTOM = 10    # ... this far from the bottom
-CHANNELS = ("RGB", "R", "G", "B", "A")
+CHANNELS = ("RGB", "R", "G", "B", "A", "Y")   # Y: luminance (Nuke 17.0 Keyboard Shortcuts, "Y Toggles between the Luminance channel and RBG")
 TOGGLE_TIP = "\nClick: switch between no change and the last value you set."
 LENS_3D_TIP = ("Draw the 3D viewport the way the camera's lens bends the picture, with the overscan the lens needs "
                "(L). Off shows the ideal, undistorted picture.")
@@ -70,7 +70,8 @@ class ChannelButtons(QWidget):
             button.setAutoRaise(False)
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             button.setToolTip("Show all colour channels" if name == "RGB" else
-                              {"R": "Show red", "G": "Show green", "B": "Show blue", "A": "Show alpha"}[name])
+                              {"R": "Show red", "G": "Show green", "B": "Show blue", "A": "Show alpha",
+                               "Y": "Show luminance (Y)"}[name])
             button.clicked.connect(lambda _checked=False, n=name: self.setCurrentText(n))
             self.group.addButton(button)
             self.buttons[name] = button

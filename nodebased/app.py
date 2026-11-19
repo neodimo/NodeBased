@@ -5635,7 +5635,9 @@ class Viewer(PanZoomView):
             event.accept()
             return
         # Nuke's RotoPaint tool cycles are N/C/X/D. B remains the viewer's blue-channel key.
-        channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
+        # Y is Nuke 17.0's luminance toggle (Keyboard Shortcuts, 2D Compositing Viewer: "Y Toggles between the Luminance
+        # channel and RBG"); a second Y returns to RGB like the channel keys.
+        channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A", Qt.Key.Key_Y: "Y"}
         if event.key() in channel_for_key and not event.modifiers():
             channel = channel_for_key[event.key()]
             # Nuke-style solo behavior: pressing an already-soloed channel returns to RGB.
@@ -21226,6 +21228,7 @@ class Window(QMainWindow):
                         and not self.viewer._pixel_readout_active and self.viewer.color_sampling is None
                         and not getattr(self, "_float_requested", False)
                         and look.get("gpu", True) and not (channel == "A" and look.get("rgb_only") is False)
+                        and channel != "Y"
                         and compare_model.active_b(request.document)[1] is None
                         and not self._direct_shown())
         if request.display:
@@ -21582,6 +21585,7 @@ class Window(QMainWindow):
         knobs = viewerknobs.knobs_of(request.document)
         if (not knobs["use_gpu_for_viewer"]
                 or (not knobs["rgb_only"] and (channel or self.channels.currentText()) == "A")
+                or (channel or self.channels.currentText()) == "Y"      # luminance is made in `to_qimage`
                 or viewerknobs.stretch(request.document) != 1.0):
             return False
         limits = getattr(self, "_direct_limits", None)

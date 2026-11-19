@@ -503,6 +503,19 @@ def _quantize(rgb):
 ALPHA_OVERLAY_STRENGTH = 0.5
 
 
+def luminance_frame(frame):
+    """`frame` with R, G and B replaced by their Rec. 709 luminance (0.2126 R + 0.7152 G + 0.0722 B); alpha kept."""
+    frame = np.asarray(frame)
+    out = np.empty(frame.shape[:2] + (4,), np.float32)
+    rgb = frame[..., :3].astype(np.float32, copy=False)
+    luma = rgb[..., 0] * np.float32(0.2126) + rgb[..., 1] * np.float32(0.7152) + rgb[..., 2] * np.float32(0.0722)
+    out[..., 0] = luma
+    out[..., 1] = luma
+    out[..., 2] = luma
+    out[..., 3] = frame[..., 3] if frame.shape[-1] > 3 else 1.0
+    return out
+
+
 def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None, _cropped=False):
     """Compose a display image over `background` ("black" or "checker").
 
@@ -516,6 +529,11 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
     transform (`v ** (1 / gamma)`, sign kept), and the clipping warning tests that same adjusted
     scene-linear value and paints over the displayable buffer only.
     """
+    if channel == "Y":
+        # The Viewer's luminance display (Nuke's Y key): Rec. 709 luminance of the linear colour in all three channels,
+        # alpha kept, then the ordinary RGB path (gain, gamma, view transform, background) shows it.
+        frame = luminance_frame(frame)
+        channel = "RGB"
     on_card = (CARD_PICTURE and (look or {}).get("gpu", True)      # the viewer's "use GPU for viewer" knob
                and not (look or {}).get("alpha_overlay"))
     if not _cropped and on_card:

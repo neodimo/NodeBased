@@ -2494,8 +2494,10 @@ def _viewer_luminance_y(bench):
     bench.window.channels.setCurrentText("RGB")
     _key(bench, viewer, Qt.Key.Key_Y)
     shown = bench.window.channels.currentText()
+    _key(bench, viewer, Qt.Key.Key_Y)
+    back = bench.window.channels.currentText()
     bench.window.channels.setCurrentText("RGB")
-    return shown in ("Y", "Luminance"), f"Y showed {shown}; the Viewer's channel choices have no luminance display"
+    return (shown, back) == ("Y", "RGB"), f"Y then Y showed {shown} then {back}"
 
 
 @probe("viewer.channel_keys")
