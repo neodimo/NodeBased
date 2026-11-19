@@ -661,9 +661,9 @@ LAYOUTS = {
         '(Un)premult by', 'Invert', 'Mix luminance', 'Mix'
     ],
     'HSVTool': [
-        'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Range Rolloff', 'HMask',
-        'Invert mask', 'Saturation range', 'Adjustment', 'Range Rolloff', 'Force Value', 'SMask', 'Invert mask',
-        'Brightness range', 'Adjustment', 'Range Rolloff', 'Force Value', 'BMask', 'Invert mask', 'Output', 'Invert mask',
+        'Color replacement', 'Source color', 'Destination color', 'Hue range', 'Hue rotation', 'Reset', 'Range Rolloff', 'HMask',
+        'Invert mask', 'Saturation range', 'Adjustment', 'Reset', 'Range Rolloff', 'Force Value', 'SMask', 'Invert mask',
+        'Brightness range', 'Adjustment', 'Reset', 'Range Rolloff', 'Force Value', 'BMask', 'Invert mask', 'Output', 'Invert mask',
         'Adjust by scaling', 'Mix'
     ],
     'Toe': ['Channels', 'Lift', 'Toe width', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
@@ -801,7 +801,7 @@ class LayoutTests(unittest.TestCase):
     def test_the_panel_lists_the_labels_in_that_order(self):
         from nodebased.app import Window
         from PySide6.QtCore import QPoint
-        from PySide6.QtWidgets import QCheckBox, QLabel
+        from PySide6.QtWidgets import QCheckBox, QLabel, QPushButton
         window = Window()
         try:
             window.show()
@@ -811,7 +811,8 @@ class LayoutTests(unittest.TestCase):
                 window.set_properties_widget(panel)
                 APP.processEvents()
                 # Labels down the panel, and the names on the mask row's check boxes (lane 10 step T2) along their row.
-                widgets = [w for w in (*panel.findChildren(QLabel), *panel.findChildren(QCheckBox))
+                # the Reset buttons of HSVTool (lane 2 step X5) read as their own text
+                widgets = [w for w in (*panel.findChildren(QLabel), *panel.findChildren(QCheckBox), *panel.findChildren(QPushButton))
                            if w.isVisibleTo(panel) and w.text() and w.window() is not None]
                 shown = [text for _row, _x, text in sorted(
                     (w.mapTo(panel, QPoint(0, w.height() // 2)).y() // 12, w.mapTo(panel, QPoint(0, 0)).x(), w.text()) for w in widgets)]

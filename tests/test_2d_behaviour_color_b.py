@@ -309,7 +309,10 @@ _CL_SET_KNOBS = {"source": ("red", "green", "blue"), "target": ("red", "green", 
 
 class ColorLookupKnobsActTests(KnobsActTests):
     BASES = {"ColorLookup": _CL_BASE}
-    CHANGES = {"ColorLookup": dict(_CL_CHANGES, **{name: None for name in _CL_SET_KNOBS})}
+    # Lane 2 step X5: use precomputed table and range are paired with the guide's two knobs; they set the reach of Nuke's lookup table, which NodeBased
+    # does not need (it evaluates the curves exactly), so a change to either leaves the pixels alone.
+    CHANGES = {"ColorLookup": dict(_CL_CHANGES, use_precomputed={"use_precomputed": 0}, range={"range": 3.0}, **{name: None for name in _CL_SET_KNOBS})}
+    NO_EFFECT = {"ColorLookup": ("use_precomputed", "range")}
 
     def _differs(self, kind, nuke_knob):
         if nuke_knob not in _CL_SET_KNOBS:
@@ -332,10 +335,10 @@ class ColorLookupKnobsActTests(KnobsActTests):
     def test_every_paired_knob_acts(self):
         self._check_kind("ColorLookup")
 
-    def test_the_speed_knobs_are_not_paired(self):
+    def test_the_speed_knobs_are_paired_and_move_nothing(self):
         paired = {nuke for nuke, _ in self.paired("ColorLookup")}
-        self.assertNotIn("range", paired)
-        self.assertNotIn("use_precomputed", paired)
+        self.assertIn("range", paired)
+        self.assertIn("use_precomputed", paired)
         base = run_node("ColorLookup", _CL_BASE).pixels
         np.testing.assert_array_equal(run_node("ColorLookup", dict(_CL_BASE, range=3.0)).pixels, base)
         np.testing.assert_array_equal(run_node("ColorLookup", dict(_CL_BASE, use_precomputed=0)).pixels, base)
