@@ -925,7 +925,7 @@ SPECS = {
     "NoTimeBlur": {"inputs": ["image"], "params": {"rounding": "rint", "single": 1}},
     # Motion blur samples the animated upstream image across a shutter. MotionBlur3D can also use
     # an explicit camera plus depth pass to blur a still beauty through camera motion.
-    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask", "transf"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask", "transf"], "params": {"uv": "motion", "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"uv": "motion", "Z": "none", "distance": 1.0, "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
     "Kronos": {"inputs": ["image"], "optional_inputs": ["matte", "mosrc", "fgvecs", "bgvecs"], "params": {"speed": 0.5, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
@@ -2549,6 +2549,9 @@ LIMITS.update({"create_directories": (0, 1), "use_limit": (0, 1), "lock_connecti
                "MinClampTo_enable": (0, 1), "MaxClampTo_enable": (0, 1), "read_all_lines": (0, 1)})
 # Step H: AddTimeCode, AppendClip and BurnIn (nodebased/metaknobs.py).
 CHOICES.update({"width_channel": list(_chrome.MASK_CHANNEL_CHOICES), "blur_channel": list(_chrome.MASK_CHANNEL_CHOICES)})
+# Lane 9 step X4: EdgeDetect's and Emboss's mask channels and output channel (nodebased/filterbehaviour.py).
+CHOICES.update({"edge_mask_channel": list(_chrome.MASK_CHANNEL_CHOICES), "output_mask_channel": list(_chrome.MASK_CHANNEL_CHOICES),
+                "blur_mask_channel": list(_chrome.MASK_CHANNEL_CHOICES), "edge_output_channel": list(_filterbehaviour.OUTPUT_CHANNELS)})
 LIMITS.update({"blur_scale": (0.0, 1000.0), "ignore_top_line": (0, 1), "avg_frames": (0, 1000), "enable_dropshadow_effect": (0, 1), "inherit_input_color": (0, 1),
                "shrink_expand": (-500.0, 500.0), "nonlinear": (0, 1), "effect_only": (0, 1)})
 LIMITS.update({"nyquist": (0, 1), "translate_x": (-1000000.0, 1000000.0), "translate_y": (-1000000.0, 1000000.0), "rotate_x": (-360.0, 360.0), "rotate_y": (-360.0, 360.0), "scaling": (0.000001, 1000000.0), "skew": (-360.0, 360.0), "xrotate": (-360.0, 360.0), "yrotate": (-360.0, 360.0), "p0_x": (-1000000.0, 1000000.0), "p0_y": (-1000000.0, 1000000.0), "p1_x": (-1000000.0, 1000000.0), "p1_y": (-1000000.0, 1000000.0), "color0_red": (-1000000.0, 1000000.0), "color0_green": (-1000000.0, 1000000.0), "color0_blue": (-1000000.0, 1000000.0), "color0_alpha": (-1000000.0, 1000000.0)})
@@ -2601,6 +2604,7 @@ CHOICES["ray_quality"] = list(_raysbehaviour.QUALITY)     # VolumeRays Quality (
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)
 CHOICES["image_filter"] = list(_transformbehaviour.CHOICES)        # VectorDistort Filter (lane 9 step N)
 LIMITS.update(_vectordistortknobs.LIMITS)
+CHOICES.update(_vectordistortknobs.CHOICES)
 CHOICES["camera_mov_type"] = list(_track3dknobs.CAMERA_TYPES)       # PointsTo3D Camera type (lane 9 step N)
 LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_PARAMS})
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)

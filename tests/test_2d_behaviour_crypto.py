@@ -234,12 +234,12 @@ class MergeOperationTests(unittest.TestCase):
 
 
 class ExportTests(unittest.TestCase):
-    def test_the_export_button_is_unpaired_with_its_reason(self):
+    def test_the_export_button_is_a_panel_pairing_with_its_reason(self):
         import audit_nuke_fidelity as audit
         mapping = json.loads(audit.MAP_JSON.read_text(encoding="utf-8"))["pairs"]["Encryptomatte"]["knobs"]
         entry = [e for e in mapping if "exportWrite" in e.get("nuke", [])]
         self.assertEqual(len(entry), 1)
-        self.assertEqual(entry[0]["kind"], "unsupported")
+        self.assertEqual(entry[0]["kind"], "panel")             # the panel's Export Write button, since step X4
         self.assertIn("Write", entry[0]["reason"])
 
 

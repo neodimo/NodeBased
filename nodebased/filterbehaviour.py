@@ -39,7 +39,8 @@ LEGACY = {
     "Bilateral": {"legacy_bilateral": 1},
 }
 NEW = {
-    "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0, "legacy_edge_prewitt": 0},
+    "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0, "legacy_edge_prewitt": 0,
+                   "edge_output_channel": "none", "edge_mask_channel": "none"},
     "IDistort": {"legacy_idistort": 0},
     "Erode": {"legacy_erode_sign": 0},
     "Median": {"legacy_median_radius": 0},
@@ -56,11 +57,13 @@ from . import vectorcornerpinknobs as _vcp      # noqa: E402
 from . import denoiseknobs as _denoise          # noqa: E402
 from . import motionblurknobs as _motionblur    # noqa: E402
 from . import vectorblurknobs as _vectorblur    # noqa: E402
-UPGRADE_EXTRA = {"Denoise": _denoise.UPGRADE, "MotionBlur": _motionblur.UPGRADE, "VectorBlur": _vectorblur.UPGRADE, "VectorCornerPin": _vcp.UPGRADE, "Bilateral": _bilateral.UPGRADE, "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
+UPGRADE_EXTRA = {"Denoise": _denoise.UPGRADE, "MotionBlur": _motionblur.UPGRADE, "VectorBlur": _vectorblur.UPGRADE, "VectorCornerPin": _vcp.UPGRADE, "Bilateral": _bilateral.UPGRADE, "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0, "edge_output_channel": "none", "edge_mask_channel": "none"},
                  "Laplacian": {"laplacian_size": 3.0},
                  # MotionBlur3D (lane 2 step X4): Output UV, Z input and distance. A saved node blurs through the same vectors as before; the
                  # new layer is extra data on the output, and a depth source it had keeps winning over the constant distance.
                  "MotionBlur3D": {"uv": "motion", "Z": "none", "distance": 1.0},
+                 # MotionBlur2D (lane 9 step X4): Output UV, a layer of extra data; the picture is blurred as before.
+                 "MotionBlur2D": {"uv": "motion"},
                  "Convolve": {"normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"}}
 
 
@@ -280,3 +283,46 @@ def edge_pre_blur(image, p, origin=(0, 0)):
         return image
     from . import blurknobs
     return blurknobs.filtered(image, size, "gaussian", float(p.get("edge_blur_quality", 15.0)), origin)
+
+
+# Output and mask channels of the edge-detect page (lane 9 step X4). The guide gives the EdgeDetect and Emboss pages an `output` channel
+# ("Sets the output channel for the edge detect applied", behind an enable box, default none) and a `maskedgedetect` channel per block ("The
+# channel to use as a mask. By default, the effect is limited to the non-black areas of this channel"). NodeBased reads them so: `none` leaves
+# the stage as it was; a mask channel of the input weighs the stage, 0 leaving the picture as it came into the stage and 1 the full effect;
+# an output channel gets the response alone, the other channels keeping the input picture.
+OUTPUT_CHANNELS = ("none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha")
+_OUTPUT_INDEX = {"red": 0, "r": 0, "green": 1, "g": 1, "blue": 2, "b": 2, "alpha": 3, "a": 3}
+
+
+def stage_mask(image, token):
+    """The mask channel `token` of `image` as an (h, w, 1) weight between 0 and 1, or None when it is none."""
+    token = str(token).strip()
+    if token.lower() in ("", "none"):
+        return None
+    from . import ops2d_chrome
+    return np.clip(ops2d_chrome.resolve_channel(token, image), 0.0, 1.0).astype(np.float32)
+
+
+def limit_stage(base, effect, mask):
+    """`effect` where `mask` is 1 and `base` where it is 0; `effect` itself with no mask."""
+    if mask is None:
+        return effect
+    return (base + (effect - base) * mask).astype(np.float32)
+
+
+def output_index(token):
+    """The channel index an output channel names (red 0 .. alpha 3), or None for none."""
+    word = str(token).strip().lower()
+    if word.startswith("rgba."):
+        word = word[5:]
+    return _OUTPUT_INDEX.get(word)
+
+
+def finish_stage(source, out, p, plane=None):
+    """The edge stage's last steps. `plane` is the response as an (h, w) array when it goes to one channel only (`edge_output_channel`),
+    else `out` is already the whole result. The `output_mask_channel` then limits the whole result against `source`."""
+    index = output_index(p.get("edge_output_channel", "none"))
+    if index is not None and plane is not None:
+        out = source.copy()
+        out[..., index] = plane
+    return limit_stage(source, out, stage_mask(source, p.get("output_mask_channel", "none")))

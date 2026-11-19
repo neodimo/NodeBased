@@ -16,9 +16,10 @@ the SmartVector node".
   nodes": the Transform group's list (nodebased/transformbehaviour.py), Notch not offered. A node saved before keeps bilinear sampling.
 * Channels: the warp reaches only the selected channels; the rest pass through (the shared strip in nodebased/ops2d_chrome.py).
 
-Frame Distance is not built. In Nuke SmartVector stores several vector sets, for hops of 1, 2, 4 ... 64 frames, and the knob picks one ("the maximum value for
-this control is passed down the node tree from a SmartVector node's frame distance control"). NodeBased's SmartVector stores one accumulated set per
-frame, re-anchored every `reanchor_interval` frames, so there is no second set to pick; the knob is listed `unsupported` in the mapping.
+* Frame Distance (`frame_distance`, 1 to 64 frames in steps of two, default 1 frame; lane 9 step X4): "the trade-off between warping things well for nearby frames against frames
+  further away". In Nuke SmartVector stores several vector sets, for hops of 1, 2, 4 ... 64 frames, and the knob picks one. NodeBased's SmartVector stores
+  one accumulated set per frame (its `reanchor_interval` bounds the drift), so there is no second set to pick: the knob is held on the node, as Nuke
+  holds it, and the pixels do not change with it yet (`default_notes` in the mapping, and `NOT_PIXEL` in the fidelity requirements, say so).
 
 An older document's node (`legacy_vectordistort` 1) keeps what it did: it warps the reference frame with bilinear sampling and has no output choice.
 """
@@ -27,9 +28,11 @@ from __future__ import annotations
 import numpy as np
 
 OUTPUT_MODES = ("warped src", "st-map", "st-map inverse")
-NEW = {"legacy_vectordistort": 0, "hold_frame": 1, "output_mode": "warped src", "image_filter": "cubic"}
-UPGRADE = {"legacy_vectordistort": 1, "hold_frame": 1, "output_mode": "warped src", "image_filter": "bilinear"}
+NEW = {"legacy_vectordistort": 0, "hold_frame": 1, "output_mode": "warped src", "image_filter": "cubic", "frame_distance": "1 frame"}
+UPGRADE = {"legacy_vectordistort": 1, "hold_frame": 1, "output_mode": "warped src", "image_filter": "bilinear", "frame_distance": "1 frame"}
 LIMITS = {"legacy_vectordistort": (0, 1), "hold_frame": (0, 1)}
+FRAME_DISTANCES = ("1 frame", "2 frames", "4 frames", "8 frames", "16 frames", "32 frames", "64 frames")
+CHOICES = {"frame_distance": list(FRAME_DISTANCES)}
 
 
 def is_legacy(p):

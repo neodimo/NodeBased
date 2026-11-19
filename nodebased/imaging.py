@@ -3687,6 +3687,14 @@ class Evaluator:
                             motion3d_uv = (uv_name, uv_layer)
                     if kind == "MotionBlur2D" and motion2d_transf is not None:
                         pixels = self._transf_blur(frames[0], motion2d_transf[0], motion2d_transf[1], output_data)
+                        uv_name = str(params.get("uv", "none"))
+                        if uv_name.strip().lower() not in ("", "none"):
+                            # Output UV (lane 9 step X4): where the transform carries each pixel's content across the shutter, in pixels (u in
+                            # red, v in green), written as a layer for a VectorBlur downstream; the picture is blurred as before.
+                            flow = self._transf_flow(motion2d_transf[0], motion2d_transf[1], output_data)
+                            uv_layer = np.zeros((*flow.shape[:2], 4), np.float32)
+                            uv_layer[..., 0], uv_layer[..., 1], uv_layer[..., 3] = flow[..., 0], flow[..., 1], 1.0
+                            motion3d_uv = (uv_name, uv_layer)
                     out_layers = reference.layers
                     if motion3d_uv is not None:
                         out_layers = {**(reference.layers or {}), motion3d_uv[0]: Raster(motion3d_uv[1], output_data, reference.display)}
@@ -5658,6 +5666,20 @@ class Evaluator:
         return (total / max(len(samples), 1)).astype(np.float32)
 
     @staticmethod
+    def _transf_flow(current, samples, data):
+        """MotionBlur2D's Output UV: for each pixel the displacement, in pixels, of its content from the first shutter sample to the last
+        (the content sits at `sample @ inverse(current)` applied to the pixel at each sample)."""
+        gx, gy = np.meshgrid(np.arange(data.width, dtype=np.float64) + data.x + 0.5, np.arange(data.height, dtype=np.float64) + data.y + 0.5)
+        base = np.linalg.inv(current)
+        def place(matrix):
+            m = matrix @ base
+            w = m[2, 0] * gx + m[2, 1] * gy + m[2, 2]
+            return (m[0, 0] * gx + m[0, 1] * gy + m[0, 2]) / w, (m[1, 0] * gx + m[1, 1] * gy + m[1, 2]) / w
+        x0, y0 = place(samples[0])
+        x1, y1 = place(samples[-1])
+        return np.stack([x1 - x0, y1 - y0], axis=-1).astype(np.float32)
+
+    @staticmethod
     def _camera_depth_flow(depth, camera, camera_start, camera_end, display, data):
         """Project a depth plate through two shutter cameras to get a per-pixel screen-space flow."""
         from . import scene3d
@@ -7513,6 +7535,7 @@ class Evaluator:
     @staticmethod
     def _edge_detect(image, p, origin=(0, 0)):
         from . import filterbehaviour
+        source = image
         image = filterbehaviour.edge_pre_blur(image, p, origin)       # Nuke's "blur size": a blur before the edges are found
         rgb = image[..., :3].mean(axis=2)
         method = p.get("edge_type", "Sobel")
@@ -7530,12 +7553,15 @@ class Evaluator:
                 gx = a[:-2, 2:] + 2*a[1:-1, 2:] + a[2:, 2:] - a[:-2, :-2] - 2*a[1:-1, :-2] - a[2:, :-2]
                 gy = a[2:, :-2] + 2*a[2:, 1:-1] + a[2:, 2:] - a[:-2, :-2] - 2*a[:-2, 1:-1] - a[:-2, 2:]
             response = np.hypot(gx, gy).astype(np.float32)
+        edge_mask = filterbehaviour.stage_mask(source, p.get("edge_mask_channel", "none"))      # the guide's mask channel: the response is limited to it
+        if edge_mask is not None:
+            response = response * edge_mask[..., 0]
         response = np.maximum(response - float(p.get("threshold", 0.0)), 0.0)
         out = image.copy()
         out[..., :3] = response[..., None]
         if filterbehaviour.edge_erode_reach(p):
             out = Evaluator._morph(out, float(p.get("edge_erode_size", 0.0)), "rgb")      # Nuke's "erode size": an erode after
-        return out
+        return filterbehaviour.finish_stage(source, out, p, plane=out[..., 0])
 
     @staticmethod
     def _emboss(image, p, origin=(0, 0)):

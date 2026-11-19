@@ -164,7 +164,7 @@ MAIN_TAB = {
     "Soften": ["Channels", "Minimum", "Maximum", "Amount", "Size", "Filter", "Quality", "Crop to format"],
     "Glow": ["Channels", "Tint", "Tolerance", "Brightness", "Saturation", "Width channel", "Non linear", "Effect only", "Size", "Filter",
              "Quality", "Crop to format"],
-    "EdgeDetect": ["Edge Detector", "Channels", "Threshold", "Erode size", "Blur size", "Blur quality"],
+    "EdgeDetect": ["Edge Detector", "Channels", "Threshold", "Output", "Mask", "Erode size"],
     "Laplacian": ["Channels", "Size", "Filter", "Quality", "Crop to format"],
     "ErodeFilter": ["Channels", "Size", "Filter"],
     "EdgeExtend": ["Channels", "Matte", "Source Is Premultiplied", "Erode", "Detail amount", "Edge mask", "Premultiply"],

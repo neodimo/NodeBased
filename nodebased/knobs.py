@@ -318,6 +318,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "EdgeDetect": _groups(
         KnobGroup("enum", ("edge_type",)), KnobGroup("float_slider", ("threshold",), soft_range=(0, 1)),
+        KnobGroup("enum", ("edge_output_channel",), label="Output", help="The channel the edges are written to; none writes them to red, green and blue."),
+        KnobGroup("enum", ("edge_mask_channel",), label="Mask", help="A channel of the picture that limits the edges: they show where it is not black."),
         KnobGroup("float_slider", ("edge_blur_size",), label="Blur size", soft_range=(0, 20),
                   help="Blur the picture this much before the edges are found; it smooths noise out of the result."),
         KnobGroup("float_slider", ("edge_erode_size",), label="Erode size", soft_range=(-20, 20),
@@ -329,10 +331,16 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Emboss": _groups(KnobGroup("enum", ("emboss_type",), label="Emboss type", help="Traditional adds the relief to the picture; effect outputs the relief alone, about mid grey."),
                       KnobGroup("float_slider", ("angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("width",), soft_range=(0, 20)),
+                      KnobGroup("enum", ("edge_mask_channel",), label="Mask", help="A channel of the picture that limits the relief: it shows where this channel is not black."),
                       KnobGroup("enum", ("edge_detector",), label="Edge detector", help="How the slope of the brightness is read: simple, sobel or prewitt."),
                       KnobGroup("enum", ("edge_channels",), label="Edge channels", help="The channels whose brightness the slope is read from; none gives no relief."),
+                      KnobGroup("float_slider", ("threshold",), label="Threshold", soft_range=(0, 1), help="A slope smaller than this counts as flat and makes no relief."),
+                      KnobGroup("enum", ("edge_output_channel",), label="Output", help="The one channel the relief is written to; none writes it to red, green and blue."),
+                      KnobGroup("enum", ("output_mask_channel",), label="Output mask", help="A channel of the picture that limits the output: the picture shows through where it is black."),
+                      KnobGroup("float_slider", ("edge_erode_size",), label="Erode size", soft_range=(-20, 20), help="Erode the relief this much: positive thins it, negative thickens it."),
                       KnobGroup("float_slider", ("blur_size",), label="Blur size", soft_range=(0, 20), help="Blur the brightness this much before the slope is read."),
                       KnobGroup("float_slider", ("blur_quality",), label="Blur quality", soft_range=(1, 100), help="The largest blur worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
+                      KnobGroup("enum", ("blur_mask_channel",), label="Blur mask", help="A channel of the picture that limits the blur: it blurs where this channel is not black."),
                       KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "BumpBoss": _groups(KnobGroup("xy", ("lightposition_x", "lightposition_y"), label="Light position xy", help="Where the light sits; its offset from the image centre sets the side the light leans in."),
                         KnobGroup("float", ("bumpsize",), label="Bump size", help="The size of the emboss."),
@@ -934,9 +942,13 @@ KNOB_LAYOUT = {
     "Vectorfield": _groups(KnobGroup("file_read", ("cube_path",), label="3D LUT (.cube, .3dl)"),
         KnobGroup("int", ("reload",), label="Reload", help="Counts the Reload button: the file is read again."),
         KnobGroup("enum", ("vector_file_type",), label="File type", help="Auto reads the file by its extension; cube or 3dl reads it as that format whatever it is called."),
-        KnobGroup("enum", ("interpolation",)), KnobGroup("enum", ("colorspace_in",), label="Input space"), KnobGroup("enum", ("colorspace_out",), label="Output space"),
+        KnobGroup("enum", ("interpolation",)),
+        KnobGroup("bool", ("vector_gpu_extrapolate",), label="GPU extrapolate", help="Whether the GPU implementation extrapolates the table past its edge or clamps to the largest value. NodeBased clamps on every path, so the picture does not change with it."),
+        KnobGroup("enum", ("colorspace_in",), label="Input space"), KnobGroup("enum", ("colorspace_out",), label="Output space"),
         KnobGroup("enum", ("vector_output_bitdepth",), label="Output bit depth (.3dl)", help="The bit depth the .3dl mesh values are read at; auto takes the file's header or its largest value."),
-        KnobGroup("bool", ("vector_normalize_output",), label="Normalize output", help="Scale the .3dl mesh so its largest value is 1."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("bool", ("vector_normalize_output",), label="Normalize output", help="Scale the .3dl mesh so its largest value is 1."),
+        KnobGroup("enum", ("vector_format_3dl",), label="3DL file format", help="The .3dl format: auto reads the header. NodeBased's reader takes Flame and Lustre files from the file itself, so the picture does not change with it."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "GenerateLUT": _groups(KnobGroup("file_write", ("lut_path",), label="Output file"),
                            KnobGroup("enum", ("lut_file_type",), label="File type", help="cube writes a .cube; 3dl writes a Flame/Lustre .3dl with a 1D preLUT and an integer mesh. The output path must end in the file type."),
                            KnobGroup("int", ("lut_size",), label="Size"),
@@ -1551,7 +1563,9 @@ KNOB_LAYOUT = {
     "TimeWarp": _groups(KnobGroup("float", ("lookup",), label="Input frame"),
         KnobGroup("float", ("lookup_length",), label="Input length", help="The length of time, in frames, averaged together for the output frame (the box filter's width). 1 is the default."),
         KnobGroup("enum", ("lookup_filter",), label="Filter")),
-    "MotionBlur2D": _groups(KnobGroup("float", ("shutter",)), KnobGroup("enum", ("shutter_offset",)),
+    "MotionBlur2D": _groups(
+        KnobGroup("string", ("uv",), label="Output UV", help="The layer the motion across the shutter is written to, in pixels (u in red, v in green), when a 2D transf is connected; none writes no layer. The picture is blurred the same way."),
+        KnobGroup("float", ("shutter",)), KnobGroup("enum", ("shutter_offset",)),
         KnobGroup("float", ("custom_offset",)), KnobGroup("int", ("samples",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "MotionBlur3D": _groups(
         KnobGroup("string", ("uv",), label="Output UV", help="The layer the camera motion is written to, in pixels (u in red, v in green), for a VectorBlur further down; none writes no layer. The picture is blurred along the same vectors."),
@@ -1623,6 +1637,7 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("weight_blue",), label="Weight Blue", help="The blue channel's weight in the luminance the motion is estimated on.")),
     "VectorDistort": _groups(KnobGroup("int", ("reference_frame",)), KnobGroup("float", ("blur_size",)),
         KnobGroup("bool", ("hold_frame",), label="Hold frame", help="Warp the reference frame (as a FrameHold after the source would). Off warps the current frame back to the reference frame instead."),
+        KnobGroup("enum", ("frame_distance",), label="Frame distance", help="The trade-off between warping well for nearby frames and for frames further away (1 to 64 frames). NodeBased's SmartVector keeps one set of vectors per frame, so the picture does not change with it yet."),
         KnobGroup("enum", ("output_mode",), label="Output", help="The warped picture, or the st-map of the warp from the reference frame to this one (or the inverse)."),
         KnobGroup("enum", ("image_filter",), label="Filter", help="How the warp samples the picture: Impulse keeps the original values, Cubic smooths, Keys, Simon and Rifman sharpen more and more."),
         KnobGroup("bool", ("legacy_vectordistort",), label="Legacy distort", help="Warp with bilinear sampling and no output choice, as graphs saved before the VectorDistort page was followed do."),
@@ -2737,7 +2752,7 @@ STEP_D_NEW_KINDS = ("Clamp", "Exposure", "ShuffleCopy", "MatchGrade", "ColorTran
 NUKE_LAYOUT.update({
     "Clamp": ("channels", "minimum", "maximum", "MinClampTo", "MinClampTo_enable", "MaxClampTo", "MaxClampTo_enable"),
     "AddMix": ("Achannels", "Bchannels", "merge_output", "premultiplied", "nonlinear", "lut_a", "lut_b"),
-    "Vectorfield": ("cube_path", "reload", "vector_file_type", "interpolation", "colorspace_in", "colorspace_out", "vector_output_bitdepth", "vector_normalize_output"),
+    "Vectorfield": ("cube_path", "reload", "vector_file_type", "interpolation", "vector_gpu_extrapolate", "colorspace_in", "colorspace_out", "vector_output_bitdepth", "vector_normalize_output", "vector_format_3dl"),
     "Exposure": ("channels", "exposure_colorspace", "blackpoint", "exposure_mode", "gang", "red", "green", "blue"),
     "ShuffleCopy": ("layer1", "layer2", *[f"out{o}_{c}" for o in (1, 2) for c in "rgba"]),
     "ColorTransfer": ("roi_x",),
@@ -2833,13 +2848,14 @@ NUKE_LAYOUT_LANE9.update({
     "Soften": ("channels", "minimum", "maximum", "amount", "soften_size", "kernel_filter", "quality", "crop"),
     "Glow": ("channels", "red", "glow_threshold", "brightness", "saturation", "width_channel", "nonlinear", "effect_only", "glow_size",
              "kernel_filter", "quality", "crop"),
-    "EdgeDetect": ("edge_type", "channels", "threshold", "edge_erode_size", "edge_blur_size", "edge_blur_quality"),
+    "EdgeDetect": ("edge_type", "channels", "threshold", "edge_output_channel", "edge_mask_channel", "edge_erode_size", "edge_blur_size", "edge_blur_quality"),
     "Laplacian": ("channels", "laplacian_size", "kernel_filter", "quality", "crop"),
     "ErodeFilter": ("channels", "filter_size", "filter_type"),
     "EdgeExtend": ("channels", "matte", "source_premultiplied", "erode", "detail_amount", "edge_mask", "premultiply"),
     "Defocus": ("channels", "defocus", "aspect", "scale", "quality", "defocus_method"),
     # Lane 9 step O: Emboss and BumpBoss in the guide's order.
-    "Emboss": ("channels", "emboss_type", "angle", "width", "edge_detector", "edge_channels", "blur_size", "blur_quality"),
+    "Emboss": ("channels", "emboss_type", "angle", "width", "edge_mask_channel", "edge_detector", "edge_channels", "threshold", "edge_output_channel",
+               "output_mask_channel", "edge_erode_size", "blur_size", "blur_quality", "blur_mask_channel"),
     "BumpBoss": ("channels", "lightposition_x", "bumpsize", "light_height", "intensity", "minshadow", "center_x"),
     # Lane 9 step W1: the guide opens these on `channels`; the rest keep their places after it.
     "Median": ("channels",), "IDistort": ("channels",), "Bilateral": ("channels",), "Inpaint": ("channels",), "TVIScale": ("channels",),
@@ -2925,7 +2941,7 @@ NUKE_LABELS["Text"] = {"premult": "Premult"}
 # Lane 9 step W2 (11/17): DirBlur's mask strip comes before Mix as the guide's table has it; the legacy switch stays after both.
 NUKE_LAYOUT_LANE9["DirBlur"] = ("channels", "blur_type", "BlurLayer", "holdout", "center_x", "length", "angle", "target", "UseTarget", "Samples", "PixelAspect",
                                 "Quality", "pixeloffset", "maskChannelInput", "inject", "invert_mask", "fringe", "mix")
-NUKE_LAYOUT_LANE9["VectorDistort"] = ("reference_frame", "hold_frame", "output_mode", "blur_size", "channels", "image_filter", "fade_frames", "legacy_vectordistort", "mix")
+NUKE_LAYOUT_LANE9["VectorDistort"] = ("reference_frame", "hold_frame", "frame_distance", "output_mode", "blur_size", "channels", "image_filter", "fade_frames", "legacy_vectordistort", "mix")
 NUKE_LABELS.setdefault("GridWarp", {})["bbox"] = "Set bbox to"
 NUKE_LABELS.setdefault("SplineWarp", {})["boundary_bbox"] = "Bbox boundary curve"
 

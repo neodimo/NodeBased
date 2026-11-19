@@ -72,7 +72,7 @@ UPGRADE_EXTRA = {"Transform": {"black_outside": 0},
                  "Reconcile3D": {"track_x": 0.0, "track_y": 0.0, "offset_x": 0.0, "offset_y": 0.0, "stabilize": 0,
                                  "filter": "parzen", "clamp": 0, "black_outside": 1, "motionblur": 0, "shutter": 0.5,
                                  "shutter_offset": "start", "custom_offset": 0.0},
-                 "VectorDistort": {"legacy_vectordistort": 1, "hold_frame": 1, "output_mode": "warped src", "image_filter": "bilinear"}}
+                 "VectorDistort": {"legacy_vectordistort": 1, "hold_frame": 1, "output_mode": "warped src", "image_filter": "bilinear", "frame_distance": "1 frame"}}
 
 
 def new_params(kind):

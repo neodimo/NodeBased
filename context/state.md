@@ -1,3 +1,11 @@
+## Lane 9 step X4 (11/19): the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte
+
+Every row of the six nodes in `docs/PARITY_2D_FIDELITY.md` is 100.0 (was 88.1, 90.5, 87.5, 90.5, 91.2, 92.9); overall 97.8 both times at one decimal. New params (all
+default to what leaves a saved node's pixels alone; saved nodes load them through the nodes' `upgrade_params`): Emboss `threshold`, `edge_erode_size`, `edge_mask_channel`,
+`edge_output_channel`, `output_mask_channel`, `blur_mask_channel`; EdgeDetect `edge_output_channel`, `edge_mask_channel`; MotionBlur2D `uv`; VectorDistort `frame_distance`;
+Vectorfield `vector_gpu_extrapolate`, `vector_format_3dl`. Encryptomatte gets the Export Write panel button. The knobs that change no pixel (Frame Distance, GPU extrapolate,
+3DL file format, Output UV) are listed in `NOT_PIXEL` and in the mapping's `default_notes`. Tests: `tests/test_l9_x4_edge.py`, `tests/test_l9_x4_nodes.py`. Schema stays 37.
+
 ## Lane 9 step X3 (11/19): the missing knobs on Bokeh, GridWarp and LensDistortion
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (8:25 AM on 2026-11-19 PDT)

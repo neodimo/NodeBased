@@ -219,6 +219,11 @@ NOT_PIXEL["Flare"].update({name: ("the per-family seed only changes deterministi
                            for name in ("mult_seed", "mult_offset_seed", "mult_size_seed", "mult_color_seed", "mult_brightness_seed", "mult_visibility_seed", "mult_flattening_seed", "mult_rotate_seed")})
 # Lane 9 step X3 (11/19): the guide says Integrate Deep Front and Back Separately acts on the Deep input, which NodeBased does not have.
 NOT_PIXEL["Bokeh"] = {"integrateFrontAndBackSeperately": "acts on the Deep input only, and NodeBased has no Deep image (tests/test_l9_x3_bokeh.py shows it changes no pixels)"}
+# Lane 9 step X4 (11/19): knobs the guide gives these nodes that NodeBased holds on the node without a pixel effect (the mapping's default_notes say the same).
+NOT_PIXEL["MotionBlur2D"] = {"uv": "Output UV names the layer the motion vectors are written to, which is extra data on the output; the blurred picture does not change with it (tests/test_l9_x4_nodes.py reads the layer)"}
+NOT_PIXEL["VectorDistort"] = {"frameDistance": "Nuke picks one of SmartVector's vector sets for hops of 1 to 64 frames; NodeBased's SmartVector keeps one accumulated set per frame, so there is no second set to pick (tests/test_l9_x4_nodes.py shows the stored value changes no pixel)"}
+NOT_PIXEL["Vectorfield"] = {"gpuExtrapolate": "governs Nuke's GPU implementation only; NodeBased's Vectorfield clamps at the table's edge on every path (tests/test_l9_x4_nodes.py shows it changes no pixel)",
+                            "format_3dl_id": "acts only when a .3dl file is loaded, and NodeBased's reader takes the format from the file's own header; the Assimilate Scratch scale and offset is not stated by the guide (tests/test_l9_x4_nodes.py)"}
 NOT_PIXEL["Viewer"] = {name: "viewer display only" for name in (
     "frame_range", "frame_range_lock", "frame_increment", "clip_warning", "gain", "gamma", "rgb_only", "downrez",
     "ignore_pixel_aspect", "zoom_lock", "show_overscan", "full_frame_processing", "overscan", "safe_zone", "format_center",

@@ -200,7 +200,7 @@ class LayoutTests(unittest.TestCase):
         return [g.label for g in knobs.KNOB_LAYOUT[kind] if g.kind != "legacy" and not g.params[0].startswith("legacy_")]
 
     def test_emboss_main_tab_follows_the_guide(self):
-        self.assertEqual(self.shown("Emboss")[:5], ["Channels", "Emboss type", "Angle", "Width", "Edge detector"])
+        self.assertEqual(self.shown("Emboss")[:6], ["Channels", "Emboss type", "Angle", "Width", "Mask", "Edge detector"])        # the edge-detect block's mask channel (step X4) opens the block
 
     def test_bumpboss_main_tab_follows_the_guide(self):
         self.assertEqual(self.shown("BumpBoss")[:7], ["Channels", "Light position xy", "Bump size", "Light height", "Light intensity", "Minimum shadow intensity",

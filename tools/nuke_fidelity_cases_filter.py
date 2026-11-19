@@ -545,6 +545,11 @@ def cases():
              "convention", f"EdgeDetect {method}: a picture with no change (the parts of the step picture at least two pixels from the edge) has no edge, "
              "so the response is zero there; " + edge_note, nb_inputs=("S",))
 
+    case("edgedetect_output_channel_keeps_the_other_channels", "EdgeDetect", "EdgeDetectWrapper", (("edgedetector", "sobel"), ("output", "rgba.alpha")),
+         "EdgeDetect", {"edge_type": "Sobel", "channels": "all", "edge_output_channel": "rgba.alpha"},
+         on("S", 1, gradient_magnitude(sobel_x), rgba=(3,)), "convention",
+         "EdgeDetect with the output channel set to alpha: the guide says only 'sets the output channel for the edge detect applied'; read here as the "
+         "response going to that channel alone while the colour channels keep the picture; " + edge_note, nb_inputs=("S",))
     # ------------------------------------------------------------------------------------------------------- Emboss
     emboss_note = ("the guide says Emboss 'offsets the original input using the Angle and Width controls' (traditional 'applies the emboss "
                    "effect to the input image') and gives no formula or scale, so only what follows from any reading is scored: the "
@@ -564,6 +569,12 @@ def cases():
          interior(1, lambda s: s), "convention", "Emboss traditional: the relief's scale at an angle and width",
          unscored="the guide gives no formula, shading origin or scale for the relief; tests/test_2d_behaviour_filter_q.py checks that the "
                   "relief turns over with the angle, grows with the width and sits on the steep side of a step")
+    case("emboss_effect_output_channel_keeps_the_colour", "Emboss", "Emboss", (("Angle", 0.0), ("Width", 1.0), ("optype", "effect"), ("output", "rgba.alpha")),
+         "Emboss", {"angle": 0.0, "width": 1.0, "emboss_type": "effect", "edge_detector": "sobel", "edge_channels": "rgb", "edge_output_channel": "rgba.alpha"},
+         on("S", 0, lambda s: np.concatenate([s[..., :3], np.full_like(s[..., 3:], 0.5)], axis=2), valid=flat_parts), "convention",
+         "Emboss effect with the output channel set to alpha, on the flat parts of a step picture: no slope, so the effect is the mid grey, and it goes "
+         "to alpha alone while the colour channels keep the picture (the guide: 'sets the output channel for the edge detect applied'; " + emboss_note + ")",
+         nb_inputs=("S",))
     # ================================================================================================ the Transform group (step B)
     axis_note = ("positive translate x moves the picture right and positive translate y up the screen (the guide's Position page: "
                  "'Positive values move the image up or to the right'; Transform and Position share Nuke's axes). Rows count from the top "

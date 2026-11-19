@@ -888,7 +888,7 @@ PIXEL_UNIT_PARAMS = {
              "translate_x", "translate_y", "center_x", "center_y", "p0_x", "p0_y", "p1_x", "p1_y", "shadow_distance", "shadow_softness",
              "shadow_expand"),
     "BurnIn": ("font_size", "margin", "y_padding", "bar_x_border", "bar_y_border"),
-    "Blur": ("radius",), "Laplacian": ("laplacian_size",), "EdgeDetect": ("edge_blur_size", "edge_erode_size"), "ErodeFilter": ("filter_size",), "Emboss": ("width", "blur_size"),
+    "Blur": ("radius",), "Laplacian": ("laplacian_size",), "EdgeDetect": ("edge_blur_size", "edge_erode_size"), "ErodeFilter": ("filter_size",), "Emboss": ("width", "blur_size", "edge_erode_size"),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size", "size"), "DirBlur": ("length", "center_x", "center_y"),
     "VectorDistort": ("blur_size",), "Inpaint": ("translate_x", "translate_y", "center_x", "center_y"),

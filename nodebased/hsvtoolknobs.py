@@ -32,6 +32,15 @@ def range_mask(image, p, socket, name, invert_name, socket_alpha):
 
 
 # Vectorfield (same step): the file type, the reload counter and the two .3dl knobs that change the output.
-VECTORFIELD = {"reload": 0, "vector_file_type": "auto", "vector_output_bitdepth": "auto", "vector_normalize_output": 0}
-VECTORFIELD_LIMITS = {"vector_normalize_output": (0, 1)}
-VECTORFIELD_CHOICES = {"vector_file_type": ["auto", "cube", "3dl"], "vector_output_bitdepth": ["auto", "8", "10", "12", "16"]}
+VECTORFIELD = {"reload": 0, "vector_file_type": "auto", "vector_output_bitdepth": "auto", "vector_normalize_output": 0,
+               # Lane 9 step X4: GPU extrapolate and 3DL file format. Both are held on the node as Nuke holds them; neither changes NodeBased's pixels
+               # (the table is clamped at its edge on every path, and the .3dl reader takes the format from the file itself).
+               "vector_gpu_extrapolate": 1, "vector_format_3dl": "auto"}
+def upgrade_params(kind):
+    """What a Vectorfield saved before each of its knobs existed gets on load: the knobs at the values that change nothing."""
+    return dict(VECTORFIELD) if kind == "Vectorfield" else {}
+
+
+VECTORFIELD_LIMITS = {"vector_normalize_output": (0, 1), "vector_gpu_extrapolate": (0, 1)}
+VECTORFIELD_CHOICES = {"vector_file_type": ["auto", "cube", "3dl"], "vector_output_bitdepth": ["auto", "8", "10", "12", "16"],
+                       "vector_format_3dl": ["auto", "autodesk flame/smoke", "autodesk lustre", "assimilate scratch"]}

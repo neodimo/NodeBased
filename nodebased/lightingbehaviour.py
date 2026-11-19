@@ -32,13 +32,18 @@ import math
 
 import numpy as np
 
+# Lane 9 step X4: the edge-detect block's Threshold, Output channel and mask channel, the output block's mask channel, and the PreBlur/PostErode
+# block's Erode size and mask channel. Every default leaves the picture as it was (a saved node loads with the same values).
+_X4 = {"threshold": 0.0, "edge_erode_size": 0.0, "edge_mask_channel": "none", "edge_output_channel": "none", "output_mask_channel": "none",
+       "blur_mask_channel": "none"}
 NEW = {
-    "Emboss": {"emboss_type": "traditional", "edge_detector": "sobel", "edge_channels": "rgb", "blur_size": 0.0, "blur_quality": 15.0},
+    "Emboss": {"emboss_type": "traditional", "edge_detector": "sobel", "edge_channels": "rgb", "blur_size": 0.0, "blur_quality": 15.0,
+               **_X4},
     "BumpBoss": {"lightposition_x": 480.0, "lightposition_y": 360.0, "bumpsize": 1.0, "light_height": 1.0, "intensity": 1.0,
                  "minshadow": 0.0, "center_x": 320.0, "center_y": 240.0, "legacy_bumpboss": 0},
 }
 UPGRADE = {
-    "Emboss": {"emboss_type": "effect", "edge_detector": "simple", "edge_channels": "rgb", "blur_size": 0.0, "blur_quality": 15.0},
+    "Emboss": {"emboss_type": "effect", "edge_detector": "simple", "edge_channels": "rgb", "blur_size": 0.0, "blur_quality": 15.0, **_X4},
     "BumpBoss": {"lightposition_x": 480.0, "lightposition_y": 360.0, "bumpsize": 1.0, "light_height": 1.0, "intensity": 1.0,
                  "minshadow": 0.0, "center_x": 320.0, "center_y": 240.0, "legacy_bumpboss": 1},
 }
@@ -72,26 +77,45 @@ EDGE_CHANNELS = {"rgb": (0, 1, 2), "rgba": (0, 1, 2, 3), "all": (0, 1, 2, 3), "a
 
 
 def blur_reach(p):
-    """The pixels each way the pre-blur reads (Blur size and Blur quality; the same blur EdgeDetect runs before its edges)."""
+    """The pixels each way the pre-blur reads (Blur size and Blur quality; the same blur EdgeDetect runs before its edges) and the post erode."""
     from . import filterbehaviour
-    return filterbehaviour.edge_blur_reach({"edge_blur_size": p.get("blur_size", 0.0), "edge_blur_quality": p.get("blur_quality", 15.0)})
+    return filterbehaviour.edge_blur_reach({"edge_blur_size": p.get("blur_size", 0.0), "edge_blur_quality": p.get("blur_quality", 15.0)}) \
+        + filterbehaviour.edge_erode_reach(p)
 
 
 def emboss(image, p, origin=(0, 0)):
     from . import filterbehaviour
     channels = EDGE_CHANNELS.get(str(p.get("edge_channels", "rgb")), (0, 1, 2))
-    # The brightness the slope is read from: the mean of the Edge Channels, after the pre-blur. No channel, no slope, no relief.
+    # The brightness the slope is read from: the mean of the Edge Channels, after the pre-blur (limited by the PreBlur block's mask channel).
     blurred = filterbehaviour.edge_pre_blur(image, {"edge_blur_size": p.get("blur_size", 0.0), "edge_blur_quality": p.get("blur_quality", 15.0)}, origin)
+    blurred = filterbehaviour.limit_stage(image, blurred, filterbehaviour.stage_mask(image, p.get("blur_mask_channel", "none")))
     lum = blurred[..., list(channels)].mean(axis=2) if channels else np.zeros(image.shape[:2], np.float32)
     dx, dy = _central(lum, str(p.get("edge_detector", "simple")))
     angle = math.radians(float(p.get("angle", 135.0)))
     relief = float(p.get("width", 1.0)) * (np.cos(angle) * dx + np.sin(angle) * dy)
+    edge_mask = filterbehaviour.stage_mask(image, p.get("edge_mask_channel", "none"))           # the edge-detect block's mask channel
+    if edge_mask is not None:
+        relief = relief * edge_mask[..., 0]
+    threshold = float(p.get("threshold", 0.0))
+    if threshold > 0.0:                                          # a slope under the threshold counts as flat
+        relief = np.sign(relief) * np.maximum(np.abs(relief) - threshold, 0.0)
+    if filterbehaviour.edge_erode_reach(p):                      # the PostErode block: a box erode of the relief, as EdgeDetect erodes its edges
+        from .imaging import Evaluator
+        relief = Evaluator._morph(np.repeat(relief[..., None], 4, axis=2).astype(np.float32), float(p.get("edge_erode_size", 0.0)), "rgb")[..., 0]
+    index = filterbehaviour.output_index(p.get("edge_output_channel", "none"))
     out = image.copy()
     if str(p.get("emboss_type", "effect")) == "effect":
-        out[..., :3] = np.clip(0.5 + relief, 0, 1)[..., None]
+        shown = np.clip(0.5 + relief, 0, 1)
+        if index is None:
+            out[..., :3] = shown[..., None]
+        else:
+            out[..., index] = shown
     else:
-        out[..., :3] = image[..., :3] + relief[..., None].astype(np.float32)
-    return out
+        if index is None:
+            out[..., :3] = image[..., :3] + relief[..., None].astype(np.float32)
+        else:
+            out[..., index] = image[..., index] + relief.astype(np.float32)
+    return filterbehaviour.limit_stage(image, out, filterbehaviour.stage_mask(image, p.get("output_mask_channel", "none")))
 
 
 def light_direction(p):

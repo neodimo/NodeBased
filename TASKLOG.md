@@ -1,3 +1,27 @@
+## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X4 (Thu 11/19): close the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte
+
+- **What was done (evidence):** fidelity before and after (rows of the report): Emboss 88.1 -> 100.0 (13 of 13 knobs, 12 of 12 act), EdgeDetect 90.5 -> 100.0 (7 of 7),
+  MotionBlur2D 87.5 -> 100.0, VectorDistort 90.5 -> 100.0, Vectorfield 91.2 -> 100.0 (10 of 10; the 71 column closes through a declared equivalence),
+  Encryptomatte 92.9 -> 100.0. Overall stays 97.8 at one decimal (these six sit low in the rank weighting).
+  (1) Emboss and EdgeDetect: the guide's Output channel (`edge_output_channel`: none writes red, green and blue as before, a channel gets the response alone and the
+  others keep the picture) and its mask channels (`edge_mask_channel`, and on Emboss `output_mask_channel`, `blur_mask_channel`: a channel of the picture weighs the
+  stage, 0 leaving what came into it, 1 the full effect). Emboss also gets Threshold (`threshold`: a slope under it is flat, the relief keeps its sign) and Erode size
+  (`edge_erode_size`: a box erode of the relief, halo added to the tile rules through `lightingbehaviour.blur_reach`). One kernel serves both paths
+  (`filterbehaviour.stage_mask/limit_stage/finish_stage`); tiles of 7, 16 and 32 equal the frame with and without a mask; every default leaves a saved node's pixels
+  (bit for bit; saved nodes load the new params through `UPGRADE`). Two scored cases added (`edgedetect_output_channel_keeps_the_other_channels`,
+  `emboss_effect_output_channel_keeps_the_colour`). (2) MotionBlur2D Output UV (`uv`, default `motion`): with a 2D transf connected the layer holds the
+  displacement across the shutter in pixels (`Evaluator._transf_flow`); extra data on the output, the picture is as before (NOT_PIXEL). (3) VectorDistort Frame Distance
+  (`frame_distance`, "1 frame" .. "64 frames", default "1 frame"): held on the node; NodeBased's SmartVector keeps one accumulated set per frame, so no pixel moves
+  with it (NOT_PIXEL, `default_notes`). (4) Vectorfield GPU extrapolate (`vector_gpu_extrapolate`, on) and 3DL file format (`vector_format_3dl`, auto): held on the node,
+  no pixel moves (NOT_PIXEL); Vectorfield's two colour space defaults are declared equal to the guide's `linear` through `value_map` (the working space is ACEScg, as
+  `default_notes` already said). Old Vectorfield documents get the new params through `hsvtoolknobs.upgrade_params`. (5) Encryptomatte Export Write: the panel button
+  (`Window._encryptomatte_export_write`) adds a Write below the node set to .exr, all channels, 32-bit float, wired to it; mapped as a `panel` pairing.
+- **Not done / honest limits:** Frame Distance, GPU extrapolate, 3DL file format change no pixels (NodeBased lacks the second vector set, a GPU Vectorfield path, and the
+  guide states no Assimilate Scratch scale); Output UV is extra data only. Threshold and Erode size on Emboss, and every mask channel, are NodeBased's reading of
+  a guide that gives them no formula. The mask channels offer the five RGBA words, not named layers. Schema not bumped (37). No visual QA.
+- **Artifacts:** tests/test_l9_x4_edge.py, tests/test_l9_x4_nodes.py; mapping docs/parity/nodebased_to_nuke.json; NOT_PIXEL entries in tools/nuke_fidelity_requirements.py.
+- **Next owner:** Gonzo; pairing VectorCornerPin's frameDistance the same way is open.
+
 ## 2026-11-19 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X3 (Thu 11/19): the missing knobs on GridWarp, LensDistortion and Bokeh (integrator tick)
 
 - **What was done:** `main` `a700f05b` -> `805fd01c` plus this docs commit. Evidence and per-lane commit

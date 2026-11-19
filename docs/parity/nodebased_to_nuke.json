@@ -2283,8 +2283,8 @@
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
-   "value_map": {"interpolation": {"trilinear": "trilinear field"}, "vfield_file": {"": "none"}},
-   "default_notes": {"colorspaceIn": "NodeBased's working space is ACEScg, which is what the guide's `linear` names in a script that works in it; a new node leaves the picture in the working space.", "colorspaceOut": "As colorspaceIn: the output stays in the working space (ACEScg), the guide's `linear`."},
+   "value_map": {"interpolation": {"trilinear": "trilinear field"}, "vfield_file": {"": "none"}, "colorspaceIn": {"ACEScg": "linear"}, "colorspaceOut": {"ACEScg": "linear"}},
+   "default_notes": {"colorspaceIn": "NodeBased's working space is ACEScg, which is what the guide's `linear` names in a script that works in it; a new node leaves the picture in the working space.", "colorspaceOut": "As colorspaceIn: the output stays in the working space (ACEScg), the guide's `linear`.", "gpuExtrapolate": "Default on, as the guide lists; it governs Nuke's GPU implementation only and NodeBased clamps at the table's edge on every path, so no pixel changes with it (lane 9 step X4).", "format_3dl_id": "Default auto, as the guide lists; the reader takes the format from the file's header, so no pixel changes with it (lane 9 step X4)."},
    "knobs": [
     {"nodebased": ["cube_path"], "nuke": ["vfield_file"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'vectorfield file', scripting name `vfield_file`"},
     {"nodebased": ["reload"], "nuke": ["reload"], "kind": "same"},
@@ -2292,10 +2292,10 @@
     {"nodebased": ["colorspace_in"], "nuke": ["colorspaceIn"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `colorspaceIn`"},
     {"nodebased": ["colorspace_out"], "nuke": ["colorspaceOut"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `colorspaceOut`"},
     {"nodebased": ["interpolation"], "nuke": ["interpolation"], "kind": "same"},
-    {"nodebased": [], "nuke": ["gpuExtrapolate"], "kind": "unsupported", "reason": "extends the table past its edge on the GPU only; NodeBased clamps to the table's edge on every path"},
+    {"nodebased": ["vector_gpu_extrapolate"], "nuke": ["gpuExtrapolate"], "kind": "renamed", "reason": "GPU extrapolate: held on the node as Nuke holds it (default on). It governs only whether Nuke's GPU implementation extrapolates the table or clamps to its largest value; NodeBased's Vectorfield has no GPU path and clamps at the table's edge on every path, so no pixel changes with it (lane 9 step X4)"},
     {"nodebased": ["vector_output_bitdepth"], "nuke": ["output_bitdepth_id"], "kind": "renamed", "reason": "the bit depth the .3dl mesh values are read at (auto, 8, 10, 12, 16); NodeBased name prefixed to keep the shared choices table unambiguous"},
     {"nodebased": ["vector_normalize_output"], "nuke": ["normalize_output"], "kind": "renamed", "reason": "scales the .3dl mesh so its largest value is 1"},
-    {"nodebased": [], "nuke": ["format_3dl_id"], "kind": "unsupported", "reason": "Flame and Lustre .3dl files differ in their header lines; NodeBased's reader accepts both from the file itself, so the choice has no effect to give"},
+    {"nodebased": ["vector_format_3dl"], "nuke": ["format_3dl_id"], "kind": "renamed", "reason": "3DL file format: held on the node as Nuke holds it (auto, autodesk flame/smoke, autodesk lustre, assimilate scratch). NodeBased's .3dl reader takes the format from the file's own header and reads both Autodesk layouts; the Assimilate Scratch scale and offset is not stated by the guide, so no pixel changes with it (lane 9 step X4)"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
   },
@@ -2718,6 +2718,7 @@
   },
   "MotionBlur2D": {
    "nodebased": "MotionBlur2D",
+   "default_notes": {"uv": "Default `motion`, as the guide lists; the layer is extra data written when a 2D transf is connected, and the blurred picture does not change with it (lane 9 step X4)."},
    "inputs": [
     {"nodebased": "image", "nuke": "unnamed", "kind": "mapped"},
     {"nodebased": "transf", "nuke": "2D transf", "kind": "mapped"},
@@ -2729,7 +2730,7 @@
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": [], "nuke": ["uv"], "kind": "unsupported", "reason": "Output UV names the channel the node writes the motion vectors to; the guide's page for this node describes only the shutter, and NodeBased's node writes no vector channel, so the knob would change nothing (lane 9 step O)"}
+    {"nodebased": ["uv"], "nuke": ["uv"], "kind": "same"}
    ]
   },
   "MotionBlur3D": {
@@ -2869,8 +2870,8 @@
     {"nodebased": ["edge_blur_size"], "nuke": ["blursize"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Blur size', scripting name `blursize`"},
     {"nodebased": ["edge_erode_size"], "nuke": ["erodesize"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Erode size', scripting name `erodesize`"},
     {"nodebased": ["edge_blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Blur quality', scripting name `blurquality`"},
-    {"nodebased": [], "nuke": ["output"], "kind": "unsupported", "reason": "the guide says only 'sets the output channel for the edge detect applied' (a channel menu behind an enable box, default none); NodeBased writes the response into the colour channels in place, and a chosen output layer needs channel routing the node does not have (lane 9 step Q)"},
-    {"nodebased": [], "nuke": ["maskedgedetect"], "kind": "unsupported", "reason": "the guide describes a mask channel for the edge-detect stage ('by default, the blur is limited to the non-black areas of this channel') apart from the node's own mask; NodeBased has the one node-wide mask channel and no separate mask for the stage, and the guide says nothing of how the two combine (lane 9 step Q)"},
+    {"nodebased": ["edge_output_channel"], "nuke": ["output"], "kind": "renamed", "reason": "Output: the channel the edges are written to; none writes them to red, green and blue as before, a chosen channel gets the response alone and the others keep the picture (lane 9 step X4)"},
+    {"nodebased": ["edge_mask_channel"], "nuke": ["maskedgedetect"], "kind": "renamed", "reason": "Mask: a channel of the picture that limits the edges, which show where it is not black (the guide: 'by default, the effect is limited to the non-black areas of this channel'); none leaves them whole (lane 9 step X4)"},
     {"nodebased": ["legacy_edge_prewitt"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the published Prewitt masks were used keep the Prewitt response divided by three; lane 9 step Q"}
    ]
   },
@@ -2892,14 +2893,14 @@
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["edge_detector"], "nuke": ["edgedetector"], "kind": "renamed", "reason": "Edge Detector: simple, sobel or prewitt, how the slope of the brightness is read (lane 9 step O); older documents read simple"},
     {"nodebased": ["edge_channels"], "nuke": ["edgechannels"], "kind": "renamed", "reason": "Edge Channels: the channels whose brightness the slope is read from (lane 9 finish)"},
-    {"nodebased": [], "nuke": ["threshold"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
-    {"nodebased": [], "nuke": ["output"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
-    {"nodebased": [], "nuke": ["erodesize"], "kind": "unsupported", "reason": "the guide lists it in the edge-detect block of this page and states no effect on the relief (the page gives it no description, or describes only the edge-detect step); not built, so the knob is not offered"},
+    {"nodebased": ["threshold"], "nuke": ["threshold"], "kind": "same"},
+    {"nodebased": ["edge_output_channel"], "nuke": ["output"], "kind": "renamed", "reason": "Output: the one channel the relief is written to; none writes it to red, green and blue as before (lane 9 step X4)"},
+    {"nodebased": ["edge_erode_size"], "nuke": ["erodesize"], "kind": "renamed", "reason": "Erode size: a box erode of the relief after the slope is read, positive thinning it and negative thickening it, as EdgeDetect's erode does its edges (lane 9 step X4)"},
     {"nodebased": ["blur_size"], "nuke": ["blursize"], "kind": "renamed", "reason": "Blur size: the brightness is blurred this much before the slope is read (lane 9 finish)"},
     {"nodebased": ["blur_quality"], "nuke": ["blurquality"], "kind": "renamed", "reason": "Blur quality: the largest blur worked at full size (lane 9 finish)"},
-    {"nodebased": [], "nuke": ["maskedgedetect"], "kind": "unsupported", "reason": "the guide gives the edge-detect block, the output block and the PreBlur/PostErode block each a mask channel ('by default, the effect is limited to the non-black areas of this channel'); NodeBased has the one node-wide mask channel, and the guide says nothing of how the four combine (lane 9 step Q)"},
-    {"nodebased": [], "nuke": ["maskedgedetect#2"], "kind": "unsupported", "reason": "the second per-block mask channel of this page; see maskedgedetect (lane 9 step Q)"},
-    {"nodebased": [], "nuke": ["maskedgedetect#3"], "kind": "unsupported", "reason": "the third per-block mask channel of this page; see maskedgedetect (lane 9 step Q)"}
+    {"nodebased": ["edge_mask_channel"], "nuke": ["maskedgedetect"], "kind": "renamed", "reason": "Mask of the edge-detect block: the relief shows where this channel of the picture is not black (lane 9 step X4)"},
+    {"nodebased": ["output_mask_channel"], "nuke": ["maskedgedetect#2"], "kind": "renamed", "reason": "Mask of the output block: the output is limited to where this channel is not black, the picture showing through elsewhere (lane 9 step X4)"},
+    {"nodebased": ["blur_mask_channel"], "nuke": ["maskedgedetect#3"], "kind": "renamed", "reason": "Mask of the PreBlur/PostErode block: the pre-blur works where this channel is not black (lane 9 step X4)"}
    ]
   },
   "BumpBoss": {
@@ -3381,7 +3382,7 @@
     {"nodebased": ["layer_name"], "kind": "extra", "reason": "stands for Nuke's Cryptomatte Layer drop-down (no scripting name, not a counted knob): the set the mattes are added to, `crypto_object` unless renamed"},
     {"nodebased": ["id0"], "nuke": ["matteName"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Matte Name', scripting name `matteName`, the name typed for the single Matte input (NodeBased's first matte input; `id1` to `id7` name the extra ones)"},
     {"nodebased": ["merge_operation"], "nuke": ["mergeOperation"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'Merge Operation', scripting name `mergeOperation` ; NodeBased offers over, under and plus on a set of ids (the Merge operations that mean something on coverage), and `replace`, the older behaviour of writing the set afresh"},
-    {"nodebased": [], "nuke": ["exportWrite"], "kind": "unsupported", "reason": "a button that adds a Write node to the graph with the settings for .exr output; NodeBased has no node-creating button on a node panel, and a Write node set to exr writes the Cryptomatte layers and their manifest header as they are (tests/test_2d_behaviour_crypto.py)"},
+    {"nodebased": [], "nuke": ["exportWrite"], "kind": "panel", "reason": "the Export Write button of the Encryptomatte panel (nodebased/app.py `_encryptomatte_export_write`): adds a Write node below the node, wired to its output and set to write every channel as a 32-bit float .exr, which keeps the Cryptomatte layers and manifest header (tests/test_l9_x4_nodes.py)"},
     {"nodebased": ["id1"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["id2"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["id3"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
@@ -4114,6 +4115,7 @@
   },
   "VectorDistort": {
    "nodebased": "VectorDistort",
+   "default_notes": {"frameDistance": "Default 1 frame, as the guide lists; the knob is held on the node and no pixel changes with it, because NodeBased's SmartVector keeps one accumulated set of vectors per frame (lane 9 step X4)."},
    "inputs": [
     {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
     {"nodebased": "vectors", "nuke": "SmartVector", "kind": "mapped"},
@@ -4126,7 +4128,7 @@
     {"nodebased": ["output_mode"], "nuke": ["outputMode"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `outputMode` (lane 9 step N)"},
     {"nodebased": ["image_filter"], "nuke": ["imageFilter"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `imageFilter` (lane 9 step N)"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
-    {"nodebased": [], "nuke": ["frameDistance"], "kind": "unsupported", "reason": "Nuke's SmartVector keeps several vector sets, for hops of 1 to 64 frames, and Frame Distance picks one; NodeBased's SmartVector keeps one accumulated set per frame (re-anchored every `reanchor_interval` frames), so there is no second set to pick (nodebased/vectordistortknobs.py)"},
+    {"nodebased": ["frame_distance"], "nuke": ["frameDistance"], "kind": "renamed", "reason": "Frame Distance: held on the node as Nuke holds it (1 to 64 frames in steps of two, default 1 frame). Nuke picks one of SmartVector's vector sets for hops of 1 to 64 frames with it; NodeBased's SmartVector keeps one accumulated set per frame (`reanchor_interval` bounds its drift), so there is no second set to pick and no pixel changes with it yet (lane 9 step X4)"},
     {"nodebased": ["legacy_vectordistort"], "kind": "extra", "reason": "NodeBased-only: graphs saved before VectorDistort followed the guide's Hold Frame, Output and Filter keep their picture; lane 9 step N"},
     {"nodebased": ["fade_frames"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}

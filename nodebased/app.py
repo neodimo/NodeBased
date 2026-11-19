@@ -17346,6 +17346,13 @@ class Window(QMainWindow):
                 focus_pick.setToolTip("View a Render3D that uses this camera, then click the surface to focus on · Esc ends")
                 focus_pick.clicked.connect(lambda checked=False, k=key: self.begin_focus_pick(k))
                 form.addRow(focus_pick)
+            if node["type"] == "Encryptomatte":
+                # Nuke's export write button (the guide's exportWrite): a Write node set for .exr output, wired to this node.
+                export_write = QPushButton("Export Write")
+                export_write.setObjectName("encryptomatte-export-write")
+                export_write.setToolTip("Add a Write node below this one, set to write every channel as a 32-bit float .exr, which keeps the Cryptomatte layers and manifest")
+                export_write.clicked.connect(lambda checked=False, k=key: self._encryptomatte_export_write(k))
+                form.addRow("Export Write", export_write)
             if node["type"] == "Cryptomatte":
                 crypto_pick = QPushButton("Pick from viewer…")
                 crypto_pick.setToolTip("Click objects in the viewer to add their names to the matte list · Esc ends")
@@ -18236,6 +18243,21 @@ class Window(QMainWindow):
         if not edits:
             return False
         self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": name, "value": value} for name, value in edits.items()]})
+        return True
+
+    def _encryptomatte_export_write(self, key):
+        """Encryptomatte's Export Write (the guide's exportWrite): a Write node below it, connected to its output and set for .exr output: every
+        channel, 32-bit float, lossless compression, so the Cryptomatte layers and the manifest in the header are written as they are."""
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "Encryptomatte":
+            return False
+        ident = uuid.uuid4().hex[:12]
+        self.command({"op": "batch", "commands": [
+            {"op": "create", "id": ident, "type": "Write", "name": f"{node['name']} Write",
+             "params": {"file_type": "exr", "bit_depth": "float", "channels": "all", "exr_compression": "zips"},
+             "pos": [node["pos"][0], node["pos"][1] + 120]},
+            {"op": "connect", "id": ident, "input": "image", "source": key}]})
+        self.statusBar().showMessage(f"Added a Write for {node['name']}, set to .exr output")
         return True
 
     def _gridwarp_resize(self, key, side):

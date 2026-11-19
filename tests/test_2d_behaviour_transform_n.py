@@ -117,7 +117,7 @@ class VectorDistortBehaviour(unittest.TestCase):
         docs = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "parity")
         pairs = json.load(open(os.path.join(docs, "nodebased_to_nuke.json")))["pairs"]["VectorDistort"]["knobs"]
         entry = next(e for e in pairs if e["nuke"] == ["frameDistance"])
-        self.assertEqual((entry["kind"], entry["nodebased"]), ("unsupported", []))
+        self.assertEqual((entry["kind"], entry["nodebased"]), ("renamed", ["frame_distance"]))       # held on the node since step X4, with no pixel effect
         self.assertIn("SmartVector", entry["reason"])
 
 
@@ -210,7 +210,7 @@ class VectorDistortSavedGraphs(unittest.TestCase):
 
     def test_the_main_tab_lists_the_knobs_in_the_guides_order(self):
         names = [g.label for g in knobs.KNOB_LAYOUT["VectorDistort"] if not g.params[0].startswith("legacy_") and g.params != ("mix",)]
-        self.assertEqual(names[:6], ["Reference Frame", "Hold frame", "Output", "Blur Size", "Channels", "Filter"])
+        self.assertEqual(names[:7], ["Reference Frame", "Hold frame", "Frame distance", "Output", "Blur Size", "Channels", "Filter"])
         kept, total = layout_order("VectorDistort")[0]
         self.assertEqual(kept, total)
 
