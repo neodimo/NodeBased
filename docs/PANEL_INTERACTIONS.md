@@ -335,7 +335,12 @@ Before the step 6 of the 21 documented behaviours worked like Nuke's (R, G, B, A
 middle and Alt drag to pan, F, Ctrl+1); after it, 8. Fixed: plain + and - now zoom in and out as the guide says (Ctrl+=,
 Ctrl++ and Ctrl+- still work), and Up and Down cycle through the Viewer's wired inputs. No shortcut was removed.
 
+The finish step brought it to 12. The info bar shows the pixel under the pointer (its x and y counted from the bottom, as
+Nuke's are, and its RGBA). Ctrl+click in the Viewer now holds that pixel in the info bar while the pointer moves on,
+Ctrl+Shift+drag holds the average of the region dragged, and Ctrl+right-click lets the info bar follow the pointer again.
+A Ctrl press only samples when nothing else takes it first: a colour knob's armed eye dropper, a handle, a pick or the
+wipe keep their Ctrl+click.
+
 Still open: M (alpha as a red overlay), a middle click to re-centre, middle plus left drag to zoom, Alt+Z to lock the zoom,
-{ and } to hide the toolbars, and the info bar, Ctrl-click and Ctrl+Shift-drag sampling, Ctrl+right-click to cancel, the gain
-and gamma toggle buttons, U, Alt+G and the frame field's +/-20, which are documented but not yet probed.
+{ and } to hide the toolbars, the gain and gamma toggle buttons, U, Alt+G and the frame field's +/-20.
 

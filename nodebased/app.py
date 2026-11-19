@@ -2369,6 +2369,10 @@ class Viewer(PanZoomView):
         self.color_sampling = None     # a colour picker's eyedropper: called with the linear pixel clicked
         self.knob_sampling = None      # a colour knob's eye dropper, armed from its swatch: ((node, params), callback, values when armed)
         self.knob_sample_region = None  # scene point where a Ctrl+Shift region sample started
+        # The Viewer's own sample in the info bar (Nuke 17.0 User Guide, Using the Viewer Controls): Ctrl+click holds
+        # one pixel, Ctrl+Shift+drag the average of a region, Ctrl+right-click lets the readout follow the pointer again.
+        self.info_sample = None         # {"kind": "pixel"|"region", "rgba", "text", ...} while a sample is held
+        self.info_sample_region = None  # scene point where a Ctrl+Shift region sample of the info bar started
         self.focus_picking = None   # the Camera3D node whose focus distance a click sets
         # A/B compare. The wipe geometry is display state only (not in the document): the split
         # is a fraction of the format rectangle plus an angle, see compare.py. `wipe_pixmap` is
@@ -2664,7 +2668,48 @@ class Viewer(PanZoomView):
                 "position": f"x {full_x}  y {nuke_y}", "values": f"{red:.3f} {green:.3f} {blue:.3f}",
                 "rgba": (red, green, blue, alpha), "buffer": shown_buffer, "raw_buffer": buffer}
 
+    def _show_info_sample(self):
+        """Show the held sample in the pixel readout instead of the pixel under the pointer."""
+        sample = self.info_sample
+        red, green, blue, _ = sample["rgba"]
+        color = QColor.fromRgbF(min(max(red, 0.0), 1.0), min(max(green, 0.0), 1.0),
+                                min(max(blue, 0.0), 1.0), 1.0)
+        self.pixel_readout.set_value(sample["text"], color, "", position=sample["position"], values=sample["values"])
+        self._pixel_readout_active = True
+        if self._place_pixel_readout():
+            self.pixel_readout.show()
+            self.pixel_readout.raise_()
+
+    def _sample_info_pixel(self, scene_pos):
+        info = self.pixel_readout_info(scene_pos)
+        if info is None:
+            return
+        self.info_sample = {"kind": "pixel", "rgba": info["rgba"], "text": "sample " + info["text"],
+                            "position": info["position"], "values": info["values"]}
+        self._show_info_sample()
+
+    def _sample_info_region(self, start, end):
+        rgba = self.linear_region_average(start, end)
+        if rgba is None:
+            return
+        red, green, blue, alpha = rgba
+        x0, x1 = sorted(math.floor(p.x()) for p in (start, end))
+        y0, y1 = sorted(math.floor(p.y()) for p in (start, end))
+        size = f"{x1 - x0 + 1}x{y1 - y0 + 1}"
+        self.info_sample = {"kind": "region", "rgba": (red, green, blue, alpha),
+                            "text": f"region {size}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}",
+                            "position": f"region {size}", "values": f"{red:.3f} {green:.3f} {blue:.3f}"}
+        self._show_info_sample()
+
+    def cancel_info_sample(self):
+        self.info_sample = None
+        self.info_sample_region = None
+        self._hide_pixel_readout()
+
     def _update_pixel_readout(self, event):
+        if self.info_sample is not None:
+            self._show_info_sample()
+            return
         info = self.pixel_readout_info(self._event_scene_pos(event))
         if info is None:
             self._hide_pixel_readout()
@@ -2865,7 +2910,7 @@ class Viewer(PanZoomView):
         painter.restore()
 
     def leaveEvent(self, event):
-        if not self._handling_mouse_move:
+        if not self._handling_mouse_move and self.info_sample is None:
             self._hide_pixel_readout()
         super().leaveEvent(event)
 
@@ -5516,6 +5561,10 @@ class Viewer(PanZoomView):
                 self.knob_sampling[1](value)
             self.viewport().update()
             return True
+        if button == Qt.MouseButton.LeftButton and self.info_sample_region is not None:
+            start, self.info_sample_region = self.info_sample_region, None
+            self._sample_info_region(start, scene_pos)
+            return True
         self._cancel_drag_preview()
         if button == Qt.MouseButton.LeftButton:
             graph = getattr(self.window, "graph", None)
@@ -7009,6 +7058,18 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     self._wipe_drag_to(scene_pos)
                 return True
+        # Nothing above took a Ctrl press: it samples the picture into the info bar, as Nuke's Viewer does.
+        if modifiers & Qt.KeyboardModifier.ControlModifier and self.format_rect is not None:
+            if button == Qt.MouseButton.RightButton and (self.info_sample is not None
+                                                         or self.info_sample_region is not None):
+                self.cancel_info_sample()
+                return True
+            if button == Qt.MouseButton.LeftButton:
+                if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                    self.info_sample_region = scene_pos
+                else:
+                    self._sample_info_pixel(scene_pos)
+                return True
         return False
 
     def mousePressEvent(self, event):
@@ -7031,7 +7092,7 @@ class Viewer(PanZoomView):
 
     def hit_move(self, scene_pos, modifiers, pressure=1.0):
         """A move to a scene point while a handle is held. True when a drag took it."""
-        if self.knob_sample_region is not None:
+        if self.knob_sample_region is not None or self.info_sample_region is not None:
             return True
         if self.paint_size_drag is not None:
             drag = self.paint_size_drag

@@ -2555,6 +2555,132 @@ def _viewer_one_to_one(bench):
     return abs(zoom - 1.0) < 1e-6, f"Ctrl+1 set the zoom to {zoom:.3f}"
 
 
+
+def _ramp_viewer(bench):
+    """The Viewer showing a 64 x 32 horizontal 0 to 1 ramp at 1:1, centred; returns (viewer, float frame) or (viewer, None)."""
+    import time
+    import numpy as np
+    viewer = bench.window.viewer
+    viewer.resetTransform()                 # the whole frame on screen, so the Viewer renders all of it
+    viewer.fit()
+    ramp = bench.node("Ramp", {"width": 64, "height": 32, "p1_x": 63.0})
+    bench.window.command({"op": "view", "id": ramp})
+    frame = None
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        bench.settle(1)
+        shown = bench.window._float_frame_on_demand()
+        if shown is not None and getattr(shown, "shape", (0, 0))[:2] == (32, 64):
+            frame = np.array(shown, copy=True)
+            break
+        time.sleep(0.01)
+    viewer.info_sample = None
+    viewer.info_sample_region = None
+    # Several screen pixels per image pixel, so a click lands on the pixel named, with the whole frame still on screen.
+    port = viewer.viewport().rect()
+    scale = max(float(viewer.last_scale or 1.0), 1.0)
+    zoom = max(1.0, min(4.0, 0.8 * port.width() / (64 * scale), 0.8 * port.height() / (32 * scale)))
+    viewer.auto_fit = False
+    viewer.resetTransform()
+    viewer.scale(zoom, zoom)
+    viewer.centerOn(32.0 * scale, 16.0 * scale)
+    viewer.setFocus()
+    bench.settle(8)
+    return viewer, frame
+
+
+def _port_point(viewer, x, y):
+    """Viewport coordinates of the ramp's pixel centre (x, y), counted from the top-left as the frame array is."""
+    from PySide6.QtCore import QPointF
+    scale = max(float(viewer.last_scale or 1.0), 1.0)
+    point = viewer.mapFromScene(QPointF((x + 0.5) * scale, (y + 0.5) * scale))
+    return (float(point.x()), float(point.y()))
+
+
+def _viewer_hover(bench, viewer, x, y):
+    from PySide6.QtCore import QEvent, Qt
+    _mouse(viewer.viewport(), QEvent.Type.MouseMove, _port_point(viewer, x, y), Qt.MouseButton.NoButton,
+           Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+    bench.settle()
+
+
+def _viewer_click(bench, viewer, x, y, button, modifiers, drag_to=None):
+    from PySide6.QtCore import QEvent, Qt
+    port = viewer.viewport()
+    start = _port_point(viewer, x, y)
+    _mouse(port, QEvent.Type.MouseButtonPress, start, button, button, modifiers)
+    end = start
+    if drag_to is not None:
+        end = _port_point(viewer, *drag_to)
+        _mouse(port, QEvent.Type.MouseMove, end, Qt.MouseButton.NoButton, button, modifiers)
+    _mouse(port, QEvent.Type.MouseButtonRelease, end, button, Qt.MouseButton.NoButton, modifiers)
+    bench.settle()
+
+
+def _viewer_readout(viewer):
+    shown = viewer.pixel_readout.isVisibleTo(viewer.viewport())
+    return shown, viewer.pixel_readout.position.text(), viewer.pixel_readout.values.text()
+
+
+@probe("viewer.info_bar")
+def _viewer_info_bar(bench):
+    viewer, frame = _ramp_viewer(bench)
+    if frame is None:
+        return False, "the ramp never reached the viewer"
+    _viewer_hover(bench, viewer, 40, 5)
+    shown, position, values = _viewer_readout(viewer)
+    red = f"{float(frame[5, 40, 0]):.3f}"
+    ok = shown and position.startswith("x 40") and values.startswith(red)
+    return ok, f"hovering pixel 40 showed {position!r} {values!r} (red {red}, readout shown {shown})"
+
+
+@probe("viewer.sample_pixel")
+def _viewer_sample_pixel(bench):
+    from PySide6.QtCore import Qt
+    viewer, frame = _ramp_viewer(bench)
+    if frame is None:
+        return False, "the ramp never reached the viewer"
+    _viewer_click(bench, viewer, 20, 5, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier)
+    _viewer_hover(bench, viewer, 55, 5)            # the sample stays in the info bar while the pointer moves on
+    _, position, values = _viewer_readout(viewer)
+    red = f"{float(frame[5, 20, 0]):.3f}"
+    held = viewer.info_sample is not None and viewer.info_sample["kind"] == "pixel"
+    ok = held and values.startswith(red) and "20" in position
+    viewer.cancel_info_sample()
+    return ok, f"Ctrl+click on pixel 20, then a move to 55, showed {position!r} {values!r} (pixel red {red})"
+
+
+@probe("viewer.sample_region")
+def _viewer_sample_region(bench):
+    from PySide6.QtCore import Qt
+    viewer, frame = _ramp_viewer(bench)
+    if frame is None:
+        return False, "the ramp never reached the viewer"
+    mods = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+    _viewer_click(bench, viewer, 0, 0, Qt.MouseButton.LeftButton, mods, drag_to=(63, 31))
+    sample = viewer.info_sample or {}
+    expected = float(frame[:, :, 0].mean())
+    got = sample.get("rgba", (None,))[0]
+    ok = sample.get("kind") == "region" and got is not None and abs(got - expected) < 1e-3
+    viewer.cancel_info_sample()
+    return ok, f"Ctrl+Shift+drag over the whole ramp held red {got} (frame mean {expected:.4f})"
+
+
+@probe("viewer.sample_cancel")
+def _viewer_sample_cancel(bench):
+    from PySide6.QtCore import Qt
+    viewer, frame = _ramp_viewer(bench)
+    if frame is None:
+        return False, "the ramp never reached the viewer"
+    _viewer_click(bench, viewer, 20, 5, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier)
+    held = viewer.info_sample is not None
+    _viewer_click(bench, viewer, 30, 5, Qt.MouseButton.RightButton, Qt.KeyboardModifier.ControlModifier)
+    cleared = viewer.info_sample is None
+    _viewer_hover(bench, viewer, 50, 5)
+    _, position, _ = _viewer_readout(viewer)
+    ok = held and cleared and position.startswith("x 50")
+    return ok, f"Ctrl+click held a sample {held}, Ctrl+right-click cleared it {cleared}, the readout follows again ({position!r})"
+
 def probe_all():
     """{behaviour id: {"widget", "status", "result": "pass"|"fail"|"not probed"|"undocumented", "detail"}}."""
     ref = reference()
