@@ -2359,6 +2359,7 @@ class Viewer(PanZoomView):
         self.dustbust_preset = False
         self.transform_drag = None
         self.box_drag = None             # Crop's or Text's on-screen box being dragged
+        self.point_drag = None           # a Ramp end or a CornerPin to-pin being dragged
         self.grid_jack_drag = None       # GridWarp's grid transformation overlay being dragged
         self.analysis_drag = None
         self.flare_drag = None
@@ -3403,6 +3404,44 @@ class Viewer(PanZoomView):
             seen.add(current)
             stack.extend(nodes[current]["inputs"].values())
         return None
+
+    def _point_context(self):
+        """The selected Ramp or CornerPin when its point handles can be drawn: selected and viewed directly or through a
+        downstream node, as for the box handles."""
+        graph = getattr(self.window, "graph", None)
+        if graph is None or self.format_rect is None:
+            return None
+        key = graph.selected_id()
+        document = self.window.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] not in handles2d.POINT_NODES:
+            return None
+        nodes, stack, seen = document["nodes"], [document.get("view")], set()
+        while stack:
+            current = stack.pop()
+            if current is None or current in seen or current not in nodes:
+                continue
+            if current == key:
+                return key, node
+            seen.add(current)
+            stack.extend(nodes[current]["inputs"].values())
+        return None
+
+    def _point_values(self):
+        """(key, type, [(x, y)...], values) for the selected point-handle node at the current frame, any live drag applied."""
+        context = self._point_context()
+        if context is None:
+            return None
+        key, node = context
+        values = self._analysis_params(key)
+        drag = self.point_drag
+        if drag is not None and drag["key"] == key:
+            sx, sy = self._transform_data_point(drag["start"])
+            cx, cy = self._transform_data_point(drag["scene"])
+            (name_x, name_y), (bx, by) = drag["names"], drag["base"]
+            values[name_x], values[name_y] = bx + cx - sx, by + cy - sy
+        pairs = handles2d.POINT_NODES[node["type"]]
+        return key, node["type"], [(float(values[a]), float(values[b])) for a, b in pairs], values
 
     def _box_size(self):
         """The viewed format's (width, height) in data units, for boxes whose knobs count from the bottom left."""
@@ -5495,7 +5534,7 @@ class Viewer(PanZoomView):
             self.viewport().update()
             event.accept(); return
         if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
-                                                  or self.transform_drag is not None or self.box_drag is not None or self.grid_jack_drag is not None or self.analysis_drag is not None or self.flare_drag is not None or self.warp_drawing
+                                                  or self.transform_drag is not None or self.box_drag is not None or self.point_drag is not None or self.grid_jack_drag is not None or self.analysis_drag is not None or self.flare_drag is not None or self.warp_drawing
                                                   or self.warp_drag is not None or self.tracker_drag is not None):
             if self.roto_drawing or self.roto_drag is not None:
                 self.cancel_roto_edit()
@@ -5508,6 +5547,7 @@ class Viewer(PanZoomView):
                     self.window.preview_knobs(key, node["params"])
             self.transform_drag = None
             self.box_drag = None
+            self.point_drag = None
             self.grid_jack_drag = None
             self.analysis_drag = None
             self.flare_drag = None
@@ -5826,6 +5866,19 @@ class Viewer(PanZoomView):
                     key, {prefix + name: values[name] for name in drag["touched"]})})
             self.grid_jack_drag = None
             self.unsetCursor()
+            return True
+        if button == Qt.MouseButton.LeftButton and self.point_drag is not None:
+            drag = self.point_drag
+            drag["scene"] = scene_pos
+            drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
+            shown = self._point_values() if drag["moved"] else None
+            if shown is not None:
+                key, _, _, values = shown
+                self.window.command({"op": "batch", "commands": self._transform_commands(
+                    key, {name: values[name] for name in drag["names"]})})
+            self.point_drag = None
+            self.unsetCursor()
+            self.viewport().update()
             return True
         if button == Qt.MouseButton.LeftButton and self.box_drag is not None:
             drag = self.box_drag
@@ -6652,6 +6705,24 @@ class Viewer(PanZoomView):
                     center = self._transform_scene_point(*point)
                     painter.setBrush(QColor("#202127")); painter.drawRect(QRectF(center.x()-radius, center.y()-radius, radius*2, radius*2))
             painter.restore()
+        shown_points = self._point_values()
+        if shown_points is not None:
+            _, kind, points, _ = shown_points
+            radius = 6.0 / max(abs(self.view_zoom()), 0.05)
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            pen = QPen(QColor("#65d9e8"), 2); pen.setCosmetic(True)
+            painter.setPen(pen)
+            scene = [self._transform_scene_point(x, y) for x, y in points]
+            if kind == "Ramp":
+                painter.drawLine(scene[0], scene[1])
+            else:                       # the pinned quad: 1 top left, 2 top right, 4 bottom right, 3 bottom left
+                for a, b in ((0, 1), (1, 3), (3, 2), (2, 0)):
+                    painter.drawLine(scene[a], scene[b])
+            painter.setBrush(QColor("#202127"))
+            for centre in scene:
+                painter.drawEllipse(centre, radius, radius)
+            painter.restore()
         flare_context = self._flare_context()
         if flare_context is not None:
             values = self._flare_values(self.flare_drag)
@@ -7031,6 +7102,18 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     return True
         if button == Qt.MouseButton.LeftButton:
+            shown = self._point_values()
+            if shown is not None:
+                key, kind, points, values = shown
+                index = handles2d.point_hit(self._transform_data_point(scene_pos), points,
+                                            12.0 / max(abs(self.view_zoom()), 0.05))
+                if index is not None:
+                    names = handles2d.POINT_NODES[kind][index]
+                    self.point_drag = {"key": key, "names": names, "start": scene_pos, "scene": scene_pos, "moved": False,
+                                       "base": points[index]}
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                    return True
+        if button == Qt.MouseButton.LeftButton:
             box = self._box_values()
             if box is not None:
                 key, kind, values = box
@@ -7275,6 +7358,11 @@ class Viewer(PanZoomView):
         if self.box_drag is not None:
             self.box_drag["scene"] = scene_pos
             self.box_drag["moved"] = (scene_pos - self.box_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            return True
+        if self.point_drag is not None:
+            self.point_drag["scene"] = scene_pos
+            self.point_drag["moved"] = (scene_pos - self.point_drag["start"]).manhattanLength() > 2
             self.viewport().update()
             return True
         if self.transform_drag is not None:

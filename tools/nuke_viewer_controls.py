@@ -60,6 +60,11 @@ class Bench:
         dispatcher.execute({"op": "connect", "id": "tr", "input": "image", "source": "c"})
         dispatcher.execute({"op": "create", "id": "gw", "type": "GridWarp", "pos": [600, 120]})
         dispatcher.execute({"op": "connect", "id": "gw", "input": "image", "source": "c"})
+        dispatcher.execute({"op": "create", "id": "rect", "type": "Rectangle", "pos": [0, 360]})       # lane 10 step T9
+        dispatcher.execute({"op": "create", "id": "rad", "type": "Radial", "pos": [150, 360]})
+        dispatcher.execute({"op": "create", "id": "ramp", "type": "Ramp", "pos": [300, 360]})
+        dispatcher.execute({"op": "create", "id": "cp", "type": "CornerPin", "pos": [450, 360]})
+        dispatcher.execute({"op": "connect", "id": "cp", "input": "image", "source": "c"})
         dispatcher.execute({"op": "view", "id": "t"})
         self.window = Window(dispatcher.document)
         self.window.resize(1400, 900)
@@ -419,6 +424,91 @@ def _colortransfer_on_a(bench):
     ok = bool(taken) and _roi(bench) == (100.0, 100.0, 560.0, 400.0) and bench.undo_steps() == 1
     bench.focus("ct", roi_x=0.0, roi_y=0.0, roi_r=0.0, roi_t=0.0)
     return ok, f"with the Viewer on input A the right edge drag stored roi {_roi(bench) if not ok else (100, 100, 560, 400)}"
+
+
+# -- Rectangle, Radial, Ramp and CornerPin (lane 10, step T9) ------------------------------------------------------------------
+# The Nuke 17.0 Reference Guide pages read describe no Viewer control for these, so their entries stay undocumented; the probes
+# measure the handles NodeBased draws, and tests/test_l10_t9_point_handles.py runs them.
+
+def _area_box(bench, key):
+    p = bench.params(key)
+    return tuple(float(p[k]) for k in ("box_x", "box_y", "box_width", "box_height"))
+
+
+def _area(bench, key):
+    area = dict(box_x=100.0, box_y=100.0, box_width=300.0, box_height=200.0)
+    bench.focus(key, **area)
+    taken = bench.drag((400, 200), (450, 210))                            # the right edge: the width only
+    edge = bool(taken) and _area_box(bench, key) == (100.0, 100.0, 350.0, 200.0) and bench.undo_steps() == 1
+    bench.focus(key, **area)
+    bench.drag((100, 100), (120, 130))                                    # the top-left corner: the bottom right stays
+    corner = _area_box(bench, key) == (120.0, 130.0, 280.0, 170.0)
+    bench.focus(key, **area)
+    bench.drag((250, 200), (290, 220))                                    # inside: the whole box moves
+    body = _area_box(bench, key) == (140.0, 120.0, 300.0, 200.0) and bench.undo_steps() == 1
+    bench.focus(key, **area)
+    keyed = _keyed_drag(bench, key, "box_width", (400, 200), (440, 200), 340.0)
+    bench.focus(key, **area)
+    bench.focus("t")
+    hidden = bench.window.viewer._box_values() is None or bench.window.viewer._box_values()[0] != key
+    ok = edge and corner and body and keyed and hidden
+    return ok, f"right edge {edge}, corner {corner}, body move {body}, animated width keyed in one step {keyed}, hidden when deselected {hidden}"
+
+
+@probe("Rectangle.area")
+def _rectangle_area(bench):
+    return _area(bench, "rect")
+
+
+@probe("Radial.area")
+def _radial_area(bench):
+    return _area(bench, "rad")
+
+
+def _point_knobs(bench, key, names):
+    p = bench.params(key)
+    return tuple(float(p[n]) for n in names)
+
+
+@probe("Ramp.points")
+def _ramp_points(bench):
+    ends = dict(p0_x=100.0, p0_y=100.0, p1_x=600.0, p1_y=100.0)
+    bench.focus("ramp", **ends)
+    taken = bench.drag((600, 100), (650, 140))                            # p1 moves, p0 stays
+    names = ("p0_x", "p0_y", "p1_x", "p1_y")
+    p1 = bool(taken) and _point_knobs(bench, "ramp", names) == (100.0, 100.0, 650.0, 140.0) and bench.undo_steps() == 1
+    bench.focus("ramp", **ends)
+    bench.drag((100, 100), (80, 60))
+    p0 = _point_knobs(bench, "ramp", names) == (80.0, 60.0, 600.0, 100.0)
+    bench.focus("ramp", **ends)
+    keyed = _keyed_drag(bench, "ramp", "p0_x", (100, 100), (130, 100), 130.0)
+    bench.focus("ramp", **ends)
+    bench.focus("t")
+    hidden = bench.window.viewer._point_values() is None
+    ok = p0 and p1 and keyed and hidden
+    return ok, f"p1 drag {p1}, p0 drag {p0}, animated p0 keyed in one step {keyed}, hidden when deselected {hidden}"
+
+
+@probe("CornerPin.pins")
+def _cornerpin_pins(bench):
+    width = bench.window.viewer.format_rect.width()
+    height = bench.window.viewer.format_rect.height()
+    pins = {f"to{i}_{a}": v for i, (x, y) in enumerate(((0.0, 0.0), (width, 0.0), (0.0, height), (width, height)), 1)
+            for a, v in (("x", x), ("y", y))}
+    bench.focus("cp", **pins)
+    taken = bench.drag((width, height), (width - 60, height - 40))      # pin 4, the bottom right corner
+    after = dict(pins, to4_x=width - 60, to4_y=height - 40)
+    moved = bool(taken) and all(float(bench.params("cp")[k]) == v for k, v in after.items()) and bench.undo_steps() == 1
+    bench.focus("cp", **pins)
+    bench.drag((0, 0), (30, 20))                                          # pin 1, the top left corner
+    first = float(bench.params("cp")["to1_x"]) == 30.0 and float(bench.params("cp")["to1_y"]) == 20.0
+    bench.focus("cp", **pins)
+    keyed = _keyed_drag(bench, "cp", "to2_x", (width, 0), (width - 50, 0), width - 50)
+    bench.focus("cp", **pins)
+    bench.focus("t")
+    hidden = bench.window.viewer._point_values() is None
+    ok = moved and first and keyed and hidden
+    return ok, f"pin 4 drag {moved}, pin 1 drag {first}, animated to2 keyed in one step {keyed}, hidden when deselected {hidden}"
 
 
 # -- Tracker and GridWarp: controls NodeBased already drew, now measured ------------------------------------------------------

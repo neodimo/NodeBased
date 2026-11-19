@@ -172,12 +172,32 @@ def snap_rotate(value, step=ROTATE_SNAP_STEP, tolerance=ROTATE_SNAP_TOLERANCE):
 # the Viewer by dragging its edges."; Text: "You can also move and resize the box in the Viewer." and its center "You can also
 # move it using Ctrl/Cmd +drag." Knobs per node: (x, y, width, height) of the box in data coordinates, rows counting down.
 BOX_NODES = {"Crop": ("x", "y", "width", "height"), "Text": ("box_x", "box_y", "box_width", "box_height"),
-             "ColorTransfer": ("roi_x", "roi_y", "roi_r", "roi_t")}
+             "ColorTransfer": ("roi_x", "roi_y", "roi_r", "roi_t"),
+             # Rectangle and Radial (lane 10 step T9): their area box, rows down like Text's. Nuke 17.0 Reference Guide,
+             # Rectangle: "area ... You can also adjust the rectangle in the Viewer"; Radial: "area ... You can also adjust
+             # the area in the Viewer". The drag grabs a corner, an edge or the body, as for Text's box.
+             "Rectangle": ("box_x", "box_y", "box_width", "box_height"),
+             "Radial": ("box_x", "box_y", "box_width", "box_height")}
 # Nodes whose box knobs are corners counted from the bottom left (Nuke's x, y, r, t), not (x, y, width, height) rows down.
 # ColorTransfer: Nuke 17.0 Reference Guide, ColorTransfer, ROI: "You can also adjust the ROI in the Viewer by dragging its edges."
 # All four zero is the guide's default ("set to cover the entire input"), so that box is drawn over the whole frame.
 CORNER_BOX_NODES = ("ColorTransfer",)
 GRIPS = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
+
+# Point handles (lane 10 step T9): knob pairs drawn as draggable points in data coordinates, rows counting down (CornerPin's
+# pin 1 is the top left corner, `cornerpinknobs`). Ramp: p0 and p1, the ramp's two ends; CornerPin: the four to-pins.
+POINT_NODES = {"Ramp": (("p0_x", "p0_y"), ("p1_x", "p1_y")),
+               "CornerPin": tuple((f"to{i}_x", f"to{i}_y") for i in (1, 2, 3, 4))}
+
+
+def point_hit(point, points, radius):
+    """Index of the point in `points` nearest `point` within `radius`, else None."""
+    best = None
+    for index, (x, y) in enumerate(points):
+        distance = math.hypot(point[0] - x, point[1] - y)
+        if distance <= radius and (best is None or distance < best[1]):
+            best = (index, distance)
+    return None if best is None else best[0]
 
 
 def box_grips(x, y, w, h):
