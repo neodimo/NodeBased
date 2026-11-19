@@ -21,7 +21,8 @@ Bokeh's per-pixel blur sizes; Bokeh adds the depth reading, the focus region, th
   "when enabled, you can use the Lens controls to match your physical lens characteristics ... when disabled, the Lens controls have no effect". On,
   the blur is the circle of confusion of a thin lens, c = f^2 |d - s| / (N d (s - f)) (the standard optics formula, a "convention" source),
   with the distances in millimetres (world scale times its multiplier; mm, cm, m, in and ft are ours, the page names none), s the near or far edge
-  of the focus region, and its radius c / 2 turned into pixels by the film width: the frame's width over the aperture width in millimetres. The
+  of the focus region, and its radius c / 2 turned into pixels by the film width: the frame's width over the aperture width in millimetres (the
+  filter's width over its height is then the pixels per millimetre across over those up, so the aperture height acts). The
   35mm film format is the guide's 22 x 16 aperture; Custom lets the aperture be typed ("set Film Format to Custom and then enter the required
   aperture dimensions in mm"); the page lists no other format.
 * Outputs (`outputType`): Defocused Image; Lens Bloom ("just the bloom effect"); Focal Distance Visualization ("Red - the focal plane, where your
@@ -151,6 +152,13 @@ def amounts(dist, p):
     return front, back, below, above
 
 
+def aperture(p):
+    """(width, height) of the film aperture in millimetres: the format's own, or the typed ones with Custom."""
+    if p.get("filmFormat", "35mm") == "Custom":
+        return max(1e-6, float(p.get("apertureWidth", 22.0))), max(1e-6, float(p.get("apertureHeight", 16.0)))
+    return FILM_APERTURES.get(p.get("filmFormat", "35mm"), (22.0, 16.0))
+
+
 def lens_radius(dist, below, above, p, width):
     """The real world lens: the thin-lens circle of confusion at each pixel, as a radius in pixels (see the module's note)."""
     scale = WORLD_SCALES.get(p.get("worldScale", "cm"), 10.0) * max(1e-9, float(p.get("worldScaleMultiplier", 1.0)))
@@ -159,10 +167,7 @@ def lens_radius(dist, below, above, p, width):
     s = np.where(dist < below, below, above) * scale
     s = np.maximum(s, f * 1.0001)
     coc = f * f * np.abs(d - s) / (n * d * (s - f))
-    if p.get("filmFormat", "35mm") == "Custom":
-        film = max(1e-6, float(p.get("apertureWidth", 22.0)))
-    else:
-        film = FILM_APERTURES.get(p.get("filmFormat", "35mm"), (22.0, 16.0))[0]
+    film = aperture(p)[0]
     inside = (dist >= below) & (dist <= above)
     return np.where(inside, 0.0, coc / 2.0 * (width / film))
 
@@ -222,6 +227,12 @@ def _gather(image, z, radii, sides, p, kernel):
     if p.get("kernelType") == "Input" and kernel is not None and p.get("missingKernelChannel", "none") not in ("none", ""):
         if not np.any(kernel[..., 3] > 0):
             zp["filter_channel"] = str(p["missingKernelChannel"])
+    if int(p.get("realWorldLens", 0)):
+        # Pixels are not square on the film unless the picture and the aperture share a shape: the filter's width over its height is the ratio of the
+        # pixels per millimetre across and up.
+        height, width = image.shape[:2]
+        film_w, film_h = aperture(p)
+        zp["aspect"] = min(10.0, max(0.1, zp["aspect"] * (width / film_w) / (height / film_h)))
     sph = (float(p["kSphAbb"]), max(1e-3, float(p.get("bloomCurvature", 2.0)))) if float(p.get("kSphAbb", 0.0)) else None
     return Evaluator._zdefocus(image, z, zp, kernel, override={"z": z, "radii": radii, "sides": sides, "sph": sph})
 
