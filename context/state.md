@@ -1,3 +1,7 @@
+## Lane 9 step X6 (11/19): the last open marks in Filter and Draw
+
+Roto `format` chooser, EdgeBlur `output`, VectorBlur `normalize` (scatter when off), Flare probe off-centre (corners angle `rel` now shows), LensDistortion's nine buttons recorded with the guide's sentences, Bokeh's Deep Input and Camera checked. Fidelity: EdgeBlur 97.1 -> 100.0, VectorBlur 92.4 -> 95.0, Flare 95.5 -> 96.1, Roto 98.8 (widget mark gone), overall 97.9 -> 97.9; lane 9 worklist 0 open. Details in the TASKLOG note and docs/PARITY_2D.md "Lane 9 step notes".
+
 ## Lane 2 step X6 (11/19): Kronos's Method and Strength, SmartVector's Export Write, and the last panel marks
 
 Kronos gets Method and Strength on the estimator MotionBlur's Regularized uses (nodebased/retimeknobs.py `estimate_flows`; Local is the old estimate, so saved nodes need no flag and no schema change; tests/test_l2_x6_kronos_method.py holds the pixel digests of the code before). SmartVector's Export Write adds a Write (nodebased/smartvectorknobs.py). IBKColor's Darks and Lights are rgb split knobs. The pairing's `accept_widget` marks a widget that differs on purpose, with the reason. Fidelity: Kronos 97.4, SmartVector 97.7, MatchGrade 99.6, IBKColor 100.0; overall 97.9. Lane 2 worklist: 87 open (Primatte, Ultimatte), 36 accepted. Schema stays 38.
