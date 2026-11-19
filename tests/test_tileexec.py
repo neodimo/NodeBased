@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
+from nodebased import readspaces
 from nodebased.core import Dispatcher, demo_document
 from nodebased.decodepool import DecodeAheadPool
 from nodebased.imaging import Evaluator, write_png
@@ -814,6 +815,7 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
             path = self._plate(temp)
             document = _read_view_document(path)
             params = dict(document["nodes"]["r"]["params"])
+            params["colorspace"] = readspaces.token(document)      # the Read's colorspace as the executor sends it: the project's defaults by file type
             old_key = _read_decode_key(params, 1)
             pool = DecodeAheadPool(max_workers=1, budget_bytes=50_000_000)
             executor = TileExecutor(decode_pool=pool)

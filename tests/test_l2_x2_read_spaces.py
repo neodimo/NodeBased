@@ -14,7 +14,7 @@ import OpenImageIO as oiio
 import tests.isolation  # noqa: F401
 from nodebased import color, projectsettings, readspaces
 from nodebased.color import cineon_to_linear, to_working
-from nodebased.core import SCHEMA_VERSION, Dispatcher, empty_document, upgrade_document
+from nodebased.core import SCHEMA_VERSION, SPECS, Dispatcher, empty_document, upgrade_document
 from nodebased.imaging import Evaluator
 from nodebased.media import resolve_space
 from nodebased.tileexec import TileExecutor
@@ -67,6 +67,7 @@ class ReadSpaceTests(unittest.TestCase):
 
     def test_a_document_saved_before_keeps_reading_a_log_file_as_srgb(self):
         old = empty_document()
+        old["nodes"]["r"] = {"type": "Read", "name": "Read", "params": dict(SPECS["Read"]["params"]), "inputs": {}, "pos": [0, 0], "disabled": False}
         old["version"] = 35
         upgraded = upgrade_document(old)
         self.assertEqual(upgraded["version"], SCHEMA_VERSION)
@@ -74,6 +75,16 @@ class ReadSpaceTests(unittest.TestCase):
         self.assertEqual([fields[n] for n in readspaces.FIELDS], list(readspaces.LEGACY))
         self.assertEqual(readspaces.token(upgraded), "Auto")        # the string an old document always sent: its cache keys do not change
         self.assertNotEqual(readspaces.token(empty_document()), "Auto")
+
+    def test_a_read_inside_a_group_counts_and_a_document_without_a_read_is_left_alone(self):
+        nested = empty_document()
+        nested["nodes"]["g"] = {"type": "Group", "name": "Group", "params": {}, "inputs": {}, "pos": [0, 0], "disabled": False,
+                                "graph": {"nodes": {"r": {"type": "Read", "name": "Read", "params": {}, "inputs": {}, "pos": [0, 0], "disabled": False}}}}
+        nested["version"] = 35
+        self.assertEqual(upgrade_document(nested)["settings"]["project"], {"log_lut": "sRGB"})
+        bare = empty_document()
+        bare["version"] = 35
+        self.assertNotIn("project", upgrade_document(bare)["settings"])
 
     def test_the_settings_reject_an_unknown_space_and_round_trip_through_the_operation(self):
         d = Dispatcher()

@@ -3186,8 +3186,13 @@ def upgrade_document(document):
         # v35 -> v36: the project's default colour spaces by file type (Nuke's int8LUT, int16LUT, logLUT, floatLUT; settings.project,
         # nodebased/readspaces.py). A new project starts with the guide's defaults, where a log file (Cineon, DPX) is read as Cineon;
         # a document saved before read such a file as sRGB, so it keeps that. The other three defaults are what Read always did.
+        # Only a document with a Read in it (a Group's inside too) has anything to keep.
+        def _holds_read(scope):
+            return any(isinstance(n, dict) and (n.get("type") == "Read" or (isinstance(n.get("graph"), dict)
+                                                                           and isinstance(n["graph"].get("nodes"), dict) and _holds_read(n["graph"]["nodes"])))
+                       for n in scope.values())
         settings = doc.get("settings")
-        if isinstance(settings, dict):
+        if isinstance(settings, dict) and isinstance(doc.get("nodes"), dict) and _holds_read(doc["nodes"]):
             project = settings.get("project")
             if not isinstance(project, dict):
                 project = settings["project"] = {}

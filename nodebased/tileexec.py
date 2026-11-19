@@ -588,6 +588,8 @@ class TileExecutor:
                 if node is None or not node["params"].get("path"):
                     continue
                 params = dict(node["params"])
+                if params.get("colorspace") == "Auto":
+                    params["colorspace"] = _readspaces.token(document)      # the project's default colour spaces, as the Read consumer asks for them
                 key = _read_decode_key(params, frame)
 
                 def decode_fn(p=params, f=frame):
