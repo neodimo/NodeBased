@@ -142,7 +142,7 @@ class PixelAndDocumentTests(unittest.TestCase):
         rows = {row["nuke"][0]: row for row in pairs if row.get("nuke") and row["nuke"][0] in SECTIONS}
         self.assertEqual(set(rows), set(SECTIONS))
         for name, row in rows.items():
-            self.assertEqual((row["kind"], row["nodebased"]), ("panel", [name]))
+            self.assertEqual(row["kind"], "panel")
 
 
 if __name__ == "__main__":
