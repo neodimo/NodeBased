@@ -1,3 +1,9 @@
+## 2026-11-18 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X1 (Wed 11/18): a Bokeh node, the defocus Nuke 17 ships beside ZDefocus, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T7 (Wed 11/18): the Curve Editor and Dope Sheet work like Nuke's (finish 1) (integrator tick)
+
+- **What was done:** `main` `4d32b761` -> `18e98016` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `18e98016`: Ran 10268 tests in 1931.318 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-18 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X1 (Wed 11/18): a ColorTransfer node, then the colour group's remaining layout rows (integrator tick)
 
 - **What was done:** `main` `ca71aee2` -> `71beb266` plus this docs commit. Evidence and per-lane commit

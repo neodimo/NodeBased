@@ -1,5 +1,34 @@
 ## Lane 2 step X1 (11/18 8:35 PM): ColorTransfer and the colour group's label and widget-type rows
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (10:36 PM on 2026-11-18 PDT)
+
+`main` moved `4d32b761` -> `18e98016` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `18e98016` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1118-2201.log`, started 10:03 PM): **Ran 10268 tests in 1931.318 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step X1 (Wed 11/18): a Bokeh node, the defocus Nuke 17 ships beside ZDefocus.** Commits:
+  - `cd425312` Fidelity report and worklist rebuilt after rebasing Bokeh onto ColorTransfer (overall 97.6)
+  - `ce28cd12` Bokeh: the bundled PARITY_2D copy, the step's TASKLOG and state notes
+  - `def382ce` Bokeh: PARITY_2D row 20, the regenerated fidelity report and review worklist (bundled copy identical), and the guide's check boxes typed as bool in the reference
+  - `ae45bd68` Bokeh: a missing matte channel reads as black, the Input kernel with nothing wired is the circular one, and the guide's check boxes are typed as such in the audit
+  - `cb3783b9` Bokeh: the parity mapping, the lens aperture's height, and tests for every knob, the kernels, the outputs, the panel order and the tiles
+  - `4ef02749` Bokeh: a depth-driven defocus node on ZDefocus's kernels, with the guide's focus region, multipliers, kernel, bloom and outputs, and its behaviour cases
+  Diff: 24 files changed, 1223 insertions(+), 123 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T7 (Wed 11/18): the Curve Editor and Dope Sheet work like Nuke's (finish 1).** Commits:
+  - `d51f755e` Lane 10 step T7 finish notes: Curve Editor 21 of 21 and Dope Sheet 12 of 12 in the fidelity report (111 of 111 documented panel behaviours); what each new behaviour does described in PANEL_INTERACTIONS
+  - `a79a8828` Curve Editor and Dope Sheet: the rest of Nuke's documented behaviours (lane 10, step T7 finish)
+  Diff: 9 files changed, 764 insertions(+), 73 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (9:56 PM on 2026-11-18 PDT)
 
 `main` moved `ca71aee2` -> `71beb266` (lane commits cherry-picked onto main in lane order) and then to this
