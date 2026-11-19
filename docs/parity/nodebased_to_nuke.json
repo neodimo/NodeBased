@@ -482,7 +482,7 @@
     {"nodebased": ["skew_y"], "nuke": ["skewY"], "kind": "renamed", "reason": "same control under another name; NodeBased's skew is a shear factor like its Transform node's"},
     {"nodebased": ["skew_order"], "nuke": ["skew_order"], "kind": "same"},
     {"nodebased": ["center_x", "center_y"], "nuke": ["center"], "kind": "components", "reason": "the pivot of the text block as two scalar params; NodeBased reads them as an offset from the box's centre, so the pivot follows the box"},
-    {"nodebased": [], "nuke": ["group_animation"], "kind": "unsupported", "reason": "Nuke's animation layers animate groups of characters or lines; NodeBased's Text draws one block and has no per-character animation"},
+    {"nodebased": ["group_animation"], "nuke": ["group_animation"], "kind": "same", "reason": "held on the node as a text entry (empty by default; the guide lists no default). Nuke's animation layers animate groups of characters or lines; NodeBased's Text draws one block and has no per-character groups, so the entry changes no pixel (lane 9 step X5)"},
     {"nodebased": ["ramp"], "nuke": ["ramp"], "kind": "same"},
     {"nodebased": ["p0_x", "p0_y"], "nuke": ["p0"], "kind": "components", "reason": "ramp start point as two scalar params; Nuke has one xy knob"},
     {"nodebased": ["p1_x", "p1_y"], "nuke": ["p1"], "kind": "components", "reason": "ramp end point as two scalar params; Nuke has one xy knob"},

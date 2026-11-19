@@ -34,7 +34,7 @@ import numpy as np
 NEW = {"yjustify": "top", "index": "Regular", "global_font_scale": 1.0, "font_width": 100.0, "font_height": 100.0,
        "kerning": 0.0, "tracking": 0.0, "baseline_shift": 0.0, "leading": 0.0,
        "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0, "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY",
-       "center_x": 0.0, "center_y": 0.0,
+       "center_x": 0.0, "center_y": 0.0, "group_animation": "",
        "ramp": "none", "p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0,
        "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 0.0,
        "enable_shadows": 0, "shadow_inherit_input_color": 0, "shadow_red": 0.0, "shadow_green": 0.0, "shadow_blue": 0.0,

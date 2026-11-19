@@ -1472,6 +1472,8 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("skew_x",), label="Skew X"), KnobGroup("float", ("skew_y",), label="Skew Y"),
         KnobGroup("enum", ("skew_order",), label="Skew order"),
         KnobGroup("xy", ("center_x", "center_y"), label="Centre offset"),
+        KnobGroup("string", ("group_animation",), label="Animation layers",
+                  help="Nuke's animation layers animate groups of characters or lines. NodeBased's Text draws one block, so the entry is kept with the node and the picture does not change with it."),
         KnobGroup("bool", ("enable_shadows",), label="Enable drop shadows"),
         KnobGroup("bool", ("shadow_inherit_input_color",), label="Inherit input color", section="Shadows"),
         KnobGroup("color", ("shadow_red", "shadow_green", "shadow_blue", "shadow_alpha"), label="Shadow colour"),
@@ -1685,7 +1687,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("LABColourSpace",), label="LAB colour space"), KnobGroup("float", ("stretchAmount",)), KnobGroup("float", ("stretchDirection",)),
         KnobGroup("enum", ("detailSource",), label="Detail source"), KnobGroup("float", ("detailAmount",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"),
         KnobGroup("float", ("rotate",)), KnobGroup("float", ("scale",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "MarkerRemoval": _groups(KnobGroup("bool", ("enabled",), label="Control channel enabled"), KnobGroup("enum", ("mode",), label="Paint type"), KnobGroup("int", ("linearsearch",), label="Bilinear Y search"), KnobGroup("string", ("ctrlMask",), label="Control channel"), KnobGroup("int", ("x_offset",), label="X offset", section="Pixel offset"), KnobGroup("int", ("y_offset",), label="Y offset")),
+    "MarkerRemoval": _groups(KnobGroup("enum", ("mode",), label="Paint type"), KnobGroup("int", ("linearsearch",), label="Bilinear Y search"), KnobGroup("bool", ("enabled",), label="Control channel enabled"), KnobGroup("string", ("ctrlMask",), label="Control channel"), KnobGroup("int", ("x_offset",), label="X offset", section="Pixel offset"), KnobGroup("int", ("y_offset",), label="Y offset")),
     "DustBust": _groups(KnobGroup("float_slider", ("enable",), soft_range=(0, 1)), KnobGroup("bool", ("view_source",)), KnobGroup("int", ("frame_offset",)), KnobGroup("float_slider", ("edge_hardness",), soft_range=(0, 1)), KnobGroup("string", ("maskchannel",))),
     "CurveTool": _groups(KnobGroup("enum", ("curve_type",), label="Curve type"),
         KnobGroup("string", ("channels",), label="Channels"), KnobGroup("int", ("avg_frames",), label="Frames for base average"),
@@ -2959,7 +2961,7 @@ NUKE_LAYOUT_LANE9.update({
 # Lane 9 step K (11/3): Text in the guide's order (the Draw chrome first, then message, box, justify, font, transform, colour and ramp, shadows).
 NUKE_LAYOUT_LANE9["Text"] = ("output", "premult", "cliptype", "replace", "invert", "opacity", "maskChannelInput", "inject", "invert_mask", "message", "box_x", "justify", "yjustify", "font", "index",
                              "global_font_scale", "font_size", "font_width", "font_height", "kerning", "tracking", "baseline_shift", "leading",
-                             "translate_x", "rotate", "scale", "skew_x", "skew_y", "skew_order", "center_x", "ramp", "red", "p1_x", "color0_red", "p0_x",
+                             "translate_x", "rotate", "scale", "skew_x", "skew_y", "skew_order", "center_x", "group_animation", "ramp", "red", "p1_x", "color0_red", "p0_x",
                              "enable_shadows", "shadow_inherit_input_color", "shadow_red", "shadow_opacity", "shadow_angle", "shadow_distance",
                              "shadow_softness", "shadow_expand")
 NUKE_LABELS["Text"] = {"premult": "Premult"}
