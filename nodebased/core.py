@@ -334,6 +334,7 @@ from . import zdefocusknobs as _zdefocusknobs
 from . import bokehknobs as _bokehknobs
 from . import timeknobs as _timeknobs
 from . import retimeknobs as _retimeknobs
+from . import smartvectorknobs as _smartvectorknobs
 from . import cornerpinknobs as _cornerpinknobs
 from . import profilenode as _profilenode
 from . import trackerknobs as _trackerknobs
@@ -945,7 +946,7 @@ SPECS = {
                      "vector_detail": 4, "smoothness": 1.0, "reanchor_interval": 5,
                      "flow_backend": "auto", "matte_channel": "None", "matte_output": "Background",
                      "match_strength": 1.5, "inpainting": 0, "matte_dilation": 50, "flicker_compensation": 0,
-                     "weight_red": 0.3, "weight_green": 0.6, "weight_blue": 0.1}},
+                     "weight_red": 0.3, "weight_green": 0.6, "weight_blue": 0.1, **_smartvectorknobs.EXPORT_COUNTER}},
     "VectorDistort": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
                        "params": {"reference_frame": 1, "blur_size": 0.0, "fade_frames": 20, "mix": 1.0, **_vectordistortknobs.NEW}},
     "VectorCornerPin": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
@@ -2592,7 +2593,7 @@ LIMITS.update(_behaviour2d.LIMITS)
 LIMITS.update(_drawfxbehaviour.LIMITS)
 LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_length": (0.0, 64.0),
                "legacy_shutter": (0, 1), "auto_shutter_time": (0, 1), "flicker_compensation": (0, 1), "vector_density": (0.02, 1.0), "legacy_vector_density": (0, 1),
-               "motion_strength": (0.1, 10.0)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
+               "motion_strength": (0.1, 10.0), "export_write": (0, 2147483647)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["retime_output"] = list(_retimeknobs.OUTPUTS)
 CHOICES["resample_type"] = list(_retimeknobs.RESAMPLES)

@@ -81,3 +81,32 @@ def infill(field, plan):
     out = np.array(field, np.float32, copy=True)
     out[region] = field[rows[region], cols[region]]
     return out
+
+
+# Export Write (`export_write`, tab Export; lane 2 step X6). The guide's button "adds a Write node with EXR settings" for the vectors the node makes, which are
+# written as EXR layers. Here it adds a Write on the node's output (a 32 bit float EXR of every channel, the node's frame range, zip, a lossless compression, because vectors must not be quantised), and counts the press on the node, as Reload's counter does, so the press is one change the
+# document and the undo history hold. It moves no pixel of the SmartVector itself.
+EXPORT_COUNTER = {"export_write": 0}
+
+
+def upgrade_params(kind):
+    """What a SmartVector saved before the Export Write button gets on load."""
+    return dict(EXPORT_COUNTER) if kind == "SmartVector" else {}
+
+
+def export_write_commands(key, nodes):
+    """The commands of the Export Write button for SmartVector `key`: create a Write node with EXR settings connected to it, and count the press.
+    Run as one batch they are one undo step. `nodes` is the document's node map (it holds the SmartVector and its position)."""
+    node = nodes[key]
+    ident, n = f"{key}-export", 1
+    while ident in nodes:
+        n += 1
+        ident = f"{key}-export{n}"
+    pos = list(node.get("pos") or [0, 0])
+    params = node.get("params") or {}
+    first, last = int(params.get("frame_start", 1)), int(params.get("frame_end", 100))
+    return [{"op": "create", "id": ident, "type": "Write", "name": f"{node.get('name', 'SmartVector')} Write",
+             "params": {"file_type": "exr", "bit_depth": "float", "channels": "all", "exr_compression": "zip", "first": first, "last": last, "use_limit": 1},
+             "pos": [pos[0] + 160, pos[1]]},
+            {"op": "connect", "id": ident, "input": "image", "source": key},
+            {"op": "set", "id": key, "param": "export_write", "value": int(params.get("export_write", 0)) + 1}]

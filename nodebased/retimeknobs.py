@@ -46,6 +46,19 @@ _KRONOS_STEP_N = {"shutter_time": 0.0, "auto_shutter_time": 0, "vector_detail": 
 DENSITY_FLAG = "legacy_vector_density"
 _DENSITY_NEW = {"Kronos": {"vector_density": 0.3, DENSITY_FLAG: 0}, "OFlow": {"vector_density": 0.2, DENSITY_FLAG: 0}}
 _DENSITY_OLD = {"vector_density": 1.0, DENSITY_FLAG: 1}
+# Step X6 (11/19): Kronos's Method (`motionEstimation`) and Strength (`strength`), as the guide gives them. "Local - uses local block matching to estimate
+# motion vectors ... This option is for legacy compatibility. Regularized - uses semi-global motion estimation to produce more consistent vectors
+# between regions", and Strength, "only active if Method is set to Regularized": "Higher values allow you to accurately match similar pixels in one
+# image to another, concentrating on detail matching even if the resulting motion field is jagged. Lower values ... are less likely to provide you
+# with the odd spurious vector, producing smoother results" (default 1.5). Local is the estimate this node always made (the window match at the
+# node's Smoothness), so a node saved before reads Local and renders the same pixels with no flag of its own. Regularized is that estimate with the
+# Smoothness the Strength gives (SmartVector's rule: `smartvectorknobs.effective_smoothness`) and then the edge-aware pass MotionBlur's Regularized
+# uses (`motionblurknobs._regularize`): each vector averaged with its neighbours of similar colour, so vectors agree inside a region and differ across
+# its edges. A new node is Regularized (the guide: "a new node defaults to Regularized"). OFlow's table in the guide has neither knob, so OFlow keeps
+# its estimator.
+ESTIMATORS = ("Local", "Regularized")
+_ESTIMATOR_NEW = {"Kronos": {"motion_method": "Regularized", "motion_strength": 1.5}}
+_ESTIMATOR_OLD = {"Kronos": {"motion_method": "Local", "motion_strength": 1.5}}
 # Step R (11/16): Resampling and the three luminance weights of both nodes. `resample_type` is the filter the motion warp samples with
 # (Bilinear is the guide's default and what every saved node used); the weights are the guide's 0.3, 0.6, 0.1 on a new node, and a node saved
 # before step R gets the Rec. 709 weights its estimator always read, so its pixels do not move.
@@ -55,7 +68,7 @@ _STEP_R_NEW = {"resample_type": "Bilinear", "weight_red": 0.3, "weight_green": 0
 _STEP_R_OLD = {"resample_type": "Bilinear", "weight_red": REC709[0], "weight_green": REC709[1], "weight_blue": REC709[2]}
 NEW = {
     "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 0.5, "retimed_channels": "all", FLAG: 0, "timing": "speed",
-               SHUTTER_FLAG: 0, **_KRONOS_STEP_N, **_STEP_R_NEW, **_DENSITY_NEW["Kronos"]},
+               SHUTTER_FLAG: 0, **_KRONOS_STEP_N, **_STEP_R_NEW, **_DENSITY_NEW["Kronos"], **_ESTIMATOR_NEW["Kronos"]},
     "OFlow": {"input_speed": 0.5, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_NEW,
               **_DENSITY_NEW["OFlow"]},
 }
@@ -63,7 +76,7 @@ NEW = {
 # shutter it had (the output speed wide, `shutter_time` unread); `legacy_shutter` says so.
 OLD = {
     "Kronos": {"input_start": 1.0, "input_end": 100.0, "input_speed": 1.0, "retimed_channels": "all", FLAG: 1, "timing": "speed", "frame": -1.0,
-               SHUTTER_FLAG: 1, **_KRONOS_STEP_N, **_STEP_R_OLD, **_DENSITY_OLD},
+               SHUTTER_FLAG: 1, **_KRONOS_STEP_N, **_STEP_R_OLD, **_DENSITY_OLD, **_ESTIMATOR_OLD["Kronos"]},
     "OFlow": {"input_speed": 1.0, "retimed_channels": "all", "interpolation": "motion", "auto_shutter_time": 0, "flicker_compensation": 0, **_STEP_R_OLD,
               **_DENSITY_OLD},
 }
@@ -251,27 +264,57 @@ def estimate_flows(first, second, params, backend):
     height, width = grey_a.shape[:2]
     step = density_step(params, height, width)
     levels = int(params.get("vector_detail", 4))
+    smoothness = float(params.get("smoothness", 1.0))
+    regularized = str(params.get("motion_method", "Local")) == "Regularized"
+    if regularized:
+        from .smartvectorknobs import effective_smoothness
+        smoothness = effective_smoothness(smoothness, params.get("motion_strength", 1.5))
+
+    def finish(fw, bw, occ):
+        """Regularized adds the edge-aware pass, each field guided by the picture it is defined on."""
+        if regularized:
+            from .motionblurknobs import _regularize
+            plane = lambda grey: np.asarray(grey, np.float32)[..., 0]          # the grey picture keeps every channel; one carries the weighted luminance  # noqa: E731
+            fw, bw = _regularize(np.asarray(fw, np.float32), plane(grey_a)), _regularize(np.asarray(bw, np.float32), plane(grey_b))
+        return fw, bw, occ
+
     if step == 1:
-        return flow_pair(grey_a, grey_b, vector_detail=levels, smoothness=float(params.get("smoothness", 1.0)), backend=backend)
+        return finish(*flow_pair(grey_a, grey_b, vector_detail=levels, smoothness=smoothness, backend=backend))
     # The vectors are kept at one per `step` pixels: the full-size estimate averaged over each block and brought back to full size by bilinear
     # sampling. (Estimating on the averaged-down picture instead was measured noisier on a plate with two motions: it lost the detail the estimator
     # matches on, so a lower value gave a rougher field, not a smoother one.)
-    fw, bw, occ = flow_pair(grey_a, grey_b, vector_detail=levels, smoothness=float(params.get("smoothness", 1.0)), backend=backend)
-    fw, bw = (_block_field(np.asarray(field, np.float32), step) for field in (fw, bw))
-    return fw, bw, occ
+    fw, bw, occ = flow_pair(grey_a, grey_b, vector_detail=levels, smoothness=smoothness, backend=backend)
+    blocks = [_block_means(np.asarray(field, np.float32), step) for field in (fw, bw)]
+    if regularized:
+        # The edge-aware pass runs on the block vectors (one per step x step pixels), guided by the picture averaged to the same blocks: the vectors
+        # are that sparse already, and a pass over every pixel would cost step squared more for the same field.
+        from .motionblurknobs import _down, _regularize
+        guide = lambda grey: _down(np.asarray(grey, np.float32)[..., 0], step)          # noqa: E731
+        blocks = [_regularize(blocks[0], guide(grey_a)), _regularize(blocks[1], guide(grey_b))]
+    return tuple(_block_sample(b, step, height, width) for b in blocks) + (occ,)
+
+
+def _block_means(field, step):
+    """`field` (h x w x 2 vectors in pixels) as one averaged vector per step x step block."""
+    import numpy as np
+    height, width = field.shape[:2]
+    ph, pw = (-height) % step, (-width) % step
+    padded = np.pad(field, ((0, ph), (0, pw), (0, 0)), mode="edge")
+    return padded.reshape(padded.shape[0] // step, step, padded.shape[1] // step, step, 2).mean(axis=(1, 3)).astype(np.float32)
+
+
+def _block_sample(blocks, step, height, width):
+    """The block vectors sampled back at every pixel of a height x width picture by bilinear interpolation."""
+    import numpy as np
+    from .opticalflow import _sample
+    xs = np.clip((np.arange(width, dtype=np.float32) + 0.5) / step - 0.5, 0, blocks.shape[1] - 1)
+    ys = np.clip((np.arange(height, dtype=np.float32) + 0.5) / step - 0.5, 0, blocks.shape[0] - 1)
+    return _sample(blocks, np.broadcast_to(xs, (height, width)), np.broadcast_to(ys[:, None], (height, width))).astype(np.float32)
 
 
 def _block_field(field, step):
     """`field` (h x w x 2 vectors in pixels) as one averaged vector per step x step block, sampled back at every pixel by bilinear interpolation."""
-    import numpy as np
-    from .opticalflow import _sample
-    height, width = field.shape[:2]
-    ph, pw = (-height) % step, (-width) % step
-    padded = np.pad(field, ((0, ph), (0, pw), (0, 0)), mode="edge")
-    blocks = padded.reshape(padded.shape[0] // step, step, padded.shape[1] // step, step, 2).mean(axis=(1, 3)).astype(np.float32)
-    xs = np.clip((np.arange(width, dtype=np.float32) + 0.5) / step - 0.5, 0, blocks.shape[1] - 1)
-    ys = np.clip((np.arange(height, dtype=np.float32) + 0.5) / step - 0.5, 0, blocks.shape[0] - 1)
-    return _sample(blocks, np.broadcast_to(xs, (height, width)), np.broadcast_to(ys[:, None], (height, width))).astype(np.float32)
+    return _block_sample(_block_means(field, step), step, *field.shape[:2])
 
 
 def retimed_picture(ap, bp, alpha, method, params, *, flow_backend, mosrc=None, given=None, mattes=None, output="result", sample_whole=False):

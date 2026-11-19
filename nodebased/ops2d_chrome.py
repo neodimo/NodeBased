@@ -333,6 +333,8 @@ def upgrade_nodes(nodes):
         added.update(samplerknobs.upgrade_params(node.get("type")))            # Sampler's Normalize X (lane 2 step R)
         from . import hsvtoolknobs
         added.update(hsvtoolknobs.upgrade_params(node.get("type")))            # Vectorfield's file, GPU and 3DL knobs (lane 9 step X4)
+        from . import smartvectorknobs
+        added.update(smartvectorknobs.upgrade_params(node.get("type")))        # SmartVector's Export Write counter (lane 2 step X6)
         from . import bokehknobs
         added.update(bokehknobs.upgrade_params(node.get("type")))              # Bokeh's expand bbox and deep integration (lane 9 step X3)
         if added and isinstance(params, dict):

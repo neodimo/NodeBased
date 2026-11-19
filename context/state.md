@@ -1,3 +1,7 @@
+## Lane 2 step X6 (11/19): Kronos's Method and Strength, SmartVector's Export Write, and the last panel marks
+
+Kronos gets Method and Strength on the estimator MotionBlur's Regularized uses (nodebased/retimeknobs.py `estimate_flows`; Local is the old estimate, so saved nodes need no flag and no schema change; tests/test_l2_x6_kronos_method.py holds the pixel digests of the code before). SmartVector's Export Write adds a Write (nodebased/smartvectorknobs.py). IBKColor's Darks and Lights are rgb split knobs. The pairing's `accept_widget` marks a widget that differs on purpose, with the reason. Fidelity: Kronos 97.4, SmartVector 97.7, MatchGrade 99.6, IBKColor 100.0; overall 97.9. Lane 2 worklist: 87 open (Primatte, Ultimatte), 36 accepted. Schema stays 38.
+
 ## Lane 9 step X5 (11/19): the last gaps on SplineWarp, LensDistortion, Grain, MarkerRemoval and Text
 
 ## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (2:46 PM on 2026-11-19 PDT)

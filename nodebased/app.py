@@ -16170,7 +16170,10 @@ class Window(QMainWindow):
                     reset_button.setObjectName(f"{group.params[0]}-button")
                     if group.help:
                         reset_button.setToolTip(group.help)
-                    reset_button.clicked.connect(lambda _checked=False, k=key, c=group.params[0]: self.hsvtool_reset(k, c))
+                    if group.params[0] == "export_write":
+                        reset_button.clicked.connect(lambda _checked=False, k=key: self.smartvector_export_write(k))      # SmartVector's Export Write
+                    else:
+                        reset_button.clicked.connect(lambda _checked=False, k=key, c=group.params[0]: self.hsvtool_reset(k, c))
                     form.addRow(reset_button)
                     continue
                 if group.kind == "xyz":
@@ -22820,6 +22823,11 @@ class Window(QMainWindow):
         first, last = retimeknobs.reset_range(self.graph_document())
         self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": "input_start", "value": first},
                                                   {"op": "set", "id": key, "param": "input_end", "value": last}]})
+
+    def smartvector_export_write(self, key):
+        """SmartVector's Export Write: a Write node with EXR settings on the node's output, in one undo step (nodebased/smartvectorknobs.py)."""
+        from . import smartvectorknobs
+        self.command({"op": "batch", "commands": smartvectorknobs.export_write_commands(key, self.graph_nodes())})
 
     def hsvtool_reset(self, key, counter):
         """Nuke's Reset beside a Hue, Saturation or Brightness range: that section's range, adjustment and rolloff back to their defaults, in one undo step."""
