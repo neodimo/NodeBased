@@ -211,6 +211,8 @@ NOT_PIXEL["Flare"].update({name: ("multiple-flare controls only act when mult_nu
                            for name in ("mult_offset", "mult_size", "mult_color", "mult_brightness", "mult_visibility", "mult_flattening", "mult_rotate")})
 NOT_PIXEL["Flare"].update({name: ("the per-family seed only changes deterministic randomization when its matching variation is nonzero and mult_num is greater than 1 (tests/test_2d_behaviour_extra_draw.py)")
                            for name in ("mult_seed", "mult_offset_seed", "mult_size_seed", "mult_color_seed", "mult_brightness_seed", "mult_visibility_seed", "mult_flattening_seed", "mult_rotate_seed")})
+# Lane 9 step X3 (11/19): the guide says Integrate Deep Front and Back Separately acts on the Deep input, which NodeBased does not have.
+NOT_PIXEL["Bokeh"] = {"integrateFrontAndBackSeperately": "acts on the Deep input only, and NodeBased has no Deep image (tests/test_l9_x3_bokeh.py shows it changes no pixels)"}
 NOT_PIXEL["Viewer"] = {name: "viewer display only" for name in (
     "frame_range", "frame_range_lock", "frame_increment", "clip_warning", "gain", "gamma", "rgb_only", "downrez",
     "ignore_pixel_aspect", "zoom_lock", "show_overscan", "full_frame_processing", "overscan", "safe_zone", "format_center",

@@ -440,9 +440,11 @@ _COUNT_KNOBS |= {("PointsTo3D", "ref_timeA"), ("PointsTo3D", "ref_timeB"), ("Poi
 # guide's table types it as a channel set (lane 9 step S). LensDistortion's distort in fisheye space is a check box whose default the guide writes
 # as 'enabled (if a fisheye Projection Model is selected)'.
 # Bokeh's real world lens simulation, normalize visualization and override near/far are check boxes (the page: "when enabled", "when this control is
-# enabled", "when enabled, you can override"; lane 9 step X1), listed as strings in the guide's table.
+# enabled", "when enabled, you can override"; lane 9 step X1), listed as strings in the guide's table. Integrate Deep Front and Back Separately and Expand
+# Bounding Box To Max Kernel Size are check boxes too ("when enabled ... integrated separately", "when enabled, the bounding box is increased"; step X3).
 _BOOL_KNOBS = {("ZDefocus", "use_input_channels"), ("Undistort", "distortInFisheyeSpace"), ("Bokeh", "realWorldLens"), ("Bokeh", "normalizeVisualization"),
-               ("Bokeh", "overrideNearAndFarForSlices")}
+               ("Bokeh", "overrideNearAndFarForSlices"),
+               ("Bokeh", "integrateFrontAndBackSeperately"), ("Bokeh", "expandBBoxToMaxKernelSize")}
 _FLOAT_KNOBS = {("IBKGizmo", "level"), ("Kronos", "timingFrame2"), ("OFlow", "timingFrame2")}
 # Knobs whose Nuke widget the guide's default cannot tell: IBKColor's Size (a pixel size, default 10) and multi ("patch black", default 0, which
 # the gizmo may show as a check box or a number). Left unmeasured and counted as such, as the rule asks.

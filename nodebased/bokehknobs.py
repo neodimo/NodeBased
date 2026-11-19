@@ -58,8 +58,16 @@ Bokeh's per-pixel blur sizes; Bokeh adds the depth reading, the focus region, th
   divided into during defocus calculations, which can help avoid objects at different depths overlapping incorrectly. The depth volume sliced is
   defined by the Focal Plane and Focus Region Size": 1 slice, no ordering (pixels gather from any depth: the overlap); 2, the front and back processed
   separately; more, that many equal slices of the volume (a pixel gathers from its own slice and nearer ones). Override Near/Far replaces the volume.
-* Not provided: the Deep and Camera inputs, Integrate Deep Front and Back Separately and Expand Bounding Box To Max Kernel Size (NodeBased images
-  keep their format and there is no Deep image); the mapping lists each as unsupported.
+* Expand bounding box (`expandBBoxToMaxKernelSize`, Kernel tab after Maximum Kernel Size): "when enabled, the bounding box is increased to
+  accommodate the kernel size if the kernel extends beyond the bounding box. When disabled, the parts of the kernel extending past the bounding box
+  are ignored." Ours (lane 9 step X3): on, the output's data window is the source's grown by the filter's reach (half the maximum kernel size) on every
+  side, as VectorBlur's Expand blur bbox does, and the ring takes the blur that spills out of the picture (outside the source there is no colour, no
+  depth beyond the edge's, no matte); off, the window is the source's and what the kernel reaches past it is ignored. The display window is the
+  format's either way, so the ring shows only where the source's data window is smaller than the format (a cropped plate). Needs the whole frame.
+* Integrate Deep Front and Back Separately (`integrateFrontAndBackSeperately`, Bokeh tab, last row): "when enabled, front and back deep data from the
+  Deep input is integrated separately". NodeBased has no Deep image and the Deep input is not provided, so the knob is kept for the layout and the
+  saved script and changes no pixels (the page says it acts on the Deep input only).
+* Not provided: the Deep and Camera inputs; the mapping lists each as unsupported.
 """
 from __future__ import annotations
 
@@ -79,15 +87,16 @@ FILM_APERTURES = {"35mm": (22.0, 16.0)}
 NEW = {"depthChannel": "depth.Z", "outputType": "Defocused Image", "focusOutput": "Both", "multiplier": 1.0, "frontmultiplier": 1.0,
        "backmultiplier": 1.0, "depthStyle": "Real", "focalPlane": 100.0, "focusRegionSize": 1.0, "focusRegionFalloff": "Linear",
        "defocusMatteChannel": "none", "normalizeVisualization": 1,
+       "integrateFrontAndBackSeperately": 0,
        "realWorldLens": 0, "focalLength": 35.0, "fStop": 6.0, "worldScale": "cm", "worldScaleMultiplier": 1.0, "filmFormat": "35mm",
        "apertureWidth": 22.0, "apertureHeight": 16.0,
        "bokeh_bloom": 0.0, "bloomCurvature": 2.0, "bloomThreshold": 0.7, "bloomMatteChannel": "none", "kSphAbb": 0.0, "kChrAbb": 0.0,
        "chromic_offset_red": 0.6, "chromic_offset_green": 1.0, "chromic_offset_blue": 1.0, "chromicAberrationMatteChannel": "none",
-       "kernelType": "Circular", "max_kernelsize": 256.0, "missingKernelChannel": "none", "kAspectRatio": 1.0, "kSoftness": 0.1, "kNumSides": 6,
+       "kernelType": "Circular", "max_kernelsize": 256.0, "expandBBoxToMaxKernelSize": 0, "missingKernelChannel": "none", "kAspectRatio": 1.0, "kSoftness": 0.1, "kNumSides": 6,
        "kCurvature": 0.1, "kRotation": 0.0,
        "correctiveSlices": 10, "overrideNearAndFarForSlices": 0, "slices_near": 0.0, "slices_far": 0.0}
 LIMITS = {"multiplier": (0.0, 1000.0), "frontmultiplier": (0.0, 1000.0), "backmultiplier": (0.0, 1000.0), "focalPlane": (-1.0e6, 1.0e6),
-          "focusRegionSize": (0.0, 1.0e6), "normalizeVisualization": (0, 1), "realWorldLens": (0, 1), "focalLength": (0.1, 10000.0),
+          "focusRegionSize": (0.0, 1.0e6), "normalizeVisualization": (0, 1), "integrateFrontAndBackSeperately": (0, 1), "expandBBoxToMaxKernelSize": (0, 1), "realWorldLens": (0, 1), "focalLength": (0.1, 10000.0),
           "fStop": (0.1, 128.0), "worldScaleMultiplier": (1.0e-6, 1.0e6), "apertureWidth": (0.01, 1000.0), "apertureHeight": (0.01, 1000.0),
           "bokeh_bloom": (0.0, 1000.0), "bloomCurvature": (0.0, 20.0), "bloomThreshold": (-1000.0, 1000.0), "kSphAbb": (-1.0, 1.0),
           "kChrAbb": (-10.0, 10.0), "chromic_offset_red": (-10.0, 10.0), "chromic_offset_green": (-10.0, 10.0),
@@ -101,9 +110,24 @@ MATTE_PARAMS = ("defocusMatteChannel", "bloomMatteChannel", "chromicAberrationMa
 _WORDS = {"red": 0, "r": 0, "green": 1, "g": 1, "blue": 2, "b": 2, "alpha": 3, "a": 3}
 
 
+ADDED_IN_X3 = {"integrateFrontAndBackSeperately": 0, "expandBBoxToMaxKernelSize": 0}
+
+
+def upgrade_params(kind):
+    """The two knobs step X3 added, at the values a Bokeh saved before them rendered with (both off), for `ops2d_chrome.upgrade_nodes`."""
+    return dict(ADDED_IN_X3) if kind == "Bokeh" else {}
+
+
 def needs_full_frame(p):
-    """The kernel image and the filter preview are whole pictures, and the lens reads the frame's width: tiles cannot do any of the three."""
-    return p.get("kernelType") == "Input" or p.get("outputType") == "Filter Shape" or bool(int(p.get("realWorldLens", 0)))
+    """The kernel image and the filter preview are whole pictures, the lens reads the frame's width, and an expanded box grows the picture's window:
+    tiles cannot do any of the four."""
+    return (p.get("kernelType") == "Input" or p.get("outputType") == "Filter Shape" or bool(int(p.get("realWorldLens", 0)))
+            or bool(int(p.get("expandBBoxToMaxKernelSize", 0))))
+
+
+def grow(p):
+    """How many pixels Expand Bounding Box To Max Kernel Size adds to every side of the picture's window: the filter's reach, or 0 with the knob off."""
+    return reach(p) if int(p.get("expandBBoxToMaxKernelSize", 0)) else 0
 
 
 def reach(p):

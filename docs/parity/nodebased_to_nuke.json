@@ -3105,7 +3105,7 @@
     {"nodebased": ["focusRegionFalloff"], "nuke": ["focusRegionFalloff"], "kind": "same"},
     {"nodebased": ["defocusMatteChannel"], "nuke": ["defocusMatteChannel"], "kind": "same"},
     {"nodebased": ["normalizeVisualization"], "nuke": ["normalizeVisualization"], "kind": "same"},
-    {"nodebased": [], "nuke": ["integrateFrontAndBackSeperately"], "kind": "unsupported", "reason": "NodeBased has no Deep image, so there is no deep front and back to integrate separately (the Deep Input is unsupported too)"},
+    {"nodebased": ["integrateFrontAndBackSeperately"], "nuke": ["integrateFrontAndBackSeperately"], "kind": "same"},
     {"nodebased": ["realWorldLens"], "nuke": ["realWorldLens"], "kind": "same"},
     {"nodebased": ["focalLength"], "nuke": ["focalLength"], "kind": "same"},
     {"nodebased": ["fStop"], "nuke": ["fStop"], "kind": "same"},
@@ -3124,7 +3124,7 @@
     {"nodebased": ["chromicAberrationMatteChannel"], "nuke": ["chromicAberrationMatteChannel"], "kind": "same"},
     {"nodebased": ["kernelType"], "nuke": ["kernelType"], "kind": "same"},
     {"nodebased": ["max_kernelsize"], "nuke": ["max_kernelsize"], "kind": "same"},
-    {"nodebased": [], "nuke": ["expandBBoxToMaxKernelSize"], "kind": "unsupported", "reason": "NodeBased keeps an image's format and has no bounding box that grows; samples past the picture's edge repeat its edge pixels"},
+    {"nodebased": ["expandBBoxToMaxKernelSize"], "nuke": ["expandBBoxToMaxKernelSize"], "kind": "same"},
     {"nodebased": ["missingKernelChannel"], "nuke": ["missingKernelChannel"], "kind": "same"},
     {"nodebased": ["kAspectRatio"], "nuke": ["kAspectRatio"], "kind": "same"},
     {"nodebased": ["kSoftness"], "nuke": ["kSoftness"], "kind": "same"},
@@ -3141,7 +3141,7 @@
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the shared mask strip every filter node carries (the Bokeh page lists its mattes under the Defocus, Bloom and Chromic Aberration matte channels)"}
    ],
    "skip_default": ["depthChannel"],
-   "default_notes": {"depthChannel": "the guide lists depth.Z and NodeBased starts on the same name; whether the picture carries that layer is up to the wired source"}
+   "default_notes": {"integrateFrontAndBackSeperately": "the knob acts on the Deep input only; NodeBased has no Deep image, so it is kept off, as the guide lists, and changes no pixels", "depthChannel": "the guide lists depth.Z and NodeBased starts on the same name; whether the picture carries that layer is up to the wired source"}
   },
   "Keyer": {
    "nodebased": "Keyer",

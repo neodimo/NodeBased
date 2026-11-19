@@ -268,7 +268,9 @@ class KnobsActTests(unittest.TestCase):
         "slices_near": (3.5, {**SLICES, "slices_far": 7.0}), "slices_far": (4.0, {**SLICES, "slices_near": 0.5}),
     }
     # depthChannel names a layer of the input (tested through the node below); missingKernelChannel needs a wired kernel with an empty alpha (above).
-    OTHER = {"depthChannel", "missingKernelChannel", "mix", "channels", "maskChannelInput", "invert_mask", "inject", "fringe"}
+    # integrateFrontAndBackSeperately acts on the Deep input only and changes no pixel, and expandBBoxToMaxKernelSize grows the window rather than the
+    # array this helper reads: tests/test_l9_x3_bokeh.py (lane 9 step X3) shows both.
+    OTHER = {"depthChannel", "missingKernelChannel", "integrateFrontAndBackSeperately", "expandBBoxToMaxKernelSize", "mix", "channels", "maskChannelInput", "invert_mask", "inject", "fringe"}
 
     def scene(self):
         picture = texture()
@@ -318,11 +320,12 @@ class LayoutAndRegistrationTests(unittest.TestCase):
         self.assertEqual(shown[:-4], [
             "Bokeh Channels", "Depth Channel", "Output Type", "Focus Region Output", "Multiplier", "Front Multiplier", "Back Multiplier", "Depth Style",
             "Focal Plane", "Focus Region Size", "Focus Region Falloff", "Defocus Matte Channel", "Normalize Visualization",
+            "Integrate Deep Front and Back Separately",
             "Real World Lens Simulation", "Focal Length", "Aperture", "World Scale", "World Scale Multiplier", "Film Format", "Aperture Width",
             "Aperture Height",
             "Bloom", "Curvature", "Bloom Threshold", "Bloom Matte Channel", "Spherical Aberration", "Chromic Aberration", "Chromic Aberration Offset",
             "Chromic Aberration Matte Channel",
-            "Kernel Type", "Maximum Kernel Size", "Missing Kernel Channel", "Aspect Ratio", "Softness", "Blade Count", "Curvature", "Rotation",
+            "Kernel Type", "Maximum Kernel Size", "Expand Bounding Box To Max Kernel Size", "Missing Kernel Channel", "Aspect Ratio", "Softness", "Blade Count", "Curvature", "Rotation",
             "Number of Corrective Slices", "Override Near/Far", "Near and Far"])
 
     def test_every_param_is_laid_out_once(self):

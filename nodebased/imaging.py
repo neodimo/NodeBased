@@ -4536,20 +4536,27 @@ class Evaluator:
             kernel_input = inputs[2] if len(inputs) > 2 else None
             mask = inputs[3] if len(inputs) > 3 else None
             layers = source.layers or {}
+            # Expand Bounding Box To Max Kernel Size (lane 9 step X3): the window grows by the filter's reach on every side, so the blur that spills past
+            # the picture is kept. The ring has no colour, no matte and the nearest edge depth.
+            ring = bokehknobs.grow(p)
+            window = source.data.expand(ring, ring) if ring else source.data
+            def padded(plane, edge):
+                return np.pad(plane, ((ring, ring), (ring, ring)), mode="edge" if edge else "constant") if ring else plane
             depth_plane = None
             if depth_input is not None:
-                depth_plane = depth_input.fit(source.data)[..., 0]
+                depth_plane = padded(depth_input.fit(source.data)[..., 0], True)
             elif p.get("depthChannel", "depth.Z") in layers or "." in p.get("depthChannel", "depth.Z") and p.get("depthChannel", "depth.Z").rsplit(".", 1)[0] in layers:
-                depth_plane = Evaluator._layer_of(kind, source, p.get("depthChannel", "depth.Z")).pixels[..., 0]
+                depth_plane = padded(Evaluator._layer_of(kind, source, p.get("depthChannel", "depth.Z")).pixels[..., 0], True)
             def named_plane(name):
                 try:
-                    return Evaluator._layer_of(kind, source, name).pixels[..., 0]
+                    return padded(Evaluator._layer_of(kind, source, name).pixels[..., 0], False)
                 except ValueError:
                     return None                  # a channel the picture does not have reads as black
-            planes = bokehknobs.planes_for(source.pixels, p, named_plane)
-            filtered = bokehknobs.render(source.pixels, depth_plane, p, None if kernel_input is None else kernel_input.pixels, planes)
-            pixels = Evaluator._apply_mask_mix(source.pixels, filtered, None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
-            return Raster(pixels, source.data, source.display, source.layers, source.meta)
+            base = source.fit(window)
+            planes = bokehknobs.planes_for(base, p, named_plane)
+            filtered = bokehknobs.render(base, depth_plane, p, None if kernel_input is None else kernel_input.pixels, planes)
+            pixels = Evaluator._apply_mask_mix(base, filtered, None if mask is None else mask.fit(window), p.get("mix", 1.0))
+            return Raster(pixels, window, source.display, source.layers, source.meta)
         if kind in ("Undistort", "Redistort"):
             return Evaluator._lens_warp(kind, p, inputs)
         if kind in UV_KINDS:

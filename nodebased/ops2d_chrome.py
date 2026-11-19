@@ -327,6 +327,8 @@ def upgrade_nodes(nodes):
         added.update(retimeknobs.upgrade_params(node.get("type")))             # Kronos and OFlow timing (lane 2 step J)
         from . import samplerknobs
         added.update(samplerknobs.upgrade_params(node.get("type")))            # Sampler's Normalize X (lane 2 step R)
+        from . import bokehknobs
+        added.update(bokehknobs.upgrade_params(node.get("type")))              # Bokeh's expand bbox and deep integration (lane 9 step X3)
         if added and isinstance(params, dict):
             for name, default in added.items():
                 params.setdefault(name, default)
