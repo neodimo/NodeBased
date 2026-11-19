@@ -45,7 +45,7 @@ FILTER_CHROME = {
     "Toe": ("rgb", True, True), "Dither": (None, True, True),
     "Blur": ("all", True, False), "Sharpen": (None, True, False), "ErodeFilter": ("all", True, False),
     "Median": (None, True, False), "Glow": (None, True, False), "Soften": (None, True, False),
-    "Defocus": (None, True, False), "ZDefocus": (None, True, False), "DirBlur": (None, True, False),
+    "Defocus": (None, True, False), "ZDefocus": (None, True, False), "Bokeh": ("rgba", True, False), "DirBlur": (None, True, False),
     "EdgeBlur": (None, True, False), "Glint": ("all", True, False), "Erode": (None, True, False), "DegrainSimple": ("all", True, False),
     "Bilateral": ("all", True, False), "Matrix": ("all", True, False), "Emboss": ("all", True, False),
     "BumpBoss": ("all", True, False), "Laplacian": (None, True, False), "Convolve": ("all", True, False),

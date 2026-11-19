@@ -380,6 +380,13 @@ def _zdefocus_rule(params, region, arity):
     return [region.expand(support, support)] * arity
 
 
+def _bokeh_rule(params, region, arity):
+    # The filter reaches half the maximum kernel size from a pixel (nodebased/bokehknobs.py); the named depth and matte layers follow the source.
+    from . import bokehknobs
+    support = bokehknobs.reach(params)
+    return [region.expand(support, support)] * arity
+
+
 def _defocus_rule(params, region, arity):
     # The disc reaches rx pixels along x and ry along y (nodebased/drawbehaviour.py: defocus, aspect ratio and scaling); the padding
     # is the larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
@@ -610,7 +617,7 @@ REGION_RULES = {
     "Soften": _soften_rule,
     "Defocus": _defocus_rule,
     "Bilateral": _bilateral_rule, "Denoise": _denoise_rule, "DegrainSimple": _degrain_rule,
-    "ZDefocus": _zdefocus_rule,
+    "ZDefocus": _zdefocus_rule, "Bokeh": _bokeh_rule,
     "ZMerge": _merge_rule, "ZSlice": _identity, "Remove": _identity,
     "DirBlur": _dirblur_rule,
     "DropShadow": _drop_shadow_rule,

@@ -910,6 +910,7 @@ def cases():
     _lightwrap_cases(Case, out)
     _bilateral_cases(Case, out)
     _denoise_cases(Case, out)
+    _bokeh_cases(Case, out)
     _vectorcornerpin_cases(Case, out)
     _warp_cases(Case, out)
     _lens_cases(Case, out)
@@ -2184,6 +2185,174 @@ def _denoise_cases(Case, out):
     case("denoise_default_result", (), {}, same, "convention", "Denoise at its defaults: the denoised picture",
          unscored="the guide names no algorithm; Foundry's Denoise is a trained model (the node 'requires' its analysis). NodeBased uses an edge-preserving "
                   "window average (nodebased/denoiseknobs.py); the step's tests show the residual variance falling with the amount")
+
+
+BOKEH_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/filter_nodes/bokeh.html"
+
+
+def _bokeh_cases(Case, out):
+    """Bokeh (lane 9 step X1). The page names what each knob does and gives no blur formula, so every size below follows nodebased/bokehknobs.py: the
+    radius is 10 pixels times the multiplier times the amount (the distance past the focus region over the pixel's own distance). On the ZP fixture
+    (one white pixel in the middle) behind a depth of 3 and a focal plane of 1 the amount is 2/3, so a multiplier of 0.6 gives a filter 4 pixels in
+    radius, and the output is the filter itself. Kernel shapes are compared in full; the sizes are ours and said so in each statement."""
+    def case(id, nuke_knobs, nb_params, expected, source, statement, unscored="", nb_inputs=("ZP", "ZD")):
+        out.append(Case(id=id, nuke="Bokeh", nuke_class="Bokeh", nuke_knobs=nuke_knobs, nuke_inputs=("ZP",), nb_kind="Bokeh", nb_params=nb_params,
+                        nb_inputs=nb_inputs, expected=expected, source=source, statement=statement, unscored=unscored))
+
+    mid_y, mid_x, reach = 6, 8, 4
+    offsets = [(dy, dx) for dy in range(-reach, reach + 1) for dx in range(-reach, reach + 1)]
+    base_nuke = (("focalPlane", 1.0), ("focusRegionSize", 0.0), ("multiplier", 0.6), ("max_kernelsize", 16.0), ("kSoftness", 0.0))
+    base = {"focalPlane": 1.0, "focusRegionSize": 0.0, "multiplier": 0.6, "max_kernelsize": 16.0, "kSoftness": 0.0}
+
+    def filter_of(weight):
+        """The point spread by the filter whose weight at offset (dy, dx) from the middle is `weight(dy, dx)`: the filter itself, summing to 1."""
+        def expected(fx):
+            ref = np.zeros(fx["ZP"].shape, np.float64)
+            total = sum(max(0.0, weight(dy, dx)) for dy, dx in offsets)
+            for dy, dx in offsets:
+                ref[mid_y + dy, mid_x + dx, :] = max(0.0, weight(dy, dx)) / total
+            return ref, np.ones(ref.shape, bool)
+        return expected
+
+    def disc(radius):
+        return filter_of(lambda dy, dx: float(dx * dx + dy * dy <= radius * radius + 1e-9))
+
+    point = lambda fx: (fx["ZP"].astype(np.float64), np.ones(fx["ZP"].shape, bool))
+    page = BOKEH_GUIDE
+    ours = "(the page gives no size: ours, 10 pixels times the multiplier times the amount 2/3, is 4 here)"
+    case("bokeh_circular_point_behind_the_plane_is_a_disc", base_nuke, base, disc(4), "convention",
+         f"Bokeh circular kernel ({page}): 'a clean, round lens shape that produces a round bloom effect': a bright point behind the focal plane "
+         f"becomes a flat disc {ours}")
+    case("bokeh_blur_grows_with_distance_from_the_plane", (("focalPlane", 2.0), *base_nuke[1:]), {**base, "focalPlane": 2.0}, disc(2), "convention",
+         f"Bokeh: 'lower values move the plane towards the front of the image and higher values move the plane towards the back': the plane at 2 is nearer "
+         f"the point (depth 3) than the plane at 1, so the disc is smaller: amount 1/3, a radius of 2 pixels")
+    case("bokeh_point_on_the_focal_plane_stays_sharp", (("focalPlane", 3.0), *base_nuke[1:]), {**base, "focalPlane": 3.0}, point, "guide",
+         f"Bokeh: the focal plane is 'the plane on which the image is totally in focus' ({page}), so a point at its depth is unchanged")
+    case("bokeh_focus_region_size_widens_the_plane_in_focus", (("focalPlane", 2.0), ("focusRegionSize", 2.0), *base_nuke[2:]),
+         {**base, "focalPlane": 2.0, "focusRegionSize": 2.0}, point, "guide",
+         f"Bokeh: Focus Region Size is 'the size of the plane totally in focus. Larger values increase the width of the plane' ({page}): a plane of width 2 "
+         "at 2 reaches 3, the point's depth, which is then in focus")
+    case("bokeh_back_multiplier_scales_the_back_region_blur", (("backmultiplier", 2.0), ("focalPlane", 1.0), ("focusRegionSize", 0.0), ("multiplier", 0.3),
+                                                          ("max_kernelsize", 16.0), ("kSoftness", 0.0)),
+         {**base, "multiplier": 0.3, "backmultiplier": 2.0}, disc(4), "convention",
+         f"Bokeh: the back multiplier 'sets the amount of defocus applied to the back focus region in addition to the defocus applied by the Multiplier' "
+         f"({page}): the point is behind the plane, so a multiplier of 0.3 with a back multiplier of 2 blurs as a multiplier of 0.6 does {ours}")
+    case("bokeh_front_multiplier_leaves_the_back_region_alone", (("frontmultiplier", 5.0), *base_nuke), {**base, "frontmultiplier": 5.0}, disc(4),
+         "convention", f"Bokeh: the front multiplier applies to 'the front focus region' only ({page}), so the point behind the plane blurs as it did "
+                       f"{ours}")
+    case("bokeh_front_multiplier_scales_the_front_region_blur", (("frontmultiplier", 2.0), ("focalPlane", 5.0), ("focusRegionSize", 0.0), ("multiplier", 0.3),
+                                                            ("max_kernelsize", 16.0), ("kSoftness", 0.0)),
+         {**base, "focalPlane": 5.0, "multiplier": 0.3, "frontmultiplier": 2.0}, disc(4), "convention",
+         f"Bokeh: the front multiplier 'sets the amount of defocus applied to the front focus region in addition to the defocus applied by the Multiplier' "
+         f"({page}): the point (depth 3) is in front of a plane at 5, amount 2/3, so a multiplier of 0.3 with a front multiplier of 2 gives a radius of 4 "
+         "(ours, as above)")
+    case("bokeh_max_kernel_size_clamps_the_blur", (("max_kernelsize", 4.0), *[k for k in base_nuke if k[0] != "max_kernelsize"]),
+         {**base, "max_kernelsize": 4.0}, disc(2), "guide",
+         f"Bokeh: Maximum Kernel Size 'sets an upper limit on the size of the kernel ... any defocus result is then clamped' ({page}): a kernel of 4 "
+         "across is a disc of radius 2, the size being a diameter")
+    case("bokeh_no_depth_defocuses_uniformly_by_the_multiplier", (("multiplier", 0.4), ("max_kernelsize", 16.0), ("kSoftness", 0.0)),
+         {"multiplier": 0.4, "max_kernelsize": 16.0, "kSoftness": 0.0}, disc(4), "guide",
+         f"Bokeh: 'You can defocus an image without using any additional depth data, but the result is uniformly defocused by the Multiplier control' "
+         f"({page}): with no depth channel a multiplier of 0.4 blurs the point by 10 pixels times 0.4, a disc of radius 4 (the 10 is ours)",
+         nb_inputs=("ZP",))
+    case("bokeh_multiplier_zero_is_no_defocus", (("multiplier", 0.0), *[k for k in base_nuke if k[0] != "multiplier"]), {**base, "multiplier": 0.0}, point,
+         "guide", f"Bokeh: the Multiplier 'sets the overall amount of defocus applied to the image' ({page}): 0 applies none")
+    # ---- the kernel
+    blades = {**base, "kernelType": "Aperture Blades", "kNumSides": 4, "kCurvature": 0.0}
+    blades_nuke = (*base_nuke, ("kernelType", "Aperture Blades"), ("kNumSides", 4), ("kCurvature", 0.0))
+    case("bokeh_blade_count_four_is_a_square", blades_nuke, blades, filter_of(lambda dy, dx: float(abs(dx) <= 2 and abs(dy) <= 2)), "convention",
+         f"Bokeh aperture blades: 'the number of blades on the lens is set by the Blades Count control' ({page}); with 4 blades and curvature 0 (sharp "
+         "angles) the filter is a square whose corners lie on the circle of the blur size, 4 pixels, so its half-width is 2.83 and it covers the pixels "
+         "within 2 of the middle (the page gives no polygon size)")
+    case("bokeh_rotation_turns_the_blades", (*blades_nuke, ("kRotation", 45.0)), {**blades, "kRotation": 45.0},
+         filter_of(lambda dy, dx: float(abs(dx) + abs(dy) <= 4)), "convention",
+         f"Bokeh: Rotation 'controls the rotation of the blades in the kernel shape' ({page}): the square turned 45 degrees is a diamond with its "
+         "corners on the circle of the blur size, covering the pixels with |x| + |y| of at most 4")
+    case("bokeh_curvature_one_rounds_the_blades_into_a_disc", (*blades_nuke[:-1], ("kCurvature", 1.0)), {**blades, "kCurvature": 1.0}, disc(4),
+         "convention", f"Bokeh: 'higher values smooth the kernel shape' ({page}); a curvature of 1 rounds the polygon all the way into the circle through "
+                       "its corners, the flat disc of the blur size")
+    case("bokeh_aspect_ratio_above_one_widens_the_kernel", (*base_nuke, ("kAspectRatio", 2.0)), {**base, "kAspectRatio": 2.0},
+         filter_of(lambda dy, dx: float((dx / 4.0) ** 2 + (dy / 2.0) ** 2 <= 1.0 + 1e-9)), "convention",
+         f"Bokeh: Aspect Ratio 'determines the aspect ratio of the kernel' ({page}): the width over the height, so 2 is an ellipse 4 across and 2 up "
+         "(the page does not say which axis is squeezed; this is ZDefocus's reading of its own aspect knob)")
+    case("bokeh_softness_one_is_a_gaussian", (*base_nuke[:-1], ("kSoftness", 1.0)), {**base, "kSoftness": 1.0}, disc(4), "convention",
+         f"Bokeh: Softness 'a value of 0 produces a very hard edge and a value of 1 produces a very soft edge' ({page})",
+         unscored="the guide gives no profile; NodeBased dissolves the flat disc into a Gaussian of sigma half the radius as softness goes from 0 to 1 "
+                  "(tests/test_l9_x1_bokeh.py asserts the middle weighs more than the rim and the weights sum to 1)")
+    # ---- the outputs
+    shown = lambda focal: ({**base, "focalPlane": focal, "outputType": "Focal Distance Visualization"},
+                           (("focalPlane", focal), ("focusRegionSize", 0.0), ("outputType", "Focal Distance Visualization")))
+    nb_p, nuke_p = shown(3.0)
+    case("bokeh_visualization_is_red_on_the_focal_plane", nuke_p, nb_p,
+         lambda fx: (np.stack([np.ones(fx["ZP"].shape[:2]), np.zeros(fx["ZP"].shape[:2]), np.zeros(fx["ZP"].shape[:2]), np.ones(fx["ZP"].shape[:2])],
+                              axis=-1), np.ones(fx["ZP"].shape, bool)), "guide",
+         f"Bokeh Focal Distance Visualization: 'Red - the focal plane, where your image is fully in focus' ({page}): depth 3 on a plane at 3 is red")
+    nb_p, nuke_p = shown(1.0)
+    only = lambda channel: (lambda fx: (np.zeros(fx["ZP"].shape, np.float64),
+                                         np.broadcast_to(np.arange(4) == channel, fx["ZP"].shape).copy()))
+    case("bokeh_visualization_behind_the_plane_is_not_green", nuke_p, nb_p, only(1), "guide",
+         f"Bokeh Focal Distance Visualization: 'Blue - areas of the image behind the focal plane', 'Green - areas of the image in front' ({page}): depth 3 "
+         "behind a plane at 1 carries no green", unscored="")
+    nb_p, nuke_p = shown(5.0)
+    case("bokeh_visualization_in_front_of_the_plane_is_not_blue", nuke_p, nb_p, only(2), "guide",
+         f"Bokeh Focal Distance Visualization: 'Green - areas of the image in front of the focal plane' ({page}): depth 3 in front of a plane at 5 carries no "
+         "blue")
+    case("bokeh_visualization_amounts", (("focalPlane", 1.0), ("outputType", "Focal Distance Visualization")),
+         {**base, "outputType": "Focal Distance Visualization"}, point, "convention",
+         f"Bokeh Focal Distance Visualization ({page}): how bright each colour is",
+         unscored="the guide names the colours and the regions they mark and no values; NodeBased shows red as one minus the blur amount, green the "
+                  "amount in front and blue the amount behind (nodebased/bokehknobs.py)")
+    shape_ref = filter_of(lambda dy, dx: float(dx * dx + dy * dy <= 16))
+
+    def shape_view(fx):
+        ref = np.zeros(fx["ZP"].shape, np.float64)
+        ref[..., 3] = 1.0
+        for dy, dx in offsets:
+            if dx * dx + dy * dy <= 16:
+                ref[mid_y + dy, mid_x + dx, :3] = 1.0
+        return ref, np.ones(ref.shape, bool)
+    case("bokeh_filter_shape_output_draws_the_kernel", (("outputType", "Filter Shape"), ("max_kernelsize", 8.0)),
+         {"outputType": "Filter Shape", "max_kernelsize": 8.0, "kSoftness": 0.0}, shape_view, "guide",
+         f"Bokeh Filter Shape: 'preview the shape of the kernel' ({page}): the circular kernel in white, centred, at the largest size (a kernel 8 across, "
+         "radius 4: the size being a diameter)", nb_inputs=("ZP",))
+    both_zero = lambda channels: (lambda fx: (np.zeros(fx["ZP"].shape, np.float64),
+                                              np.broadcast_to(np.isin(np.arange(4), channels), fx["ZP"].shape).copy()))
+    case("bokeh_focus_mattes_on_the_plane_are_empty", (("focalPlane", 3.0), ("outputType", "Focus Mattes")),
+         {**base, "focalPlane": 3.0, "outputType": "Focus Mattes"}, both_zero((0, 1)), "guide",
+         f"Bokeh Focus Mattes: 'Front/Back mattes for the focus' ({page}): a pixel on the focal plane is in neither the front nor the back region",
+         unscored="")
+    case("bokeh_focus_mattes_channels", (("outputType", "Focus Mattes"),), {**base, "outputType": "Focus Mattes"}, point, "convention",
+         f"Bokeh Focus Mattes ({page}): which channel carries which matte",
+         unscored="the guide says only 'Front/Back mattes for the focus'; NodeBased puts the front matte in red and the back matte in green, blue 0")
+    # ---- bloom, lens, slices, aberrations, outputs the page leaves without numbers
+    case("bokeh_bloom_below_the_threshold_adds_nothing", (*base_nuke, ("bloom", 1.0), ("bloomThreshold", 2.0)), {**base, "bokeh_bloom": 1.0, "bloomThreshold": 2.0},
+         disc(4), "guide", f"Bokeh: Bloom Threshold 'controls the brightness level at which pixels are affected by the Bloom control. Any pixels with a "
+                           f"brightness less than the Bloom Threshold are not affected' ({page}): the point is 1, under a threshold of 2, so the "
+                           f"output is the plain defocus")
+    case("bokeh_lens_bloom_output_without_bloom_is_empty", (("outputType", "Lens Bloom"), *base_nuke),
+         {**base, "outputType": "Lens Bloom"}, both_zero((0, 1, 2)), "guide",
+         f"Bokeh Lens Bloom: 'displays just the bloom effect' ({page}); with the bloom at 0 there is none")
+    case("bokeh_bloom_amount", (("bloom", 1.0),), {**base, "bokeh_bloom": 1.0}, point, "convention", f"Bokeh bloom ({page}): the bloom's brightness",
+         unscored="the guide gives no bloom formula; NodeBased adds bloom times the part of each colour above the threshold, gathered through the "
+                  "kernel at the pixel's blur size (nodebased/bokehknobs.py)")
+    case("bokeh_real_world_lens", (("realWorldLens", True),), {**base, "realWorldLens": 1}, point, "convention",
+         f"Bokeh Real World Lens Simulation ({page}): the blur of a physical lens",
+         unscored="the guide says the lens controls match 'physical lens characteristics' and gives no formula; NodeBased uses the thin-lens circle of "
+                  "confusion c = f^2 |d - s| / (N d (s - f)) (a textbook form) in pixels by the film width (nodebased/bokehknobs.py)")
+    case("bokeh_corrective_slices", (("correctiveSlices", 2),), {**base, "correctiveSlices": 2}, point, "convention",
+         f"Bokeh Corrective Slices ({page}): objects at different depths overlapping correctly",
+         unscored="the guide names the effect, that 1 slice can overlap and 2 slices separate the front and back regions, and gives no ordering rule; "
+                  "NodeBased lets a pixel gather from its own depth slice and nearer ones (tests/test_l9_x1_bokeh.py)")
+    case("bokeh_spherical_aberration", (("kSphAbb", 1.0),), {**base, "kSphAbb": 1.0}, point, "convention",
+         f"Bokeh Spherical Aberration ({page}): 'Negative Spherical Aberration values make the kernels brighter in the center and positive values "
+         "brighter on the edges'",
+         unscored="the direction is the guide's; the profile is not (NodeBased: weight 1 + k (2 q^curvature - 1)); the test module asserts the direction")
+    case("bokeh_chromatic_aberration", (("kChrAbb", 1.0),), {**base, "kChrAbb": 1.0}, point, "convention",
+         f"Bokeh Chromic Aberration ({page}): 'affects the bloom color' with the offsets 'for the red, green, and blue channels'",
+         unscored="the guide gives no numbers; NodeBased scales the bloom's radius per colour by 1 + k (offset - 1)")
+    case("bokeh_focus_region_output", (("focusOutput", "Back"),), {**base, "focalPlane": 5.0, "focusOutput": "Back"}, point, "convention",
+         f"Bokeh Focus Region Output ({page}): 'Sets whether the Front, Back, or Both focus regions are output to the Viewer'",
+         unscored="the guide does not say what a pixel outside the chosen region shows; NodeBased keeps its input colour")
 
 
 VECTORCORNERPIN_GUIDE = "https://learn.foundry.com/nuke/17.0/content/reference_guide/transform_nodes/vectorcornerpin.html"

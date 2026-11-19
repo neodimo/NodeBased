@@ -38,7 +38,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "MarkerRemoval", "DustBust", "RotoPaint",
-                                       "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ColorTransfer", "ZMerge", "ZSlice")
+                                       "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "Bokeh", "MatchGrade", "ColorTransfer", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -327,6 +327,7 @@ from . import transformbehaviour as _transformbehaviour
 from . import lensdistortion as _lensdistortion
 from . import drawbehaviour as _drawbehaviour
 from . import zdefocusknobs as _zdefocusknobs
+from . import bokehknobs as _bokehknobs
 from . import timeknobs as _timeknobs
 from . import retimeknobs as _retimeknobs
 from . import cornerpinknobs as _cornerpinknobs
@@ -501,6 +502,8 @@ SPECS = {
                   "params": {"depth_layer": "depth", "focal_plane": 0.0, "depth_of_field": 0.0,
                              "max_size": 50.0, "depth_math": "depth", "bokeh_shape": "disc",
                              "blade_count": 5, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0, **_drawbehaviour.new_params("ZDefocus")}},
+    "Bokeh": {"inputs": ["image"], "optional_inputs": ["depth", "kernel", "mask"],
+              "params": {**_bokehknobs.NEW, "mix": 1.0}},
     "ZMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                "params": {"depth_layer": "depth.Z", "backwards": False, "alpha_channel": "rgba.alpha",
                           "depth_math": "depth", "smoothing": 0.0, "mix": 1.0}},
@@ -2556,6 +2559,8 @@ CHOICES["ramp"] = ["none", "linear", "smooth0", "smooth1", "smooth"]
 CHOICES["ramp_type"] = list(_drawbehaviour.RAMP_TYPES)
 CHOICES["zdefocus_math"] = list(_drawbehaviour.ZDEFOCUS_MATH)
 CHOICES.update(_zdefocusknobs.CHOICES)
+CHOICES.update(_bokehknobs.CHOICES)
+LIMITS.update(_bokehknobs.LIMITS)
 LIMITS.update(_drawbehaviour.LIMITS)
 CHOICES.update({"Quality": ["low", "normal", "high"], "fillRegion": ["Matte Alpha", "Source Alpha"],
                 "detailSource": ["Source", "Detail"]})

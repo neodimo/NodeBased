@@ -511,6 +511,10 @@ class TileExecutor:
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
+            if node["type"] == "Bokeh":
+                from . import bokehknobs
+                if bokehknobs.needs_full_frame(node["params"]):
+                    return False
             if node["type"] == "ZDefocus":
                 from . import zdefocusknobs
                 if zdefocusknobs.needs_full_frame(node["params"]):
@@ -1457,6 +1461,17 @@ class TileExecutor:
             if depth_arr is None: raise ValueError("ZDefocus: missing depth layer")
             kernel=inputs[2].pixels if len(inputs)>2 and inputs[2] is not None else None
             filtered=imaging.Evaluator._zdefocus(source.pixels,depth_arr[...,0],params,kernel)
+            mask=inputs[3].pixels if len(inputs)>3 and inputs[3] is not None else None
+            return imaging.Evaluator._apply_mask_mix(source.pixels,filtered,mask,params.get("mix",1.0))
+        if kind == "Bokeh":
+            from . import bokehknobs
+            source=inputs[0]
+            depth_art=inputs[1] if len(inputs)>1 and inputs[1] is not None else None
+            depth_name=params.get("depthChannel","depth.Z")
+            depth_arr=depth_art.pixels[...,:1] if depth_art is not None else _named_layer_array(source, depth_name)
+            kernel=inputs[2].pixels if len(inputs)>2 and inputs[2] is not None else None
+            planes=bokehknobs.planes_for(source.pixels, params, lambda name: (lambda a: None if a is None else a[...,0])(_named_layer_array(source, name)))
+            filtered=bokehknobs.render(source.pixels, None if depth_arr is None else depth_arr[...,0], params, kernel, planes)
             mask=inputs[3].pixels if len(inputs)>3 and inputs[3] is not None else None
             return imaging.Evaluator._apply_mask_mix(source.pixels,filtered,mask,params.get("mix",1.0))
         if kind == "ZMerge":

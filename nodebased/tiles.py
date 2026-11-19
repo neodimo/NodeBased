@@ -293,7 +293,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "ChromaKeyer", "IBKGizmo",              # pointwise, halo = (0, 0); step K1 keyers
     "ScreenKeyer",                          # halo = shrink/grow + softness reach, declared by tiers._screen_keyer_rule
     "IBKColor",                             # halo = erode + fill reach, declared by tiers._ibk_color_rule
-    "Shuffle", "ShuffleCopy", "Remove", "ZMerge", "ZSlice", "ZDefocus",
+    "Shuffle", "ShuffleCopy", "Remove", "ZMerge", "ZSlice", "ZDefocus", "Bokeh",
     "Premult", "Unpremult",                # named-layer aware or pointwise, halo per tiers.py
     "Dot", "NoOp", "PostageStamp", "Profile", "PlanarTracker",  # passthrough, halo = (0, 0)
     "Tracker", "Stabilize",              # solved transforms use the shared inverse-mapped region rule

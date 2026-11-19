@@ -130,6 +130,7 @@ NODE_CATEGORIES = {
         "Denoise": "Noise reducer after Nuke Denoise: a measured noise level, per-band and per-channel tuning and temporal blending (not Foundry's model).",
         "DegrainSimple": "Blurs RGB channels by separately chosen amounts.",
         "ZDefocus": "Blurs by depth around a chosen focal plane.",
+        "Bokeh": "Depth defocus with a lens-shaped kernel, front and back multipliers and bloom.",
         "Inpaint": "Fills a matte from neighboring frames, then a named spatial fill method.",
         "ZSlice": "Isolates a depth band as a matte or masked image.",
         "Remove": "Keeps or removes named image layers.",

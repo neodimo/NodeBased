@@ -988,6 +988,16 @@ class _SourceScope:
         self.tasks = {}
 
 
+
+def zdefocusknobs_sph(disk, weights, yy, xx, r, sph):
+    """Bokeh's spherical aberration on the filter weights (nodebased/bokehknobs.py): negative values make the filter brighter in the middle,
+    positive values brighter at its edge; `sph` is (amount, curvature)."""
+    amount, curvature = sph
+    reach = np.minimum(np.sqrt(xx * xx + yy * yy) / max(float(r), 1e-6), 1.0)
+    radial = np.maximum(0.0, 1.0 + amount * (2.0 * np.power(reach, curvature) - 1.0))
+    base = disk.astype(np.float64) if weights is None else weights
+    return base * radial
+
 class Evaluator:
     """Retained-result evaluator with a memory tier over an optional disk tier.
 
@@ -4484,6 +4494,22 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.pixels, filtered,
                                                None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
             return Raster(pixels, source.data, source.display, source.layers, source.meta)
+        if kind == "Bokeh":
+            from . import bokehknobs
+            source = inputs[0]
+            depth_input = inputs[1] if len(inputs) > 1 else None
+            kernel_input = inputs[2] if len(inputs) > 2 else None
+            mask = inputs[3] if len(inputs) > 3 else None
+            layers = source.layers or {}
+            depth_plane = None
+            if depth_input is not None:
+                depth_plane = depth_input.fit(source.data)[..., 0]
+            elif p.get("depthChannel", "depth.Z") in layers or "." in p.get("depthChannel", "depth.Z") and p.get("depthChannel", "depth.Z").rsplit(".", 1)[0] in layers:
+                depth_plane = Evaluator._layer_of(kind, source, p.get("depthChannel", "depth.Z")).pixels[..., 0]
+            planes = bokehknobs.planes_for(source.pixels, p, lambda name: Evaluator._layer_of(kind, source, name).pixels[..., 0])
+            filtered = bokehknobs.render(source.pixels, depth_plane, p, None if kernel_input is None else kernel_input.pixels, planes)
+            pixels = Evaluator._apply_mask_mix(source.pixels, filtered, None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
+            return Raster(pixels, source.data, source.display, source.layers, source.meta)
         if kind in ("Undistort", "Redistort"):
             return Evaluator._lens_warp(kind, p, inputs)
         if kind in UV_KINDS:
@@ -7878,8 +7904,11 @@ class Evaluator:
         return result
 
     @staticmethod
-    def _zdefocus(image, depth, p, kernel=None):
-        """Depth-radius disc blur, composited nearest-to-farthest to protect foreground edges."""
+    def _zdefocus(image, depth, p, kernel=None, override=None):
+        """Depth-radius disc blur, composited nearest-to-farthest to protect foreground edges.
+
+        `override` is the Bokeh node's hand-over (nodebased/bokehknobs.py): its own per-pixel blur radii and front/back sides, the ordering
+        depth its corrective slices make and its spherical aberration, so that Bokeh gathers through the very kernels ZDefocus does."""
         if depth is None:
             raise ValueError("ZDefocus needs a depth layer on the image or a wired depth input")
         depth = np.asarray(depth, dtype=np.float32)
@@ -7892,7 +7921,10 @@ class Evaluator:
         # them keeps the picture it had (legacy_zdefocus_focus, set on load).
         modern = not int(p.get("legacy_zdefocus", 1)) and not int(p.get("legacy_zdefocus_focus", 1))
         sides = None
-        if int(p.get("legacy_zdefocus", 1)):
+        if override is not None:
+            z, radii, sides = override["z"], override["radii"], override["sides"]
+            modern = True
+        elif int(p.get("legacy_zdefocus", 1)):
             z = np.maximum(depth, 1e-6)
             if p.get("depth_math") == "1/depth": z = 1.0 / z
             radii = np.minimum(float(p.get("max_size", 20.0)), np.abs(z - focal) / dof * float(p.get("max_size", 20.0)))
@@ -7966,7 +7998,12 @@ class Evaluator:
         for y in range(h):
             for x in range(w):
                 r = float(radii[y, x])
+                if override is not None and r < 1.0 and p.get("bokeh_shape") != "image":
+                    out[y, x] = pad_img[y + radius, x + radius]      # a filter under a pixel across is the pixel itself
+                    continue
                 disk, kernel_grid = shape(r, yy, xx, radius)
+                if override is not None and override.get("sph") and p.get("bokeh_shape") != "image" and r > 0:
+                    kernel_grid = zdefocusknobs_sph(disk, kernel_grid, yy, xx, r, override["sph"])
                 samples_z = pad_z[y:y + 2 * radius + 1, x:x + 2 * radius + 1]
                 # Near objects remain in front; reject farther samples around a foreground pixel.
                 visible = disk & (samples_z <= z[y, x] + 1e-6)
