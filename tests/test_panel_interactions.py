@@ -23,6 +23,10 @@ from nodebased.app import evaluate_field_formula  # noqa: E402
 KNOWN_GAPS = {
     # Step T6 finish closed the last two (the channel/format Link menu and Clone): every documented behaviour passes.
     # Step T7 (the Curve Editor and the Dope Sheet) left these open; tests/test_l10_t7_curves.py names each one.
+    # Step T8 (the Viewer) left these open; tests/test_l10_t8_viewer.py gives each reason.
+    "viewer.alpha_overlay", "viewer.recenter_middle_click", "viewer.zoom_drag", "viewer.prevent_auto_zoom", "viewer.toolbars",
+    "viewer.info_bar", "viewer.sample_pixel", "viewer.sample_region", "viewer.sample_cancel", "viewer.gain_gamma_toggle",
+    "viewer.refresh", "viewer.goto_frame", "viewer.frame_field_math",
 }
 
 

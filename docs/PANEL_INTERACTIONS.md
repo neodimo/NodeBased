@@ -320,3 +320,22 @@ Older documents load unchanged: no stored format changed, and framing never edit
 Every documented Curve Editor and Dope Sheet behaviour now passes. Older documents load unchanged: no stored format changed.
 
 - **Tests:** `tests/test_l10_t7_curves.py`.
+
+## The Viewer (lane 10, step T8, 2026-11-18)
+
+- **Reference:** the `viewer` entries of `docs/parity/nuke_knob_interactions.json`, from the Nuke 17.0 User Guide's
+  [Viewers](https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/viewers.html) and
+  [Using the Viewer Controls](https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/using_viewer_controls.html)
+  pages, each quoting its line. 21 behaviours are documented there; the Y key, the mouse wheel on the picture, J/K/L, the
+  A/B wipe and the proxy and region-of-interest toggles are not described on those pages and are listed as undocumented.
+- **Probes:** `tools/nuke_panel_interactions.py` presses keys and drags on NodeBased's real Viewer; `tests/test_l10_t8_viewer.py`
+  asserts each result and names every open one.
+
+Before the step 6 of the 21 documented behaviours worked like Nuke's (R, G, B, A and pressing one again, the input numbers,
+middle and Alt drag to pan, F, Ctrl+1); after it, 8. Fixed: plain + and - now zoom in and out as the guide says (Ctrl+=,
+Ctrl++ and Ctrl+- still work), and Up and Down cycle through the Viewer's wired inputs. No shortcut was removed.
+
+Still open: M (alpha as a red overlay), a middle click to re-centre, middle plus left drag to zoom, Alt+Z to lock the zoom,
+{ and } to hide the toolbars, and the info bar, Ctrl-click and Ctrl+Shift-drag sampling, Ctrl+right-click to cancel, the gain
+and gamma toggle buttons, U, Alt+G and the frame field's +/-20, which are documented but not yet probed.
+

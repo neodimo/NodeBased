@@ -2411,6 +2411,150 @@ def _dope_bars(bench):
 
 # -- run -------------------------------------------------------------------------------------------------------------------
 
+# -- the Viewer (lane 10, step T8, 2026-11-18) -------------------------------------------------------------------------------
+# Keys and mouse on NodeBased's real Viewer (window.viewer), against the Nuke 17.0 User Guide's Viewers and Using the Viewer
+# Controls pages.
+
+def _viewer(bench, inputs=1):
+    """The Viewer showing a Constant, with `inputs` Constants wired to Viewer inputs 1..inputs; focus on the Viewer."""
+    window = bench.window
+    keys = []
+    for _ in range(inputs):
+        keys.append(bench.node("Constant"))
+    window.command({"op": "view", "id": keys[0]})
+    for slot, key in enumerate(keys[1:], 2):
+        window.command({"op": "viewer_input", "slot": slot, "id": key})
+    window.command({"op": "viewer_input", "slot": 1, "id": keys[0]})
+    viewer = window.viewer
+    viewer.setFocus()
+    bench.settle(8)
+    return viewer, keys
+
+
+def _key(bench, widget, key, modifiers=None):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    QTest.keyClick(widget, key, modifiers if modifiers is not None else Qt.KeyboardModifier.NoModifier)
+    bench.settle()
+
+
+@probe("viewer.channel_keys")
+def _viewer_channel_keys(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    shown = {}
+    for name, key in (("R", Qt.Key.Key_R), ("G", Qt.Key.Key_G), ("B", Qt.Key.Key_B), ("A", Qt.Key.Key_A)):
+        bench.window.channels.setCurrentText("RGB")
+        _key(bench, viewer, key)
+        shown[name] = bench.window.channels.currentText()
+    bench.window.channels.setCurrentText("RGB")
+    ok = all(shown[n] == n for n in shown)
+    return ok, f"R, G, B and A showed {', '.join(shown[n] for n in 'RGBA')}"
+
+
+@probe("viewer.channel_toggle_back")
+def _viewer_channel_back(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    bench.window.channels.setCurrentText("RGB")
+    _key(bench, viewer, Qt.Key.Key_G)
+    first = bench.window.channels.currentText()
+    _key(bench, viewer, Qt.Key.Key_G)
+    second = bench.window.channels.currentText()
+    return (first, second) == ("G", "RGB"), f"G then G again showed {first} then {second}"
+
+
+@probe("viewer.input_numbers")
+def _viewer_input_numbers(bench):
+    from PySide6.QtCore import Qt
+    viewer, keys = _viewer(bench, 3)
+    _key(bench, viewer, Qt.Key.Key_3)
+    third = bench.window.dispatcher.document.get("view")
+    _key(bench, viewer, Qt.Key.Key_1)
+    first = bench.window.dispatcher.document.get("view")
+    ok = third == keys[2] and first == keys[0]
+    return ok, f"3 showed input 3 ({third == keys[2]}), 1 showed input 1 ({first == keys[0]})"
+
+
+@probe("viewer.input_arrows")
+def _viewer_input_arrows(bench):
+    from PySide6.QtCore import Qt
+    viewer, keys = _viewer(bench, 3)
+    seen = []
+    for key in (Qt.Key.Key_Down, Qt.Key.Key_Down, Qt.Key.Key_Down, Qt.Key.Key_Up):
+        _key(bench, viewer, key)
+        view = bench.window.dispatcher.document.get("view")
+        seen.append(keys.index(view) + 1 if view in keys else None)
+    return seen == [2, 3, 1, 3], f"Down, Down, Down, Up showed inputs {seen}"
+
+
+def _view_center(viewer):
+    return viewer.mapToScene(viewer.viewport().rect().center())
+
+
+@probe("viewer.pan")
+def _viewer_pan(bench):
+    from PySide6.QtCore import QEvent, Qt
+    viewer, _ = _viewer(bench)
+    viewer.resetTransform()
+    bench.settle()
+    results = {}
+    for name, button, mods in (("middle", Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier),
+                               ("Alt", Qt.MouseButton.LeftButton, Qt.KeyboardModifier.AltModifier)):
+        before = _view_center(viewer)
+        port = viewer.viewport()
+        _mouse(port, QEvent.Type.MouseButtonPress, (300, 300), button, button, mods)
+        for x in (320, 340, 360):
+            _mouse(port, QEvent.Type.MouseMove, (x, 300), Qt.MouseButton.NoButton, button, mods)
+        _mouse(port, QEvent.Type.MouseButtonRelease, (360, 300), button, Qt.MouseButton.NoButton, mods)
+        bench.settle()
+        after = _view_center(viewer)
+        results[name] = after.x() - before.x()
+    ok = all(dx < -10 for dx in results.values())         # the frame follows the pointer: the view centre moves left
+    return ok, f"a 60 pixel drag to the right moved the view centre by {results['middle']:.0f} (middle) and {results['Alt']:.0f} (Alt)"
+
+
+@probe("viewer.fit_f")
+def _viewer_fit(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    viewer.resetTransform()
+    viewer.scale(4.0, 4.0)
+    bench.settle()
+    _key(bench, viewer, Qt.Key.Key_F)
+    bench.settle(12)
+    zoom, fitted = viewer.transform().m11(), bool(viewer.auto_fit)   # auto_fit is set by the Viewer's fit command alone
+    ok = fitted and zoom < 4.0
+    return ok, f"F at 4x zoom ran the Viewer's fit {fitted}, zoom now {zoom:.2f}"
+
+
+@probe("viewer.zoom_keys")
+def _viewer_zoom_keys(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    viewer.resetTransform()
+    bench.settle()
+    start = viewer.transform().m11()
+    _key(bench, viewer, Qt.Key.Key_Plus)
+    _key(bench, viewer, Qt.Key.Key_Plus)
+    zoomed = viewer.transform().m11()
+    _key(bench, viewer, Qt.Key.Key_Minus)
+    back = viewer.transform().m11()
+    ok = zoomed > start * 1.2 and start < back < zoomed
+    return ok, f"+ + took the zoom from {start:.2f} to {zoomed:.2f}, - back to {back:.2f}"
+
+
+@probe("viewer.one_to_one")
+def _viewer_one_to_one(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    viewer.scale(2.5, 2.5)
+    bench.settle()
+    _key(bench, viewer, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+    zoom = viewer.transform().m11()
+    return abs(zoom - 1.0) < 1e-6, f"Ctrl+1 set the zoom to {zoom:.3f}"
+
+
 def probe_all():
     """{behaviour id: {"widget", "status", "result": "pass"|"fail"|"not probed"|"undocumented", "detail"}}."""
     ref = reference()

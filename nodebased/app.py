@@ -162,13 +162,17 @@ VIEW_ZOOM_STEP = 1.15
 VIEW_KEY_ACTIONS = {
     "fit": ((Qt.Key.Key_F, Qt.KeyboardModifier.NoModifier), (Qt.Key.Key_H, Qt.KeyboardModifier.NoModifier)),
     "one_to_one": ((Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier),),
+    # Nuke 17.0 User Guide, Viewers: "Press the plus button ( + ) repeatedly" / "Press the minus button ( - )" (lane 10 step T8);
+    # the Ctrl forms NodeBased had before stay.
     "zoom_in": ((Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier),
-                (Qt.Key.Key_Plus, Qt.KeyboardModifier.ControlModifier)),
-    "zoom_out": ((Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier),),
+                (Qt.Key.Key_Plus, Qt.KeyboardModifier.ControlModifier),
+                (Qt.Key.Key_Plus, Qt.KeyboardModifier.NoModifier), (Qt.Key.Key_Equal, Qt.KeyboardModifier.NoModifier),
+                (Qt.Key.Key_Plus, Qt.KeyboardModifier.ShiftModifier)),
+    "zoom_out": ((Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier), (Qt.Key.Key_Minus, Qt.KeyboardModifier.NoModifier)),
 }
 # What the "?" list on the Viewer and the direct picture says for each of them.
 VIEW_ACTION_KEYS = {"fit": ("F / H", "fit the picture"), "one_to_one": ("Ctrl+1", "1:1 zoom"),
-                    "zoom_in": ("Ctrl+= / Ctrl++", "zoom in"), "zoom_out": ("Ctrl+-", "zoom out")}
+                    "zoom_in": ("+ / Ctrl+= / Ctrl++", "zoom in"), "zoom_out": ("- / Ctrl+-", "zoom out")}
 
 
 def view_key_action(key, modifiers):
@@ -2722,6 +2726,15 @@ class Viewer(PanZoomView):
             return False
         self.window.command({"op": "viewer_input", "slot": number, "id": node})
         return True
+
+    def cycle_input(self, step):
+        """Show the next (`step` 1) or previous (-1) wired Viewer input after the active one. False with fewer than two."""
+        state = self.input_state()
+        wired = [slot for slot, node in enumerate(state["inputs"], 1) if node is not None]
+        if len(wired) < 2:
+            return False
+        active = state["active"] if state["active"] in wired else wired[0]
+        return self.show_input(wired[(wired.index(active) + step) % len(wired)])
 
     def set_b(self, number):
         """Choose the B input (None clears it). Picking a B while the mode is "A only" turns the
@@ -5450,6 +5463,11 @@ class Viewer(PanZoomView):
             return
         if not event.modifiers() and Qt.Key.Key_1 <= event.key() <= Qt.Key.Key_9:
             self.show_input(event.key() - Qt.Key.Key_0)
+            event.accept()
+            return
+        if not event.modifiers() and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down) and self.cycle_input(
+                1 if event.key() == Qt.Key.Key_Down else -1):
+            # Nuke 17.0 User Guide, Viewers: "press the up or down arrow keys to quickly cycle through the views".
             event.accept()
             return
         if event.modifiers() == Qt.KeyboardModifier.AltModifier and Qt.Key.Key_0 <= event.key() <= Qt.Key.Key_9:
