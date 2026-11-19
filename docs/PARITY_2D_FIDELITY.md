@@ -1,6 +1,6 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 97.6 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
+**Overall fidelity: 97.7 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.6 (99.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
@@ -44,7 +44,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Merge | 99.9 | 99.7 | 99.9 | 13 |
 | Transform | 98.9 | 96.5 | 98.6 | 20 |
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
-| Other | 83.7 | 53.0 | 83.7 | 14 |
+| Other | 84.3 | 54.2 | 84.0 | 14 |
 
 Behaviour checked: 138 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
@@ -326,7 +326,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | unmeasured |
 | 8 | VariableGroup | - | missing | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | unmeasured |
 | 10 | Precomp | `Precomp` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | - | - | - | 100 | - | unmeasured |
-| 11 | Root | `time and settings` | partial | 50.7 | 51.2 | 53 (17/43) | - | 43 | - | - | - | - | - | unmeasured |
+| 11 | Root | `time and settings` | partial | 67.1 | 59.1 | 60 (21/43) | - | 56 | - | - | - | 100 | - | unmeasured |
 | 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
 | 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | unmeasured |
 
@@ -509,7 +509,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | LiveInput | — | — | 4 |
 | VariableGroup | — | — | 1 |
 | Precomp | — | 100.0% (3/3) | 6 |
-| Root | 0.0% (0/4) | — | 10 |
+| Root | 100.0% (4/4) | 100.0% (13/13) | 17 |
 | Assert | — | — | 0 |
 | AudioRead | — | — | 4 |
 
@@ -523,7 +523,7 @@ Panel sweep S5 (2026-11-07) baseline for its nodes, before rows were placed on o
 
 Read baseline before Lane 9 step R1: shared rows 0/8 (0.0%) and widget types 25/29 (86.2%); the reload counter and three Boolean toggles were the four mismatches. Current measurements are rows 8/8 (100.0%) and types 29/29 (100.0%). Read fidelity is unchanged at 100.0.
 
-**Lowest shared-row scores:** MarkerRemoval (0.0%); Root (0.0%); Write (50.0%); RotoPaint (98.1%); BurnIn (100.0%).
+**Lowest shared-row scores:** MarkerRemoval (0.0%); Write (50.0%); RotoPaint (98.1%); BurnIn (100.0%); Clamp (100.0%).
 **Lowest widget-type scores:** Expression (0.0%); IBKColor (33.3%); MarkerRemoval (40.0%); MatchGrade (81.2%); Viewer (82.4%).
 
 ## The 30 largest gaps
@@ -536,11 +536,11 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 2 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 3 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 4 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 5 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
-| 6 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 7 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 8 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 9 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 5 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 6 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 7 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 8 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 9 | Root (Other #11) | `time and settings` | 2.99 | 67.1 | primary knobs missing: `is_live`, `render_mode`; 20 secondary knobs missing |
 | 10 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
 | 11 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
 | 12 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
