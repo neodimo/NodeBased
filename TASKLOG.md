@@ -1,3 +1,9 @@
+## 2026-11-19 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X3 (Thu 11/19): Project Settings, part 2: the OCIO config menu and the Views tab (integrator tick)
+
+- **What was done:** `main` `6efa8714` -> `9c96e1c6` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `9c96e1c6`: Ran 10321 tests in 1972.209 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-19 — Lane 2 step X3: the OCIO config menu and the Views tab of Project Settings (DONE)
 
 - **What was done:** (1) The Color tab's OCIO config is a menu like Nuke 17.0's Root knob (`nodebased/ocioconfigs.py`): the configs Nuke ships, the built-in ACES configs NodeBased can load, then `custom` with the `custom OCIO config` path field below it (shown only on `custom`). Choosing a config NodeBased cannot load (Foundry's shipped files) shows a warning under the menu, and the colour-space menus of the OCIO nodes use the built-in list; an OCIO node itself still errors clearly. Sources: Reference Guide Other > Root (knob names, default `nuke-default`), User Guide OCIO Color Management (`nuke-default`, ACES 1.3 configs, `custom`, "a warning displays"), and Andrea Geremia's measurement of Nuke 17.0 for the list of shipped configs (third party, order is the page's). (2) The Views tab (`nodebased/projectviews.py`, `settings.views`): views list (default `main`), add, remove, up, down, hero, Set up views for stereo, View selection uses buttons?, Use colors in UI?. Recorded and saved only; tooltips say rendering is mono.

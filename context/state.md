@@ -1,5 +1,24 @@
 ## Lane 2 step X3 (11/19): OCIO config menu and the Views tab of Project Settings
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (2:16 AM on 2026-11-19 PDT)
+
+`main` moved `6efa8714` -> `9c96e1c6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `9c96e1c6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1119-0136.log`, started 1:37 AM): **Ran 10321 tests in 1972.209 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X3 (Thu 11/19): Project Settings, part 2: the OCIO config menu and the Views tab.** Commits:
+  - `65cdc089` Project Settings: the OCIO config is a menu like Nuke 17.0's (custom path field, warning for configs NodeBased cannot load, schema 37) and a Views tab recorded in the document (settings.views, rendering stays mono)
+  Diff: 20 files changed, 944 insertions(+), 51 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 - `nodebased/ocioconfigs.py` (menu entries, selection, warning, migration), `nodebased/projectviews.py` (`settings.views`), rows and panel code in `nodebased/rootpanel.py` and `Window.build_root_panel`; schema 37 (`settings.color.custom_config`, `settings.views` optional). Fidelity: Root 67.1 to 77.8, overall 97.7 unchanged. Views are recorded only; rendering is mono.
 
 ## Lane 2 step X2 (11/18 10:30 PM): Project Settings panel and default colour spaces by file type
