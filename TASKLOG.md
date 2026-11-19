@@ -1,3 +1,24 @@
+## 2026-11-18 8:35 PM — Lane 2 step X1: ColorTransfer, then the colour group's label and widget-type rows (DONE)
+
+- **What was done:** `ColorTransfer` (`openclaw/nb-2d-parity`, commit 5924c654): a node of its own, where `docs/parity/nodebased_to_nuke.json` said "covered by
+  MatchGrade". Inputs A (colours to match) and B (the picture that takes them), the guide's one knob ROI as `roi_x/roi_y/roi_r/roi_t` (pixels from A's bottom left,
+  all zero is the whole of A), the shared mask and mix. The guide's page documents only the ROI, so the match is a stated *convention*: Reinhard, Ashikhmin, Gooch and
+  Shirley 2001 per-channel mean and standard deviation transfer on the working RGB values, alpha B's own (cited on the docs row and in the cases). MatchGrade's statistics
+  now live in `Evaluator._channel_stats` / `_std_ratio`, which both nodes read; MatchGrade's pixels are unchanged (tests). Global statistics keep it off the tile path
+  like MatchGrade and Histogram (`test_global_statistics_keep_it_off_the_tile_path_like_matchgrade`). Bypass passes input 0 (A), as Nuke's disabled nodes do.
+  Four scored cases in `tools/nuke_fidelity_cases_color.py` (whole input, identical inputs, ROI from the left, ROI from the bottom edge); the old unscored entry is gone.
+  Registered in SPECS, LIMITS, MASK_MIX_KINDS, knobs, theme colour, tiers rule, nodecatalog, mapping; docs row 16 and a step note, bundled copies identical.
+- **Worklist** (`6441bb69`): the review book's label and widget-type marks now follow the audit's own rules (on/off text knob = check box, a row of number fields = number
+  list, a guide label several knobs share = the row's label). Lane 2's open rows 111 to 94: 16 label and widget rows closed (TimeOffset 3, FrameHold 2, Histogram 2, Copy 4,
+  Expression 4, HSVTool 1) and ColorTransfer's ROI row. Left open: IBKColor darks and lights (one number where Nuke's hold r, g, b; the guide gives no meaning, so the
+  per-channel kernel would be invented), IBKColor patch black, MatchGrade's two reference frame lists (text where the guide types a number), HSVTool's Conversion default.
+- **Measured:** ColorTransfer fidelity 0.0 to 100.0; its cases 4 of 4 pass; Color group 98.6 to 99.5; overall 97.4 to 97.5 (previous formula 97.3 to 97.4); behaviour checked
+  136 to 137 of 170 nodes. No schema bump (a new kind; no existing params changed).
+- **Evidence vs inference:** pixels asserted by `tests/test_l2_x1_color_transfer.py` (19) and `tests/test_l2_x1_worklist.py` (9); the formula is a convention, not read from Nuke.
+- **Not done:** the Viewer's draggable ROI box (the guide: "adjust the ROI in the Viewer by dragging its edges"; MinColor's box overlay uses x, y, w, h from the top, ColorTransfer's
+  is x, y, r, t from the bottom, so it needs its own conversion); no real-Nuke render comparison.
+- **Next owner:** Gonzo, for the Viewer ROI overlay and the IBKColor per-channel darks and lights meaning.
+
 ## 2026-11-18 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T7 (Wed 11/18): the Curve Editor and Dope Sheet work like Nuke's (integrator tick)
 
 - **What was done:** `main` `bcd14e1e` -> `6ce12e4b` plus this docs commit. Evidence and per-lane commit

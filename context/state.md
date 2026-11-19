@@ -1,3 +1,10 @@
+## Lane 2 step X1 (11/18 8:35 PM): ColorTransfer and the colour group's label and widget-type rows
+
+`ColorTransfer` is a node (5924c654): A holds the colours, measured in the ROI (x, y, r, t from A's bottom left, zeros = whole A); B takes their per-channel mean and standard
+deviation (Reinhard et al. 2001, a stated convention; the guide gives no formula). Shared statistics helper `Evaluator._channel_stats`; MatchGrade pixels unchanged. Not tiled
+(global statistics). Four scored cases. The review book's label and widget rules now mirror the audit's (6441bb69): lane 2 open rows 111 to 94. Color 98.6 to 99.5, overall
+97.4 to 97.5. Open: Viewer ROI overlay, IBKColor per-channel darks and lights.
+
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
 ## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (9:06 PM on 2026-11-18 PDT)
