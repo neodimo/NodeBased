@@ -177,11 +177,22 @@ BOX_NODES = {"Crop": ("x", "y", "width", "height"), "Text": ("box_x", "box_y", "
              # Rectangle: "area ... You can also adjust the rectangle in the Viewer"; Radial: "area ... You can also adjust
              # the area in the Viewer". The drag grabs a corner, an edge or the body, as for Text's box.
              "Rectangle": ("box_x", "box_y", "box_width", "box_height"),
-             "Radial": ("box_x", "box_y", "box_width", "box_height")}
+             "Radial": ("box_x", "box_y", "box_width", "box_height"),
+             # Reformat with type "to box" (step T9 finish): the output box, drawn over the output format from its origin.
+             # Reformat has no box position knob, so only the size changes: an edge or corner drag sets width and height,
+             # and the body does not move.
+             "Reformat": ("width", "height")}
 # Nodes whose box knobs are corners counted from the bottom left (Nuke's x, y, r, t), not (x, y, width, height) rows down.
 # ColorTransfer: Nuke 17.0 Reference Guide, ColorTransfer, ROI: "You can also adjust the ROI in the Viewer by dragging its edges."
 # All four zero is the guide's default ("set to cover the entire input"), so that box is drawn over the whole frame.
 CORNER_BOX_NODES = ("ColorTransfer",)
+# Nodes whose box is only a size (width, height) placed at the format origin.
+SIZE_BOX_NODES = ("Reformat",)
+
+
+def box_shown(kind, params):
+    """Whether `kind`'s box handle applies with these params: Reformat's only when its type is "to box"."""
+    return kind != "Reformat" or params.get("reformat_type") == "to_box"
 GRIPS = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
 
 # Point handles (lane 10 step T9): knob pairs drawn as draggable points in data coordinates, rows counting down (CornerPin's
@@ -246,6 +257,8 @@ def box_drag(start, part, dx, dy, minimum=1.0):
 def box_from_knobs(kind, values, width, height):
     """The box (x, y, w, h) in data coordinates, rows counting down, that `kind`'s box knobs in `values` describe."""
     names = BOX_NODES[kind]
+    if kind in SIZE_BOX_NODES:
+        return 0.0, 0.0, float(values[names[0]]), float(values[names[1]])
     a, b, c, d = (float(values[n]) for n in names)
     if kind not in CORNER_BOX_NODES:
         return a, b, c, d
@@ -258,6 +271,8 @@ def knobs_from_box(kind, box, height):
     """{knob: value} for `kind` from a box (x, y, w, h) in data coordinates, rows counting down."""
     names = BOX_NODES[kind]
     x, y, w, h = box
+    if kind in SIZE_BOX_NODES:
+        return dict(zip(names, (w, h)))
     if kind not in CORNER_BOX_NODES:
         return dict(zip(names, (x, y, w, h)))
     return dict(zip(names, (x, float(height) - (y + h), x + w, float(height) - y)))

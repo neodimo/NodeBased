@@ -32,6 +32,9 @@ class PointAndAreaHandleTests(unittest.TestCase):
     def test_ramp_points(self):
         self._run("Ramp.points")
 
+    def test_reformat_box(self):
+        self._run("Reformat.box")
+
     def test_cornerpin_pins(self):
         self._run("CornerPin.pins")
 

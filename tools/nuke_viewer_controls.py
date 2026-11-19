@@ -65,6 +65,8 @@ class Bench:
         dispatcher.execute({"op": "create", "id": "ramp", "type": "Ramp", "pos": [300, 360]})
         dispatcher.execute({"op": "create", "id": "cp", "type": "CornerPin", "pos": [450, 360]})
         dispatcher.execute({"op": "connect", "id": "cp", "input": "image", "source": "c"})
+        dispatcher.execute({"op": "create", "id": "rf", "type": "Reformat", "pos": [600, 360]})      # step T9 finish
+        dispatcher.execute({"op": "connect", "id": "rf", "input": "image", "source": "c"})
         dispatcher.execute({"op": "view", "id": "t"})
         self.window = Window(dispatcher.document)
         self.window.resize(1400, 900)
@@ -487,6 +489,40 @@ def _ramp_points(bench):
     hidden = bench.window.viewer._point_values() is None
     ok = p0 and p1 and keyed and hidden
     return ok, f"p1 drag {p1}, p0 drag {p0}, animated p0 keyed in one step {keyed}, hidden when deselected {hidden}"
+
+
+@probe("Reformat.box")
+def _reformat_box(bench):
+    """Reformat with type "to box": the output box from the format origin; edges and corners set width and height, the body
+    does not move it (Reformat has no box position), and the box is gone for the other types."""
+    size = dict(reformat_type="to_box", width=400, height=300)
+    bench.focus("rf", **size)
+    bench.idle()
+
+    def box():
+        p = bench.params("rf")
+        return int(p["width"]), int(p["height"])
+
+    taken = bench.drag((400, 150), (450, 160))                            # the right edge: the width only
+    edge = bool(taken) and box() == (450, 300) and bench.undo_steps() == 1
+    bench.focus("rf", **size)
+    bench.drag((400, 300), (380, 340))                                    # the bottom-right corner: both
+    corner = box() == (380, 340)
+    bench.focus("rf", **size)
+    bench.drag((200, 150), (240, 170))                                    # inside: nothing to move
+    body = box() == (400, 300) and bench.undo_steps() == 0
+    bench.focus("rf", **size)
+    keyed = _keyed_drag(bench, "rf", "width", (400, 150), (440, 150), 440.0)
+    bench.focus("rf", reformat_type="to_format", width=400, height=300)
+    other_type = bench.window.viewer._box_values() is None
+    bench.focus("rf", **size)
+    bench.focus("t")
+    hidden = bench.window.viewer._box_values() is None or bench.window.viewer._box_values()[0] != "rf"
+    bench.focus("rf", reformat_type="to_format", format="HD_1080")
+    bench.focus("t")
+    ok = edge and corner and body and keyed and other_type and hidden
+    return ok, (f"right edge {edge}, corner {corner}, body leaves it {body}, animated width keyed in one step {keyed}, "
+                f"none for to format {other_type}, hidden when deselected {hidden}")
 
 
 @probe("CornerPin.pins")

@@ -3406,6 +3406,8 @@ class Viewer(PanZoomView):
         node = document["nodes"].get(key) if key else None
         if node is None or node["type"] not in handles2d.BOX_NODES:
             return None
+        if not handles2d.box_shown(node["type"], self._analysis_params(key)):
+            return None
         view_key = document.get("view")
         nodes = document["nodes"]
         stack, seen = [view_key], set()
@@ -7147,7 +7149,7 @@ class Viewer(PanZoomView):
                     part = "center"            # "You can also move it using Ctrl/Cmd +drag."
                 else:
                     part = handles2d.box_hit(point, *self._box_rect(kind, values), radius,
-                                             body=kind != "Crop")   # Crop: "by dragging its edges"; Text's and the ROI box also move
+                                             body=kind not in ("Crop", "Reformat"))   # Crop: "by dragging its edges"; Text's and the ROI box also move; Reformat's has no position
                 if part is not None:
                     touched = ("center_x", "center_y") if part == "center" else handles2d.BOX_NODES[kind]
                     self.box_drag = {"key": key, "part": part, "start": scene_pos, "scene": scene_pos, "moved": False,
