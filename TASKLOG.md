@@ -1,3 +1,9 @@
+## 2026-11-19 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X4 (Thu 11/19): close the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte (integrator tick)
+
+- **What was done:** `main` `68f7c377` -> `2d069f6e` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `2d069f6e`: Ran 10440 tests in 1759.707 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X4 (Thu 11/19): close the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte
 
 - **What was done (evidence):** fidelity before and after (rows of the report): Emboss 88.1 -> 100.0 (13 of 13 knobs, 12 of 12 act), EdgeDetect 90.5 -> 100.0 (7 of 7),

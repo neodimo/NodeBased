@@ -1,5 +1,24 @@
 ## Lane 9 step X4 (11/19): the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:35 AM on 2026-11-19 PDT)
+
+`main` moved `68f7c377` -> `2d069f6e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `2d069f6e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1119-0955.log`, started 9:57 AM): **Ran 10440 tests in 1759.707 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step X4 (Thu 11/19): close the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte.** Commits:
+  - `e1c203ed` Emboss and EdgeDetect get Output, mask channels, Threshold and Erode size; MotionBlur2D Output UV, VectorDistort Frame Distance, Vectorfield GPU extrapolate and 3DL file format, Encryptomatte Export Write (six nodes at 100.0; saved nodes unchanged)
+  Diff: 24 files changed, 730 insertions(+), 116 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Every row of the six nodes in `docs/PARITY_2D_FIDELITY.md` is 100.0 (was 88.1, 90.5, 87.5, 90.5, 91.2, 92.9); overall 97.8 both times at one decimal. New params (all
 default to what leaves a saved node's pixels alone; saved nodes load them through the nodes' `upgrade_params`): Emboss `threshold`, `edge_erode_size`, `edge_mask_channel`,
 `edge_output_channel`, `output_mask_channel`, `blur_mask_channel`; EdgeDetect `edge_output_channel`, `edge_mask_channel`; MotionBlur2D `uv`; VectorDistort `frame_distance`;
