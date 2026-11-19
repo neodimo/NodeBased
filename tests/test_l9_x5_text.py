@@ -2,7 +2,7 @@
 
 * Text: the knob is held on the node (empty by default), listed after Centre offset where the guide has it, changes no pixel (NodeBased's Text draws one
   block with no per-character groups), and a node saved without it loads with the empty entry;
-* MarkerRemoval: Paint type, Bilinear Y search, Control channel (with its switch), then the Pixel offset pair, as the guide's table lists them.
+* MarkerRemoval: Paint type, Bilinear Y search, Control channel (the switch and the channel on one row), then the Pixel offset pair, as the guide's table lists them.
 """
 import unittest
 
@@ -32,7 +32,7 @@ class TextGroupAnimationTests(unittest.TestCase):
 class MarkerRemovalPanelTests(unittest.TestCase):
     def test_the_panel_follows_the_guides_order(self):
         names = [g.label for g in knobs.KNOB_LAYOUT["MarkerRemoval"]]
-        self.assertEqual(names, ["Paint type", "Bilinear Y search", "Control channel", "Control channel", "X offset", "Y offset"])
+        self.assertEqual(names, ["Paint type", "Bilinear Y search", "Control channel", "X offset", "Y offset"])
 
     def test_the_knobs_still_act(self):
         image = np.zeros((5, 9, 4), np.float32)

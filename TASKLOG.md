@@ -1,3 +1,16 @@
+## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X5 (Thu 11/19): the last gaps on SplineWarp, LensDistortion, Grain, MarkerRemoval and Text
+
+- **What was done (evidence):** fidelity before and after (rows of the report): SplineWarp 91.1 -> 98.8 (knobs 19/23 -> 23/23, sockets 67 -> 100, defaults 89 -> 90, layout 96 -> 98), LensDistortion 87.6 -> 94.6 (knobs 37/58 -> 49/58; layout 100 -> 99 as the new knobs' widget kinds are measured),
+  Grain 96.7 -> 100.0, MarkerRemoval 96.2 -> 100.0, Text 99.3 -> 100.0, VectorCornerPin 98.3 -> 100.0. Overall 97.8 -> 97.9. (1) VectorCornerPin Frame Distance (`frame_distance`, 1 to 64 frames, default 1 frame) is held on the node as VectorDistort's is: no pixel
+  changes with it because SmartVector keeps one vector set per frame. (2) SplineWarp: `transform_matrix` is nine params `extra_matrix_RC` (identity default) applied to the curves after the Transform tab in canvas pixels, read as CornerPin's is (the guide gives
+  no formula); the `B` input (optional, after the mask) with `spline_output` A, A warped (default), B, B warped (B is carried from the destination curves back to the source ones; AB morph is not offered, the guide has no formula for it); `boundary_curverez`
+  (3), `previewrez` (100) and `rbf` (off) are held and move no pixel. (3) Grain `presets`: the guide's seven names after NodeBased's `none`; the guide gives no default and no values for any stock, so choosing one sets nothing (nothing invented).
+  (4) Text `group_animation` is held (empty text entry); MarkerRemoval's panel follows the guide's order with the switch and channel on one row, and its three counts are declared whole numbers in the audit tool. (5) LensDistortion: the twelve Analysis tab
+  settings the guide gives a default for (Detection frames, Preview, Number of Features, Patch Size, Feature Separation, Detection Threshold, Angle, Distance and Peak Threshold, Solve Error, Threshold, Show) are held at the guide's defaults.
+- **Not done:** the nine buttons of the Analysis tab (Detect, Reject, Solve, Reset is already built, the six line drawing modes) have nothing to run without a grid detector or solver; SplineWarp's `key` panel and the AB morph output; Grain preset values and the
+  node-label change for `other`; Text per-character groups. SplineWarp stays full-frame only, so its tile-path check is a skip. No schema bump (stays 37); saved nodes load the new knobs at defaults that change nothing (tested).
+- **Tests:** `tests/test_l9_x5_vcp.py`, `test_l9_x5_splinewarp.py`, `test_l9_x5_grain.py`, `test_l9_x5_text.py`, `test_l9_x5_lens.py` plus the modules that grep for these kinds. Report regenerated and copied byte-identical to `nodebased/data/docs/`.
+
 ## 2026-11-19 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X4 (Thu 11/19): close the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte (integrator tick)
 
 - **What was done:** `main` `68f7c377` -> `2d069f6e` plus this docs commit. Evidence and per-lane commit

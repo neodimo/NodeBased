@@ -1,3 +1,11 @@
+## Lane 9 step X5 (11/19): the last gaps on SplineWarp, LensDistortion, Grain, MarkerRemoval and Text
+
+Rows of `docs/PARITY_2D_FIDELITY.md` now: SplineWarp 98.8 (was 91.1), LensDistortion 94.6 (87.6), Grain 100.0 (96.7), MarkerRemoval 100.0 (96.2), Text 100.0 (99.3), VectorCornerPin 100.0 (98.3); overall 97.9 (97.8).
+New params, all at defaults that leave a saved node's pixels alone (saved nodes load them through `upgrade_params`, schema stays 37): VectorCornerPin `frame_distance`; SplineWarp `extra_matrix_00` to `extra_matrix_22`, `spline_output`,
+`boundary_curverez`, `previewrez`, `rbf` and the optional input `b` (after `mask`); Grain `presets`; Text `group_animation`; Undistort and Redistort `detectionFrameType`, `preview`, `numFeatures`, `patchSize`, `featureSeparation`,
+`detectionThreshold`, `angleThreshold`, `distanceThreshold`, `peakThreshold`, `solveError`, `errorThreshold`, `overlayType`. The extra matrix and B (B and B warped) change pixels; the rest are held, listed in `NOT_PIXEL` and in the
+mapping's `default_notes`. SplineWarp's old `output` (image, stmap, channels) is now labelled View and `spline_output` takes the guide's Output place. Tests: `tests/test_l9_x5_*.py`.
+
 ## Lane 9 step X4 (11/19): the remaining gaps on Emboss, EdgeDetect, MotionBlur2D, VectorDistort, Vectorfield and Encryptomatte
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:35 AM on 2026-11-19 PDT)
