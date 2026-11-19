@@ -1,5 +1,31 @@
 ## Lane 9 step X6 (11/19): the last open marks in Filter and Draw
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:36 PM on 2026-11-19 PDT)
+
+`main` moved `0eefc250` -> `c0cbb414` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `c0cbb414` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1119-1456.log`, started 2:58 PM): **Ran 10579 tests in 1737.403 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X6 (Thu 11/19): Kronos and OFlow pick their motion estimator like Nuke's, and the last panel marks in Color and Keyer.** Commits:
+  - `bc64a011` Lane 2 X6: Kronos's Regularized pass runs at full size so a lower Vector Detail gives the smoother field; tests follow the IBKColor widgets and the Method default
+  - `e6264bef` Lane 2 X6 parts 2 to 4: Kronos Method and Strength on the shared estimator (a saved Kronos reads Local and keeps its pictures), SmartVector Export Write, default notes on ChromaKeyer and Keylight, fidelity report and worklist regenerated
+  - `f2472402` Lane 2 X6 part 1: IBKColor's darks and lights are red, green, blue split knobs and patch black a number field; MatchGrade's reference frame lists and HSVTool's Conversion default are accepted with the guide's words
+  Diff: 24 files changed, 646 insertions(+), 98 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step X6 (Thu 11/19): the last open marks in Filter and Draw: EdgeBlur's output, VectorBlur's normalize, Roto's format, Flare's corner angle, and LensDistortion's line tools.** Commits:
+  - `1914092d` docs: rebuild the 2D fidelity report and lane 9 worklist after step X6, with the step notes
+  - `4debce71` Roto format chooser, EdgeBlur output, VectorBlur normalize, Flare probe off-centre, and the guide's sentences for LensDistortion's nine buttons (lane 9 step X6)
+  Diff: 23 files changed, 695 insertions(+), 75 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Roto `format` chooser, EdgeBlur `output`, VectorBlur `normalize` (scatter when off), Flare probe off-centre (corners angle `rel` now shows), LensDistortion's nine buttons recorded with the guide's sentences, Bokeh's Deep Input and Camera checked. Fidelity: EdgeBlur 97.1 -> 100.0, VectorBlur 92.4 -> 95.0, Flare 95.5 -> 96.1, Roto 98.8 (widget mark gone), overall 97.9 -> 97.9; lane 9 worklist 0 open. Details in the TASKLOG note and docs/PARITY_2D.md "Lane 9 step notes".
 
 ## Lane 2 step X6 (11/19): Kronos's Method and Strength, SmartVector's Export Write, and the last panel marks

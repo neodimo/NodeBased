@@ -1,3 +1,9 @@
+## 2026-11-19 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X6 (Thu 11/19): Kronos and OFlow pick their motion estimator like Nuke's, and the last panel marks in Color and Keyer, Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X6 (Thu 11/19): the last open marks in Filter and Draw: EdgeBlur's output, VectorBlur's normalize, Roto's format, Flare's corner angle, and LensDistortion's line tools (integrator tick)
+
+- **What was done:** `main` `0eefc250` -> `c0cbb414` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `c0cbb414`: Ran 10579 tests in 1737.403 s, OK (skipped=39), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X6 (Thu 11/19): the last open marks in Filter and Draw
 
 - **What was done (evidence):** fidelity before and after (rows of the report): EdgeBlur 97.1 -> 100.0 (knobs 8/9 -> 9/9, acts 4/4 -> 5/5), VectorBlur 92.4 -> 95.0 (knobs 13/15 -> 14/15), Flare 95.5 -> 96.1 (acts 24/25 -> 27/27: no knob left that changes no pixels), Roto 98.8 -> 98.8 (the widget-type mark gone, types 55/56 -> 55/55; the default `root.format` is accepted as a skipped default), LensDistortion 94.6 -> 94.6 and Bokeh 95.2 -> 95.2 (unchanged by design, see below). Overall 97.9 -> 97.9 (the knobs-that-act line reads 465 of 465, was 461 of 462). Lane 9's worklist: 0 open, 15 accepted (was 1 open, 14 accepted). No schema bump (main is at 38; each new param is additive with a load-time default).
