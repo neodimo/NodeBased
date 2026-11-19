@@ -1,5 +1,25 @@
 ## Lane 2 step X2 (11/18 10:30 PM): Project Settings panel and default colour spaces by file type
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:36 PM on 2026-11-18 PDT)
+
+`main` moved `fd24fa04` -> `1592934a` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `1592934a` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1118-2256.log`, started 10:57 PM): **Ran 10286 tests in 1973.115 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X2 (Wed 11/18): Project Settings that open and read like Nuke's Root panel, and default colour spaces by file type.** Commits:
+  - `4ade4d3a` Colour-space defaults: the decode-ahead prefetch asks for a Read the way the executor does, the schema 36 migration only touches documents that hold a Read, DPX and Cineon named in the media error messages
+  - `cf0f9a9f` Project Settings panel like Nuke's Root panel (S, Edit menu), and default colour spaces by file type: int8, int16, log and float LUTs that a Read at Auto resolves through, Read opens DPX and Cineon, schema 36
+  Diff: 31 files changed, 891 insertions(+), 76 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Root panel: `nodebased/rootpanel.py` (layout table, `edit`, `edit_proxy`, `knob_groups` for the audit), `Window.open_project_settings_panel` / `build_root_panel`, key `@root` in
 `pinned_panels`; S in the graph and Edit > Project Settings open it (S no longer creates a Shuffle). Colour spaces: `settings.project.int8_lut/int16_lut/log_lut/float_lut`
 (`projectsettings.DEFAULTS`: sRGB, sRGB, Cineon, Linear Rec.709), `nodebased/readspaces.py`, `media.resolve_space`, `color.cineon_to_linear`, Read opens DPX and Cineon.

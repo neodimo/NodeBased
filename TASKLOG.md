@@ -1,3 +1,9 @@
+## 2026-11-18 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X2 (Wed 11/18): Project Settings that open and read like Nuke's Root panel, and default colour spaces by file type (integrator tick)
+
+- **What was done:** `main` `fd24fa04` -> `1592934a` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `1592934a`: Ran 10286 tests in 1973.115 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-18 10:30 PM — Lane 2 step X2: a Project Settings panel like Nuke's Root panel, and default colour spaces by file type (DONE)
 
 - **What was done:** (1) `nodebased/rootpanel.py` lays out Root's panel in the Reference Guide's tabs, order, labels and widget kinds (Root tab: name, project directory,
