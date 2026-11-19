@@ -2894,6 +2894,10 @@ class Evaluator:
                         # The guide's shutter (nodebased/transformbehaviour.py); a node saved before it keeps the older window.
                         low, high = _transformbehaviour.shutter_window(
                             frame, shutter, offset, params.get("custom_offset", 0.0), _transformbehaviour.is_legacy(kind, params, "legacy_shutter_window"))
+                    elif kind in ("MotionBlur2D", "MotionBlur3D"):
+                        # The guide's shutter offset, as the Transform nodes read it; a node saved before keeps the older window (lane 2 step X5).
+                        low, high = _transformbehaviour.shutter_window(
+                            frame, shutter, offset, params.get("custom_offset", 0.0), timeknobs.is_legacy(params, "legacy_shutter_window"))
                     elif offset == "start":
                         low, high = frame - shutter, frame
                     elif offset == "end":

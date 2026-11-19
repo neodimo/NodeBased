@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -925,8 +925,8 @@ SPECS = {
     "NoTimeBlur": {"inputs": ["image"], "params": {"rounding": "rint", "single": 1}},
     # Motion blur samples the animated upstream image across a shutter. MotionBlur3D can also use
     # an explicit camera plus depth pass to blur a still beauty through camera motion.
-    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask", "transf"], "params": {"uv": "motion", "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
-    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"uv": "motion", "Z": "none", "distance": 1.0, "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask", "transf"], "params": {"uv": "motion", "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0, **_filterbehaviour.new_params("MotionBlur2D")}},
+    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"uv": "motion", "Z": "none", "distance": 1.0, "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0, **_filterbehaviour.new_params("MotionBlur3D")}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
     "Kronos": {"inputs": ["image"], "optional_inputs": ["matte", "mosrc", "fgvecs", "bgvecs"], "params": {"speed": 0.5, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
               **_retimeknobs.new_params("Kronos")}},
@@ -3217,6 +3217,23 @@ def upgrade_document(document):
         if isinstance(color, dict) and isinstance(color.get("config"), str) and color["config"].strip():
             _ocioconfigs.migrate(color)
         doc["version"] = 37
+    if isinstance(doc, dict) and doc.get("version") == 37:
+        # v37 -> v38: MotionBlur2D and MotionBlur3D open the shutter where the Nuke 17.0 guide says (`start` at the current frame, `end` closing
+        # there, `custom` opening at the offset). A node saved before reads the window it had, through `legacy_shutter_window` 1, so it renders
+        # the same pixels; a node made since carries 0. Group graphs too.
+        def _motionblur_shutter(scope):
+            for current in scope.values():
+                if not isinstance(current, dict):
+                    continue
+                params = current.get("params")
+                if isinstance(params, dict) and current.get("type") in ("MotionBlur2D", "MotionBlur3D"):
+                    params.setdefault("legacy_shutter_window", 1)
+                graph = current.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _motionblur_shutter(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _motionblur_shutter(doc["nodes"])
+        doc["version"] = 38
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

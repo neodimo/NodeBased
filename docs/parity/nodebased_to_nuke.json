@@ -2728,6 +2728,7 @@
     {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
     {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["legacy_shutter_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the shutter followed the guide keep start and end the other way round; lane 2 step X5"},
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["uv"], "nuke": ["uv"], "kind": "same"}
@@ -2745,6 +2746,7 @@
     {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
     {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["legacy_shutter_window"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the shutter followed the guide keep start and end the other way round; lane 2 step X5"},
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["uv"], "nuke": ["uv"], "kind": "same"},

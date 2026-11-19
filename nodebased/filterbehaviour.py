@@ -49,6 +49,9 @@ NEW = {
     "DropShadow": {"legacy_dropshadow_angle": 0},
     "DirBlur": {"legacy_dirblur_knobs": 0},
     "Convolve": {"legacy_convolve": 0, "normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"},
+    # MotionBlur2D and MotionBlur3D (lane 2 step X5): the guide's shutter window (see imaging.py, `_transformbehaviour.shutter_window`).
+    "MotionBlur2D": {"legacy_shutter_window": 0},
+    "MotionBlur3D": {"legacy_shutter_window": 0},
 }
 # What an older document's node of the kind gets on load besides the legacy flags: the new knobs, at the value that leaves it as it was.
 from . import storedknobs as _storedknobs      # noqa: E402
@@ -61,9 +64,9 @@ UPGRADE_EXTRA = {"Denoise": _denoise.UPGRADE, "MotionBlur": _motionblur.UPGRADE,
                  "Laplacian": {"laplacian_size": 3.0},
                  # MotionBlur3D (lane 2 step X4): Output UV, Z input and distance. A saved node blurs through the same vectors as before; the
                  # new layer is extra data on the output, and a depth source it had keeps winning over the constant distance.
-                 "MotionBlur3D": {"uv": "motion", "Z": "none", "distance": 1.0},
+                 "MotionBlur3D": {"uv": "motion", "Z": "none", "distance": 1.0, "legacy_shutter_window": 1},
                  # MotionBlur2D (lane 9 step X4): Output UV, a layer of extra data; the picture is blurred as before.
-                 "MotionBlur2D": {"uv": "motion"},
+                 "MotionBlur2D": {"uv": "motion", "legacy_shutter_window": 1},
                  "Convolve": {"normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"}}
 
 
