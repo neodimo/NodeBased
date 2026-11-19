@@ -1764,7 +1764,8 @@
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["adjust_by_scaling"], "kind": "extra", "reason": "NodeBased-only: the older saturation and brightness adjustment, which scaled the value by (1 + adjustment); a new node adds the adjustment as Nuke does, and a graph saved before keeps this on"}
    ],
-   "skip_default": ["huesrcs", "satsrcs", "brtsrcs", "output"]
+   "skip_default": ["huesrcs", "satsrcs", "brtsrcs", "output"],
+   "default_notes": {"Conversion": "The guide's table gives the `Conversion` menu (label `is`) the default `hue` and its `output` knob `rgba.alpha`, and says no more about either. NodeBased's one Output to alpha choice holds both knobs, and its `preserve` is the state in which the output is not written: reading both guide defaults literally makes a new HSVTool replace the picture's alpha with the raw hue, which turns the colour adjuster into a matte writer and changes every new node's pixels. `hue` is what the choice reads once an artist turns the output on, so the default stays preserve (lane 2 step X6)."}
   },
   "ColorMatrix": {
    "nodebased": "ColorMatrix",
@@ -2013,6 +2014,7 @@
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
    "widget_notes": {"sourceRefFrames": "The guide types the reference frames `number`; NodeBased takes a list of frames as text (1, 5, 10), which a single number field cannot hold.", "targetRefFrames": "As sourceRefFrames."},
+   "accept_widget": {"sourceRefFrames": "a text field is the right widget: the guide's own words are \"Displays the Source input frames that you have set as reference frames\" (a list, with an Add and a Delete button for the current frame; its type column says number and its default 0 stands for an empty list), and one number field cannot hold the list (1, 5, 9-12)", "targetRefFrames": "a text field is the right widget: the guide's own words are \"Displays the Target input frames that you have set as reference frames\" (a list, with an Add and a Delete button for the current frame; its type column says number and its default 0 stands for an empty list), and one number field cannot hold the list"},
    "knobs": [
     {"nodebased": ["grade_gain_r", "grade_gain_g", "grade_gain_b"], "nuke": ["slope"], "kind": "components", "reason": "the solved gain is Nuke's CDL slope"},
     {"nodebased": ["grade_gamma_r", "grade_gamma_g", "grade_gamma_b"], "nuke": ["power"], "kind": "components", "reason": "the solved gamma is Nuke's CDL power"},
@@ -3311,7 +3313,7 @@
     {"nodebased": "pick", "nuke": "1", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
    ],
-   "widget_notes": {"off": "The guide types darks and lights `number_list` (red, green, blue); NodeBased's are single numbers that apply to every channel.", "mult": "As off.", "multi": "The guide types patch black `number`; NodeBased draws a checkbox, as the knob is an on/off switch (default 0)."},
+   "widget_notes": {"off": "The guide types darks and lights `number_list` (red, green, blue); NodeBased's are split knobs: one number that applies to every channel, or a red, green and blue list in which the screen channel reads its own entry (lane 2 step X6).", "mult": "As off.", "multi": "The guide types patch black `number` (default 0); NodeBased draws a number field holding 0 or 1."},
    "knobs": [
     {"nodebased": ["fill_size"], "nuke": ["Size"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'size', scripting name `Size`"},
     {"nodebased": ["screen_erode"], "nuke": ["erode"], "kind": "renamed", "reason": "PARITY_2D.md Keyer #7: Nuke's `erode`"},

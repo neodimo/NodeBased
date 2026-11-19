@@ -390,7 +390,11 @@ def alignment(nuke_node, pair, kind, name=""):
                         and all(m in ("int", "float") for m in g.members):
                     base = "row"
                 if ok_widgets and base not in ok_widgets:
-                    row["marks"].append("widget")
+                    accepted_widget = (pair.get("accept_widget") or {}).get(k["name"])
+                    if accepted_widget:
+                        row["widget_accepted"] = accepted_widget     # the pairing says why this widget is the right one
+                    else:
+                        row["marks"].append("widget")
             elif first is not None:
                 row["marks"].append("not laid out")
             if first in params and len(nb) == 1 and k["type"] not in ("unknown",):
@@ -771,6 +775,8 @@ def node_items(name, row, nuke_node, pair, weight, interactions=None, case_resul
             continue
         if r.get("accepted"):
             add("default", r["name"], r["default"], r["nb_default"], r["primary"], status="accepted", reason=r["accepted"])
+        if r.get("widget_accepted"):
+            add("widget type", r["name"], r["type"], r["nb_widget"], r["primary"], status="accepted", reason=r["widget_accepted"])
         for m in r["marks"]:
             nuke_value = {"default": r["default"], "label": r["label"], "widget": r["type"]}.get(m, r["label"])
             nb_value = {"default": r["nb_default"], "label": r["nb_label"], "widget": r["nb_widget"]}.get(m, r["nodebased"])

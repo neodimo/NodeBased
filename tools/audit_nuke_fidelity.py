@@ -548,6 +548,9 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
             if nuke_kind == "unknown":
                 unknown_count += 1
             continue
+        if name in (pair.get("accept_widget") or {}):
+            unknown_count += 1      # the pairing records why this knob's widget differs from the guide's type (lane 2 step X6): unmeasured, never scored
+            continue
         if read and name in _READ_KNOB_TYPES:
             nuke_kind = _READ_KNOB_TYPES[name]
         elif (node_type, name) in _BOOL_KNOBS:

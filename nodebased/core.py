@@ -78,9 +78,9 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
 SCHEMA_VERSION = 38
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
-# param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
+# param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a, "rgb" is r, g, b and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
-SPLIT_CHANNELS = {"rgba": ("r", "g", "b", "a"), "wh": ("w", "h")}
+SPLIT_CHANNELS = {"rgba": ("r", "g", "b", "a"), "rgb": ("r", "g", "b"), "wh": ("w", "h")}
 SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: split set}
     # Nuke's AColor knobs on the colour nodes (docs/PARITY_2D.md). A kernel reads one through split_values, and each is laid out
     # as a KnobGroup("split", ...) in nodebased/knobs.py; tests/test_split_knobs.py checks the two lists agree.
@@ -98,6 +98,8 @@ SPLITTABLE: dict[str, dict[str, str]] = {       # node kind -> {param name: spli
     # Nuke's size on the Filter nodes is a WH knob (lane 9 step D): a width and a height, so a blur can be wider than it is tall.
     "Blur": {"radius": "wh"}, "Sharpen": {"sharpen_size": "wh"}, "Soften": {"soften_size": "wh"}, "Glow": {"glow_size": "wh"},
     "ErodeFilter": {"filter_size": "wh"},
+    # IBKColor's darks and lights are Nuke's `off` and `mult`, typed number_list (red, green, blue) in the guide (lane 2 step X6).
+    "IBKColor": {"darks": "rgb", "lights": "rgb"},
 }
 
 
@@ -2589,7 +2591,8 @@ LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_cl
 LIMITS.update(_behaviour2d.LIMITS)
 LIMITS.update(_drawfxbehaviour.LIMITS)
 LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_length": (0.0, 64.0),
-               "legacy_shutter": (0, 1), "auto_shutter_time": (0, 1), "flicker_compensation": (0, 1), "vector_density": (0.02, 1.0), "legacy_vector_density": (0, 1)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
+               "legacy_shutter": (0, 1), "auto_shutter_time": (0, 1), "flicker_compensation": (0, 1), "vector_density": (0.02, 1.0), "legacy_vector_density": (0, 1),
+               "motion_strength": (0.1, 10.0)})      # Kronos and OFlow (nodebased/retimeknobs.py); input speed has no negative values
 CHOICES["retimed_channels"] = list(_chrome.CHANNEL_CHOICES)
 CHOICES["retime_output"] = list(_retimeknobs.OUTPUTS)
 CHOICES["resample_type"] = list(_retimeknobs.RESAMPLES)

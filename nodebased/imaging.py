@@ -7283,6 +7283,7 @@ class Evaluator:
         clamped to `darks`..`lights`; alpha is 1. With a `pick` picture (the node's second input, same pixel grid) the screen is
         still found in `image`, but the colour the plate holds there is the pick's rather than the image's: a clean plate or a
         sampled screen colour stands in for the computed one."""
+        from .core import split_values
         rgb = image[..., :3].astype(np.float32)
         colour = rgb if pick is None else pick[..., :3].astype(np.float32)
         dominant = 2 if p.get("screen_type", "green") == "blue" else 1
@@ -7301,7 +7302,9 @@ class Evaluator:
             new = (~known) & (counts > 0)
             plate = np.where(new, sums / np.maximum(counts, 1.0), plate)
             known = known | new
-        darks, lights = float(p.get("darks", 0.05)), float(p.get("lights", 1000.0))
+        # Nuke's darks and lights are red, green, blue lists: split, the screen channel reads its own entry (one number applies to all).
+        darks = float(split_values(p, "darks", 3, 0.05)[dominant])
+        lights = float(split_values(p, "lights", 3, 1000.0)[dominant])
         channel = plate[..., dominant:dominant + 1]
         factor = np.where(channel > 1e-6, np.clip(channel, darks, lights) / np.maximum(channel, 1e-6), 1.0)
         plate = np.where(known, plate * factor, plate)

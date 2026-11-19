@@ -39,10 +39,11 @@ class SharedRulesTests(unittest.TestCase):
         for knob in ("in", "out"):
             self.assertNotIn("widget", marks("Histogram", knob))
 
-    def test_a_single_slider_is_still_not_a_number_list(self):
-        """IBKColor's darks and lights hold one number where Nuke's hold red, green and blue: that is real work, and stays listed."""
-        self.assertIn("widget", marks("IBKColor", "off"))
-        self.assertIn("widget", marks("IBKColor", "mult"))
+    def test_a_split_knob_is_a_number_list(self):
+        """IBKColor's darks and lights were float sliders, one number where Nuke's number_list holds red, green and blue; since step X6 they are split
+        knobs, which read as number lists."""
+        for knob in ("off", "mult"):
+            self.assertNotIn("widget", marks("IBKColor", knob))
 
     def test_a_shared_guide_label_is_the_rows_not_one_knobs(self):
         for knob in ("to0", "to1", "to2", "to3"):
@@ -74,10 +75,14 @@ class WorklistTests(unittest.TestCase):
         self.assertEqual(rows, [])
 
     def test_the_real_ones_remain(self):
+        """After step X6 nothing of the panel marks is open on IBKColor or MatchGrade: the darks and lights are split knobs, and the reference frames are
+        accepted with the guide's wording (a list shown as text)."""
         rows = open_rows(["IBKColor", "MatchGrade"], ("label", "widget type"))
-        self.assertIn(("IBKColor", "widget type", "mult"), rows)
-        self.assertIn(("IBKColor", "widget type", "off"), rows)
-        self.assertIn(("MatchGrade", "widget type", "sourceRefFrames"), rows)
+        self.assertEqual(rows, [])
+        items = book.worklist(nodes=["MatchGrade"], with_cases=False)
+        accepted = {i["knob"]: i["reason"] for i in items if i["status"] == "accepted" and i["kind"] == "widget type"}
+        self.assertEqual(set(accepted), {"sourceRefFrames", "targetRefFrames"})
+        self.assertIn("Displays the Source input frames", accepted["sourceRefFrames"])
 
     def test_color_transfer_is_paired_so_it_is_not_a_missing_node(self):
         items = book.worklist(nodes=["ColorTransfer"], with_cases=True)

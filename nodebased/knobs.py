@@ -30,7 +30,7 @@ class KnobGroup:
     soft_range: tuple[float, float] | None = None
     section: str | None = None     # a heading shown above the first knob of a run that shares it
     help: str | None = None        # one plain sentence shown under the knob and as its tooltip
-    channels: str | None = None    # a "split" knob: its split set, "rgba" (r g b a) or "wh" (w h), as in core.SPLIT_CHANNELS
+    channels: str | None = None    # a "split" knob: its split set, "rgba" (r g b a), "rgb" (r g b) or "wh" (w h), as in core.SPLIT_CHANNELS
     captions: tuple[str, ...] | None = None    # an "xy" row's field captions when they are not x, y, z (a Keyer's A B C D); a "row"
                                                # knob's per-member labels (the mask row's inject, invert, fringe), "" for none
     members: tuple[str, ...] | None = None     # a "row" group: the widget kind of each param (int, float, enum, bool, string), side by side on one row;
@@ -1881,9 +1881,9 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("screen_type",), label="Screen type"),
         KnobGroup("int", ("fill_size",), label="Size"),
         KnobGroup("float_slider", ("screen_erode",), label="Erode", soft_range=(0, 10)),
-        KnobGroup("float_slider", ("darks",), label="Darks", soft_range=(0, 1)),
-        KnobGroup("float_slider", ("lights",), label="Lights", soft_range=(0, 10)),
-        KnobGroup("bool", ("patch_black",), label="Patch black"),
+        KnobGroup("split", ("darks",), label="Darks", soft_range=(0, 1), channels="rgb"),
+        KnobGroup("split", ("lights",), label="Lights", soft_range=(0, 10), channels="rgb"),
+        KnobGroup("int", ("patch_black",), label="Patch black"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "IBKGizmo": _groups(
         KnobGroup("enum", ("screen_type",), label="Screen type"),
