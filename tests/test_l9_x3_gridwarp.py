@@ -240,5 +240,35 @@ class OldDocumentsAndLayoutTests(unittest.TestCase):
             self.assertEqual(core.LIMITS[name], (0, 1))
 
 
+class PanelTests(unittest.TestCase):
+    """The real Properties panel: the keys readouts and the Resize to Image buttons of both grids, and the Reset button of a lens node."""
+
+    def setUp(self):
+        from tests.test_desktop import release_window
+        self.window = Window()
+        self.window.show()
+        APP.processEvents()
+        self.addCleanup(release_window, self)
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_the_grid_panel_has_a_keys_readout_and_a_resize_button_per_grid(self):
+        from PySide6.QtWidgets import QLabel, QPushButton
+        self.window.dispatcher.execute(dict(op="create", id="gw", type="GridWarp"))
+        panel = self.window.build_node_panel("gw")
+        for side in ("source", "destination"):
+            self.assertEqual(panel.findChild(QLabel, f"gridwarp-{side}-keys").text(), "none")
+            self.assertIsNotNone(panel.findChild(QPushButton, f"gridwarp-{side}-resize"))
+
+    def test_a_lens_panel_has_a_reset_button(self):
+        from PySide6.QtWidgets import QPushButton
+        for kind in ("Undistort", "Redistort"):
+            self.window.dispatcher.execute(dict(op="create", id=f"lens-{kind}", type=kind))
+            self.assertIsNotNone(self.window.build_node_panel(f"lens-{kind}").findChild(QPushButton, "lens-reset-distortion"), kind)
+
+
 if __name__ == "__main__":
     unittest.main()
