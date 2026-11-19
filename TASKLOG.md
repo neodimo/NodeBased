@@ -1,3 +1,9 @@
+## 2026-11-18 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T7 (Wed 11/18): the Curve Editor and Dope Sheet work like Nuke's (integrator tick)
+
+- **What was done:** `main` `bcd14e1e` -> `6ce12e4b` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `6ce12e4b`: Ran 10209 tests in 1902.147 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T6 (Tue 11/17): the rest of the Node Graph, and the last linking case (finish 1) (integrator tick)
 
 - **What was done:** `main` `0e712973` -> `19dd070b` plus this docs commit. Evidence and per-lane commit

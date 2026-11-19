@@ -1,5 +1,25 @@
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
+## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (9:06 PM on 2026-11-18 PDT)
+
+`main` moved `bcd14e1e` -> `6ce12e4b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `6ce12e4b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1118-2026.log`, started 8:27 PM): **Ran 10209 tests in 1902.147 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T7 (Wed 11/18): the Curve Editor and Dope Sheet work like Nuke's.** Commits:
+  - `2d086c9d` Curve Editor and Dope Sheet work like Nuke's (lane 10, step T7)
+  - `52063aea` Curve Editor and Dope Sheet reference: 33 behaviours from Nuke 17.0's Animating Parameters page (lane 10, step T7)
+  Diff: 9 files changed, 904 insertions(+), 16 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (10:15 PM on 2026-11-17 PDT)
 
 `main` moved `0e712973` -> `19dd070b` (lane commits cherry-picked onto main in lane order) and then to this
