@@ -73,7 +73,10 @@ NEW["Radial"] = {FLAG: 0, "plinear": 0, "ramp": "none", **RAMP_POINTS}
 NEW["Grid"] = {FLAG: 0, "ramp": "none", **RAMP_POINTS}
 NEW["Noise"] = {FLAG: 0, **NOISE_COLOUR}
 NEW["Dither"] = {"legacy_dither": 0, "monodither": 0, "static_seed": 0, "bits": 0, "dither_amount": 0.1}
-NEW["Grain"] = {"legacy_grain": 0, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
+# The guide's presets list (Grain: `presets`): six film stocks and `other`. It gives no default ("N/A") and no values for any stock, so the list starts at
+# NodeBased's own `none` and choosing a stock sets no other knob (nothing is invented); lane 9 step X5.
+GRAIN_PRESETS = ["none", "Kodak 5248", "Kodak 5279", "Kodak FX214", "Kodak GT5274", "Kodak 5217", "Kodak 5218", "other"]
+NEW["Grain"] = {"legacy_grain": 0, "presets": "none", "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
                 "maskgrain": 1, "invert_mask": 0, "red_intensity": 0.416, "green_intensity": 0.46, "blue_intensity": 0.85}
 NEW["Defocus"] = {"legacy_defocus": 0, "scale": 1.0}
 NEW["ZDefocus"] = {"legacy_zdefocus": 0, "zdefocus_math": "depth", "size": 25.0, **_zdefocusknobs.NEW}
@@ -94,7 +97,7 @@ LEGACY["Radial"] = {FLAG: 1, "plinear": 0, "ramp": "none", **RAMP_POINTS}
 LEGACY["Grid"] = {FLAG: 1, "ramp": "none", **RAMP_POINTS}
 LEGACY["Noise"] = {FLAG: 1, **NOISE_COLOUR}
 LEGACY["Dither"] = {"legacy_dither": 1, "monodither": 0, "static_seed": 0}
-LEGACY["Grain"] = {"legacy_grain": 1, "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
+LEGACY["Grain"] = {"legacy_grain": 1, "presets": "none", "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
                    "maskgrain": 0, "invert_mask": 0}
 LIMITS = {"legacy_roto_alpha": (0, 1), "legacy_roto_shapes": (0, 1), "legacy_lightwrap_grade": (0, 1), "legacy_lightwrap_luma": (0, 1), "legacy_paint_replace": (0, 1), "legacy_defocus": (0, 1), "legacy_zdefocus": (0, 1), "legacy_edge_extend": (0, 1), "source_premultiplied": (0, 1), "premultiply": (0, 1),
           "erode": (-100.0, 100.0), FLAG: (0, 1), "plinear": (0, 1), "legacy_dither": (0, 1), "monodither": (0, 1), "static_seed": (0, 1), "legacy_grain": (0, 1),

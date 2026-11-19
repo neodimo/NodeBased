@@ -621,6 +621,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Grain": _groups(
         KnobGroup("int", ("seed",), label="Seed"),
+        KnobGroup("enum", ("presets",), label="Presets",
+                  help="The film stock to match, as the guide lists them. The guide gives no size, irregularity or intensity values for any stock, so choosing one only records it; the knobs below stay as they are."),
         KnobGroup("float_slider", ("red_size",), label="Red", soft_range=(0, 20), section='Size'),
         KnobGroup("float_slider", ("green_size",), label="Green", soft_range=(0, 20)),
         KnobGroup("float_slider", ("blue_size",), label="Blue", soft_range=(0, 20)),
@@ -1273,7 +1275,19 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("skew_y",), label="Skew Y"),
         KnobGroup("enum", ("skew_order",), label="Skew order"),
         KnobGroup("xy", ("center_x", "center_y"), label="Center"),
-        KnobGroup("enum", ("filter",)), KnobGroup("enum", ("output",))),
+        *(KnobGroup("float", (f"extra_matrix_{r}{c}",), label=f"Extra matrix {r},{c}",
+                    section="Extra matrix" if (r, c) == (0, 0) else None,
+                    help="A matrix applied to the curves after the Transform tab, in canvas pixels, read as CornerPin's is (the guide states no formula)." if (r, c) == (0, 0) else None)
+          for r in range(3) for c in range(3)),
+        KnobGroup("int", ("boundary_curverez",), label="Boundary curve resolution",
+                  help="The resolution of the boundary curve. NodeBased has no separate boundary curve, so the value is kept and does not change the picture."),
+        KnobGroup("int", ("previewrez",), label="Preview resolution",
+                  help="The resolution of the Viewer's preview while a curve is edited; it never changes the rendered picture."),
+        KnobGroup("bool", ("rbf",), label="Classic warping",
+                  help="Nuke's classic warping method. The guide gives no formula for it, so NodeBased keeps the value and renders one way."),
+        KnobGroup("enum", ("filter",)),
+        KnobGroup("enum", ("spline_output",), label="Output", help="A or B as they are, or either carried along the curves: A warped (the default) goes from the source curves to the destination curves, B warped back. AB morph is not offered."),
+        KnobGroup("enum", ("output",), label="View", help="The picture, or the st-map of the warp (NodeBased's own diagnostic views).")),
     "GridWarp": _groups(
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("warp",), label="Warp"),
@@ -1657,6 +1671,7 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("use_baked",), label="Bake corners", help="Use the baked To pins instead of the pins the vectors give (what Nuke's Bake Corners button leaves behind)."),
         KnobGroup("enum", ("image_filter",), label="Filter", help="How the warp samples the picture when it remaps pixels (Cubic by default; Impulse keeps the original values)."),
         *[KnobGroup("xy", (f"from{i}_x", f"from{i}_y"), label=f"From{i} xy", help="The corner of the source the pin takes: 1 bottom left, 2 bottom right, 3 top right, 4 top left." if i == 1 else None) for i in range(1, 5)],
+        KnobGroup("enum", ("frame_distance",), label="Frame distance", help="The trade-off between warping well for nearby frames and for frames further away (1 to 64 frames). NodeBased's SmartVector keeps one set of vectors per frame, so the picture does not change with it yet."),
         KnobGroup("enum", ("output_mode",), label="Output", help="The warped picture, or the st-map of the warp from the reference frame to this one (or the inverse)."),
         KnobGroup("float", ("blur_size",), label="Blur size", help="Blurs the warp's internal st-map, which can remove local distortions in the result."),
         KnobGroup("bool", ("legacy_vectorcornerpin",), label="Legacy corners", help="Use the four corner points below as both the source quad and the pins' start, and require a SmartVector, as graphs saved before the VectorCornerPin page was followed do."),
@@ -2728,7 +2743,7 @@ NUKE_LAYOUT_LANE9 = {
     "MarkerRemoval": ("mode", "linearsearch", "enabled", "ctrlMask", "x_offset", "y_offset"),
     "DustBust": ("enable", "view_source", "frame_offset", "edge_hardness", "maskchannel"),
     "Dither": ("channels", "dither_amount", "monodither", "seed", "static_seed"),
-    "Grain": ("seed", "red_size", "green_size", "blue_size", "red_i", "green_i", "blue_i", "red_intensity", "green_intensity", "blue_intensity", "black",
+    "Grain": ("seed", "presets", "red_size", "green_size", "blue_size", "red_i", "green_i", "blue_i", "red_intensity", "green_intensity", "blue_intensity", "black",
               "minimum_red", "maskgrain", "invert_mask"),
 }
 # The mask strip in Nuke's wording (docs/parity/nuke_nodes.json: mask, inject, invert, fringe, (un)premult by, invert). Nuke has no
@@ -2937,8 +2952,9 @@ NUKE_LAYOUT_LANE9.update({
                  "use_source_transform", "destination_grid_transform_translate_x", "destination_grid_transform_rotate", "destination_grid_transform_scale",
                  "destination_grid_transform_skew_x", "destination_grid_transform_skew_y", "destination_grid_transform_skew_order", "destination_grid_transform_center_x",
                  "render_res", "filter", "source_color_r", "destination_color_r"),
-    "SplineWarp": ("channels", "premultiply", "outputMask", "crop_to_format", "boundary_bbox", "output", "mix", "root_warp", "layer_warp", "pair_warp",
-                   "translate_x", "rotate", "scale", "skew_x", "skew_y", "skew_order", "center_x"),
+    "SplineWarp": ("channels", "premultiply", "outputMask", "crop_to_format", "boundary_bbox", "spline_output", "mix", "root_warp", "layer_warp", "pair_warp",
+                   "translate_x", "rotate", "scale", "skew_x", "skew_y", "skew_order", "center_x", "extra_matrix_00", "curve_resolution",
+                   "boundary_curverez", "previewrez", "rbf", "filter", "output"),
 })
 # Lane 9 step K (11/3): Text in the guide's order (the Draw chrome first, then message, box, justify, font, transform, colour and ramp, shadows).
 NUKE_LAYOUT_LANE9["Text"] = ("output", "premult", "cliptype", "replace", "invert", "opacity", "maskChannelInput", "inject", "invert_mask", "message", "box_x", "justify", "yjustify", "font", "index",

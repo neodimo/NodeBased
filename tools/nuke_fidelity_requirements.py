@@ -70,8 +70,7 @@ NOT_PIXEL = {
                  "destination_grid_transform_matrix": "the guide names an extra matrix control but gives no matrix interpretation or pixel behavior"},
     "SplineWarp": {"previewrez": "preview resolution changes editor preview quality only; the guide gives no rendered-pixel behavior",
                    "boundary_curverez": "the guide lists boundary-curve resolution but gives no rendered-pixel behavior; NodeBased has no separate boundary curve payload",
-                   "rbf": "the guide names Classic warping but specifies no pixel formula or direction for the switch",
-                   "transform_matrix": "the guide names an extra matrix control but gives no matrix interpretation or pixel behavior"},
+                   "rbf": "the guide names Classic warping but specifies no pixel formula or direction for the switch"},
     # Tracker's zoom and keyframe strips are viewer presentation controls. The Tracker guide
     # describes their display, and they cannot alter the analyzed image pixels.
     "Tracker": {name: "viewer display only (Nuke 17.0 Tracker reference guide)" for name in (
@@ -223,6 +222,8 @@ NOT_PIXEL["Bokeh"] = {"integrateFrontAndBackSeperately": "acts on the Deep input
 # Lane 9 step X4 (11/19): knobs the guide gives these nodes that NodeBased holds on the node without a pixel effect (the mapping's default_notes say the same).
 NOT_PIXEL["MotionBlur2D"] = {"uv": "Output UV names the layer the motion vectors are written to, which is extra data on the output; the blurred picture does not change with it (tests/test_l9_x4_nodes.py reads the layer)"}
 NOT_PIXEL["VectorDistort"] = {"frameDistance": "Nuke picks one of SmartVector's vector sets for hops of 1 to 64 frames; NodeBased's SmartVector keeps one accumulated set per frame, so there is no second set to pick (tests/test_l9_x4_nodes.py shows the stored value changes no pixel)"}
+NOT_PIXEL["Grain"] = {**NOT_PIXEL.get("Grain", {}), "presets": "the guide names the film stocks but gives no size, irregularity or intensity values for any of them, so choosing one only records it (tests/test_l9_x5_grain.py shows the grain does not change; lane 9 step X5)"}
+NOT_PIXEL["VectorCornerPin"] = {**NOT_PIXEL.get("VectorCornerPin", {}), "frameDistance": "Nuke picks one of SmartVector's vector sets for hops of 1 to 64 frames; NodeBased's SmartVector keeps one accumulated set per frame, so there is no second set to pick (tests/test_l9_x5_vcp.py shows it changes no pixels; lane 9 step X5)"}
 NOT_PIXEL["Vectorfield"] = {"gpuExtrapolate": "governs Nuke's GPU implementation only; NodeBased's Vectorfield clamps at the table's edge on every path (tests/test_l9_x4_nodes.py shows it changes no pixel)",
                             "format_3dl_id": "acts only when a .3dl file is loaded, and NodeBased's reader takes the format from the file's own header; the Assimilate Scratch scale and offset is not stated by the guide (tests/test_l9_x4_nodes.py)"}
 NOT_PIXEL["Viewer"] = {name: "viewer display only" for name in (

@@ -968,7 +968,7 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
         # uv offsets and vector lengths are read from image data in full-resolution pixels; at a
         # proxy tier the image is smaller, so the factors that turn that data into pixels shrink.
         params = {**params, **{name: params[name] / tier for name in divided if name in params}}
-    if kind == "CornerPin" and "extra_matrix_02" in params:
+    if kind in ("CornerPin", "SplineWarp") and "extra_matrix_02" in params:
         # The extra matrix works in canvas pixels: a position entry shrinks with the canvas, a perspective entry grows.
         from . import cornerpinknobs
         params = {**params, **{name: params[name] / tier for name in cornerpinknobs.POSITION_ENTRIES},

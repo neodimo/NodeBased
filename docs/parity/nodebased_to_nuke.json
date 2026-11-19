@@ -790,6 +790,7 @@
   },
   "Grain": {
    "nodebased": "Grain",
+   "default_notes": {"presets": "The guide lists no default ('N/A'), so a new node starts at NodeBased's `none`; the stocks follow in the guide's order, ending with `other` (the guide: it changes the node's label, no effect on the grain). The guide gives no size, irregularity or intensity values for any stock, so choosing one only records it (lane 9 step X5)."},
    "inputs": [
     {"nodebased": "image", "nuke": "1", "kind": "mapped"},
     {"nodebased": "mask", "kind": "extra", "reason": "NodeBased-only: the reference guide lists no input for this role"}
@@ -812,7 +813,7 @@
     {"nodebased": ["maskgrain"], "nuke": ["maskgrain"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["legacy_grain"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Grain followed Nuke keep the intensities, the brightness weighting and the unmasked grain they had; lane 9 step C"},
-    {"nodebased": [], "nuke": ["presets"], "kind": "unsupported", "reason": "the guide names six film stocks but not the size, irregularity and intensity values each sets, so choosing one has nothing to set"}
+    {"nodebased": ["presets"], "nuke": ["presets"], "kind": "same", "reason": "the guide's list (Kodak 5248, 5279, FX214, GT5274, 5217, 5218 and other) with NodeBased's own `none` first; the guide gives no default and no size, irregularity or intensity values for any stock, so choosing one only records it and the knobs stay as they are (nothing is invented; lane 9 step X5)"}
    ]
   },
   "ScannedGrain": {
@@ -4028,10 +4029,16 @@
   },
   "SplineWarp": {
    "nodebased": "SplineWarp",
-   "default_notes": {"mix": "Nuke's SplineWarp mix dissolves the A/B morph (0 = source, 1 = destination) and acts only with output set to AB morph; NodeBased's mix is the masked dissolve of the whole result, so its 1 keeps the warp visible", "output": "Nuke's 'source warped' is the warped A image; NodeBased's 'image' is that same warped source (its other choices are diagnostic views: the ST map and single channels)"},
+   "default_notes": {
+    "boundary_curverez": "Default 3, as the guide lists; held on the node, no pixel changes with it because NodeBased has no separate boundary curve (lane 9 step X5).",
+    "previewrez": "Default 100, as the guide lists; the Viewer's preview resolution, held on the node, never changes the rendered picture (lane 9 step X5).",
+    "rbf": "Default off, as the guide lists; the guide gives no formula for Classic warping, so the value is held and NodeBased renders one way (lane 9 step X5).",
+    "transform_matrix": "The guide lists the extra matrix with no default and no formula; NodeBased reads it as CornerPin's: a 3 x 3 projective matrix, the identity by default, applied to the curves after the Transform tab in canvas pixels (lane 9 step X5).",
+    "output": "The guide's output lists A, A warped, B, B warped and AB morph; NodeBased offers the first four (AB morph, the mix dissolve of the two, has no formula in the guide). B is the new optional input, carried back from the destination curves to the source ones for B warped. A saved node renders as A warped, which is what it always did.","mix": "Nuke's SplineWarp mix dissolves the A/B morph (0 = source, 1 = destination) and acts only with output set to AB morph; NodeBased's mix is the masked dissolve of the whole result, so its 1 keeps the warp visible"},
    "inputs": [
     {"nodebased": "image", "nuke": "A", "kind": "mapped"},
-    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"}
+    {"nodebased": "mask", "nuke": "mask", "kind": "mapped"},
+    {"nodebased": "b", "nuke": "B", "kind": "mapped"}
    ],
    "knobs": [
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
@@ -4048,18 +4055,19 @@
     {"nodebased": ["skew_y"], "nuke": ["skewY"], "kind": "renamed", "reason": "NodeBased uses snake case for the Y skew."},
     {"nodebased": ["skew_order"], "nuke": ["skew_order"], "kind": "same"},
     {"nodebased": ["center_x", "center_y"], "nuke": ["center"], "kind": "components", "reason": "Center XY is represented as two scalar document params."},
-    {"nodebased": [], "nuke": ["transform_matrix"], "kind": "unsupported", "reason": "The guide marks this as an extra matrix control; NodeBased has no editable matrix parameter or documented pixel effect."},
+    {"nodebased": ["extra_matrix_00", "extra_matrix_01", "extra_matrix_02", "extra_matrix_10", "extra_matrix_11", "extra_matrix_12", "extra_matrix_20", "extra_matrix_21", "extra_matrix_22"], "nuke": ["transform_matrix"], "kind": "components", "reason": "NodeBased stores the matrix as nine scalar params, `extra_matrix_RC` for row R, column C (the identity by default); applied to the curves after the Transform tab, in canvas pixels, as CornerPin's is (lane 9 step X5)"},
     {"nodebased": [], "nuke": ["key"], "kind": "panel", "reason": "the spline keys are the animation keys of each curve point's scalars, per point in the node's payload (docs/SHAPES.md), not a node param"},
     {"nodebased": [], "nuke": ["curves"], "kind": "panel", "reason": "the curves list is the node's payload `pairs` (a source and a destination curve per pair), edited in the viewer, not a node param"},
     {"nodebased": ["curve_resolution"], "nuke": ["curverez"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `curverez`"},
-    {"nodebased": [], "nuke": ["boundary_curverez"], "kind": "unsupported", "reason": "The guide names boundary-curve resolution but specifies no pixel behavior; NodeBased has no separate boundary-curve payload."},
-    {"nodebased": [], "nuke": ["previewrez"], "kind": "unsupported", "reason": "Editor preview resolution only; it does not change rendered pixels."},
-    {"nodebased": [], "nuke": ["rbf"], "kind": "unsupported", "reason": "The guide names Classic warping but specifies no pixel formula or direction for this switch."},
+    {"nodebased": ["boundary_curverez"], "nuke": ["boundary_curverez"], "kind": "same", "reason": "held on the node (default 3); NodeBased has no separate boundary curve, so no pixel changes with it (lane 9 step X5)"},
+    {"nodebased": ["previewrez"], "nuke": ["previewrez"], "kind": "same", "reason": "held on the node (default 100); the Viewer's preview resolution never changes the rendered picture (lane 9 step X5)"},
+    {"nodebased": ["rbf"], "nuke": ["rbf"], "kind": "same", "reason": "held on the node (off by default); the guide gives no formula for Classic warping, so NodeBased renders one way (lane 9 step X5)"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["root_warp"], "nuke": ["root_warp"], "kind": "same"},
     {"nodebased": ["warp_direction"], "kind": "extra", "reason": "NodeBased-only: which way the pairs carry the picture (A: source curves to destination curves, B: back); Nuke chooses this with output (A warped, B warped). A SplineWarp saved before root warp became the multiplier kept it in root_warp (lane 11 step B4)"},
     {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
-    {"nodebased": ["output"], "nuke": ["output"], "kind": "same"},
+    {"nodebased": ["spline_output"], "nuke": ["output"], "kind": "renamed", "reason": "`output` is already the shared image, stmap and channel choice in CHOICES; SplineWarp's is A, A warped, B or B warped (AB morph is not offered, as for GridWarp)"},
+    {"nodebased": ["output"], "kind": "extra", "reason": "NodeBased-only: the diagnostic view of the warp, the picture or its st-map"},
     {"nodebased": ["bbox"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
    ]
   },
@@ -4079,6 +4087,7 @@
   },
   "VectorCornerPin": {
    "nodebased": "VectorCornerPin",
+   "default_notes": {"frameDistance": "Default 1 frame, as the guide lists; the knob is held on the node and no pixel changes with it, because NodeBased's SmartVector keeps one accumulated set of vectors per frame (lane 9 step X5)."},
    "inputs": [
     {"nodebased": "image", "nuke": "Source", "kind": "mapped"},
     {"nodebased": "vectors", "nuke": "SmartVector", "kind": "mapped"},
@@ -4100,7 +4109,7 @@
     {"nodebased": ["from4_x", "from4_y"], "nuke": ["to4#2"], "kind": "components", "reason": "NodeBased stores each point as two scalar params; Nuke has one two-value knob; the guide's From tab repeats the scripting name to4, which the knob table lists as to4#2"},
     {"nodebased": ["image_filter"], "nuke": ["imageFilter"], "kind": "renamed", "reason": "NodeBased uses VectorDistort's name for the same Filter control; Nuke's scripting name is `imageFilter`"},
     {"nodebased": ["blur_size"], "nuke": ["blurSize"], "kind": "renamed", "reason": "NodeBased uses VectorDistort's name for the same Blur Size control; Nuke's scripting name is `blurSize`"},
-    {"nodebased": [], "nuke": ["frameDistance"], "kind": "unsupported", "reason": "Nuke's SmartVector keeps several vector sets, for hops of 1 to 64 frames, and Frame Distance picks one; NodeBased's SmartVector keeps one accumulated set per frame, so there is none to pick (as for VectorDistort); a product decision in docs/parity/review/DECISIONS.md"},
+    {"nodebased": ["frame_distance"], "nuke": ["frameDistance"], "kind": "renamed", "reason": "Frame Distance: held on the node as Nuke holds it (1 to 64 frames in steps of two, default 1 frame). Nuke picks one of SmartVector's vector sets for hops of 1 to 64 frames with it; NodeBased's SmartVector keeps one accumulated set per frame (`reanchor_interval` bounds its drift), so there is no second set to pick and no pixel changes with it yet (lane 9 step X5)"},
     {"nodebased": ["output_mode"], "nuke": ["outputMode"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `outputMode`"},
     {"nodebased": ["use_baked"], "nuke": ["bakeCorners"], "kind": "renamed", "reason": "Nuke's Bake Corners is a button that renders the frame range and writes the To pins; NodeBased cannot write params from a render, so the button's effect is the Use baked pins switch: on, the To pins replace the pins the vectors give (lane 11 step B4)"},
     {"nodebased": ["legacy_vectorcornerpin"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the VectorCornerPin page was followed keep their pictures (the corner points below); lane 9 step G"},

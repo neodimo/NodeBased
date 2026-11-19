@@ -5439,8 +5439,8 @@ class Evaluator:
         if p.get("warp_direction", "A") == "B":
             src, dst = dst, src
         if kind == "SplineWarp":
-            src = warps_knobs.transform_points(src, p)
-            dst = warps_knobs.transform_points(dst, p)
+            src = warps_knobs.extra_matrix_points(warps_knobs.transform_points(src, p), p)
+            dst = warps_knobs.extra_matrix_points(warps_knobs.transform_points(dst, p), p)
         mix = float(p.get("mix", 1.0))
         if len(src):
             control_source, control_destination = src, dst
@@ -5448,9 +5448,12 @@ class Evaluator:
             control_source = control_destination = np.zeros((0, 2), np.float64)
         out = source.data
         gridwarp = kind == "GridWarp"
-        dst_in = inputs[2] if gridwarp and len(inputs) > 2 else None
+        dst_in = inputs[2] if (gridwarp or kind == "SplineWarp") and len(inputs) > 2 else None
         bg_in = inputs[3] if gridwarp and len(inputs) > 3 else None
         choice = str(p.get("grid_output", "source warped")) if gridwarp else "source warped"
+        if kind == "SplineWarp":
+            # Nuke's output A, A warped, B and B warped: the B picture is carried from the destination curves back to the source ones.
+            choice = {"A": "source", "A warped": "source warped", "B": "destination", "B warped": "destination warped"}.get(str(p.get("spline_output", "A warped")), "source warped")
         if choice == "source":
             return source
         if choice == "destination" and dst_in is None:

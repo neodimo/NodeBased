@@ -48,8 +48,12 @@ GRIDWARP = {"grid_output": "source warped", "warp": 1.0, "background": "on src",
             "use_source_transform": 1,
             **{f"destination_grid_transform_{key}": value for key, value in _GRID_TRANSFORM.items()},
             "render_res": 10}
+SPLINE_OUTPUTS = ["A", "A warped", "B", "B warped"]
+# The extra matrix of the Transform tab (Nuke's `transform_matrix`, "extra matrix"): nine entries, `extra_matrix_RC`, the identity by default.
+EXTRA_MATRIX = {f"extra_matrix_{r}{c}": (1.0 if r == c else 0.0) for r in range(3) for c in range(3)}
 SPLINEWARP = {"premultiply": 0, "outputMask": "mask_splinwarp.a", "crop_to_format": 1, "boundary_bbox": 1,
-              "layer_warp": 1.0, "pair_warp": 1.0, "warp_direction": "A",
+              "layer_warp": 1.0, "pair_warp": 1.0, "warp_direction": "A", "spline_output": "A warped",
+              "boundary_curverez": 3, "previewrez": 100, "rbf": 0, **EXTRA_MATRIX,
               "translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0,
               "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "center_x": 0.0, "center_y": 0.0}
 # A saved SplineWarp had no mask layer and no crop, so it keeps both off.
@@ -58,6 +62,8 @@ LIMITS = {**{f"{side}_{name}": (0, 1) for side in GRID_COLORS for name in ("grid
           **{f"{side}_color_{channel}": (0.0, 1.0) for side in GRID_COLORS for channel in "rgb"},
           "background_mix": (0.0, 1.0), "warp": (0.0, 10.0), "use_source_transform": (0, 1),
           "premultiply": (0, 1), "crop_to_format": (0, 1), "boundary_bbox": (0, 1),
+          "boundary_curverez": (1, 100), "previewrez": (1, 100), "rbf": (0, 1),
+          **{name: (-1000000.0, 1000000.0) for name in EXTRA_MATRIX},
           "layer_warp": (0.0, 1.0), "pair_warp": (0.0, 1.0), "root_warp": (0.0, 1.0), "render_res": (1.0, 100.0),
           **{f"{grid}_grid_transform_{name}": bounds
              for grid in ("source", "destination")
@@ -65,7 +71,7 @@ LIMITS = {**{f"{side}_{name}": (0, 1) for side in GRID_COLORS for name in ("grid
                                   ("rotate", (-360.0, 360.0)), ("scale", (-1000.0, 1000.0)),
                                   ("skew_x", (-1000.0, 1000.0)), ("skew_y", (-1000.0, 1000.0)),
                                   ("center_x", (-1000000.0, 1000000.0)), ("center_y", (-1000000.0, 1000000.0)))}}
-CHOICES = {"warp_direction": ("A", "B"), "grid_output": GRID_OUTPUTS, "background": BACKGROUNDS, "skew_order": ("XY", "YX"),
+CHOICES = {"warp_direction": ("A", "B"), "spline_output": SPLINE_OUTPUTS, "grid_output": GRID_OUTPUTS, "background": BACKGROUNDS, "skew_order": ("XY", "YX"),
            "source_grid_transform_skew_order": ("XY", "YX"),
            "destination_grid_transform_skew_order": ("XY", "YX")}
 OPEN_CHOICES = ("outputMask",)
@@ -160,6 +166,23 @@ def transform_points(points, p):
     pivot = np.array([cx, cy])
     offset = pivot + np.array([tx, -ty]) - linear @ pivot
     return np.asarray(points) @ linear.T + offset
+
+
+def has_extra_matrix(p):
+    return any(float(p.get(name, value)) != value for name, value in EXTRA_MATRIX.items())
+
+
+def extra_matrix_points(points, p):
+    """The points after SplineWarp's extra matrix (Nuke's `transform_matrix`), a 3 x 3 projective matrix read as CornerPin's is: in canvas
+    pixels, applied after the Transform tab. The guide states no formula for this knob; the identity (the default) returns the points."""
+    if not has_extra_matrix(p) or not len(points):
+        return points
+    m = np.array([[float(p.get(f"extra_matrix_{r}{c}", EXTRA_MATRIX[f"extra_matrix_{r}{c}"])) for c in range(3)] for r in range(3)], np.float64)
+    pts = np.asarray(points, np.float64)
+    h = pts @ m[:, :2].T + m[:, 2]
+    w = h[:, 2:3]
+    w = np.where(np.abs(w) > 1e-9, w, 1e-9)
+    return h[:, :2] / w
 
 
 def transform_grid(points, p, grid):

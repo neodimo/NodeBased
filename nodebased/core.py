@@ -706,7 +706,7 @@ SPECS = {
                             "uv_scale_x": 1.0, "uv_scale_y": 1.0, "uv_offset_x": 0.0, "uv_offset_y": 0.0,
                             "filter": "cubic", "blur": "none", "blur_scale": 1.0, "maskChannel": "none", "premultiplied": 0, "channels": "all", "invert_mask": 0, "mix": 1.0,
                             **_filterbehaviour.new_params("IDistort")}},
-    "SplineWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
+    "SplineWarp": {"inputs": ["image"], "optional_inputs": ["mask", "b"],
                    "params": {"mix": 1.0, "curve_resolution": 3, "bbox": "source",
                               "root_warp": 1.0, "filter": "cubic", "output": "image", **_warpknobs.new_params("SplineWarp")}},
     # GridWarp's `dst` and `bg` follow the mask so a saved edge into the mask keeps its slot (lane 9 step H).
@@ -2571,6 +2571,7 @@ CHOICES.update(_zdefocusknobs.CHOICES)
 CHOICES.update(_bokehknobs.CHOICES)
 LIMITS.update(_bokehknobs.LIMITS)
 LIMITS.update(_drawbehaviour.LIMITS)
+CHOICES["presets"] = list(_drawbehaviour.GRAIN_PRESETS)       # Grain presets (lane 9 step X5)
 CHOICES.update({"Quality": ["low", "normal", "high"], "fillRegion": ["Matte Alpha", "Source Alpha"],
                 "detailSource": ["Source", "Detail"]})
 LIMITS.update({"metafps": (0, 1), "use_frame": (0, 1), "meta_from_first": (0, 1), "y_padding": (0.0, 8192.0),
@@ -2604,7 +2605,7 @@ CHOICES["ray_quality"] = list(_raysbehaviour.QUALITY)     # VolumeRays Quality (
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)
 CHOICES["image_filter"] = list(_transformbehaviour.CHOICES)        # VectorDistort Filter (lane 9 step N)
 LIMITS.update(_vectordistortknobs.LIMITS)
-CHOICES.update(_vectordistortknobs.CHOICES)
+CHOICES.update(_vectordistortknobs.CHOICES)       # frame_distance is shared with VectorCornerPin (lane 9 step X5)
 CHOICES["camera_mov_type"] = list(_track3dknobs.CAMERA_TYPES)       # PointsTo3D Camera type (lane 9 step N)
 LIMITS.update({name: (-8192.0, 8192.0) for name in _vectorcornerpinknobs.POINT_PARAMS})
 CHOICES["bilateral_filter"] = list(_bilateralknobs.FILTERS)

@@ -612,7 +612,7 @@ class DitherGrainKnobsActTests(unittest.TestCase):
 
     def test_the_main_tabs_lay_their_knobs_out_in_nuke_order(self):
         self.assertEqual(labels("Dither")[:5], ["Channels", "Amount", "Monodither", "Seed", "Static Seed"])
-        self.assertEqual(labels("Grain")[:14], ["Seed", "Red", "Green", "Blue", "Red", "Green", "Blue",      # the guide's labels, under Size, Irregularity and Intensity headings
+        self.assertEqual(labels("Grain")[:15], ["Seed", "Presets", "Red", "Green", "Blue", "Red", "Green", "Blue",      # the guide's labels, under Size, Irregularity and Intensity headings
                                                 "Red", "Green", "Blue", "Black", "Minimum rgb", "Apply only through alpha",
                                                 "Invert alpha"])
 

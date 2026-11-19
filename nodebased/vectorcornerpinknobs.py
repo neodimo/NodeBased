@@ -21,7 +21,9 @@ What the guide leaves open, and this module therefore fixes:
 Filter (`image_filter`, Cubic): "the filtering algorithm to use when remapping pixels from their original positions to new positions", the
 Transform group's list as VectorDistort offers it. Blur Size (`blur_size`, 0): "the amount of blur applied to the internally calculated STMap",
 the per-pixel source position the pins give, blurred with Soften's Gaussian before the picture is sampled (lane 11 step B4). A node saved before
-keeps bilinear sampling and no blur, which is the warp it always had. Frame Distance is not built, for VectorDistort's reason (one vector set).
+keeps bilinear sampling and no blur, which is the warp it always had. Frame Distance (`frame_distance`, 1 to 64 frames in steps of two,
+default 1 frame; lane 9 step X5) is held on the node as VectorDistort's is (nodebased/vectordistortknobs.py): Nuke picks one of SmartVector's
+vector sets with it, NodeBased's SmartVector keeps one accumulated set per frame, so no pixel changes with it yet.
 
 An older document's node (`legacy_vectorcornerpin` 1) keeps what it did: the four `corner` points are both the source quad and the pins' starting
 points, the vectors displace them and a SmartVector must be wired.
@@ -34,12 +36,12 @@ CORNERS = (1, 2, 3, 4)
 SENTINEL = ((0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0))
 OUTPUT_MODES = ("warped src", "st-map", "st-map inverse")
 _SIDES = ("user", "to", "from")
-NEW = {"legacy_vectorcornerpin": 0, "output_mode": "warped src", "use_baked": 0, "image_filter": "cubic", "blur_size": 0.0}
+NEW = {"legacy_vectorcornerpin": 0, "output_mode": "warped src", "use_baked": 0, "image_filter": "cubic", "blur_size": 0.0, "frame_distance": "1 frame"}
 for _side in _SIDES:
     for _i, (_x, _y) in zip(CORNERS, SENTINEL):
         NEW[f"{_side}{_i}_x"] = _x
         NEW[f"{_side}{_i}_y"] = _y
-UPGRADE = {"legacy_vectorcornerpin": 1, "output_mode": "warped src", "use_baked": 0, "image_filter": "bilinear", "blur_size": 0.0}
+UPGRADE = {"legacy_vectorcornerpin": 1, "output_mode": "warped src", "use_baked": 0, "image_filter": "bilinear", "blur_size": 0.0, "frame_distance": "1 frame"}
 for _side in _SIDES:
     for _i, (_x, _y) in zip(CORNERS, SENTINEL):
         UPGRADE[f"{_side}{_i}_x"] = _x
