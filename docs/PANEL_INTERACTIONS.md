@@ -262,8 +262,10 @@ Source: Animating Parameters (Nuke 17.0 User Guide), sections Using the Dope She
 documented Curve Editor behaviours and 12 documented Dope Sheet behaviours, each with the guide's sentence; deleting a key in the
 Curve Editor, its undo steps, dragging and scaling keys in the Dope Sheet and its frame ruler are listed as undocumented.
 
-NodeBased's curve canvas edits curve knobs (ColorLookup's lookups); keyframed knobs show in the Dope Sheet. Measured with
-`tools/nuke_panel_interactions.py`: the Curve Editor went from 3 to 15 of 21, the Dope Sheet from 2 to 7 of 12.
+NodeBased's curve canvas edits curve knobs (ColorLookup's lookups) and, from a knob's animation menu (Curve editor…), an
+animated knob's keys; keyframed knobs show in the Dope Sheet. Measured with `tools/nuke_panel_interactions.py`: the Curve
+Editor went from 3 to 15 of 21 in step T7 and to 21 of 21 in its finish pass, the Dope Sheet from 2 to 7 of 12 and then to
+12 of 12.
 
 What the curve canvas now does:
 
@@ -273,7 +275,21 @@ What the curve canvas now does:
   neighbours' slope but goes flat at a peak or dip, so the curve never overshoots; Catmull-Rom takes it regardless; Cubic solves
   the natural spline so the second derivative is continuous; Horizontal sets zero slope; Break lets the handles move apart.
 - **A** frames all, **F** centres the selected key, **+** and **-** zoom, and **Alt+drag** pans (as well as the middle button).
-- **Delete/Backspace** deletes the selected key.
+- **Delete/Backspace** deletes the selected keys.
+- **Several keys** (finish pass): Shift+click adds or removes a key, a drag on empty space draws a marquee (Shift adds or
+  removes), Ctrl/Cmd+A selects every key, and dragging one selected key moves them all, one undo step.
+- **Several curves**: a list beside the canvas names the node's curve knobs (Master, Red, Green, Blue, Alpha on
+  ColorLookup). Shift+click shows a run of them, Ctrl/Cmd+click one more; the others are drawn thin under the current one,
+  which is the one that edits.
+- **Edit > Move…** (right-click) opens Move Animation Keys: x and y are expressions of each selected key's own x and y,
+  such as `x+10` or `y*2`. One undo step; a bad expression is named in the dialog and changes nothing.
+- **The expression field** at the bottom sets the curve from an expression of x (numbers, x, pi, e, + - * / ** and abs,
+  min, max, pow, sqrt, exp, log, sin, cos, tan, floor, ceil, clamp, lerp, smoothstep). The curve is sampled into 17 keys
+  whose tangents follow the expression, so the stored curve format is unchanged; Revert puts the keys back.
+- **Frame snap**: the knob animation menu's Curve editor… shows that knob's keys with the frame along x. A moved key's x
+  rounds to the nearest whole frame and stays a frame from its neighbours; with Shift it follows the pointer while
+  dragging, and lands on a whole frame because the document keeps whole-frame keys. One interpolation per curve
+  (constant, linear or smooth) is what an animated knob stores, so tangent handles are hidden there.
 
 What the Dope Sheet now does:
 
@@ -282,11 +298,18 @@ What the Dope Sheet now does:
 - **Delete/Backspace** erases the selected keys on every keyed knob of that node, one undo step.
 - **Ctrl/Cmd+Alt+click** on an empty spot keys every animated knob of that row at the curve's current value.
 - **Drag selected keys in time**, one undo step; a key stops beside the next one rather than pass it.
+- **Project range lines** (finish pass): the time area spans a few frames either side of the project range, and the first
+  and last frames have light lines of their own.
+- **Marquee**: a drag on empty space selects the keys inside it; Shift adds or removes them.
+- **Move field**: the row under the sheet holds a Move number and < > buttons that move the selected keys by that many
+  frames (negative moves them back), one undo step.
+- **Copy and paste**: Ctrl/Cmd+C copies the selected keys (every knob keyed on those frames); Ctrl/Cmd+V pastes them with
+  the earliest on the current frame, one undo step.
+- **Read clip bars**: a Read whose panel is open shows its clip (first to last frame) as a gray bar; dragging the bar
+  repositions the clip by changing the Read's frame offset, one undo step.
 
 Older documents load unchanged: no stored format changed, and framing never edits a curve.
 
-Still open: frame snap (the canvas edits 0 to 1 lookup curves, where whole-frame rounding would collapse them; it belongs to a
-keyframe curve view), selecting several keys and Ctrl/Cmd+A, showing several knobs' curves at once, the Move dialog, the
-expression field, the Dope Sheet's project-range lines, marquee, Move field, copy and paste of keys, and Read clip bars.
+Every documented Curve Editor and Dope Sheet behaviour now passes. Older documents load unchanged: no stored format changed.
 
 - **Tests:** `tests/test_l10_t7_curves.py`.

@@ -52,7 +52,7 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**100 of 111 documented knob-widget behaviours work as Nuke's do** (23 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**111 of 111 documented knob-widget behaviours work as Nuke's do** (23 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -70,8 +70,8 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 | properties bin | 13 / 13 | - | `new_panel_on_top`, `limit_default`, `pin_one_panel` |
 | linking | 9 / 9 | - | `remove`, `copy_paste_knob`, `time_offset` |
 | node graph | 25 / 25 | - | `swap_inputs_shift`, `select_downstream`, `duplicate_alt_c` |
-| curve editor | 15 / 21 | `frame_snap`, `select_several`, `select_all`, `several_curves`, `move_dialog`, `expression_field` | `delete_key`, `undo_step` |
-| dope sheet | 7 / 12 | `project_range`, `marquee`, `move_field`, `copy_paste`, `clip_bars` | `drag_keys`, `scale_keys`, `time_ruler` |
+| curve editor | 21 / 21 | - | `delete_key`, `undo_step` |
+| dope sheet | 12 / 12 | - | `drag_keys`, `scale_keys`, `time_ruler` |
 
 ## On-screen controls that work like Nuke
 
