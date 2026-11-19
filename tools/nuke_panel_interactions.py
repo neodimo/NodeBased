@@ -2681,6 +2681,240 @@ def _viewer_sample_cancel(bench):
     ok = held and cleared and position.startswith("x 50")
     return ok, f"Ctrl+click held a sample {held}, Ctrl+right-click cleared it {cleared}, the readout follows again ({position!r})"
 
+# -- the Viewer, part two (lane 10, step T8 finish, 2026-11-19) -------------------------------------------------------------
+
+def _wait_for_picture(bench, before, seconds=30):
+    """Settle until the Viewer shows a picture other than `before` (the QImage it showed); the new one or None."""
+    import time
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        bench.settle(1)
+        shown = getattr(bench.window.viewer, "last_display_image", None)
+        if shown is not None and shown is not before:
+            return shown
+        time.sleep(0.01)
+    return None
+
+
+def _centre_rgb(image):
+    colour = image.pixelColor(image.width() // 2, image.height() // 2)
+    return colour.red(), colour.green(), colour.blue()
+
+
+@probe("viewer.alpha_overlay")
+def _viewer_alpha_overlay(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    window = bench.window
+    window.alpha_overlay = False
+    plain = _wait_for_picture(bench, None)
+    if plain is None:
+        return False, "the Constant never reached the viewer"
+    before = _centre_rgb(plain)
+    _key(bench, viewer, Qt.Key.Key_M)
+    overlaid = _wait_for_picture(bench, plain)
+    on = window.alpha_overlay
+    during = _centre_rgb(overlaid) if overlaid is not None else None
+    _key(bench, viewer, Qt.Key.Key_M)
+    back = _wait_for_picture(bench, overlaid)
+    after = _centre_rgb(back) if back is not None else None
+    ok = (on and not window.alpha_overlay and during is not None and during[0] > before[0] + 60
+          and during[2] < before[2] and after is not None and max(abs(a - b) for a, b in zip(after, before)) <= 1)
+    return ok, f"M took the centre pixel from {before} to {during} (overlay {on}), M again to {after}"
+
+
+@probe("viewer.recenter_middle_click")
+def _viewer_recenter_middle(bench):
+    from PySide6.QtCore import QEvent, Qt
+    viewer, _ = _viewer(bench)
+    viewer.resetTransform()
+    viewer.scale(4.0, 4.0)
+    viewer.auto_fit = False
+    bench.settle()
+    port = viewer.viewport()
+    middle, none = Qt.MouseButton.MiddleButton, Qt.MouseButton.NoButton
+    _mouse(port, QEvent.Type.MouseButtonPress, (200, 200), middle, middle, Qt.KeyboardModifier.NoModifier)
+    _mouse(port, QEvent.Type.MouseButtonRelease, (200, 200), middle, none, Qt.KeyboardModifier.NoModifier)
+    bench.settle(8)
+    clicked = (bool(viewer.auto_fit), viewer.transform().m11())
+    # A middle drag stays a pan: it does not re-centre.
+    viewer.resetTransform()
+    viewer.scale(4.0, 4.0)
+    viewer.auto_fit = False
+    _mouse(port, QEvent.Type.MouseButtonPress, (200, 200), middle, middle, Qt.KeyboardModifier.NoModifier)
+    _mouse(port, QEvent.Type.MouseMove, (260, 200), none, middle, Qt.KeyboardModifier.NoModifier)
+    _mouse(port, QEvent.Type.MouseButtonRelease, (260, 200), middle, none, Qt.KeyboardModifier.NoModifier)
+    bench.settle()
+    dragged = (bool(viewer.auto_fit), viewer.transform().m11())
+    ok = clicked[0] and clicked[1] < 4.0 and not dragged[0] and abs(dragged[1] - 4.0) < 1e-6
+    return ok, f"a middle click re-centred {clicked[0]} (zoom {clicked[1]:.2f}); a middle drag re-centred {dragged[0]}"
+
+
+@probe("viewer.zoom_drag")
+def _viewer_zoom_drag(bench):
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    viewer, _ = _viewer(bench)
+    viewer.resetTransform()
+    bench.settle()
+    port = viewer.viewport()
+    M, L, none = Qt.MouseButton.MiddleButton, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton
+    mods = Qt.KeyboardModifier.NoModifier
+    start = viewer.transform().m11()
+    anchor = viewer.mapToScene(300, 260)
+    _mouse(port, QEvent.Type.MouseButtonPress, (300, 260), M, M, mods)
+    _mouse(port, QEvent.Type.MouseButtonPress, (300, 260), L, M | L, mods)
+    for x in (320, 340, 360):
+        _mouse(port, QEvent.Type.MouseMove, (x, 260), none, M | L, mods)
+    zoomed = viewer.transform().m11()
+    held = viewer.mapFromScene(QPointF(anchor))
+    for x in (340, 320):                  # dragging back zooms out again
+        _mouse(port, QEvent.Type.MouseMove, (x, 260), none, M | L, mods)
+    back = viewer.transform().m11()
+    _mouse(port, QEvent.Type.MouseButtonRelease, (320, 260), L, M, mods)
+    _mouse(port, QEvent.Type.MouseButtonRelease, (320, 260), M, none, mods)
+    bench.settle()
+    drift = abs(held.x() - 300) + abs(held.y() - 260)
+    ok = zoomed > start * 1.5 and start < back < zoomed and drift <= 2 and not viewer.auto_fit
+    return ok, (f"middle plus left dragged 60 pixels right took the zoom from {start:.2f} to {zoomed:.2f} (the point under "
+                f"the pointer moved {drift} pixels), 40 back to {back:.2f}")
+
+
+def _wait_for_format(bench, before, seconds=30):
+    import time
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        bench.settle(1)
+        rect = bench.window.viewer.format_rect
+        if rect is not None and (before is None or abs(rect.width() - before) > 1):
+            return rect.width()
+        time.sleep(0.01)
+    return None
+
+
+@probe("viewer.prevent_auto_zoom")
+def _viewer_prevent_auto_zoom(bench):
+    from PySide6.QtCore import Qt
+    from nodebased.core import viewer_knobs
+    window = bench.window
+    big = bench.node("Constant", {"width": 960, "height": 540})
+    small = bench.node("Constant", {"width": 240, "height": 135})
+    window.command({"op": "view", "id": big})
+    window.command({"op": "viewer_input", "slot": 1, "id": big})
+    window.command({"op": "viewer_input", "slot": 2, "id": small})
+    viewer = window.viewer
+    viewer.setFocus()
+    width = _wait_for_format(bench, None)
+    results = {}
+    for name, lock in (("unlocked", False), ("locked", True)):
+        if bool(viewer_knobs(window.dispatcher.document)["zoom_lock"]) != lock:
+            _key(bench, viewer, Qt.Key.Key_Z, Qt.KeyboardModifier.AltModifier)
+        viewer.resetTransform()
+        viewer.scale(2.0, 2.0)
+        viewer.auto_fit = False
+        bench.settle()
+        _key(bench, viewer, Qt.Key.Key_2 if window.dispatcher.document.get("view") == big else Qt.Key.Key_1)
+        width = _wait_for_format(bench, width)
+        bench.settle(4)
+        results[name] = viewer.transform().m11()
+    locked = bool(viewer_knobs(window.dispatcher.document)["zoom_lock"])
+    _key(bench, viewer, Qt.Key.Key_Z, Qt.KeyboardModifier.AltModifier)
+    unlocked_again = not viewer_knobs(window.dispatcher.document)["zoom_lock"]
+    ok = (abs(results["unlocked"] - 2.0) > 1e-3 and abs(results["locked"] - 2.0) < 1e-6 and locked and unlocked_again)
+    return ok, (f"switching to an input of another size at 2x zoom left the zoom at {results['unlocked']:.2f}, after Alt+Z at "
+                f"{results['locked']:.2f}; Alt+Z again turned the lock off {unlocked_again}")
+
+
+@probe("viewer.toolbars")
+def _viewer_toolbars(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    window = bench.window
+    seen = []
+    for key, widget in ((Qt.Key.Key_BraceLeft, window.viewer_strip), (Qt.Key.Key_BraceRight, window.time_row)):
+        _key(bench, viewer, key, Qt.KeyboardModifier.ShiftModifier)
+        hidden = widget.isHidden()
+        _key(bench, viewer, key, Qt.KeyboardModifier.ShiftModifier)
+        seen.append((hidden, widget.isHidden()))
+    ok = seen == [(True, False), (True, False)]
+    return ok, f"{{ hid then showed the top toolbar {seen[0]}, }} the bottom one {seen[1]}"
+
+
+@probe("viewer.gain_gamma_toggle")
+def _viewer_gain_gamma_toggle(bench):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    _viewer(bench)
+    window, strip = bench.window, bench.window.viewer_strip
+    seen = {}
+    for name, spin, button, value, neutral in (("gain", window.exposure, strip.sun, 1.5, 0.0),
+                                               ("gamma", window.gamma, strip.gamma_mark, 1.8, 1.0)):
+        spin.setValue(value)
+        bench.settle()
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        bench.settle()
+        first = spin.value()
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        bench.settle()
+        seen[name] = (first, spin.value(), neutral, value)
+        spin.setValue(neutral)
+    bench.settle()
+    ok = all(abs(a - n) < 1e-9 and abs(b - v) < 1e-9 for a, b, n, v in seen.values())
+    return ok, "; ".join(f"{k} {v[3]} -> {v[0]} -> {v[1]}" for k, v in seen.items())
+
+
+@probe("viewer.refresh")
+def _viewer_refresh(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    window = bench.window
+    shown = _wait_for_picture(bench, None)
+    count = window.viewer_refreshes
+    _key(bench, viewer, Qt.Key.Key_U)
+    again = _wait_for_picture(bench, shown)
+    ok = window.viewer_refreshes == count + 1 and again is not None and again is not shown
+    return ok, f"U refreshed {window.viewer_refreshes - count} time(s) and drew the frame again {again is not None}"
+
+
+@probe("viewer.goto_frame")
+def _viewer_goto_frame(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    window = bench.window
+    timeline = window.dispatcher.document["time"]
+    target = int(timeline["first"]) + 3 if int(timeline["current"]) != int(timeline["first"]) + 3 else int(timeline["first"])
+    _key(bench, viewer, Qt.Key.Key_G, Qt.KeyboardModifier.AltModifier)
+    dialog = window.goto_frame_dialog
+    if dialog is None:
+        return False, "Alt+G opened no dialog"
+    title = dialog.windowTitle()
+    dialog.setIntValue(target)
+    dialog.accept()
+    bench.settle()
+    now = int(window.dispatcher.document["time"]["current"])
+    return now == target and title == "Go to frame", f"Alt+G opened {title!r}; entering {target} went to frame {now}"
+
+
+@probe("viewer.frame_field_math")
+def _viewer_frame_field_math(bench):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    window = bench.window
+    window.set_time(first=1, last=200)
+    window.set_time(current=50)
+    bench.settle()
+    field = window.frame_current
+    seen = []
+    for text in ("+20", "-20", "-20"):
+        edit = field.lineEdit()
+        field.setFocus()
+        edit.selectAll()
+        QTest.keyClicks(edit, text)
+        QTest.keyClick(edit, Qt.Key.Key_Return)
+        bench.settle()
+        seen.append(int(window.dispatcher.document["time"]["current"]))
+    return seen == [70, 50, 30], f"typing +20, -20, -20 into the frame field from 50 went to {seen}"
+
+
 def probe_all():
     """{behaviour id: {"widget", "status", "result": "pass"|"fail"|"not probed"|"undocumented", "detail"}}."""
     ref = reference()

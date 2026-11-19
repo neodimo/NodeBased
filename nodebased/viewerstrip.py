@@ -28,6 +28,7 @@ STRIP_SIDE = 12       # smallest gap between the strip and the viewer's side edg
 CORNER_SIDE = 18      # corner readouts sit this far from the sides and ...
 CORNER_BOTTOM = 10    # ... this far from the bottom
 CHANNELS = ("RGB", "R", "G", "B", "A")
+TOGGLE_TIP = "\nClick: switch between no change and the last value you set."
 LENS_3D_TIP = ("Draw the 3D viewport the way the camera's lens bends the picture, with the overscan the lens needs "
                "(L). Off shows the ideal, undistorted picture.")
 
@@ -217,12 +218,16 @@ class ViewerStrip(QFrame):
         self.display_button = DisplayMenuButton(window.display_view, window.viewer_display)
         self.row.addWidget(self.display_button)
         self.row.addWidget(separator())
-        self.sun = QLabel()
-        self.sun.setPixmap(strip_icon(SUN_ICON, 15).pixmap(15, 15))
-        self.sun.setToolTip(window.exposure.toolTip())
-        self.gamma_mark = QLabel("γ")
-        self.gamma_mark.setObjectName("strip-caption")
-        self.gamma_mark.setToolTip(window.gamma.toolTip())
+        # The captions are Nuke's gain and gamma toggle buttons (Nuke 17.0 User Guide, Using the Viewer Controls): a click
+        # switches between no change and the last value set.
+        self.sun = tool_button("", window.exposure.toolTip() + TOGGLE_TIP, strip_icon(SUN_ICON, 15))
+        self.sun.setObjectName("strip-gain-toggle")
+        self.sun.setIconSize(QSize(15, 15))
+        self.sun.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.sun.clicked.connect(lambda _checked=False: window.toggle_viewer_gain())
+        self.gamma_mark = tool_button("γ", window.gamma.toolTip() + TOGGLE_TIP)
+        self.gamma_mark.setObjectName("strip-gamma-toggle")
+        self.gamma_mark.clicked.connect(lambda _checked=False: window.toggle_viewer_gamma())
         for caption, spin in ((self.sun, window.exposure), (self.gamma_mark, window.gamma)):
             spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             spin.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)

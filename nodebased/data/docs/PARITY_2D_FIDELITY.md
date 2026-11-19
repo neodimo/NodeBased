@@ -52,7 +52,7 @@ Knobs that act: 453 of the 454 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**123 of 132 documented knob-widget behaviours work as Nuke's do** (28 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**132 of 132 documented knob-widget behaviours work as Nuke's do** (28 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -72,7 +72,7 @@ Knobs that act: 453 of the 454 paired knobs probed change the output pixels; 1 c
 | node graph | 25 / 25 | - | `swap_inputs_shift`, `select_downstream`, `duplicate_alt_c` |
 | curve editor | 21 / 21 | - | `delete_key`, `undo_step` |
 | dope sheet | 12 / 12 | - | `drag_keys`, `scale_keys`, `time_ruler` |
-| viewer | 12 / 21 | `alpha_overlay` (not probed), `recenter_middle_click` (not probed), `zoom_drag` (not probed), `prevent_auto_zoom` (not probed), `toolbars` (not probed), `gain_gamma_toggle` (not probed), `refresh` (not probed), `goto_frame` (not probed), `frame_field_math` (not probed) | `luminance_y`, `wheel_zoom`, `jkl`, `wipe`, `proxy_roi` |
+| viewer | 21 / 21 | - | `luminance_y`, `wheel_zoom`, `jkl`, `wipe`, `proxy_roi` |
 
 ## On-screen controls that work like Nuke
 

@@ -341,6 +341,13 @@ Ctrl+Shift+drag holds the average of the region dragged, and Ctrl+right-click le
 A Ctrl press only samples when nothing else takes it first: a colour knob's armed eye dropper, a handle, a pick or the
 wipe keep their Ctrl+click.
 
-Still open: M (alpha as a red overlay), a middle click to re-centre, middle plus left drag to zoom, Alt+Z to lock the zoom,
-{ and } to hide the toolbars, the gain and gamma toggle buttons, U, Alt+G and the frame field's +/-20.
+The second finish step brought it to all 21. M shows the alpha as a red overlay on the RGB (half strength where the alpha
+is 1; M again turns it off). A middle click without a drag re-centres the frame as F does, and dragging with the middle and
+left buttons held zooms about the point under the pointer (to the right zooms in). Alt+Z switches the Viewer settings'
+prevent auto zoom, so an input of another size keeps the zoom. { hides or shows the top toolbar (the viewer strip) and }
+the bottom one (the playback row). The gain and gamma captions on the strip are Nuke's toggle buttons: a click switches
+between no change and the last value set. U draws the frame again from the graph with the cached pictures dropped, and
+Alt+G opens a Go to frame dialog. The frame field's +20 and -20 already jumped by 20 frames; it is now measured. In the
+Viewer M, U and the braces are Viewer keys; in the Node Graph M and U still create Merge and Unpremult. No shortcut was
+removed.
 

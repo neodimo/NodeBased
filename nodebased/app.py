@@ -226,6 +226,12 @@ SHORTCUT_SECTIONS = (
                 ("Alt+1-9", "set viewer input 1-9 as the B buffer (Alt+0 clears B)"),
                 ("Shift+W", "reset the wipe to the centre, vertical"),
                 ("Ctrl+P", "toggle the viewer proxy (off / the last proxy chosen)"),
+                ("M", "alpha as a red overlay on the RGB (press again to turn it off)"),
+                ("Alt+Z", "prevent auto zoom: a picture of another size keeps the zoom"),
+                ("{ / }", "hide or show the top toolbar / the bottom toolbar"),
+                ("U", "refresh the viewer"), ("Alt+G", "go to frame"),
+                ("Click gain / gamma caption", "switch between no change and the last value"),
+                ("MMB click", "re-centre the frame"), ("MMB+LMB drag", "zoom about the pointer"),
                 ("Drag ROI box / edges / Shift-drag", "region of interest: move / resize / draw a new one (ROI button on)"),
                 ("Drag wipe centre / rotation handle", "wipe compare: move the split / turn it · Ctrl-click resets"),
                 ("Drag box / ring / handles", "Transform: translate / rotate / scale · Ctrl-drag centre moves the pivot"),
@@ -5523,6 +5529,29 @@ class Viewer(PanZoomView):
             self.reset_wipe()
             event.accept()
             return
+        # Nuke 17.0 User Guide, Viewers and Using the Viewer Controls (lane 10 step T8 finish): M the alpha overlay,
+        # Alt+Z prevent auto zoom, { and } the top and bottom toolbars, U refresh, Alt+G Go to frame.
+        mods = event.modifiers() & ~Qt.KeyboardModifier.KeypadModifier
+        if event.key() in (Qt.Key.Key_BraceLeft, Qt.Key.Key_BraceRight) and not (mods & ~Qt.KeyboardModifier.ShiftModifier):
+            self.window.toggle_viewer_toolbar("top" if event.key() == Qt.Key.Key_BraceLeft else "bottom")
+            event.accept()
+            return
+        if not mods and event.key() == Qt.Key.Key_M:
+            self.window.toggle_alpha_overlay()
+            event.accept()
+            return
+        if not mods and event.key() == Qt.Key.Key_U:
+            self.window.refresh_viewer()
+            event.accept()
+            return
+        if mods == Qt.KeyboardModifier.AltModifier and event.key() == Qt.Key.Key_Z:
+            self.window.toggle_zoom_lock()
+            event.accept()
+            return
+        if mods == Qt.KeyboardModifier.AltModifier and event.key() == Qt.Key.Key_G:
+            self.window.open_goto_frame()
+            event.accept()
+            return
         # Nuke's RotoPaint tool cycles are N/C/X/D. B remains the viewer's blue-channel key.
         channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
         if event.key() in channel_for_key and not event.modifiers():
@@ -5811,8 +5840,24 @@ class Viewer(PanZoomView):
         return False
 
     def mouseReleaseEvent(self, event):
+        if getattr(self, "zoom_drag", None) is not None and event.button() in (Qt.MouseButton.LeftButton,
+                                                                              Qt.MouseButton.MiddleButton):
+            self.zoom_drag = None
+            if event.button() == Qt.MouseButton.LeftButton:
+                if self.pan is not None:
+                    self.pan = event.position()      # the middle button still held pans on from here, without a jump
+                event.accept()
+                self.window.request_preview()
+                return
         if self.pan is not None:
+            click = getattr(self, "_middle_click", None)
+            self._middle_click = None
+            ends_middle = event.button() == Qt.MouseButton.MiddleButton and self.pan_button == Qt.MouseButton.MiddleButton
             PanZoomView.mouseReleaseEvent(self, event)
+            if ends_middle and click is not None:
+                travel = event.position() - click
+                if abs(travel.x()) + abs(travel.y()) <= self.MIDDLE_CLICK_SLOP:
+                    self.run_view_action("fit")         # a middle click without a drag re-centres, as F does
             return
         self.released_at = time.monotonic()      # the window shortens its panel rebuild delay for the edit this release commits
         handled = self.hit_release(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event))
@@ -7072,9 +7117,36 @@ class Viewer(PanZoomView):
                 return True
         return False
 
+    # Nuke 17.0 User Guide, Viewers (lane 10 step T8 finish): "Drag the mouse while pressing the middle mouse button and
+    # the left mouse button" zooms, and "clicking the middle-mouse button" re-centres the frame.
+    MIDDLE_CLICK_SLOP = 3.0
+    ZOOM_DRAG_RATE = 1.01        # zoom factor per pixel dragged to the right
+
+    def _zoom_drag_to(self, position):
+        drag = getattr(self, "zoom_drag", None)
+        factor = self.ZOOM_DRAG_RATE ** (position.x() - drag["x"])
+        drag["x"] = position.x()
+        if not 0.05 < self.transform().m11() * factor < 20:
+            return
+        anchor, port = drag["anchor"], drag["port"]
+        self.scale(factor, factor)
+        moved = self.mapFromScene(anchor)
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + round(moved.x() - port.x()))
+        self.verticalScrollBar().setValue(self.verticalScrollBar().value() + round(moved.y() - port.y()))
+        self.auto_fit = False
+
     def mousePressEvent(self, event):
+        if (event.button() == Qt.MouseButton.LeftButton and self.pan is not None
+                and self.pan_button == Qt.MouseButton.MiddleButton):
+            # The left button joins a held middle button: zoom about the point under the pointer.
+            self.zoom_drag = {"x": event.position().x(), "port": event.position(),
+                              "anchor": self.mapToScene(event.position().toPoint())}
+            self._middle_click = None
+            event.accept()
+            return
         if self.starts_pan(event):
             # A pan never places a tracker, a roto point or a roto drag.
+            self._middle_click = event.position() if event.button() == Qt.MouseButton.MiddleButton else None
             PanZoomView.mousePressEvent(self, event)
             return
         handled = self.hit_press(self._event_scene_pos(event), event.button(), event.modifiers(), self._event_pressure(event))
@@ -7204,6 +7276,10 @@ class Viewer(PanZoomView):
         # is to read the picture under the pointer, which is exactly what an artist placing a
         # shape wants. This is the viewer's only mouse-move handler; a second definition would
         # silently replace it (the readout was dead for exactly that reason once).
+        if getattr(self, "zoom_drag", None) is not None:
+            self._zoom_drag_to(event.position())
+            event.accept()
+            return
         if self.pan is None and self.hit_move(self._event_scene_pos(event), event.modifiers(), self._event_pressure(event)):
             self._update_pixel_readout(event)
             event.accept()
@@ -11847,6 +11923,10 @@ class Window(QMainWindow):
             self.viewer_mode_buttons[mode] = button
         self.channels = ChannelButtons()
         self.channels.currentTextChanged.connect(self.request_preview)
+        # M: the alpha as a red overlay on the RGB (Nuke 17.0 User Guide, Using the Viewer Controls). Viewer state only.
+        self.alpha_overlay = False
+        self.viewer_refreshes = 0
+        self.goto_frame_dialog = None
         self.display_view = QComboBox(self.strip_models)
         self.display_view.addItems(VIEWS)
         self.display_view.setCurrentText(self.dispatcher.document["settings"]["color"]["view"])
@@ -14201,7 +14281,73 @@ class Window(QMainWindow):
             args["rgb_only"] = False
         if not knobs["use_gpu_for_viewer"]:
             args["gpu"] = False
+        if getattr(self, "alpha_overlay", False):
+            # The overlay is drawn by `to_qimage` on the processor, so the card's ready-made picture is not taken.
+            args["alpha_overlay"] = True
+            args["gpu"] = False
         return args
+
+    # -- Nuke's Viewer toggles (Nuke 17.0 User Guide, Viewers and Using the Viewer Controls; lane 10 step T8 finish) --
+    def toggle_alpha_overlay(self):
+        """M: show the alpha as a red overlay on the RGB; M again returns to the plain picture."""
+        self.alpha_overlay = not self.alpha_overlay
+        self.statusBar().showMessage("Alpha overlay on" if self.alpha_overlay else "Alpha overlay off", 2000)
+        self.request_preview()
+        return self.alpha_overlay
+
+    def toggle_zoom_lock(self):
+        """Alt+Z: the Viewer settings' "prevent auto zoom", switched from the Viewer."""
+        on = not viewer_knobs(self.dispatcher.document)["zoom_lock"]
+        self.set_viewer_knobs(zoom_lock=on)
+        self.statusBar().showMessage("Prevent auto zoom on" if on else "Prevent auto zoom off", 2000)
+        return on
+
+    def toggle_viewer_toolbar(self, which):
+        """{ hides or shows the Viewer's top toolbar (the strip), } the bottom one (the playback row)."""
+        widget = self.viewer_strip if which == "top" else self.time_row
+        widget.setVisible(widget.isHidden())
+        return not widget.isHidden()
+
+    def refresh_viewer(self):
+        """U: draw the Viewer's frame again from the graph, its cached pictures dropped first."""
+        self.display_cache.clear()
+        self.tile_executor.cache.clear()
+        self.viewer_refreshes += 1
+        self.statusBar().showMessage("Viewer refreshed", 1500)
+        self.request_preview()
+
+    def open_goto_frame(self):
+        """Alt+G: the Go to frame dialog; the frame typed there becomes the current frame (one undo step)."""
+        from PySide6.QtWidgets import QInputDialog
+        timeline = self.dispatcher.document["time"]
+        dialog = QInputDialog(self)
+        dialog.setObjectName("viewer-goto-frame")
+        dialog.setWindowTitle("Go to frame")
+        dialog.setLabelText("Frame:")
+        dialog.setInputMode(QInputDialog.InputMode.IntInput)
+        dialog.setIntRange(-1000000, 1000000)
+        dialog.setIntValue(int(timeline["current"]))
+        dialog.intValueSelected.connect(lambda value: self.set_time(current=int(value)))
+        dialog.finished.connect(lambda _result: setattr(self, "goto_frame_dialog", None))
+        self.goto_frame_dialog = dialog
+        dialog.open()
+        return dialog
+
+    def _toggle_look(self, spin, neutral, memory):
+        """Nuke's gain and gamma toggle buttons: switch between the neutral value and the last other one."""
+        now = spin.value()
+        if now != neutral:
+            setattr(self, memory, now)
+            spin.setValue(neutral)
+        else:
+            spin.setValue(getattr(self, memory, neutral))
+        return spin.value()
+
+    def toggle_viewer_gain(self):
+        return self._toggle_look(self.exposure, 0.0, "_gain_toggle_value")     # gain is in f-stops: 0 is Nuke's gain of 1
+
+    def toggle_viewer_gamma(self):
+        return self._toggle_look(self.gamma, 1.0, "_gamma_toggle_value")
 
     @staticmethod
     def _moves_only(cmd):

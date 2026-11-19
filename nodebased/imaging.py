@@ -500,6 +500,9 @@ def _quantize(rgb):
     return out
 
 
+ALPHA_OVERLAY_STRENGTH = 0.5
+
+
 def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None, _cropped=False):
     """Compose a display image over `background` ("black" or "checker").
 
@@ -513,7 +516,8 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
     transform (`v ** (1 / gamma)`, sign kept), and the clipping warning tests that same adjusted
     scene-linear value and paints over the displayable buffer only.
     """
-    on_card = CARD_PICTURE and (look or {}).get("gpu", True)       # the viewer's "use GPU for viewer" knob
+    on_card = (CARD_PICTURE and (look or {}).get("gpu", True)      # the viewer's "use GPU for viewer" knob
+               and not (look or {}).get("alpha_overlay"))
     if not _cropped and on_card:
         made = gpupicture.take(frame, exposure, channel, background, view, look)       # a played 3D frame's picture, made by the render card
         if made is not None:
@@ -585,6 +589,12 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         over, under = zebra
         rgb8[over] = (255, 0, 0)
         rgb8[under] = (0, 90, 255)
+    if channel != "A" and (look or {}).get("alpha_overlay"):
+        # The Viewer's M (Nuke 17.0 User Guide, Using the Viewer Controls): the alpha as a red overlay over the RGB,
+        # half strength where the alpha is 1. Display only.
+        weight = np.clip(frame[..., 3:4], 0, 1).astype(np.float32) * np.float32(ALPHA_OVERLAY_STRENGTH)
+        red = np.array((255.0, 0.0, 0.0), np.float32)
+        rgb8[...] = np.clip(rgb8 * (1 - weight) + red * weight + 0.5, 0, 255).astype(np.uint8)
     return QImage(rgb8.data, rgb8.shape[1], rgb8.shape[0], rgb8.strides[0], QImage.Format.Format_RGB888).copy()
 
 

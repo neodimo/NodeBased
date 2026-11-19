@@ -14,17 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import nuke_panel_interactions as interactions  # noqa: E402
 
-OPEN = {
-    "viewer.alpha_overlay": "M is not a Viewer key in NodeBased yet",
-    "viewer.recenter_middle_click": "a middle click without a drag does not re-centre",
-    "viewer.zoom_drag": "middle plus left drag does not zoom",
-    "viewer.prevent_auto_zoom": "no Alt+Z lock on the zoom",
-    "viewer.toolbars": "{ and } do not hide the Viewer's toolbars",
-    "viewer.gain_gamma_toggle": "not probed in this step",
-    "viewer.refresh": "not probed in this step",
-    "viewer.goto_frame": "not probed in this step",
-    "viewer.frame_field_math": "not probed in this step",
-}
+OPEN = {}
 
 
 class ViewerTests(unittest.TestCase):
