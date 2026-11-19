@@ -94,6 +94,12 @@ def document_default(path):
     if path.startswith("settings.project."):                # optional group: a field not set holds its default
         from nodebased import projectsettings
         return projectsettings.DEFAULTS[path.split(".", 2)[2]]
+    if path.startswith("settings.views."):                  # optional group: a field not set holds its default (nodebased/projectviews.py)
+        from nodebased import projectviews
+        return projectviews.DEFAULTS[path.split(".", 2)[2]]
+    if path in ("settings.color.config", "settings.color.custom_config"):    # the OCIO config menu entry and its custom path (nodebased/ocioconfigs.py)
+        from nodebased import rootpanel
+        return rootpanel.get(doc, path)
     value = doc
     for part in path.split("."):
         value = value[part]
@@ -846,6 +852,7 @@ def build_report(reference_dir=None):
     w("")
     w("Root is the one Nuke node scored against something that is not a node: the project settings. Its pairing (`document_settings` in `docs/parity/nodebased_to_nuke.json`) names document fields, such as `time.first` or `settings.color.view`, where other pairings name a node's params. "
       "A Root knob counts as covered only when its document field exists and changes behaviour (`tests/test_2d_parity_notimeblur.py`, `RootPairingTests`, shows each one acting); every other Root knob is listed there as unsupported with a one-line reason and scores as missing. "
+      "The Views tab's nine knobs (`settings.views`, `nodebased/projectviews.py`) are paired but only recorded: the views save and load with the document and nothing renders from them (rendering is mono), so they count under `knobs` and not as behaviour. "
       "The defaults component compares a paired field with the value a new project starts with (`core.demo_document`). Root has no input sockets, shared chrome or formula cases, so those components are left out and only knobs and defaults are renormalised.")
     w("")
     w("**Overall** is the mean of node fidelity weighted by daily-use rank: a node in row *r* of its group weighs `1 / r`, shared equally by the Nuke nodes of a combined row "

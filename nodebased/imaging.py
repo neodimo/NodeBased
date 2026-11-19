@@ -23,6 +23,7 @@ from . import metadata
 from . import pathmask as _pathmask
 from . import readproxy as _readproxy
 from .projectsettings import project as _project_fields
+from . import ocioconfigs as _ocioconfigs
 from . import readspaces as _readspaces
 from .core import apply_lifetime
 from . import ops2d_chrome as _chrome
@@ -1721,7 +1722,7 @@ class Evaluator:
             node_curves = doc.get("animation", {}).get("curves", {}).get(key)
             params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
             if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
-                params["config"] = doc.get("settings", {}).get("color", {}).get("config", "")
+                params["config"] = _ocioconfigs.effective(doc.get("settings", {}).get("color", {}))
             if kind == "Read" and params.get("colorspace") == "Auto":
                 params["colorspace"] = _readspaces.token(doc)      # the project's default colour spaces by file type (nodebased/readspaces.py)
             # Pixel-unit parameters are scaled in the same pass that shrinks the sources, so a blur

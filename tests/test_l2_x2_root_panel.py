@@ -39,7 +39,7 @@ class RootPanelLayoutTests(unittest.TestCase):
         self.assertEqual(rootpanel.TABS[0], "Root")
         self.assertEqual([r.label for r in rootpanel.ROWS if r.tab == "Root"][:5],
                          ["name", "project directory", "Script Directory", "comment", "lock all connections"])
-        self.assertTrue(all(tab[n] in ("Root Tab", "Color Tab", "default LUT settings") for r in rootpanel.ROWS for n in r.names))
+        self.assertTrue(all(tab[n] in ("Root Tab", "Color Tab", "default LUT settings", "Views Tab") for r in rootpanel.ROWS for n in r.names))
 
     def test_every_row_field_exists_in_a_new_document(self):
         document = demo_document()
@@ -98,7 +98,7 @@ class RootPanelWindowTests(unittest.TestCase):
         panel = self.panel()
         kinds = {"name": QLineEdit, "lock_connections": QCheckBox, "first_frame": QSpinBox, "last_frame": QSpinBox, "fps": QDoubleSpinBox,
                  "format": QComboBox, "proxy": QCheckBox, "proxy_type": QComboBox, "proxy_scale": QDoubleSpinBox,
-                 "proxySetting": QComboBox, "monitorLUT": QComboBox, "OCIO_config": QLineEdit}
+                 "proxySetting": QComboBox, "monitorLUT": QComboBox, "OCIO_config": QComboBox}
         for name, kind in kinds.items():
             self.assertIsInstance(panel.findChild(QWidget, f"root-{name}"), kind, name)
 

@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -298,6 +298,8 @@ _LENS = {"lens_k1": 0.0, "lens_k2": 0.0, "lens_k3": 0.0, "lens_p1": 0.0, "lens_p
 
 from .writenode import DEFAULTS as _WRITE_KNOB_DEFAULTS, NEW_NODE_DEFAULTS as _WRITE_NEW_NODE_DEFAULTS, VIEW_CHOICES as _WRITE_VIEWS
 from . import projectsettings as _projectsettings
+from . import projectviews as _projectviews
+from . import ocioconfigs as _ocioconfigs
 from . import storedknobs as _storedknobs
 from . import smallnodes as _smallnodes
 from . import gradeknobs as _gradeknobs
@@ -3198,6 +3200,14 @@ def upgrade_document(document):
                 project = settings["project"] = {}
             project.setdefault("log_lut", "sRGB")
         doc["version"] = 36
+    if isinstance(doc, dict) and doc.get("version") == 36:
+        # v36 -> v37: Project Settings' OCIO config is a menu (nodebased/ocioconfigs.py). `settings.color.config` holds the menu entry
+        # and the new optional `custom_config` the path of the `custom` entry; a document that stored a file path or an unknown URI in
+        # `config` keeps it as the custom path, so it opens on `custom` and loads the same config as before.
+        color = (doc.get("settings") or {}).get("color") if isinstance(doc.get("settings"), dict) else None
+        if isinstance(color, dict) and isinstance(color.get("config"), str) and color["config"].strip():
+            _ocioconfigs.migrate(color)
+        doc["version"] = 37
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -3491,11 +3501,15 @@ def empty_document():
 def validate_settings(settings):
     # "formats" is the additive registry section (lane L2 step 4c); a hand-built document without it
     # still validates and falls back to the built-in list through `document_formats`.
-    if not isinstance(settings, dict) or not {"color", "viewer"} <= set(settings) <= {"color", "viewer", "formats", "project", "clones"}:
+    if not isinstance(settings, dict) or not {"color", "viewer"} <= set(settings) <= {"color", "viewer", "formats", "project", "clones", "views"}:
         raise ValueError("settings must define color and viewer")
+    if "views" in settings:
+        _projectviews.validate(settings["views"])
     color = settings["color"]
-    if not isinstance(color, dict) or set(color) != {"config", "working_space", "display", "view"}:
+    if not isinstance(color, dict) or not {"config", "working_space", "display", "view"} <= set(color) <= {"config", "working_space", "display", "view", "custom_config"}:
         raise ValueError("settings.color is malformed")
+    if "custom_config" in color and not isinstance(color["custom_config"], str):
+        raise ValueError("settings.color.custom_config must be a string")
     # This release ships one self-contained ACES pipeline. Persisting these fields now gives the
     # project format a clean extension point for user OCIO configs without pretending arbitrary
     # configs are already supported.
@@ -4253,7 +4267,7 @@ class Dispatcher:
             changes = cmd.get("settings")
             if not isinstance(changes, dict):
                 raise ValueError("settings operation requires a settings object")
-            unknown = set(changes) - {"color", "viewer", "project"}
+            unknown = set(changes) - {"color", "viewer", "project", "views"}
             if unknown:
                 raise ValueError(f"Unknown settings groups: {sorted(unknown)}")
             for group, values in changes.items():
@@ -4263,10 +4277,16 @@ class Dispatcher:
                     _projectsettings.merge(doc["settings"], values)
                     _check_project_formats(doc)
                     continue
-                unknown_fields = set(values) - set(doc["settings"][group])
+                if group == "views":
+                    _projectviews.merge(doc["settings"], values)
+                    continue
+                known = set(doc["settings"][group]) | ({"custom_config"} if group == "color" else set())
+                unknown_fields = set(values) - known
                 if unknown_fields:
                     raise ValueError(f"Unknown settings.{group} fields: {sorted(unknown_fields)}")
                 doc["settings"][group].update(values)
+                if group == "color" and doc["settings"]["color"].get("custom_config") == "":
+                    del doc["settings"]["color"]["custom_config"]       # the custom path is stored only when it is set
             return copy.deepcopy(doc["settings"])
         key = cmd["id"]
         node = nodes[key]

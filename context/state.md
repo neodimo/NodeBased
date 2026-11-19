@@ -1,3 +1,7 @@
+## Lane 2 step X3 (11/19): OCIO config menu and the Views tab of Project Settings
+
+- `nodebased/ocioconfigs.py` (menu entries, selection, warning, migration), `nodebased/projectviews.py` (`settings.views`), rows and panel code in `nodebased/rootpanel.py` and `Window.build_root_panel`; schema 37 (`settings.color.custom_config`, `settings.views` optional). Fidelity: Root 67.1 to 77.8, overall 97.7 unchanged. Views are recorded only; rendering is mono.
+
 ## Lane 2 step X2 (11/18 10:30 PM): Project Settings panel and default colour spaces by file type
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:36 PM on 2026-11-18 PDT)

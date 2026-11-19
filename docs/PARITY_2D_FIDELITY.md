@@ -4,7 +4,7 @@
 
 Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.6 (99.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.7 (99.5 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.8 (99.5 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -26,7 +26,7 @@ Per node, up to nine components, each a fraction from 0 to 1. The parts marked *
 
 `fidelity = 100 * sum(weight * fraction) / sum(weight)` over the components the node has. A component with nothing to count (the guide lists no inputs, no formula cases, no renders) is left out and the rest renormalised. A Nuke node with no NodeBased counterpart scores 0. A node whose guide page lists no inputs or knobs cannot be measured and is left out (listed at the end).
 
-Root is the one Nuke node scored against something that is not a node: the project settings. Its pairing (`document_settings` in `docs/parity/nodebased_to_nuke.json`) names document fields, such as `time.first` or `settings.color.view`, where other pairings name a node's params. A Root knob counts as covered only when its document field exists and changes behaviour (`tests/test_2d_parity_notimeblur.py`, `RootPairingTests`, shows each one acting); every other Root knob is listed there as unsupported with a one-line reason and scores as missing. The defaults component compares a paired field with the value a new project starts with (`core.demo_document`). Root has no input sockets, shared chrome or formula cases, so those components are left out and only knobs and defaults are renormalised.
+Root is the one Nuke node scored against something that is not a node: the project settings. Its pairing (`document_settings` in `docs/parity/nodebased_to_nuke.json`) names document fields, such as `time.first` or `settings.color.view`, where other pairings name a node's params. A Root knob counts as covered only when its document field exists and changes behaviour (`tests/test_2d_parity_notimeblur.py`, `RootPairingTests`, shows each one acting); every other Root knob is listed there as unsupported with a one-line reason and scores as missing. The Views tab's nine knobs (`settings.views`, `nodebased/projectviews.py`) are paired but only recorded: the views save and load with the document and nothing renders from them (rendering is mono), so they count under `knobs` and not as behaviour. The defaults component compares a paired field with the value a new project starts with (`core.demo_document`). Root has no input sockets, shared chrome or formula cases, so those components are left out and only knobs and defaults are renormalised.
 
 **Overall** is the mean of node fidelity weighted by daily-use rank: a node in row *r* of its group weighs `1 / r`, shared equally by the Nuke nodes of a combined row (`Grain / ScannedGrain` gives each half of `1 / 9`). Rows marked n/a in PARITY_2D.md are not counted.
 
@@ -44,7 +44,7 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Merge | 99.9 | 99.7 | 99.9 | 13 |
 | Transform | 98.9 | 96.5 | 98.6 | 20 |
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
-| Other | 84.3 | 54.2 | 84.0 | 14 |
+| Other | 84.7 | 55.0 | 84.5 | 14 |
 
 Behaviour checked: 138 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
@@ -326,7 +326,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 8 | LiveInput | - | missing | 0.0 | 0.0 | 0 (0/4) | - | - | - | - | - | - | - | unmeasured |
 | 8 | VariableGroup | - | missing | 0.0 | 0.0 | 0 (0/1) | - | - | 0 | - | - | - | - | unmeasured |
 | 10 | Precomp | `Precomp` | supported | 100.0 | 100.0 | 100 (9/9) | - | 100 | - | - | - | 100 | - | unmeasured |
-| 11 | Root | `time and settings` | partial | 67.1 | 59.1 | 60 (21/43) | - | 56 | - | - | - | 100 | - | unmeasured |
+| 11 | Root | `time and settings` | partial | 77.8 | 73.2 | 77 (31/43) | - | 59 | - | - | - | 100 | - | unmeasured |
 | 13 | Assert | `Assert` | supported | n/a | n/a | - | - | - | - | - | - | - | - | unmeasured |
 | 14 | AudioRead | - | missing | 0.0 | 0.0 | 0 (0/10) | - | - | - | - | - | - | - | unmeasured |
 
@@ -509,7 +509,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | LiveInput | — | — | 4 |
 | VariableGroup | — | — | 1 |
 | Precomp | — | 100.0% (3/3) | 6 |
-| Root | 100.0% (4/4) | 100.0% (13/13) | 17 |
+| Root | 100.0% (4/4) | 100.0% (16/16) | 19 |
 | Assert | — | — | 0 |
 | AudioRead | — | — | 4 |
 
@@ -540,8 +540,8 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 6 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 7 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
 | 8 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 9 | Root (Other #11) | `time and settings` | 2.99 | 67.1 | primary knobs missing: `is_live`, `render_mode`; 20 secondary knobs missing |
-| 10 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 9 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 10 | Root (Other #11) | `time and settings` | 2.02 | 77.8 | primary knobs missing: `is_live`, `render_mode`; 10 secondary knobs missing: `colorManagement`, `workingSpaceLUT`, `luts`, `onLiveGroupMakeLocal`, `onLiveGroupPrePublish` ... |
 | 11 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
 | 12 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
 | 13 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |

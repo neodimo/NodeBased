@@ -14994,7 +14994,25 @@ class Window(QMainWindow):
                 heading.setObjectName("project-settings-section")
                 heading.setStyleSheet("font-weight: 600; color: #9aa4b0; background: transparent; padding-top: 8px")
                 form.addRow(heading)
-            form.addRow(row.label, self._root_row_widget(document, row))
+            if not rootpanel.visible(document, row):
+                continue
+            tip = rootpanel.tab_tooltip(row)
+            widget = self._root_views_widget(document, row) if row.kind == "views" else self._root_row_widget(document, row)
+            if row.kind == "button":
+                form.addRow("", widget)
+            else:
+                form.addRow(row.label, widget)
+            if tip:
+                widget.setToolTip(tip)
+            if row.fields and row.fields[0] == rootpanel.COLOR_CONFIG:
+                from . import ocioconfigs
+                warning = ocioconfigs.problem(document["settings"]["color"])
+                if warning:
+                    note = QLabel(warning)
+                    note.setObjectName("root-OCIO_config-warning")
+                    note.setWordWrap(True)
+                    note.setStyleSheet("color: #e0a040; background: transparent")
+                    form.addRow("", note)
         tabs.setCurrentIndex(min(getattr(self, "_root_tab", 0), tabs.count() - 1))
         tabs.currentChanged.connect(lambda index: setattr(self, "_root_tab", index))
         outer.addWidget(tabs)
@@ -15003,6 +15021,11 @@ class Window(QMainWindow):
     def _root_row_widget(self, document, row):
         """The control or row of controls for one Root knob row; every one is named `root-<guide name>`."""
         from .core import VIEWER_PROXY_TIERS
+        if row.kind == "button":
+            widget = QPushButton(row.label)
+            widget.setObjectName(f"root-{row.names[0]}")
+            widget.clicked.connect(lambda checked=False: self._root_views("stereo"))
+            return widget
         kinds = row.members if row.kind == "row" else (row.kind,) * len(row.fields)
         widgets = []
         for index, (path, kind) in enumerate(zip(row.fields, kinds)):
@@ -15025,8 +15048,9 @@ class Window(QMainWindow):
                 choices = list(rootpanel.choices_for(document, row, index))
                 if path in (rootpanel.PROJECT_PREFIX + "format", rootpanel.PROJECT_PREFIX + "proxy_format") and "" not in choices:
                     choices.insert(0, "")
+                labels = dict(rootpanel.config_labels()) if path == rootpanel.COLOR_CONFIG else {}
                 for choice in choices:
-                    widget.addItem(choice or "none", choice)
+                    widget.addItem(labels.get(choice, choice or "none"), choice)
                 if str(value) not in choices:
                     widget.addItem(str(value), str(value))
                 widget.setCurrentIndex(max(0, widget.findData(str(value))))
@@ -15058,6 +15082,54 @@ class Window(QMainWindow):
         for widget in widgets:
             line.addWidget(widget, 1)
         return holder
+
+    def _root_views_widget(self, document, row):
+        """The views list with its + - up down buttons beside it (Nuke's Views tab); a view's name shows in its colour when
+        `Use colors in UI?` is on. Every button goes through `rootpanel.edit_views`."""
+        from . import projectviews
+        current = projectviews.views(document)
+        holder = QWidget()
+        holder.setObjectName("root-views")
+        line = QHBoxLayout(holder)
+        line.setContentsMargins(0, 0, 0, 0)
+        listing = QListWidget()
+        listing.setObjectName("root-views-list")
+        listing.setMaximumHeight(120)
+        for name, colour in zip(current["names"], current["colours"]):
+            item = QListWidgetItem(name)
+            if current["use_colours"]:
+                item.setForeground(QColor(colour))
+            listing.addItem(item)
+        listing.setCurrentRow(min(getattr(self, "_root_view_row", 0), listing.count() - 1))
+        listing.currentRowChanged.connect(lambda r: setattr(self, "_root_view_row", max(r, 0)))
+        line.addWidget(listing, 1)
+        column = QVBoxLayout()
+        for text, tag, action in (("+", "root-views-add", "add"), ("-", "root-views-remove", "remove"),
+                                  ("up", "root-views-up", "up"), ("down", "root-views-down", "down")):
+            button = QPushButton(text)
+            button.setObjectName(tag)
+            button.setMaximumWidth(48)
+            button.clicked.connect(lambda checked=False, a=action, w=listing: self._root_views(
+                a, name=(w.currentItem().text() if w.currentItem() else None)))
+            column.addWidget(button)
+        column.addStretch(1)
+        line.addLayout(column)
+        return holder
+
+    def _root_views(self, action, name=None):
+        """One Views tab button: add (asks for a name unless one is given), remove, up, down, or set up views for stereo."""
+        if action == "add" and name is None:
+            name, accepted = QInputDialog.getText(self, "Add view", "View name")
+            if not accepted:
+                return
+        if action == "add":
+            command = rootpanel.edit_views(self.dispatcher.document, "add", name=name)
+        elif action in ("up", "down"):
+            command = rootpanel.edit_views(self.dispatcher.document, "move", name=name, step=-1 if action == "up" else 1)
+        else:
+            command = rootpanel.edit_views(self.dispatcher.document, action, name=name)
+        if command is not None:
+            self.defer_command(command)
 
     def _root_edit(self, path, value):
         command = rootpanel.edit(self.dispatcher.document, path, value)
@@ -15404,13 +15476,15 @@ class Window(QMainWindow):
                     return
                 if param in dynamic_ocio.get(node["type"], set()):
                     from .ocio_nodes import parameter_choices
-                    config_name = (node["params"].get("config") or
-                                   self.graph_document().get("settings", {}).get("color", {}).get("config", ""))
+                    from . import ocioconfigs
+                    color_settings = self.graph_document().get("settings", {}).get("color", {})
+                    config_name = node["params"].get("config") or ocioconfigs.effective(color_settings)
                     display = node["params"].get("display", "")
                     try:
                         choices = parameter_choices(config_name, param, display)
                     except ValueError:
-                        choices = []
+                        # a config NodeBased cannot load (Project Settings warns): the menus use the built-in list
+                        choices = parameter_choices(ocioconfigs.DEFAULT, param, display)
                     if value and value not in choices:
                         choices.append(value)
                     control = ElidingComboBox()

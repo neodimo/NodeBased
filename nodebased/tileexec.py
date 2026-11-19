@@ -44,6 +44,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import ocioconfigs as _ocioconfigs
 from . import readspaces as _readspaces
 from . import cachetier
 from . import drawbehaviour as _drawbehaviour
@@ -164,7 +165,7 @@ def _compute_node_digests(document, tier, frame, solve=None):
         if kind in ("Tracker", "Stabilize") and not node["disabled"]:
             params = _tracked_transform_params(document, key, kind, params, frame, tier)
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
-            params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
+            params["config"] = _ocioconfigs.effective(document.get("settings", {}).get("color", {}))
         if kind == "Read" and params.get("colorspace") == "Auto":
             params["colorspace"] = _readspaces.token(document)      # the project's default colour spaces by file type (nodebased/readspaces.py)
         # ALL wired input slots, required and optional (mask included) — must mirror
@@ -810,7 +811,7 @@ class TileExecutor:
         if kind in ("Tracker", "Stabilize") and not node["disabled"]:
             params = _tracked_transform_params(document, node_id, kind, params, frame, tier)
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
-            params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
+            params["config"] = _ocioconfigs.effective(document.get("settings", {}).get("color", {}))
         if kind == "Read" and params.get("colorspace") == "Auto":
             params["colorspace"] = _readspaces.token(document)      # the project's default colour spaces by file type (nodebased/readspaces.py)
         if kind == "Encryptomatte":

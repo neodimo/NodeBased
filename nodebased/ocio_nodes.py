@@ -9,6 +9,9 @@ from . import ocioknobs as _knobs
 def _config(name):
     import PyOpenColorIO as ocio
     name = str(name or "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5")
+    from .ocioconfigs import NUKE_SHIPPED
+    if name in NUKE_SHIPPED:
+        raise ValueError(f"Could not load OCIO config '{name}': a Nuke config that NodeBased does not ship")
     try:
         if name.startswith("ocio://"):
             return ocio.Config.CreateFromBuiltinConfig(name)

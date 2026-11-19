@@ -186,14 +186,20 @@ class RootPairingTests(unittest.TestCase):
         self.assertEqual(sorted(listed), sorted(counted))
         for e in self.pair["knobs"]:
             self.assertTrue(e["reason"], e)
-            self.assertEqual(e["kind"] == "unsupported", e["nodebased"] == [], e)
+            # a `panel` entry is a button of the Views tab that edits the views list: no field of its own
+            self.assertEqual(e["kind"] in ("unsupported", "panel"), e["nodebased"] == [], e)
 
     def test_the_paired_knobs_are_exactly_the_ones_that_act(self):
         self.assertEqual(set(self.paired), {"first_frame", "last_frame", "fps", "OCIO_config", "monitorLUT",
                                             "proxy", "proxy_scale", "name", "project_directory", "label",
                                             "lock_connections", "lock_range", "Script_directory", "format",
                                             "proxy_type", "proxy_format", "proxySetting",
-                                            "int8LUT", "int16LUT", "logLUT", "floatLUT"})
+                                            "int8LUT", "int16LUT", "logLUT", "floatLUT",
+                                            "customOCIOConfigPath",
+                                            # the Views tab (11/19): recorded in the document, rendering stays mono, so these pair
+                                            # with a field that exists and saves but changes no pixels (see projectviews.py)
+                                            "views", "views#2", "views#3", "views#4", "views#5", "hero_view", "setlr",
+                                            "views_button", "views_colours"})
         from audit_nuke_fidelity import document_default
         for knob, fields in self.paired.items():
             for field in fields:
@@ -205,13 +211,13 @@ class RootPairingTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             document_default("time.shutter")
 
-    def test_the_score_counts_twenty_one_knobs_and_the_defaults_that_agree(self):
+    def test_the_score_counts_thirty_one_knobs_and_the_defaults_that_agree(self):
         from audit_nuke_fidelity import score_pair
         res = score_pair("Root", self.pair, self.nuke)
-        self.assertEqual(res["detail"]["knob_counts"], (21, 43))     # the four default colour spaces by file type joined the seventeen on 11/18
+        self.assertEqual(res["detail"]["knob_counts"], (31, 43))     # the four default colour spaces by file type joined the seventeen on 11/18; the custom config path and the nine Views tab knobs on 11/19
         # frames, fps, the two locks, the proxy type and the four colour spaces agree; the guide writes an empty text as "none", which the text
         # fields do not match, and the OCIO config, view, project format, proxy format and read-proxy setting differ by name or value
-        self.assertEqual(res["detail"]["default_counts"], (10, 18))
+        self.assertEqual(res["detail"]["default_counts"], (13, 22))     # the views defaults (hero, the two flags) agree; the custom path's "none" does not
         self.assertEqual(set(res["components"]), {"knobs", "defaults", "layout"})      # layout: the Project Settings panel (nodebased/rootpanel.py)
 
     def test_frame_range_bounds_the_playhead(self):
