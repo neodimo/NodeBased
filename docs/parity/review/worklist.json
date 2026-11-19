@@ -1,4 +1,4 @@
-{"counts": {"2": {"open": 94, "accepted": 33}, "9": {"open": 1, "accepted": 14}, "11": {"open": 71, "accepted": 34}},
+{"counts": {"2": {"open": 93, "accepted": 33}, "9": {"open": 1, "accepted": 14}, "11": {"open": 71, "accepted": 34}},
 "items": [
  {"group": "Draw", "kind": "widget type", "knob": "format", "lane": 9, "node": "Roto", "nodebased": "Roto", "nodebased_value": "int", "nuke": "string", "reason": "", "status": "open", "weight": 1.0},
  {"group": "Other", "kind": "missing knob", "knob": "bake", "lane": 11, "node": "BlinkScript", "nodebased": "", "nodebased_value": "", "nuke": "Bake", "reason": "no pairing in nodebased_to_nuke.json", "status": "open", "weight": 0.333333},
@@ -9,7 +9,6 @@
  {"group": "Other", "kind": "missing knob", "knob": "recompile", "lane": 11, "node": "BlinkScript", "nodebased": "", "nodebased_value": "", "nuke": "Recompile", "reason": "no pairing in nodebased_to_nuke.json", "status": "open", "weight": 0.333333},
  {"group": "Other", "kind": "missing knob", "knob": "reloadKernelSourceFile", "lane": 11, "node": "BlinkScript", "nodebased": "", "nodebased_value": "", "nuke": "Load", "reason": "no pairing in nodebased_to_nuke.json", "status": "open", "weight": 0.333333},
  {"group": "Other", "kind": "missing knob", "knob": "saveKernelFile", "lane": 11, "node": "BlinkScript", "nodebased": "", "nodebased_value": "", "nuke": "Save", "reason": "no pairing in nodebased_to_nuke.json", "status": "open", "weight": 0.333333},
- {"group": "Color", "kind": "missing knob", "knob": "use_precomputed", "lane": 2, "node": "ColorLookup", "nodebased": "ColorLookup", "nodebased_value": "", "nuke": "use precomputed table", "reason": "no pairing in nodebased_to_nuke.json", "status": "open", "weight": 0.2},
  {"group": "Other", "kind": "not laid out", "knob": "Script_directory", "lane": 11, "node": "Root", "nodebased": "", "nodebased_value": "settings.project.script_directory", "nuke": "Script Directory", "reason": "", "status": "open", "weight": 0.181818},
  {"group": "Other", "kind": "not laid out", "knob": "first_frame", "lane": 11, "node": "Root", "nodebased": "", "nodebased_value": "time.first", "nuke": "frame range", "reason": "", "status": "open", "weight": 0.181818},
  {"group": "Other", "kind": "not laid out", "knob": "format", "lane": 11, "node": "Root", "nodebased": "", "nodebased_value": "settings.project.format", "nuke": "full size format", "reason": "", "status": "open", "weight": 0.181818},
