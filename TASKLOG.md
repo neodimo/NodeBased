@@ -1,3 +1,9 @@
+## 2026-11-19 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X3 (Thu 11/19): the missing knobs on GridWarp, LensDistortion and Bokeh (integrator tick)
+
+- **What was done:** `main` `a700f05b` -> `805fd01c` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `805fd01c`: Ran 10402 tests in 1767.655 s, OK (skipped=38), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X3 (Thu 11/19): the missing knobs on Bokeh, GridWarp and LensDistortion
 
 - **What was done (evidence):** (1) Bokeh: `expandBBoxToMaxKernelSize` (Kernel tab, after Maximum Kernel Size, default off, Nuke's label) grows the output's

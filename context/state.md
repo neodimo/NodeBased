@@ -1,5 +1,27 @@
 ## Lane 9 step X3 (11/19): the missing knobs on Bokeh, GridWarp and LensDistortion
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (8:25 AM on 2026-11-19 PDT)
+
+`main` moved `a700f05b` -> `805fd01c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `805fd01c` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1119-0746.log`, started 7:48 AM): **Ran 10402 tests in 1767.655 s, OK (skipped=38), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step X3 (Thu 11/19): the missing knobs on GridWarp, LensDistortion and Bokeh.** Commits:
+  - `0e9afc8b` GridWarp and LensDistortion panels: tests that the keys readouts, Resize to Image buttons and Reset button are on the real Properties panel (lane 9 step X3)
+  - `bdcc0b5b` LensDistortion: the Reset button of the Solve section puts the distortion terms, the centre and the anamorphic twist and scale back to no distortion in one undo step. Docs, the fidelity report (Bokeh 93.3 to 95.2, GridWarp 88.4 to 97.8, LensDistortion 87.1 to 87.6) and the lane notes for step X3 (2D behaviour, lane 9 step X3, part 3 of 3)
+  - `df444f51` GridWarp: the Source Grid and Destination Grid knobs (visible, locked, the keys list, Resize to Image) and the Colors tab. A hidden grid is not drawn or picked in the Viewer, a locked grid is drawn but cannot be dragged, each grid draws in its own colour; none changes the warped picture, and saved graphs look as before (2D behaviour, lane 9 step X3, part 2 of 3)
+  - `99c7cfcc` Bokeh: Expand Bounding Box To Max Kernel Size grows the output window by the filter's reach, and Integrate Deep Front and Back Separately takes its place in the Bokeh tab (it acts on the Deep input only, so it changes no pixels). Both in Nuke's tab, order and labels; old graphs render the same on the evaluator and tiles (2D behaviour, lane 9 step X3, part 1 of 3)
+  Diff: 20 files changed, 807 insertions(+), 92 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Bokeh gained Expand Bounding Box To Max Kernel Size (grows the data window by the filter's reach; full-frame only) and Integrate Deep Front and Back Separately
 (Deep input only, no pixel effect). GridWarp gained visible, locked and colour knobs for each grid (the Viewer draws and picks accordingly), a keys readout and Resize
 to Image in the panel. LensDistortion gained a Reset button; its other 21 knobs need a grid detector and a solver, which the guide describes by knob only. Fidelity:
