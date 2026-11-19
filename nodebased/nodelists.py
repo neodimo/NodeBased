@@ -66,6 +66,9 @@ class DopeSheet(QWidget):
         self.setMinimumHeight(RULER_HEIGHT + ROW_HEIGHT)
         self.rows = []
         self.first, self.last, self.current = 1, 100, 1
+        self.selected = set()   # {(node key, frame)}: Nuke selects keys, not whole rows
+        self.drag = None
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def refresh(self):
         window = self.window
@@ -82,6 +85,8 @@ class DopeSheet(QWidget):
             return
         self.rows = rows
         self.first, self.last, self.current = state[1:]
+        present = {(key, frame) for key, _name, frames in rows for frame in frames}
+        self.selected &= present
         self.setMinimumHeight(RULER_HEIGHT + ROW_HEIGHT * max(1, len(rows)))
         self.update()
 
@@ -123,19 +128,140 @@ class DopeSheet(QWidget):
             painter.setPen(QPen(faint, 1))
             painter.drawLine(QPointF(0, top + ROW_HEIGHT), QPointF(self.width(), top + ROW_HEIGHT))
             painter.setPen(QPen(QColor("#1c1c1e"), 1))
-            painter.setBrush(QColor("#f2c94c"))
-            for _frame, point in self.key_points(index):
+            for frame, point in self.key_points(index):
+                chosen = (self.rows[index][0], frame) in self.selected
+                painter.setBrush(QColor("#ff9a2e" if chosen else "#f2c94c"))
                 painter.drawPolygon(QPolygonF([point + QPointF(0, -6), point + QPointF(5, 0),
                                                point + QPointF(0, 6), point + QPointF(-5, 0)]))
+                if chosen:   # Nuke shows the frame number next to a selected key
+                    painter.setPen(text)
+                    painter.drawText(QRectF(point.x() + 7, top, 48, ROW_HEIGHT),
+                                     int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), str(frame))
+                    painter.setPen(QPen(QColor("#1c1c1e"), 1))
         painter.setPen(QPen(QColor("#58d7ff"), 2))
         x = self.frame_x(self.current)
         painter.drawLine(QPointF(x, 0), QPointF(x, self.height()))
 
+    # -- editing keys (Nuke 17.0 User Guide, Using the Dope Sheet) -----------------------------------------------
+
+    def _curves(self):
+        return (self.window.graph_document().get("animation") or {}).get("curves") or {}
+
+    def key_at(self, position):
+        """(row index, frame) of the diamond under `position`, or None."""
+        row = int((position.y() - RULER_HEIGHT) // ROW_HEIGHT)
+        if position.y() < RULER_HEIGHT or not 0 <= row < len(self.rows):
+            return None
+        hits = [(abs(point.x() - position.x()), frame) for frame, point in self.key_points(row)
+                if abs(point.x() - position.x()) <= 7]
+        return (row, min(hits)[1]) if hits else None
+
+    def delete_selected(self):
+        """Delete/Backspace: erase every selected key (all of the node's knobs keyed on that frame), one undo step."""
+        curves = self._curves()
+        commands = [{"op": "delete_key", "id": key, "param": param, "frame": frame}
+                    for key, frame in sorted(self.selected)
+                    for param, curve in sorted((curves.get(key) or {}).items())
+                    if any(k["frame"] == frame for k in curve["keys"])]
+        self.selected = set()
+        if commands:
+            self.window.command({"op": "batch", "commands": commands})
+        self.update()
+
+    def add_key(self, row, frame):
+        """Ctrl/Cmd+Alt+click on an empty spot: key every animated knob of the row's node at its current value."""
+        from .animation import evaluate_curve
+        key = self.rows[row][0]
+        commands = [{"op": "set_key", "id": key, "param": param, "frame": int(frame),
+                     "value": float(evaluate_curve(curve, frame))}
+                    for param, curve in sorted((self._curves().get(key) or {}).items())]
+        if commands:
+            self.selected = {(key, int(frame))}
+            self.window.command({"op": "batch", "commands": commands})
+
+    def move_selected(self, delta):
+        """Move the selected keys `delta` frames, one undo step. A key never moves past another key."""
+        if not delta or not self.selected:
+            return 0
+        curves = self._curves()
+        by_node = {}
+        for key, frame in self.selected:
+            by_node.setdefault(key, set()).add(frame)
+        lo, hi = -10**9, 10**9
+        for key, frames in by_node.items():
+            every = sorted({k["frame"] for curve in (curves.get(key) or {}).values() for k in curve["keys"]})
+            for frame in frames:
+                i = every.index(frame)
+                before = [f for f in every[:i] if f not in frames]
+                after = [f for f in every[i + 1:] if f not in frames]
+                if before: lo = max(lo, before[-1] + 1 - frame)
+                if after: hi = min(hi, after[0] - 1 - frame)
+        delta = int(min(max(delta, lo), hi))
+        if not delta:
+            return 0
+        commands = []
+        for key, frames in sorted(by_node.items()):
+            for param, curve in sorted((curves.get(key) or {}).items()):
+                if not any(k["frame"] in frames for k in curve["keys"]):
+                    continue
+                keys = sorted(({"frame": k["frame"] + delta if k["frame"] in frames else k["frame"], "value": k["value"]}
+                               for k in curve["keys"]), key=lambda k: k["frame"])
+                commands.append({"op": "set_curve", "id": key, "param": param,
+                                 "curve": {"interpolation": curve["interpolation"], "keys": keys}})
+        self.selected = {(key, frame + delta) for key, frame in self.selected}
+        self.window.command({"op": "batch", "commands": commands})
+        return delta
+
     def mousePressEvent(self, event):
         position = event.position()
+        self.setFocus()
         row = int((position.y() - RULER_HEIGHT) // ROW_HEIGHT)
+        mods = event.modifiers()
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
         if position.x() < NAME_WIDTH:
             if 0 <= row < len(self.rows):
-                self.window.show_node(self.rows[row][0])
+                key, _name, frames = self.rows[row]
+                # Nuke: clicking the node name selects all the keyframes under it.
+                self.selected = {(key, frame) for frame in frames} | (self.selected if shift else set())
+                self.window.show_node(key)
+                self.update()
             return
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        hit = self.key_at(position)
+        if hit is not None:
+            pick = (self.rows[hit[0]][0], hit[1])
+            if shift:
+                self.selected ^= {pick}
+            elif pick not in self.selected:
+                self.selected = {pick}
+            self.drag = (position, self.frame_at(position.x()), 0)
+            self.update()
+            return
+        if (mods & Qt.KeyboardModifier.ControlModifier and mods & Qt.KeyboardModifier.AltModifier
+                and 0 <= row < len(self.rows)):
+            self.add_key(row, self.frame_at(position.x()))
+            return
+        if not shift:
+            self.selected = set()
         self.frame_chosen.emit(self.frame_at(position.x()))
+
+    def mouseMoveEvent(self, event):
+        if self.drag is None:
+            return
+        start, frame, _moved = self.drag
+        self.drag = (start, frame, self.frame_at(event.position().x()) - frame)
+        self.update()
+
+    def mouseReleaseEvent(self, event):
+        if self.drag is None:
+            return
+        _start, frame, _moved = self.drag
+        self.drag = None
+        self.move_selected(self.frame_at(event.position().x()) - frame)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.delete_selected()
+            return
+        super().keyPressEvent(event)

@@ -22,6 +22,18 @@ from nodebased.app import evaluate_field_formula  # noqa: E402
 
 KNOWN_GAPS = {
     # Step T6 finish closed the last two (the channel/format Link menu and Clone): every documented behaviour passes.
+    # Step T7 (the Curve Editor and the Dope Sheet) left these open; tests/test_l10_t7_curves.py names each one.
+    "curve.frame_snap": "the canvas edits 0 to 1 lookup curves; whole-frame snap belongs to a keyframe curve view",
+    "curve.select_several": "one selected key at a time",
+    "curve.select_all": "one selected key at a time",
+    "curve.several_curves": "one knob's curve at a time, no parameter tree",
+    "curve.move_dialog": "no Edit > Move dialog",
+    "curve.expression_field": "no expression field in the editor",
+    "dope.project_range": "no first/last frame lines",
+    "dope.marquee": "no marquee selection",
+    "dope.move_field": "no Move field",
+    "dope.copy_paste": "no copy and paste of keys",
+    "dope.clip_bars": "Reads show as rows, without clip bars",
 }
 
 

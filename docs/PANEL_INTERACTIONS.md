@@ -254,3 +254,39 @@ language).
   cycle check and one undo step; a formula, or a link to a knob of another family, is refused by name.
 - **No shortcut taken away.** Alt+K and Alt+Shift+K were free in the Node Graph.
 - **Tests:** `tests/test_l10_t6_clone.py` and `tests/test_l10_t6_link_menu.py`.
+
+## The Curve Editor and the Dope Sheet (lane 10, step T7, 2026-11-18)
+
+Source: Animating Parameters (Nuke 17.0 User Guide), sections Using the Dope Sheet and Using the Curve Editor
+(<https://learn.foundry.com/nuke/17.0/content/getting_started/using_interface/animating_parameters.html>). The reference holds 21
+documented Curve Editor behaviours and 12 documented Dope Sheet behaviours, each with the guide's sentence; deleting a key in the
+Curve Editor, its undo steps, dragging and scaling keys in the Dope Sheet and its frame ruler are listed as undocumented.
+
+NodeBased's curve canvas edits curve knobs (ColorLookup's lookups); keyframed knobs show in the Dope Sheet. Measured with
+`tools/nuke_panel_interactions.py`: the Curve Editor went from 3 to 15 of 21, the Dope Sheet from 2 to 7 of 12.
+
+What the curve canvas now does:
+
+- **Ctrl/Cmd+Alt+click adds a key** where you click, on the curve or off it. Double-click still adds one on the curve.
+- **A plain drag moves a key on one axis** (the larger motion wins); **Ctrl/Cmd+drag moves it freely.** One undo step per drag.
+- **Right-click > Interpolation** lists Constant, Linear, Smooth, Catmull-Rom, Cubic, Horizontal and Break. Smooth takes the
+  neighbours' slope but goes flat at a peak or dip, so the curve never overshoots; Catmull-Rom takes it regardless; Cubic solves
+  the natural spline so the second derivative is continuous; Horizontal sets zero slope; Break lets the handles move apart.
+- **A** frames all, **F** centres the selected key, **+** and **-** zoom, and **Alt+drag** pans (as well as the middle button).
+- **Delete/Backspace** deletes the selected key.
+
+What the Dope Sheet now does:
+
+- **Click a key** to select it (it turns orange and shows its frame number); Shift+click adds or removes; clicking a node's name
+  selects all its keys.
+- **Delete/Backspace** erases the selected keys on every keyed knob of that node, one undo step.
+- **Ctrl/Cmd+Alt+click** on an empty spot keys every animated knob of that row at the curve's current value.
+- **Drag selected keys in time**, one undo step; a key stops beside the next one rather than pass it.
+
+Older documents load unchanged: no stored format changed, and framing never edits a curve.
+
+Still open: frame snap (the canvas edits 0 to 1 lookup curves, where whole-frame rounding would collapse them; it belongs to a
+keyframe curve view), selecting several keys and Ctrl/Cmd+A, showing several knobs' curves at once, the Move dialog, the
+expression field, the Dope Sheet's project-range lines, marquee, Move field, copy and paste of keys, and Read clip bars.
+
+- **Tests:** `tests/test_l10_t7_curves.py`.

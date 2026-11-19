@@ -12,6 +12,34 @@ from . import colorcurves
 from .colorcurves import decode, encode, evaluate
 
 
+INTERPOLATION_MENU = ("Constant", "Linear", "Smooth", "Catmull-Rom", "Cubic", "Horizontal", "Break")
+
+
+def cubic_slopes(points):
+    """Slopes of the natural cubic spline through the keys: the second derivative is continuous."""
+    n = len(points)
+    if n < 3:
+        chord = (points[-1][1] - points[0][1]) / (points[-1][0] - points[0][0])
+        return [chord] * n
+    x = [p[0] for p in points]; y = [p[1] for p in points]
+    h = [x[i + 1] - x[i] for i in range(n - 1)]
+    d = [(y[i + 1] - y[i]) / h[i] for i in range(n - 1)]
+    a, b, c, r = [0.0] * n, [0.0] * n, [0.0] * n, [0.0] * n
+    b[0], c[0], r[0] = 2.0, 1.0, 3.0 * d[0]
+    for i in range(1, n - 1):
+        a[i], b[i], c[i] = h[i], 2.0 * (h[i - 1] + h[i]), h[i - 1]
+        r[i] = 3.0 * (h[i] * d[i - 1] + h[i - 1] * d[i])
+    a[-1], b[-1], r[-1] = 1.0, 2.0, 3.0 * d[-1]
+    for i in range(1, n):
+        m = a[i] / b[i - 1]
+        b[i] -= m * c[i - 1]; r[i] -= m * r[i - 1]
+    m_out = [0.0] * n
+    m_out[-1] = r[-1] / b[-1]
+    for i in range(n - 2, -1, -1):
+        m_out[i] = (r[i] - c[i] * m_out[i + 1]) / b[i]
+    return m_out
+
+
 class CurveCanvas(QWidget):
     changed = Signal(str)
     readout = Signal(str)
@@ -130,16 +158,22 @@ class CurveCanvas(QWidget):
         return not ((index == 0 and side == 0) or (index == len(self.curve["points"]) - 1 and side == 1))
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.MouseButton.MiddleButton:
+        mods = e.modifiers()
+        ctrl, alt = Qt.KeyboardModifier.ControlModifier, Qt.KeyboardModifier.AltModifier
+        if e.button() == Qt.MouseButton.MiddleButton or (
+                e.button() == Qt.MouseButton.LeftButton and mods & alt and not mods & ctrl):
             self.pan = e.position(); return
+        if e.button() == Qt.MouseButton.LeftButton and mods & ctrl and mods & alt:
+            self.add_key_at(e.position()); return
         distances = [(self._xy(x, y) - e.position()).manhattanLength() for x, y in self.curve["points"]]
         index = min(range(len(distances)), key=distances.__getitem__)
         if e.button() == Qt.MouseButton.RightButton:
             if distances[index] < 16:
                 self.select(index)
                 menu = QMenu(self)
-                for mode in ("smooth", "linear", "constant", "broken"):
-                    menu.addAction(mode.title(), lambda checked=False, m=mode: self._set_mode(index, m))
+                # Nuke 17.0's Curve Editor Interpolation menu, in its order.
+                for label in INTERPOLATION_MENU:
+                    menu.addAction(label, lambda checked=False, m=label: self.set_interpolation(index, m))
                 menu.addSeparator()
                 delete = menu.addAction("Delete key")
                 if len(self.curve["points"]) <= 2: delete.setEnabled(False)
@@ -157,6 +191,7 @@ class CurveCanvas(QWidget):
                 return
         if e.button() == Qt.MouseButton.LeftButton and distances[index] < 16:
             self.drag = index
+            self.drag_start = (e.position(), tuple(self.curve["points"][index]))
             self.select(index)
             self.readout.emit(self._readout(index))
 
@@ -183,6 +218,14 @@ class CurveCanvas(QWidget):
             self.selection.emit(self.drag)
             self.update(); return
         x, y = self._value(e.position())
+        start = getattr(self, "drag_start", None)
+        if start is not None and not e.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Nuke: a plain drag moves the key along x or y only (the larger motion wins); Ctrl+drag is free.
+            delta = e.position() - start[0]
+            if abs(delta.x()) >= abs(delta.y()):
+                y = start[1][1]
+            else:
+                x = start[1][0]
         x, y = colorcurves.move_point(self.curve, self.drag, x, y)
         self.readout.emit(f"x {x:.6g}   y {y:.6g}")
         self.selection.emit(self.drag)
@@ -193,15 +236,81 @@ class CurveCanvas(QWidget):
             self.drag = None
             if hasattr(self, "drag_handle"):
                 del self.drag_handle
+            self.drag_start = None
             self._emit()
         self.pan = None
 
     def mouseDoubleClickEvent(self, e):
-        x, y = self._value(e.position()); pts = self.curve["points"]
-        if pts[0][0] < x < pts[-1][0]:
-            # The new key sits on the curve with the curve's own slope: adding it never moves the curve.
-            self.select(colorcurves.insert_key(self.curve, x))
-            self._emit()
+        self.add_key_at(e.position(), on_curve=True)
+
+    def add_key_at(self, position, on_curve=False):
+        """Add a key at the pointer (Nuke's Ctrl/Cmd+Alt+click, which also adds off the curve)."""
+        x, y = self._value(position); pts = self.curve["points"]
+        if not pts[0][0] < x < pts[-1][0] or any(abs(p[0] - x) < 1e-5 for p in pts):
+            return
+        # The new key sits on the curve with the curve's own slope: adding it never moves the curve.
+        index = colorcurves.insert_key(self.curve, x)
+        if not on_curve:
+            colorcurves.move_point(self.curve, index, x, y)
+        self.select(index)
+        self._emit()
+
+    def set_interpolation(self, index, label):
+        """One entry of the right-click Interpolation menu on key `index` (Nuke 17.0 User Guide)."""
+        self._ensure_handles()
+        points, n = self.curve["points"], len(self.curve["points"])
+        if label in ("Constant", "Linear"):
+            self._set_mode(index, label.lower()); return
+        if label == "Break":
+            for j in (index - 1, index):
+                if 0 <= j < n - 1:
+                    colorcurves.bake_segment(self.curve, j)
+            self.curve["broken"][index] = True
+            self._emit(); return
+        if label == "Horizontal":
+            slope = 0.0
+        elif label == "Catmull-Rom":
+            slope = colorcurves._auto_slope(points, index)
+        elif label == "Cubic":
+            slope = cubic_slopes(points)[index]
+        else:  # Smooth: the neighbours' slope, flat when the key is above or below both neighbours.
+            lo, hi = points[max(index - 1, 0)][1], points[min(index + 1, n - 1)][1]
+            y = points[index][1]
+            between = min(lo, hi) <= y <= max(lo, hi) and 0 < index < n - 1
+            slope = colorcurves._auto_slope(points, index) if between else 0.0
+        for j in (index - 1, index):
+            if 0 <= j < n - 1:
+                colorcurves.bake_segment(self.curve, j)
+        self.curve["broken"][index] = False
+        self.curve["slopes"][index] = [float(slope), float(slope)]
+        self._emit()
+
+    def frame_all(self):
+        """Nuke's View > Frame All (A): reset zoom and pan so the whole curve shows."""
+        self.zoom, self.offset = 1.0, QPointF(0, 0)
+        self.update()
+
+    def frame_selected(self):
+        """Nuke's View > Frame Selected (F): centre the selected key."""
+        self.zoom, self.offset = 1.0, QPointF(0, 0)
+        xmin, xmax, ymin, ymax = self._bounds()
+        x, y = self.curve["points"][self.selected]
+        self.offset = QPointF(x - (xmin + xmax) / 2, y - (ymin + ymax) / 2)
+        self.update()
+
+    def keyPressEvent(self, e):
+        key = e.key()
+        if key == Qt.Key.Key_A and not e.modifiers():
+            self.frame_all(); return
+        if key == Qt.Key.Key_F and not e.modifiers():
+            self.frame_selected(); return
+        if key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            self.zoom *= 1.25; self.update(); return
+        if key in (Qt.Key.Key_Minus, Qt.Key.Key_Underscore):
+            self.zoom /= 1.25; self.update(); return
+        if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self._delete_key(self.selected); return
+        super().keyPressEvent(e)
 
     def _set_mode(self, index, mode):
         self._ensure_handles()
@@ -228,7 +337,7 @@ class CurveEditorDialog(QDialog):
         self.canvas = CurveCanvas(value); layout.addWidget(self.canvas)
         tools = QHBoxLayout(); tools.addWidget(QLabel("Interpolation"))
         self.mode = QComboBox(); self.mode.addItems(("linear", "smooth")); self.mode.setCurrentText(self.canvas.curve["interpolation"]); tools.addWidget(self.mode)
-        tools.addWidget(QLabel("Double-click: add · right-click: mode/delete · drag: move · Ctrl-drag handle: break"))
+        tools.addWidget(QLabel("Ctrl+Alt+click: add · right-click: interpolation/delete · drag: move on one axis (Ctrl: free) · A/F: frame"))
         self.point_readout = QLabel("Point: —"); tools.addWidget(self.point_readout); layout.addLayout(tools)
         self.canvas.readout.connect(lambda text: self.point_readout.setText("Point: " + text))
         fields = QHBoxLayout()
