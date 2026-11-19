@@ -14,6 +14,74 @@ import numpy as np
 CHUNK_TAPS = 1 << 21
 
 
+# An FFT correlation replaces the gather for the pixels of one blur radius that also share one depth (the occlusion mask is then the same for all of
+# them, so the group's sum is a plain correlation of the masked picture with the filter). It pays once the gather's work (pixels x taps) is this many
+# times the FFT's (padded region size): measured in tools/benchmark_defocus_fft.py. Set to 0 to switch the FFT path off.
+FFT_GAIN = 1.0
+FFT_MIN_PIXELS = 256
+
+
+def _good_size(n):
+    """The next 2^a 3^b 5^c at or above n: sizes numpy's FFT does quickly."""
+    best = 1 << (int(n) - 1).bit_length()
+    f5 = 1
+    while f5 < best:
+        f3 = f5
+        while f3 < best:
+            f2 = f3
+            while f2 < n:
+                f2 *= 2
+            best = min(best, f2)
+            f3 *= 3
+        f5 *= 5
+    return best
+
+
+def _fft_cost(count, taps, ys, xs, ty, tx):
+    """Whether an FFT of this group is cheaper than gathering it: the gather costs count x taps, the FFT about 12 passes over the padded region."""
+    hr = int(ys.max() - ys.min()) + int(ty.max() - ty.min()) + 1
+    wr = int(xs.max() - xs.min()) + int(tx.max() - tx.min()) + 1
+    return count * taps > FFT_GAIN * 12.0 * _good_size(hr) * _good_size(wr)
+
+
+def _fft_group(pad_img, pad_z, ys, xs, ty, tx, disk, weight, centre_z, radius):
+    """(total (n, channels), count (n,), weight sum (n,) or None) of the pixels (ys, xs), all sharing the depth `centre_z`, by FFT correlation.
+
+    A pixel (y, x) sums the window samples at offsets (ty, tx) whose depth is at or in front of centre_z, with the filter weights; the mask depends
+    only on the sample, so the whole group is one correlation of (picture x mask) with the filter. Float64 throughout."""
+    t0, t1, u0, u1 = int(ty.min()), int(ty.max()), int(tx.min()), int(tx.max())
+    y0, y1, x0, x1 = int(ys.min()), int(ys.max()), int(xs.min()), int(xs.max())
+    hr, wr = y1 - y0 + t1 - t0 + 1, x1 - x0 + u1 - u0 + 1
+    s = (_good_size(hr), _good_size(wr))
+    rows = slice(y0 + t0, y0 + t0 + hr)
+    cols = slice(x0 + u0, x0 + u0 + wr)
+    mask = (pad_z[rows, cols] <= centre_z).astype(np.float64)
+    picture = pad_img[rows, cols].astype(np.float64) * mask[..., None]
+    shape_kernel = (t1 - t0 + 1, u1 - u0 + 1)
+    unit = np.zeros(shape_kernel); unit[ty - t0, tx - u0] = 1.0
+    spectrum = lambda grid, axes=(0, 1): np.fft.rfft2(grid, s, axes=axes)
+    back = lambda f, axes=(0, 1): np.fft.irfft2(f, s, axes=axes)
+    fm = spectrum(mask)
+    sel = (slice(0, y1 - y0 + 1), slice(0, x1 - x0 + 1))
+    py, px = ys - y0, xs - x0
+    count = np.rint(back(fm * np.conj(spectrum(unit)))[sel][py, px]).astype(np.int64)
+    fp = spectrum(picture, (0, 1))
+    if weight is None:
+        total = back(fp * np.conj(spectrum(unit))[..., None], (0, 1))[sel][py, px]
+        return _denoise(total, picture, len(ty)), count, None
+    grid = np.zeros(shape_kernel); grid[ty - t0, tx - u0] = weight
+    fk = np.conj(spectrum(grid))
+    total = back(fp * fk[..., None], (0, 1))[sel][py, px]
+    return _denoise(total, picture, float(np.abs(weight).sum())), count, back(fm * fk)[sel][py, px]
+
+
+def _denoise(total, picture, reach):
+    """An FFT leaves about 1e-16 of the largest sum as noise where the exact sum is zero (an impulse's empty surroundings): sums under 1e-13 of
+    the largest possible one become the exact zero the gather gives. The error this can cause is under 1e-13 x the brightest sample."""
+    limit = 1e-13 * reach * np.abs(picture).max(axis=(0, 1))
+    return np.where(np.abs(total) <= limit, 0.0, total)
+
+
 def _centre_only(centre, kernel_grid, disk, sides_px, fill, image_kernel):
     """The result for a pixel whose window shows only its own sample (the loop's `visible[radius, radius] = True`), for n pixels at once.
     `centre` is (n, channels) float32; the formulas are the loop's, with a one-sample window."""
@@ -23,6 +91,42 @@ def _centre_only(centre, kernel_grid, disk, sides_px, fill, image_kernel):
     if not fill:
         return np.where((sides_px < 0)[:, None], centre / max(1, int(disk.sum())), centre)
     return centre
+
+
+def _fft_subgroups(index, ys, xs, sides_px, z_flat, centre_z, pad_img, pad_z, ty, tx, disk, weight, fill, kernel_grid, is_image, out_flat, radius):
+    """Write the pixels of one radius group that share a depth, and are numerous enough for an FFT to beat the gather, straight into `out_flat`.
+    Returns (index, ys, xs, sides_px) of the pixels left for the gather."""
+    taps = len(ty)
+    zg = z_flat[index]
+    if zg.min() == zg.max():
+        groups = [np.arange(len(index))]
+    else:
+        _, inverse = np.unique(zg, return_inverse=True)
+        sub_order = np.argsort(inverse, kind="stable")
+        bounds = np.cumsum(np.bincount(inverse))
+        groups = np.split(sub_order, bounds[:-1])
+    keep = np.ones(len(index), bool)
+    wsum = None if weight is None else float(weight.sum())
+    for sub in groups:
+        if len(sub) < FFT_MIN_PIXELS or not _fft_cost(len(sub), taps, ys[sub], xs[sub], ty, tx):
+            continue
+        gy, gx = ys[sub], xs[sub]
+        total, count, den = _fft_group(pad_img, pad_z, gy, gx, ty, tx, disk, weight, centre_z[index[sub][0]], radius)
+        if weight is None:
+            divisor = np.where(sides_px[sub] < 0, max(1, int(disk.sum())), np.maximum(count, 1)) if not fill else np.maximum(count, 1)
+            result = total / divisor[:, None]
+            usable = np.ones(len(sub), bool)
+        else:
+            # A visible-weight sum that rounds to nothing cannot be told from zero by an FFT: those pixels go through the gather.
+            usable = (count == 0) | (den > 1e-6 * wsum)
+            result = total / np.maximum(den, 1e-20)[:, None]
+        none = count == 0
+        if none.any():
+            centre = pad_img[gy[none] + radius, gx[none] + radius]
+            result[none] = _centre_only(centre, kernel_grid, disk, sides_px[sub][none], fill, is_image)
+        out_flat[index[sub][usable]] = result[usable]
+        keep[sub[usable]] = False
+    return index[keep], ys[keep], xs[keep], sides_px[keep]
 
 
 def gather(pad_img, pad_z, z, radii, radius, shape, p, kernel, override, fill, sides, sph_apply, dtype):
@@ -61,6 +165,11 @@ def gather(pad_img, pad_z, z, radii, radius, shape, p, kernel, override, fill, s
         taps = len(ty)
         weight = None if kernel_grid is None else np.asarray(kernel_grid)[ty, tx]
         sides_px = sides[ys, xs] if sides is not None else np.zeros(len(index), np.int64)
+        if FFT_GAIN > 0 and taps > 1 and len(index) >= FFT_MIN_PIXELS and not (weight is not None and weight.ndim == 2):
+            index, ys, xs, sides_px = _fft_subgroups(index, ys, xs, sides_px, z_flat, centre_z, pad_img, pad_z, ty, tx, disk, weight, fill,
+                                                     kernel_grid, is_image, out_flat, radius)
+            if not len(index):
+                continue
         tap_offset = (ty * pw + tx).astype(np.int64)
         step = max(1, CHUNK_TAPS // max(1, taps))
         for lo in range(0, len(index), step):

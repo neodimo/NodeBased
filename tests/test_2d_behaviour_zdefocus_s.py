@@ -206,7 +206,10 @@ class SavedNodeTests(unittest.TestCase):
     """A node saved before these knobs keeps its picture bit for bit: the same picture a node of the step M release drew."""
     GOLDEN = {"blades": "ef46f61d227a80f2ffaa", "blades_hollow": "6f4d6ddbb7df90bbc074", "image": "3ed71c2e1d609ce9d43d"}
 
-    def pictures(self, **extra):
+    def pictures(self, reference=True, arrays=False, **extra):
+        """Hashes (or, with arrays, the pictures) of three filters. `reference` runs the per-pixel float32 loop the golden hashes were taken from
+        (nodebased/defocusgather.py reference_gather); the grouped gather behind the node sums in float64, so its picture is the same to float32
+        accumulation rounding (under 1e-5), not bit for bit (lane 9 step X2)."""
         rng = np.random.default_rng(5)
         img = rng.random((12, 16, 4)).astype(np.float32)
         img[..., 3] = 1
@@ -219,12 +222,22 @@ class SavedNodeTests(unittest.TestCase):
         out = {}
         for name, knobs_ in configs.items():
             p = dict(base, **knobs_)
-            result = Evaluator._zdefocus(img, depth, p, kern if name == "image" else None)
+            Evaluator._zdefocus_reference = reference
+            try:
+                result = Evaluator._zdefocus(img, depth, p, kern if name == "image" else None)
+            finally:
+                Evaluator._zdefocus_reference = False
+            if arrays:
+                out[name] = np.asarray(result, np.float64)
+                continue
             out[name] = hashlib.sha256(np.ascontiguousarray(result, np.float32).tobytes()).hexdigest()[:20]
         return out
 
     def test_the_legacy_filters_draw_the_old_pixels(self):
         self.assertEqual(self.pictures(legacy_zdefocus_filters=1), self.GOLDEN)
+        old, new = self.pictures(arrays=True, legacy_zdefocus_filters=1), self.pictures(reference=False, arrays=True, legacy_zdefocus_filters=1)
+        for name in old:
+            np.testing.assert_allclose(new[name], old[name], atol=1e-5, err_msg=name)
 
     def test_a_node_without_the_flag_is_a_saved_node(self):
         params = {**SPECS["ZDefocus"]["params"]}

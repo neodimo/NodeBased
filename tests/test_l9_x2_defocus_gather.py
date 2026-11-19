@@ -149,6 +149,55 @@ class GatherEqualsTheLoop(unittest.TestCase):
             defocusgather.CHUNK_TAPS = chunk
 
 
+class FFTPathEqualsTheLoop(GatherEqualsTheLoop):
+    """Every case above again, with the FFT correlation forced on for every (radius, depth) group of any size: still the loop's picture to 1e-6."""
+
+    def setUp(self):
+        from nodebased import defocusgather
+        saved = defocusgather.FFT_GAIN, defocusgather.FFT_MIN_PIXELS
+        defocusgather.FFT_GAIN, defocusgather.FFT_MIN_PIXELS = 1e-9, 1
+        self.addCleanup(lambda: (setattr(defocusgather, "FFT_GAIN", saved[0]), setattr(defocusgather, "FFT_MIN_PIXELS", saved[1])))
+        calls = []
+        real = defocusgather._fft_group
+        defocusgather._fft_group = lambda *a, **k: (calls.append(1), real(*a, **k))[1]
+        self.addCleanup(lambda: setattr(defocusgather, "_fft_group", real))
+        self.calls = calls
+
+    def tearDown(self):
+        if "wholly_sharp" not in self._testMethodName:               # that one has no blur at all, so no filter to correlate
+            self.assertGreater(len(self.calls), 0, "the FFT path never ran")
+
+
+class FFTOnLayeredDepth(unittest.TestCase):
+    """Plateaus of constant depth make large (radius, depth) groups: the FFT path takes them by its own threshold and matches the gather to 1e-6."""
+
+    def run_both(self, **knobs_):
+        from nodebased import defocusgather
+        image = texture(seed=9, h=40, w=64)
+        depth = np.zeros((40, 64), np.float32)
+        for i in range(4):
+            depth[:, i * 16:(i + 1) * 16] = 0.5 + i * 1.7
+        run = zd(image, depth, size=8.0, max_size=8.0, **knobs_)
+        calls = []
+        real = defocusgather._fft_group
+        defocusgather._fft_group = lambda *a, **k: (calls.append(1), real(*a, **k))[1]
+        try:
+            fft = np.asarray(run(), np.float64)
+            defocusgather.FFT_GAIN = 0
+            plain = np.asarray(run(), np.float64)
+        finally:
+            defocusgather._fft_group = real
+            defocusgather.FFT_GAIN = 1.0
+        return fft, plain, len(calls)
+
+    def test_layers_match_and_take_the_fft(self):
+        for extra in ({}, {"shape": 0.3}, {"fill_foreground": 0}, {"bokeh_shape": "blades", "inner_size": 0.5, "inner_brightness": 0.0}):
+            with self.subTest(extra):
+                fft, plain, calls = self.run_both(**extra)
+                self.assertGreater(calls, 0)
+                np.testing.assert_allclose(fft, plain, atol=1e-6, rtol=1e-6)
+
+
 class TilesStillEqualTheFullFrame(unittest.TestCase):
     def test_zdefocus_and_bokeh_tiles(self):
         from tests.test_2d_behaviour_filter_a import Graph, evaluator_pixels, tile_pixels

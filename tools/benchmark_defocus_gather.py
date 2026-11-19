@@ -17,7 +17,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from nodebased import bokehknobs  # noqa: E402
+from nodebased import bokehknobs, defocusgather  # noqa: E402
 from nodebased.core import SPECS  # noqa: E402
 from nodebased.imaging import Evaluator  # noqa: E402
 
@@ -59,7 +59,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", type=int, default=4)
     args = ap.parse_args()
-    print(f"{'case':10s} {'size':>4s} {'old (strip x scale)':>20s} {'new (full frame)':>17s} {'speedup':>8s} {'max diff on strip':>18s}")
+    print(f"{'case':10s} {'size':>4s} {'old (strip x scale)':>20s} {'gather only':>12s} {'gather + FFT':>13s} {'speedup':>8s} {'max diff (strip, vs old)':>25s} {'FFT vs gather (frame)':>22s}")
     for name, fn in CASES.items():
         for size in (20, 50):
             strip_image, strip_depth = picture(args.rows, W), ramp(args.rows, W)
@@ -68,9 +68,17 @@ def main():
             Evaluator._zdefocus_reference = False
             new_strip, _ = timed(fn, strip_image, strip_depth, size)
             diff = float(np.abs(np.asarray(old, np.float64) - np.asarray(new_strip, np.float64)).max())
-            _, t_new = timed(fn, picture(H, W), ramp(H, W), size)
+            frame_image, frame_depth = picture(H, W), ramp(H, W)
+            gain = defocusgather.FFT_GAIN
+            try:
+                defocusgather.FFT_GAIN = 0
+                plain, t_plain = timed(fn, frame_image, frame_depth, size)
+            finally:
+                defocusgather.FFT_GAIN = gain
+            fast, t_new = timed(fn, frame_image, frame_depth, size)
+            fft_diff = float(np.abs(np.asarray(plain, np.float64) - np.asarray(fast, np.float64)).max())
             t_old_frame = t_old * H / args.rows
-            print(f"{name:10s} {size:4d} {t_old_frame:17.1f} s {t_new:14.2f} s {t_old_frame / t_new:7.0f}x {diff:18.2e}", flush=True)
+            print(f"{name:10s} {size:4d} {t_old_frame:17.1f} s {t_plain:10.2f} s {t_new:11.2f} s {t_old_frame / t_new:7.0f}x {diff:25.2e} {fft_diff:22.2e}", flush=True)
 
 
 if __name__ == "__main__":
