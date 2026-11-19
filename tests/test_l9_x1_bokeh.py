@@ -69,7 +69,7 @@ class CaseTests(unittest.TestCase):
 
     def test_every_unscored_bokeh_case_states_its_reason(self):
         unscored = [c for c in ruler.CASES if c.nuke == "Bokeh" and c.unscored]
-        self.assertGreaterEqual(len(unscored), 8)
+        self.assertGreaterEqual(len(unscored), 9)
         for case in unscored:
             with self.subTest(case=case.id):
                 self.assertGreater(len(case.unscored), 40, case.id)

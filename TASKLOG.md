@@ -30,6 +30,24 @@
 - **What was done:** `main` `bcd14e1e` -> `6ce12e4b` plus this docs commit. Evidence and per-lane commit
   list in the dated `context/state.md` section. Full suite at `6ce12e4b`: Ran 10209 tests in 1902.147 s, OK (skipped=38), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
+## Lane 9 step X1 (11/18 8:30 PM): a Bokeh node, the defocus Nuke 17 ships beside ZDefocus
+
+- **What was done (evidence):** new kind `Bokeh` (`nodebased/bokehknobs.py`; inputs image, depth, kernel, mask), registered in SPECS, LIMITS, CHOICES,
+  the knob layout (the guide's order, then the shared mask strip), theme, catalogue, `tiers._bokeh_rule`, the tile executor and `ops2d_chrome`
+  (channels, mask strip). It gathers through `Evaluator._zdefocus` (new `override` argument: Bokeh's own radii, sides, slice ordering depth and
+  spherical aberration), so the disc, the bladed polygon and the kernel image are ZDefocus's code, not a second implementation. 21 scored behaviour
+  cases (`_bokeh_cases` in `tools/nuke_fidelity_cases_filter.py`) pass; 9 are listed `not scored` with the guide's words. Mapping row in
+  `docs/parity/nodebased_to_nuke.json` (40 of 42 counted knobs paired; `integrateFrontAndBackSeperately` and `expandBBoxToMaxKernelSize` unsupported;
+  the Deep and Camera inputs not provided). Audit: Bokeh 0 -> 93.3; Filter group 98.1 -> 99.4; overall 97.4 -> 97.5.
+  `tests/test_l9_x1_bokeh.py` (31 tests): cases, every knob acts, kernels, outputs, lens, slices, panel order, registration, tiles of 7/16/32 equal the
+  whole frame with and without a mask.
+- **Ours, not the guide's (said in the module docstring and in each case):** the blur size (10 px x multiplier x amount), the Smooth falloff, the
+  thin-lens real world lens, bloom, spherical and chromatic aberration numbers, the slice ordering rule, the front/back matte channels, the
+  focus-region-output behaviour. Output types Red, Green and Blue are not offered (the page says nothing of them).
+- **Tiles:** Filter Shape, the Input kernel and the real world lens run on the full frame (`bokehknobs.needs_full_frame`).
+- **Not done:** Deep Input, Camera input, Integrate Deep Front and Back Separately, Expand Bounding Box To Max Kernel Size; the per-pixel gather is the
+  ZDefocus loop, so a 256-pixel kernel on a large frame is slow (a speed lane could vectorise `_zdefocus` for both nodes).
+- **Schema:** no bump (a new kind; old documents unaffected).
 
 ## 2026-11-17 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T6 (Tue 11/17): the rest of the Node Graph, and the last linking case (finish 1) (integrator tick)
 

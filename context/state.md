@@ -25,6 +25,11 @@ real display owed by Gonzo. Lane-reported limits are in each lane's report file 
 deviation (Reinhard et al. 2001, a stated convention; the guide gives no formula). Shared statistics helper `Evaluator._channel_stats`; MatchGrade pixels unchanged. Not tiled
 (global statistics). Four scored cases. The review book's label and widget rules now mirror the audit's (6441bb69): lane 2 open rows 111 to 94. Color 98.6 to 99.5, overall
 97.4 to 97.5. Open: Viewer ROI overlay, IBKColor per-channel darks and lights.
+## Lane 9 step X1 (11/18 8:30 PM PST): Bokeh
+
+New 2D kind `Bokeh` on ZDefocus's kernels; see the TASKLOG entry of the same name. Bokeh fidelity 0 -> 93.3 (40/42 counted knobs paired, 21/21 cases
+passing, sockets 60 because the Deep and Camera inputs are not provided); Filter group 98.1 -> 99.4; overall 97.4 -> 97.5. `docs/PARITY_2D_FIDELITY.md`
+regenerated and copied byte-identical to `nodebased/data/docs/`; review worklist regenerated (lane 9 open items 44 -> 1).
 
 ## Lane 10 step T3 finish (11/17 9:30 AM): Viewer on-screen controls, done
 
