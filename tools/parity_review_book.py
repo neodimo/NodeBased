@@ -340,6 +340,9 @@ def alignment(nuke_node, pair, kind, name=""):
     placed = [(i, s) for i, s in enumerate(seq) if s is not None]
     keep = _lis_indices([s for _, s in placed])
     in_order = {placed[j][0] for j in keep}
+    shared_labels = {}
+    for k in nuke_node["knobs"]:
+        shared_labels[_norm_label(k["label"])] = shared_labels.get(_norm_label(k["label"]), 0) + 1
     rows = []
     for i, k in enumerate(nuke_node["knobs"]):
         e = by_nuke.get(k["name"])
@@ -370,13 +373,22 @@ def alignment(nuke_node, pair, kind, name=""):
                     row["nb_widget"] += f" (row: {', '.join(g.params)})"
                 if seq[i] is not None and i not in in_order:
                     row["marks"].append("order")
-                if len(nb) == 1 and _norm_label(g.label) not in (_norm_label(k["label"]), _norm_label(k["name"].split("#")[0])) \
+                # The audit's own label rule (nuke_fidelity_requirements.layout_component): a guide label that several knobs share is the row's
+                # label, not one knob's; "n/a" is the guide having none; and a Nuke knob that holds several NodeBased controls (or the
+                # reverse) has no single label to compare. None of those says what one control should read.
+                if len(nb) == 1 and len(e.get("nuke", [])) == 1 and shared_labels.get(_norm_label(k["label"]), 0) <= 1 \
+                        and _norm_label(g.label) not in (_norm_label(k["label"]), _norm_label(k["name"].split("#")[0])) \
                         and _norm_label(k["label"]) not in ("na", ""):
                     row["marks"].append("label")
-                # The audit's own corrections of the guide's type column (a check box the guide types as text) apply here too.
+                # The audit's own corrections of the guide's type column apply here too: a check box the guide types as text (listed, or a
+                # text knob whose default is on or off) and a number list held by a row of number fields.
                 from audit_nuke_fidelity import _BOOL_KNOBS
-                ok_widgets = _WIDGETS.get("bool" if (kind, k["name"]) in _BOOL_KNOBS else k["type"])
+                is_bool = (kind, k["name"]) in _BOOL_KNOBS or (k["type"] == "string" and str(k["default"]).strip().lower() in ("on", "off"))
+                ok_widgets = _WIDGETS.get("bool" if is_bool else k["type"])
                 base = (row["nb_widget"] or "").split(" ")[0]
+                if k["type"] == "number_list" and g.kind == "row" and len(nb) > 1 and set(nb) <= set(g.params) \
+                        and all(m in ("int", "float") for m in g.members):
+                    base = "row"
                 if ok_widgets and base not in ok_widgets:
                     row["marks"].append("widget")
             elif first is not None:
