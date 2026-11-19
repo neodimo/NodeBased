@@ -27,7 +27,6 @@ HINT_ROW = [
     (Qt.Key.Key_T, "Transform", "image", True),
     (Qt.Key.Key_B, "Blur", "image", True),
     (Qt.Key.Key_C, "ColorCorrect", "image", True),
-    (Qt.Key.Key_S, "Shuffle", "image", True),
     (Qt.Key.Key_O, "Roto", "bg", True),
     (Qt.Key.Key_P, "Premult", "image", True),
     (Qt.Key.Key_U, "Unpremult", "image", True),
@@ -133,9 +132,9 @@ class ShortcutWiringTests(unittest.TestCase):
         finally:
             w.close()
             w.deleteLater()
-        listed = hint.split("R/G/M/T/B/C/S/O/P/U/W create")
+        listed = hint.split("R/G/M/T/B/C/O/P/U/W create")
         self.assertEqual(len(listed), 2, "the hint row still lists the create shortcuts")
-        self.assertEqual({chr(int(key)) for key, *_ in HINT_ROW}, set("RGMTBCSOPUW"))
+        self.assertEqual({chr(int(key)) for key, *_ in HINT_ROW}, set("RGMTBCOPUW"))
 
     def test_creation_slot_rules(self):
         self.assertEqual(creation_slot("Merge"), "B")

@@ -23,6 +23,11 @@ WORKING = 'ACEScg'
 INPUT_SPACES = {'sRGB': 'sRGB Encoded Rec.709 (sRGB)', 'Linear Rec.709': 'Linear Rec.709 (sRGB)',
                 'ACEScg': 'ACEScg', 'ACES2065-1': 'ACES2065-1', 'Raw': 'Raw'}
 VIEWS = ('sRGB', 'ACES 2.0', 'Linear')
+# Kodak's Cineon printing-density encoding, which Nuke's logLUT defaults to (the Reference Guide, Root, Color tab): 10-bit codes
+# with black at 95, reference white at 685, 0.002 density per code and a negative gamma of 0.6. The result is linear Rec.709 light
+# with 1.0 at reference white; a code below the black point reads as 0. It is applied before the Linear Rec.709 -> ACEScg step.
+CINEON = {'black': 95.0, 'white': 685.0, 'density': 0.002, 'gamma': 0.6}
+LOG_SPACES = ('Cineon',)
 # Spaces that are already the working space, so ingest is a no-op. `Raw` is the explicit
 # opt-out: it means "do not interpret these numbers", e.g. a normal or depth pass.
 PASSTHROUGH = tuple(name for name, space in INPUT_SPACES.items() if space == WORKING) + ('Raw',)
@@ -101,13 +106,16 @@ def to_working(rgba, space, associated=False, *, in_place=False):
     can_reuse = (in_place and source.dtype == np.float32 and source.flags.c_contiguous
                  and source.flags.writeable)
     result = source if can_reuse else np.array(rgba, dtype=np.float32, copy=True, order='C')
-    if space not in INPUT_SPACES:
+    if space not in INPUT_SPACES and space not in LOG_SPACES:
         raise ValueError(f'Unknown input color space: {space}')
     opaque = bool(np.all(result[..., 3:4] == 1.0))
     alpha = None if opaque else result[..., 3:4].copy()
     if associated and not opaque:
         scale = np.where(np.abs(alpha) > 1e-8, alpha, 1).astype(np.float32)
         result /= scale
+    if space in LOG_SPACES:
+        result[..., :3] = cineon_to_linear(result[..., :3])
+        space = 'Linear Rec.709'
     if space not in PASSTHROUGH:
         processor(INPUT_SPACES[space], WORKING).applyRGBA(result)
     if opaque:
@@ -117,6 +125,15 @@ def to_working(rgba, space, associated=False, *, in_place=False):
         result *= channel_scale
         result[..., 3:4] = alpha
     return result
+
+
+def cineon_to_linear(code):
+    """Cineon codes (0 to 1, the 10-bit value over 1023) to linear light, 1.0 at reference white (see CINEON)."""
+    c = CINEON
+    step = c['density'] / c['gamma']
+    offset = 10.0 ** ((c['black'] - c['white']) * step)
+    linear = (np.power(10.0, (np.asarray(code, np.float32) * 1023.0 - c['white']) * step) - offset) / (1.0 - offset)
+    return np.maximum(linear, 0.0).astype(np.float32)
 
 
 # Measured on the readback-design GPU path (docs/BENCHMARKS-v0.16-display.md): its cost is

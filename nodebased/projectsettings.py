@@ -20,15 +20,22 @@ their defaults is stored without it, so old and untouched documents keep their e
 - `read_proxy_files`: when a Read with a proxy file reads it (Nuke's `proxySetting`): never; if larger (the proxy file
   is at least the size the picture needs); if nearest (the file nearer that size wins); always. The default is `always`,
   which is how Read has always behaved with a proxy file.
+- `int8_lut`, `int16_lut`, `log_lut`, `float_lut`: the colour space a Read uses for a file of that kind when its own colorspace is
+  Auto (Nuke's int8LUT, int16LUT, logLUT, floatLUT; `nodebased/readspaces.py` sorts the files). The defaults are the guide's: sRGB,
+  sRGB, Cineon and linear (Linear Rec.709 here). A document saved before these fields existed keeps reading a log file as sRGB.
 """
 import math
 from pathlib import Path
 
 DEFAULTS = {"name": "", "label": "", "project_directory": "", "lock_connections": False, "lock_range": False,
-            "script_directory": "", "format": "", "proxy_type": "scale", "proxy_format": "", "read_proxy_files": "always"}
+            "script_directory": "", "format": "", "proxy_type": "scale", "proxy_format": "", "read_proxy_files": "always",
+            "int8_lut": "sRGB", "int16_lut": "sRGB", "log_lut": "Cineon", "float_lut": "Linear Rec.709"}
 TEXT_FIELDS = ("name", "label", "project_directory", "script_directory", "format", "proxy_format")
 FLAG_FIELDS = ("lock_connections", "lock_range")
-CHOICE_FIELDS = {"proxy_type": ("scale", "format"), "read_proxy_files": ("never", "if larger", "if nearest", "always")}
+# The colour spaces a Read can take a file in when its own colorspace is Auto (`nodebased/readspaces.py`).
+READ_SPACES = ("sRGB", "Linear Rec.709", "Cineon", "ACEScg", "ACES2065-1", "Raw")
+CHOICE_FIELDS = {"proxy_type": ("scale", "format"), "read_proxy_files": ("never", "if larger", "if nearest", "always"),
+                 "int8_lut": READ_SPACES, "int16_lut": READ_SPACES, "log_lut": READ_SPACES, "float_lut": READ_SPACES}
 # The full size a proxy format is measured against when the project has no format of its own.
 FALLBACK_FORMAT = "HD_1080"
 

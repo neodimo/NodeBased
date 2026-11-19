@@ -563,7 +563,10 @@ def layout_component(kind, entries, knobs):
     """(fraction, detail): half the share of paired knobs already in Nuke's order (longest run kept in order), half the share
     of paired single-param main-tab knobs whose label reads as the guide's label or the knob's scripting name. None when fewer than two paired knobs are laid out."""
     from nodebased.knobs import KnobGroup, knob_layout
-    groups = knob_layout(kind)
+    groups = knob_layout(kind) if kind != "Root" else ()
+    if kind == "Root":
+        from nodebased import rootpanel      # the Project Settings panel: Root's layout, over document fields
+        groups = rootpanel.knob_groups()
     if kind == "ViewMetaData":
         # Transient panel widgets are measured here without pretending they are document params.
         groups = (KnobGroup("table", ("metadata_table",), label="metadata viewer"),

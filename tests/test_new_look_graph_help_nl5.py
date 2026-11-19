@@ -13,7 +13,7 @@ from tests.test_new_look_viewer_strip_nl5 import Base
 APP = QApplication.instance() or QApplication([])
 
 # The graph's old hint line, word for word (the part after its "NODE GRAPH" caption).
-OLD_HINT_LINE = ("Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  "
+OLD_HINT_LINE = ("Tab search/add  ·  R/G/M/T/B/C/O/P/U/W create  ·  S Project Settings  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  "
                  "·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  Ctrl+G group / "
                  "Ctrl+Shift+G ungroup  ·  MMB or Alt+drag pan  ·  drag output ↔ input to wire  ·  Ctrl-drag noodle "
                  "midpoint inserts Dot  ·  click a wired input to rewire")

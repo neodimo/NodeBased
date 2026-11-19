@@ -1,11 +1,11 @@
-"""Lane L2 (2D parity) plan 23, step AA1 part 1: S creates a Shuffle (hands-on pass 10/7, finding 1).
-The Edit menu's Settings used to own bare S and swallowed the graph's Shuffle key."""
+"""Lane L2 (2D parity) plan 23, step AA1 part 1 (hands-on pass 10/7, finding 1): the Edit menu's Settings must not own bare S.
+Since step X2 (11/18) S opens Project Settings, as Nuke's does; the graph, not a menu shortcut, handles it."""
 import unittest
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 import tests.isolation  # noqa: F401
 from nodebased.app import SHORTCUT_SECTIONS, Window
@@ -30,7 +30,8 @@ class ShortcutTests(unittest.TestCase):
         cls.window.deleteLater()
         APP.processEvents()
 
-    def test_s_with_a_checker_selected_makes_a_wired_shuffle_and_opens_no_settings(self):
+    def test_s_opens_project_settings_like_nuke_and_makes_no_node(self):
+        # Nuke's S is Project Settings (the Root panel); November 2026 (X2) moved it there from Shuffle, which Nuke gives no key.
         w = self.window
         w.command({"op": "batch", "commands": [{"op": "delete", "id": k} for k in list(w.graph_nodes())]})
         w.command({"op": "create", "id": "chk", "type": "Checker", "pos": [0, 0], "params": {}})
@@ -47,11 +48,11 @@ class ShortcutTests(unittest.TestCase):
             APP.processEvents()
         finally:
             w.project_settings = original
-        (new,) = [k for k in w.graph.items_by_id if k not in before]
-        node = w.graph_nodes()[new]
-        self.assertEqual(node["type"], "Shuffle")
-        self.assertEqual(node["inputs"].get("image"), "chk")
+        self.assertEqual(set(w.graph.items_by_id), before)
         self.assertEqual(opened, [])
+        self.assertEqual(w.pinned_panels[0], "@root")
+        self.assertIsNotNone(w.properties.findChild(QWidget, "project-settings-panel"))
+        w.close_panel("@root")
 
     def test_settings_is_ctrl_comma_and_listed(self):
         keys = dict((text, key) for key, text in dict(SHORTCUT_SECTIONS)["Edit"])

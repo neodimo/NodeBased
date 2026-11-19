@@ -192,7 +192,8 @@ class RootPairingTests(unittest.TestCase):
         self.assertEqual(set(self.paired), {"first_frame", "last_frame", "fps", "OCIO_config", "monitorLUT",
                                             "proxy", "proxy_scale", "name", "project_directory", "label",
                                             "lock_connections", "lock_range", "Script_directory", "format",
-                                            "proxy_type", "proxy_format", "proxySetting"})
+                                            "proxy_type", "proxy_format", "proxySetting",
+                                            "int8LUT", "int16LUT", "logLUT", "floatLUT"})
         from audit_nuke_fidelity import document_default
         for knob, fields in self.paired.items():
             for field in fields:
@@ -204,12 +205,14 @@ class RootPairingTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             document_default("time.shutter")
 
-    def test_the_score_counts_seventeen_knobs_and_the_defaults_that_agree(self):
+    def test_the_score_counts_twenty_one_knobs_and_the_defaults_that_agree(self):
         from audit_nuke_fidelity import score_pair
         res = score_pair("Root", self.pair, self.nuke)
-        self.assertEqual(res["detail"]["knob_counts"], (17, 43))
-        self.assertEqual(res["detail"]["default_counts"], (6, 14))   # frames, fps, the two locks and the proxy type agree; the guide writes an empty text as "none", which the text fields do not match, the OCIO config, view, project format, proxy format and read-proxy setting differ
-        self.assertEqual(set(res["components"]), {"knobs", "defaults"})
+        self.assertEqual(res["detail"]["knob_counts"], (21, 43))     # the four default colour spaces by file type joined the seventeen on 11/18
+        # frames, fps, the two locks, the proxy type and the four colour spaces agree; the guide writes an empty text as "none", which the text
+        # fields do not match, and the OCIO config, view, project format, proxy format and read-proxy setting differ by name or value
+        self.assertEqual(res["detail"]["default_counts"], (10, 18))
+        self.assertEqual(set(res["components"]), {"knobs", "defaults", "layout"})      # layout: the Project Settings panel (nodebased/rootpanel.py)
 
     def test_frame_range_bounds_the_playhead(self):
         from nodebased.core import Dispatcher

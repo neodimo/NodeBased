@@ -23,6 +23,7 @@ from . import metadata
 from . import pathmask as _pathmask
 from . import readproxy as _readproxy
 from .projectsettings import project as _project_fields
+from . import readspaces as _readspaces
 from .core import apply_lifetime
 from . import ops2d_chrome as _chrome
 from . import keyerknobs as _keyerknobs
@@ -1721,6 +1722,8 @@ class Evaluator:
             params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
             if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
                 params["config"] = doc.get("settings", {}).get("color", {}).get("config", "")
+            if kind == "Read" and params.get("colorspace") == "Auto":
+                params["colorspace"] = _readspaces.token(doc)      # the project's default colour spaces by file type (nodebased/readspaces.py)
             # Pixel-unit parameters are scaled in the same pass that shrinks the sources, so a blur
             # radius or a crop rectangle means the same thing at every tier (clause C3). Generated
             # sources therefore produce small pixels rather than being rendered full size and

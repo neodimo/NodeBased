@@ -140,7 +140,7 @@ class WrongExtensionFileTests(Budgeted):
         path = self.dir / "clip.mov"
         write_still(self.dir / "real.exr")
         path.write_bytes((self.dir / "real.exr").read_bytes())
-        self.assert_catchable(path, pattern="EXR, PNG, JPEG and TIFF")
+        self.assert_catchable(path, pattern="EXR, PNG, JPEG, TIFF, DPX and Cineon")
 
 
 class HeaderCorruptFileTests(Budgeted):

@@ -88,6 +88,9 @@ def document_default(path):
     doc = core.demo_document()
     if path == "settings.viewer.proxy":                     # optional key: absent means the full-size tier
         return core.viewer_proxy(doc)
+    if path == "settings.viewer.proxy_scale":               # the same tier read as a fraction of full size (nodebased/rootpanel.py)
+        from nodebased import rootpanel
+        return rootpanel.get(doc, path)
     if path.startswith("settings.project."):                # optional group: a field not set holds its default
         from nodebased import projectsettings
         return projectsettings.DEFAULTS[path.split(".", 2)[2]]
@@ -282,12 +285,13 @@ def score_pair(key, pair, nuke, reference_dir=None):
             res["components"]["acts"] = frac
     # Nuke's layout: knob order and main-tab labels
     res["panel_rows"] = res["panel_types"] = None
-    if kind is not None and not document and knobs:
-        frac, detail = req.layout_component(kind, entries, knobs)
+    layout_kind = "Root" if document else kind      # Root's layout is the Project Settings panel (nodebased/rootpanel.py)
+    if layout_kind is not None and knobs:
+        frac, detail = req.layout_component(layout_kind, entries, knobs)
         res["detail"].update(detail)
         # Since 2026-11-04 the layout fraction is four equal quarters: knob order, main-tab labels, shared rows and widget types;
         # a quarter with nothing to count is left out and the rest renormalised. `layout_old` keeps the two-half form for the report.
-        rows, types = panel_shape_metrics(nuke, pair, kind, key)
+        rows, types = panel_shape_metrics(nuke, pair, layout_kind, key)
         res["panel_rows"], res["panel_types"] = rows, types
         quarters = []
         if detail.get("layout_order"):
@@ -470,6 +474,12 @@ def _widget_kind(group, param):
     return group.members[group.params.index(param)] if group.kind == "row" else group.kind
 
 
+def _root_groups():
+    """Root's panel as knob groups over document paths: the Project Settings panel the Properties bin opens (S, Edit > Project Settings)."""
+    from nodebased import rootpanel
+    return rootpanel.knob_groups()
+
+
 def panel_shape_metrics(nuke_node, pair, node_type, key=None):
     """Measure shared guide rows and widget-kind matches; these lines do not affect fidelity."""
     from nodebased.knobs import KnobGroup, knob_layout
@@ -482,7 +492,9 @@ def panel_shape_metrics(nuke_node, pair, node_type, key=None):
     for entry in entries:
         for name in entry.get("nuke", []):
             mapped.setdefault(name, set()).update(entry.get("nodebased", []))
-    groups = knob_layout(node_type) if node_type else ()
+    groups = knob_layout(node_type) if node_type and node_type != "Root" else ()
+    if node_type == "Root":
+        groups = _root_groups()      # Root's panel is the Project Settings panel (nodebased/rootpanel.py), over document fields
     if node_type == "ViewMetaData":
         # This node's transient properties-panel controls do not live in SPECS/params.
         groups = (KnobGroup("table", ("metadata_table",), label="metadata viewer"),

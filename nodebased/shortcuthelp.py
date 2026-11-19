@@ -14,7 +14,8 @@ from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePol
 SEPARATOR = "  ·  "
 GRAPH_SHORTCUTS = (
     ("Tab", "search/add"),
-    ("R/G/M/T/B/C/S/O/P/U/W", "create"),
+    ("R/G/M/T/B/C/O/P/U/W", "create"),
+    ("S", "Project Settings"),
     ("Period", "Dot"),
     ("1", "view"),
     ("D", "bypass"),

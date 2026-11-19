@@ -46,6 +46,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES, INPUT_TYPES, SPLIT_CHANNELS)
 from .nodecatalog import NODE_CATEGORIES, node_family, node_category, node_description, doc_for_kind, find_doc_row
 from . import projectsettings as _projectsettings
+from . import rootpanel
 from . import channelpicker
 from . import radialcommands
 from . import graphlook
@@ -188,7 +189,8 @@ SHORTCUT_SECTIONS = (
     ("Time", (("Left", "previous frame"), ("Right", "next frame"),
                ("Alt+Left", "previous keyframe"), ("Alt+Right", "next keyframe"),
                ("Home", "first frame"), ("End", "last frame"), ("Space", "play/stop"))),
-    ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/S/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Shuffle/Roto/Premult/Unpremult/Write)"),
+    ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Roto/Premult/Unpremult/Write)"),
+                    ("S", "open Project Settings (Nuke's Root panel) in the Properties bin"),
                     ("Ctrl+F", "focus the NODES dock's search box"),
                     ("Down/Up in that box", "move through its results"),
                     ("Return in that box", "add the selected (or first) result"),
@@ -10392,10 +10394,12 @@ class Graph(PanZoomView):
             self.window.command({"op": "batch", "commands": edits})
         elif event.key() == Qt.Key.Key_Period and not modifiers:
             self.window.add_node("Dot")
-        elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_O,
+        elif event.key() == Qt.Key.Key_S and not modifiers:
+            self.window.open_project_settings_panel()      # Nuke's S: the Root panel (Project Settings) in the Properties bin
+        elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_O,
                               Qt.Key.Key_P, Qt.Key.Key_U, Qt.Key.Key_W) and not modifiers:
             self.window.add_node({Qt.Key.Key_R: "Read", Qt.Key.Key_G: "Grade", Qt.Key.Key_M: "Merge", Qt.Key.Key_T: "Transform",
-                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "ColorCorrect", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "Roto",
+                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "ColorCorrect", Qt.Key.Key_O: "Roto",
                                    Qt.Key.Key_P: "Premult", Qt.Key.Key_U: "Unpremult",
                                    Qt.Key.Key_W: "Write"}[event.key()])
         else:
@@ -13100,6 +13104,10 @@ class Window(QMainWindow):
         connected_action.setObjectName("select-connected-action")
         connected_action.triggered.connect(lambda checked=False: self.graph.select_connected())
         edit.addAction(connected_action)
+        root_action = QAction("Project Settings…\tS", self)       # S is handled by the graph, so a bare key never steals typing
+        root_action.setObjectName("project-settings-action")
+        root_action.triggered.connect(lambda checked=False: self.open_project_settings_panel())
+        edit.addAction(root_action)
         settings_action = QAction("Viewer settings…", self)
         settings_action.setObjectName("viewer-settings-action")
         settings_action.triggered.connect(lambda checked=False: self.open_viewer_settings())
@@ -13782,9 +13790,10 @@ class Window(QMainWindow):
                 self.sync_timeline()
                 self.sync_project_settings()
                 self.update_title()
-                if cmd.get("op") == "time":
+                if cmd.get("op") == "time" or rootpanel.ROOT_KEY in self.pinned_panels:
                     # Key buttons and resolved values are playhead-dependent. Refresh through the
                     # same shared panel path used for document edits so every node stays in sync.
+                    # The Project Settings panel shows these fields too, so a settings edit rebuilds it.
                     self.refresh_panel_soon(lambda: self.inspect(self.graph.selected_id()))
                 if render:
                     self.request_preview(progressive=not bool(cmd.get("transient", False)))
@@ -14926,7 +14935,143 @@ class Window(QMainWindow):
         except Exception:
             pass  # a broken param must not take the properties panel down
 
+    def open_project_settings_panel(self):
+        """Nuke's S in the Node Graph and Edit > Project Settings: the Root panel opens in the Properties bin, on top."""
+        if rootpanel.ROOT_KEY in self.pinned_panels:
+            self.pinned_panels.remove(rootpanel.ROOT_KEY)
+        self.pinned_panels.insert(0, rootpanel.ROOT_KEY)
+        if len(self.pinned_panels) > self.panel_cap:
+            self.pinned_panels = self.pinned_panels[:max(self.panel_cap, 1)]
+        self.rebuild_properties_dock()
+        dock = getattr(self, "properties_dock", None)
+        if dock is not None:
+            dock.show()
+            dock.raise_()
+        return self.properties
+
+    def build_root_panel(self):
+        """The Project Settings panel (`nodebased/rootpanel.py` lists its tabs and rows in the Reference Guide's order). Each control
+        edits through `rootpanel.edit`, so one edit is one undo step."""
+        document = self.dispatcher.document
+        panel = QWidget()
+        panel.setObjectName("project-settings-panel")
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(4, 4, 4, 4)
+        outer.setSpacing(4)
+        top = QWidget()
+        top.setObjectName("node-panel-header")
+        head = QHBoxLayout(top)
+        head.setContentsMargins(4, 4, 6, 4)
+        title = QLabel(rootpanel.TITLE)
+        title.setObjectName("project-settings-title")
+        title.setStyleSheet("font-weight: 700; font-size: 14px; background: transparent")
+        kind = ElidedLabel("Root")
+        kind.setStyleSheet("color: #7d8793; font-size: 11px; background: transparent")
+        close = PropertiesIconButton("close-knobs")
+        close.setToolTip("Close the Project Settings panel")
+        close.setAccessibleName("Close the Project Settings panel")
+        close.clicked.connect(lambda checked=False: self.close_panel(rootpanel.ROOT_KEY))
+        head.addWidget(title)
+        head.addWidget(kind, 1)
+        head.addWidget(close)
+        outer.addWidget(top)
+        tabs = QTabWidget()
+        tabs.setObjectName("project-settings-tabs")
+        forms = {}
+        for tab in rootpanel.TABS:
+            page = QWidget()
+            form = QFormLayout(page)
+            form.setContentsMargins(12, 12, 12, 12)
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            forms[tab] = form
+            tabs.addTab(page, tab)
+        shown_section = {}
+        for row in rootpanel.ROWS:
+            form = forms[row.tab]
+            if row.section and shown_section.get(row.tab) != row.section:
+                shown_section[row.tab] = row.section
+                heading = QLabel(row.section)
+                heading.setObjectName("project-settings-section")
+                heading.setStyleSheet("font-weight: 600; color: #9aa4b0; background: transparent; padding-top: 8px")
+                form.addRow(heading)
+            form.addRow(row.label, self._root_row_widget(document, row))
+        tabs.setCurrentIndex(min(getattr(self, "_root_tab", 0), tabs.count() - 1))
+        tabs.currentChanged.connect(lambda index: setattr(self, "_root_tab", index))
+        outer.addWidget(tabs)
+        return panel
+
+    def _root_row_widget(self, document, row):
+        """The control or row of controls for one Root knob row; every one is named `root-<guide name>`."""
+        from .core import VIEWER_PROXY_TIERS
+        kinds = row.members if row.kind == "row" else (row.kind,) * len(row.fields)
+        widgets = []
+        for index, (path, kind) in enumerate(zip(row.fields, kinds)):
+            name = row.names[index]
+            value = rootpanel.get(document, path)
+            if kind == "string":
+                widget = QLineEdit(str(value))
+                widget.editingFinished.connect(lambda w=widget, p=path: self._root_edit(p, w.text()))
+            elif kind == "bool":
+                if path == "settings.viewer.proxy":
+                    widget = QCheckBox()
+                    widget.setChecked(int(value) > 1)
+                    widget.toggled.connect(lambda on: self._root_proxy(on=on))
+                else:
+                    widget = QCheckBox()
+                    widget.setChecked(bool(value))
+                    widget.toggled.connect(lambda on, p=path: self._root_edit(p, bool(on)))
+            elif kind == "enum":
+                widget = QComboBox()
+                choices = list(rootpanel.choices_for(document, row, index))
+                if path in (rootpanel.PROJECT_PREFIX + "format", rootpanel.PROJECT_PREFIX + "proxy_format") and "" not in choices:
+                    choices.insert(0, "")
+                for choice in choices:
+                    widget.addItem(choice or "none", choice)
+                if str(value) not in choices:
+                    widget.addItem(str(value), str(value))
+                widget.setCurrentIndex(max(0, widget.findData(str(value))))
+                widget.activated.connect(lambda _i, w=widget, p=path: self._root_edit(p, w.currentData()))
+            elif kind == "int":
+                widget = QSpinBox()
+                widget.setRange(-1000000, 1000000)
+                widget.setValue(int(value))
+                widget.editingFinished.connect(lambda w=widget, p=path: self._root_edit(p, int(w.value())))
+            else:   # float
+                widget = QDoubleSpinBox()
+                widget.setDecimals(3)
+                if path == rootpanel.PROXY_SCALE_FIELD:
+                    widget.setRange(0.01, 1.0)
+                    widget.setSingleStep(0.125)
+                    widget.setValue(float(value))
+                    widget.editingFinished.connect(lambda w=widget: self._root_proxy(scale=w.value()))
+                else:
+                    widget.setRange(0.001, 1000.0)
+                    widget.setValue(float(value))
+                    widget.editingFinished.connect(lambda w=widget, p=path: self._root_edit(p, float(w.value())))
+            widget.setObjectName(f"root-{name}")
+            widgets.append(widget)
+        if len(widgets) == 1:
+            return widgets[0]
+        holder = QWidget()
+        line = QHBoxLayout(holder)
+        line.setContentsMargins(0, 0, 0, 0)
+        for widget in widgets:
+            line.addWidget(widget, 1)
+        return holder
+
+    def _root_edit(self, path, value):
+        command = rootpanel.edit(self.dispatcher.document, path, value)
+        if command is not None:
+            self.defer_command(command)
+
+    def _root_proxy(self, on=None, scale=None):
+        command = rootpanel.edit_proxy(self.dispatcher.document, on=on, scale=scale)
+        if command is not None:
+            QTimer.singleShot(0, lambda t=command["tier"]: self.set_viewer_proxy(t))
+
     def build_node_panel(self, key):
+        if key == rootpanel.ROOT_KEY:
+            return self.build_root_panel()
         panel = QWidget()
         panel.setObjectName("node-properties-panel")
         panel_layout = QVBoxLayout(panel)
@@ -17612,7 +17757,7 @@ class Window(QMainWindow):
         header.addWidget(clear_all)
         layout.addLayout(header)
         for panel_key in self.pinned_panels:
-            if panel_key not in self.graph_nodes():
+            if panel_key not in self.graph_nodes() and panel_key != rootpanel.ROOT_KEY:
                 continue
             section = QWidget()
             section.setObjectName("stacked-panel-section")

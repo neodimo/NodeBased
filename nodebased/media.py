@@ -6,6 +6,7 @@ import stat as stat_module
 import tempfile
 import numpy as np
 from . import color
+from . import readspaces
 from .color import to_working, WORKING
 
 # Files that name their own colour space get taken at their word. OIIO normalises whatever
@@ -47,6 +48,22 @@ def auto_space(ext, spec):
     if tag in _TAGGED_SPACES:
         return _TAGGED_SPACES[tag]
     return 'Linear Rec.709' if ext == '.exr' else 'sRGB'
+
+
+def resolve_space(colorspace, ext, spec):
+    """The colour space one file is decoded in: a named one as given, `Auto` by the file's tag or extension, and an
+    `Auto|...` string (the project's default spaces by file type, nodebased/readspaces.py) by the tag, then the file's kind."""
+    if colorspace == 'Auto':
+        return auto_space(ext, spec)
+    spaces = readspaces.parse(colorspace)
+    if spaces is None:
+        return colorspace
+    # OpenImageIO tags nearly every PNG and JPEG it opens as sRGB, which says nothing about the file; a tag that names another space
+    # (an EXR tagged ACEScg) is the file's own word and stays. Otherwise the project's space for the file's kind decides.
+    tag = (spec.get_string_attribute('oiio:ColorSpace') or '').strip().lower()
+    if _TAGGED_SPACES.get(tag, 'sRGB') != 'sRGB':
+        return _TAGGED_SPACES[tag]
+    return readspaces.resolve(ext, spec, spaces)
 
 
 # A sequence path carries exactly one frame token: printf padding (%04d, %d) or a run of hashes
@@ -111,7 +128,8 @@ def scan_sequence(path):
 
 # Extensions the Read browser offers. OIIO reads more than this; these are the ones the app's
 # own ingest path is tested against, so they are the ones the file browser advertises.
-IMAGE_EXTENSIONS = ('.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff')
+IMAGE_EXTENSIONS = ('.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff', '.dpx', '.cin')
+READ_EXTENSIONS = frozenset(IMAGE_EXTENSIONS)
 
 # A trailing run of digits, optionally behind a '.', '_' or '-' separator, is the frame number.
 # Non-greedy stem plus an anchored end means 'shot_v2.0007' splits at the *last* number, so a
@@ -376,10 +394,10 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
     from .raster import Raster
     from .tiers import Region
     if not path:
-        raise ValueError('Choose an EXR, PNG, JPEG or TIFF file in Read properties')
+        raise ValueError('Choose an EXR, PNG, JPEG, TIFF, DPX or Cineon file in Read properties')
     ext = Path(path).suffix.lower()
-    if ext not in {'.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff'}:
-        raise ValueError('Supported images: EXR, PNG, JPEG and TIFF')
+    if ext not in READ_EXTENSIONS:
+        raise ValueError('Supported images: EXR, PNG, JPEG, TIFF, DPX and Cineon')
     options = oiio.ImageSpec()
     options.attribute('oiio:UnassociatedAlpha', 1)
     source = oiio.ImageInput.open(str(path), options)
@@ -444,7 +462,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             # decode: their beauty/layer ownership makes the compact shortcut unsafe.
             formats = list(spec.channelformats) or [spec.format]
             half_channels = bool(formats) and all(str(fmt).lower() == 'half' for fmt in formats)
-            space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
+            space = resolve_space(colorspace, ext, spec)
             # Native-half decode is the measured default for eligible files.  `=0` remains a
             # diagnostic escape hatch for comparing the float32 upload path.
             half_upload_enabled = os.environ.get('NODEBASED_GPU2D_HALF_UPLOAD', '1') != '0'
@@ -576,10 +594,10 @@ def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer=
     from .raster import Raster
     from .tiers import Region
     if not path:
-        raise ValueError('Choose an EXR, PNG, JPEG or TIFF file in Read properties')
+        raise ValueError('Choose an EXR, PNG, JPEG, TIFF, DPX or Cineon file in Read properties')
     ext = Path(path).suffix.lower()
-    if ext not in {'.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff'}:
-        raise ValueError('Supported images: EXR, PNG, JPEG and TIFF')
+    if ext not in READ_EXTENSIONS:
+        raise ValueError('Supported images: EXR, PNG, JPEG, TIFF, DPX and Cineon')
     options = oiio.ImageSpec()
     options.attribute('oiio:UnassociatedAlpha', 1)
     source = oiio.ImageInput.open(str(path), options)
@@ -633,7 +651,7 @@ def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer=
         rgba[..., :3] = _select_rgb(pixels, rgb, first)
         if alpha is not None:
             rgba[..., 3] = pixels[..., alpha - first]
-        space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
+        space = resolve_space(colorspace, ext, spec)
         associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
         rgba = to_working(rgba, space, associated, in_place=True)
         if alpha is None and not auto_alpha:

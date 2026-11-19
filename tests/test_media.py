@@ -295,7 +295,7 @@ class MediaTests(unittest.TestCase):
     def test_unreadable_and_unsupported_inputs_report_actionable_errors(self):
         with self.assertRaisesRegex(ValueError, 'Read properties'):
             read_media('')
-        with self.assertRaisesRegex(ValueError, 'EXR, PNG, JPEG and TIFF'):
+        with self.assertRaisesRegex(ValueError, 'EXR, PNG, JPEG, TIFF, DPX and Cineon'):
             read_media(str(self.dir / 'clip.mov'))
         broken = self.dir / 'broken.exr'
         broken.write_bytes(b'not an exr')

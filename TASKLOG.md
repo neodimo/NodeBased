@@ -1,3 +1,28 @@
+## 2026-11-18 10:30 PM — Lane 2 step X2: a Project Settings panel like Nuke's Root panel, and default colour spaces by file type (DONE)
+
+- **What was done:** (1) `nodebased/rootpanel.py` lays out Root's panel in the Reference Guide's tabs, order, labels and widget kinds (Root tab: name, project directory,
+  Script Directory, comment, lock all connections, frame range as a row of two fields, lock range, fps, full size format, proxy mode as a check box and a choice on one row,
+  proxy scale, proxy format, read proxy files; Color tab: OCIO config, then default LUT settings: monitor, 8-bit, 16-bit, log, float files). S with the graph focused and
+  Edit > Project Settings open it in the Properties bin (`Window.open_project_settings_panel`, key `@root` in the bin's list); every control edits through `rootpanel.edit`
+  (the `settings`, `time` and `viewer_proxy` operations), so one edit is one undo step, and the panel rebuilds on undo, redo, load and after a settings edit. There was no
+  project-fields dialog before (the old Settings dialog is app preferences and the viewer colour view), so there is no second copy. S used to create a Shuffle; Nuke's S is
+  Project Settings and Shuffle has no key, so the create keys are now R G M T B C O P U W (`tests.test_2d_parity_aa1_shortcuts`, `...shortcut_wiring_z2`,
+  `...graph_help_nl5` and `shortcuthelp.py` updated). The audit's panel reader (`panel_shape_metrics`, `req.layout_component`, `score_pair`) now reads Root's layout from the
+  same table; it only read node panels before. (2) `settings.project.int8_lut/int16_lut/log_lut/float_lut` pair with `int8LUT/int16LUT/logLUT/floatLUT`; Read at Auto resolves
+  through them (`nodebased/readspaces.py`, `media.resolve_space`); the evaluator and tile executor replace `Auto` by `Auto|<int8>|<int16>|<log>|<float>` when the project's
+  four spaces are not the old ones, so cache keys follow the project. Read opens `.dpx` and `.cin` (OpenImageIO), with `color.cineon_to_linear` (a convention: black 95, white
+  685, 0.002 density per code, gamma 0.6; 18 percent grey at code 470; below black reads 0). `proxy_scale` pairs with `settings.viewer.proxy_scale`, the proxy tier as a fraction.
+- **Schema bump:** 35 to 36 (main and the other 2D lane were at 35): a document saved before gets `settings.project.log_lut = "sRGB"` on load (it read a log file as sRGB); a new
+  project reads one as Cineon. Gonzo: renumber if another lane lands a bump first.
+- **Measured:** Root fidelity 50.7 to 67.1; knobs paired 17 to 21 of 43; Root layout (new) 100 (order, labels, shared rows, widget types); defaults agreeing 6 of 14 to 10 of 18;
+  overall 97.5 before and after (about +0.05, under the report's rounding; previous formula unchanged to its rounding).
+- **Evidence vs inference:** `tests/test_l2_x2_root_panel.py` (layout against the guide's table, S and the Edit entry, widget kinds, one undo step, panel follows undo,
+  frame range, lock, proxy), `tests/test_l2_x2_read_spaces.py` (each LUT changes only its own kind of file and equals the Read's own colorspace; Cineon anchors; a legacy
+  document keeps sRGB for DPX; tile path equals evaluator; settings operation and undo). The Cineon constants are the Kodak defaults Nuke's own Cineon LUT uses, not read from Nuke.
+- **Not done:** the Views, LUT list, font and callback tabs (no document fields); the OCIO config is a text field, not a menu of built-in configs; no real-Nuke comparison.
+  A file tag other than sRGB still outranks the project's space; a float TIFF stays in the 16-bit class (it always read as sRGB).
+- **Next owner:** Gonzo, for a views model (the Views tab) and an OCIO config menu.
+
 ## 2026-11-18 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X1 (Wed 11/18): a Bokeh node, the defocus Nuke 17 ships beside ZDefocus, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T7 (Wed 11/18): the Curve Editor and Dope Sheet work like Nuke's (finish 1) (integrator tick)
 
 - **What was done:** `main` `4d32b761` -> `18e98016` plus this docs commit. Evidence and per-lane commit

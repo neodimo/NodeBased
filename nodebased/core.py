@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -3182,6 +3182,17 @@ def upgrade_document(document):
                     _copybbox_inputs(graph["nodes"])
         _copybbox_inputs(doc.get("nodes", {}))
         doc["version"] = 35
+    if isinstance(doc, dict) and doc.get("version") == 35:
+        # v35 -> v36: the project's default colour spaces by file type (Nuke's int8LUT, int16LUT, logLUT, floatLUT; settings.project,
+        # nodebased/readspaces.py). A new project starts with the guide's defaults, where a log file (Cineon, DPX) is read as Cineon;
+        # a document saved before read such a file as sRGB, so it keeps that. The other three defaults are what Read always did.
+        settings = doc.get("settings")
+        if isinstance(settings, dict):
+            project = settings.get("project")
+            if not isinstance(project, dict):
+                project = settings["project"] = {}
+            project.setdefault("log_lut", "sRGB")
+        doc["version"] = 36
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

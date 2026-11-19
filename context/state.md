@@ -1,3 +1,10 @@
+## Lane 2 step X2 (11/18 10:30 PM): Project Settings panel and default colour spaces by file type
+
+Root panel: `nodebased/rootpanel.py` (layout table, `edit`, `edit_proxy`, `knob_groups` for the audit), `Window.open_project_settings_panel` / `build_root_panel`, key `@root` in
+`pinned_panels`; S in the graph and Edit > Project Settings open it (S no longer creates a Shuffle). Colour spaces: `settings.project.int8_lut/int16_lut/log_lut/float_lut`
+(`projectsettings.DEFAULTS`: sRGB, sRGB, Cineon, Linear Rec.709), `nodebased/readspaces.py`, `media.resolve_space`, `color.cineon_to_linear`, Read opens DPX and Cineon.
+Schema 36 (migration: `log_lut = "sRGB"` for older documents). Root fidelity 50.7 to 67.1, 21 of 43 knobs, layout 100; overall 97.5.
+
 ## Lane 2 step X1 (11/18 8:35 PM): ColorTransfer and the colour group's label and widget-type rows
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (10:36 PM on 2026-11-18 PDT)

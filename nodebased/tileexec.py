@@ -44,6 +44,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import readspaces as _readspaces
 from . import cachetier
 from . import drawbehaviour as _drawbehaviour
 from . import filterbehaviour
@@ -164,6 +165,8 @@ def _compute_node_digests(document, tier, frame, solve=None):
             params = _tracked_transform_params(document, key, kind, params, frame, tier)
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
+        if kind == "Read" and params.get("colorspace") == "Auto":
+            params["colorspace"] = _readspaces.token(document)      # the project's default colour spaces by file type (nodebased/readspaces.py)
         # ALL wired input slots, required and optional (mask included) — must mirror
         # `Evaluator.evaluate`'s `list(node["inputs"].values())` exactly. The earlier draft used
         # only `SPECS[kind]["inputs"]`, which excludes optional slots such as "mask": rewiring or
@@ -806,6 +809,8 @@ class TileExecutor:
             params = _tracked_transform_params(document, node_id, kind, params, frame, tier)
         if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
+        if kind == "Read" and params.get("colorspace") == "Auto":
+            params["colorspace"] = _readspaces.token(document)      # the project's default colour spaces by file type (nodebased/readspaces.py)
         if kind == "Encryptomatte":
             params["_matte_names"] = [document["nodes"][node["inputs"][f"matte{i}"]]["name"]
                                       if node["inputs"].get(f"matte{i}") in document["nodes"] else "" for i in range(8)]
