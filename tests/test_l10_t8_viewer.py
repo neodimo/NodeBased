@@ -1,5 +1,5 @@
 """The Viewer works like Nuke's (lane 10, step T8, 2026-11-18): NodeBased's real Viewer, driven with Qt key and mouse
-events, against the Nuke 17.0 User Guide's Viewers and Using the Viewer Controls pages (the "viewer" entries of
+events, against the Nuke 17.0 User Guide's Viewers, Using the Viewer Controls and Keyboard Shortcuts pages (the "viewer" entries of
 docs/parity/nuke_knob_interactions.json). Every documented behaviour passes or is a named gap in OPEN; closing one means
 moving it out of OPEN (tests/test_panel_interactions.py lists the same ids in KNOWN_GAPS)."""
 import tests.isolation  # noqa: F401
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import nuke_panel_interactions as interactions  # noqa: E402
 
-OPEN = {}
+OPEN = {"viewer.luminance_y": "Y toggles luminance and RGB; NodeBased's Viewer has no luminance display"}
 
 
 class ViewerTests(unittest.TestCase):
@@ -41,9 +41,9 @@ class ViewerTests(unittest.TestCase):
                 else:
                     self.assertTrue(passed, detail)
 
-    def test_the_reference_cites_both_viewer_pages(self):
+    def test_the_reference_cites_every_viewer_page(self):
         sources = {e["source"] for e in self.entries if e["status"] == "documented"}
-        self.assertEqual(sources, {"viewers", "viewer_controls"})
+        self.assertEqual(sources, {"viewers", "viewer_controls", "hotkeys"})
 
 
 if __name__ == "__main__":
