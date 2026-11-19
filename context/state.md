@@ -1,5 +1,25 @@
 ## Lane 9 step X5 (11/19): the last gaps on SplineWarp, LensDistortion, Grain, MarkerRemoval and Text
 
+## Continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) (2:46 PM on 2026-11-19 PDT)
+
+`main` moved `e2ccb7ad` -> `a04a4e57` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a04a4e57` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1119-1406.log`, started 2:08 PM): **Ran 10509 tests in 2011.848 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 10 (Panels like Nuke, Claude Opus 5.5), step T9 (Thu 11/19): on-screen controls for CornerPin, Rectangle, Radial, Ramp and Reformat, and the behaviours still marked undocumented (finish 1).** Commits:
+  - `262fd016` Reformat's output box in the Viewer when its type is to box: edges and corners set width and height, one undo step per drag, a key on animated knobs, gone for the other types and when deselected
+  - `15fc3fa6` Viewer luminance display: Y shows the Rec. 709 luminance in grey through the usual gain, view transform and alpha, and a second Y returns to RGB (Nuke 17.0 Keyboard Shortcuts); a sixth channel button; 136 of 136 documented panel behaviours
+  Diff: 14 files changed, 151 insertions(+), 15 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #10.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (1:46 PM on 2026-11-19 PDT)
 
 `main` moved `01c06ef6` -> `2bb5979e` (lane commits cherry-picked onto main in lane order) and then to this

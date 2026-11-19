@@ -1,3 +1,9 @@
+## 2026-11-19 — continuous mode merge: Lane 10 (Panels like Nuke, Claude Opus 5.5) step T9 (Thu 11/19): on-screen controls for CornerPin, Rectangle, Radial, Ramp and Reformat, and the behaviours still marked undocumented (finish 1) (integrator tick)
+
+- **What was done:** `main` `e2ccb7ad` -> `a04a4e57` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `a04a4e57`: Ran 10509 tests in 2011.848 s, OK (skipped=39), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-19 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X5 (Thu 11/19): the motion-blur shutter opens when Nuke's does, and the last knobs on ColorLookup, HSVTool and Expression, Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X5 (Thu 11/19): the last gaps on SplineWarp, LensDistortion, Grain, MarkerRemoval and Text, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T9 (Thu 11/19): on-screen controls for CornerPin, Rectangle, Radial, Ramp and Reformat, and the behaviours still marked undocumented (integrator tick)
 
 - **What was done:** `main` `01c06ef6` -> `2bb5979e` plus this docs commit. Evidence and per-lane commit
