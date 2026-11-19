@@ -16,13 +16,19 @@ import numpy as np
 CHANNEL_INDEX = {"red": 0, "green": 1, "blue": 2, "alpha": 3}
 
 NEW = {
-    "EdgeBlur": {"edge_matte": "rgba.alpha", "edgeblur_tint": 1.0, "edgeblur_brightness": 1.0},
+    "EdgeBlur": {"edge_matte": "rgba.alpha", "edgeblur_tint": 1.0, "edgeblur_brightness": 1.0, "edgeblur_output": "none"},
 }
 # What an older document's node of the kind gets on load: the knobs at the value that leaves it as it was, and where Nuke's default
 # differs from the one NodeBased had, the old default (a saved node keeps its own size and edge multiplier).
 UPGRADE = {
-    "EdgeBlur": {"edge_matte": "rgba.alpha", "edgeblur_tint": 1.0, "edgeblur_brightness": 1.0, "edgeblur_size": 4.0, "edge_mult": 1.0},
+    "EdgeBlur": {"edge_matte": "rgba.alpha", "edgeblur_tint": 1.0, "edgeblur_brightness": 1.0, "edgeblur_size": 4.0, "edge_mult": 1.0,
+                 "edgeblur_output": "none"},
 }
+
+
+# EdgeBlur's output (the guide: "Sets the output channel for any blur applied", default none, with a check box that "is the same as setting the channel
+# to none"). The blur is applied to `channels`; `output` names the one channel it is written to, as Emboss and EdgeDetect's output does (the same list).
+# None writes it to every channel the blur was applied to.
 
 
 def new_params(kind):
@@ -51,7 +57,7 @@ def edge_halo(p):
 
 def edge_blur(image, p, origin=(0, 0)):
     """Nuke's EdgeBlur on `image`; `origin` is the array's top-left pixel on the canvas (the quality scaling's blocks sit on that grid)."""
-    from . import blurknobs
+    from . import blurknobs, filterbehaviour
     from .imaging import Evaluator
     size = abs(float(p.get("edgeblur_size", 4.0)))
     out = image.copy()
@@ -67,6 +73,10 @@ def edge_blur(image, p, origin=(0, 0)):
         blurred = blurred.copy()
         blurred[..., :3] *= tint
         blurred *= brightness
-    for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+    written = Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]
+    target = filterbehaviour.output_index(p.get("edgeblur_output", "none"))
+    if target is not None:
+        written = tuple(c for c in written if c == target)       # the blur is applied to `channels` and lands in the one channel `output` names
+    for c in written:
         out[..., c] = image[..., c] + band[..., 0] * (blurred[..., c] - image[..., c])
     return out.astype(np.float32)

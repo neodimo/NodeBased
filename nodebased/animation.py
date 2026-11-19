@@ -228,7 +228,7 @@ def resolve_document(document, frame):
             from .core import _resolve_reformat_format
             for node_id, linked in expression_section.items():
                 node = resolved_nodes.get(node_id)
-                if "format" in linked and node is not None and node["type"] == "Reformat":
+                if "format" in linked and node is not None and node["type"] in ("Reformat", "Roto"):
                     params = dict(node["params"])
                     _resolve_reformat_format(params, document)
                     resolved_nodes[node_id] = {**node, "params": params}

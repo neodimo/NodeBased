@@ -577,6 +577,8 @@ KNOB_LAYOUT = {
                   help="The width of the edge band in sizes: lower values give sharper edges."),
         KnobGroup("float_slider", ("edgeblur_tint",), label="Tint", soft_range=(0, 2), help="The multiplier for the red, green and blue of the edge blur."),
         KnobGroup("float_slider", ("edgeblur_brightness",), label="Brightness", soft_range=(0, 2), help="The multiplier for all channels of the edge blur."),
+        KnobGroup("enum", ("edgeblur_output",), label="Output",
+                  help="The channel the blur is written to. None writes it to the channels the blur is applied to; a channel writes it only there (if the channels knob lets the blur reach it)."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "EdgeExtend": _groups(
         KnobGroup("float_slider", ("extend_size",), label="Size", soft_range=(0, 50)),
@@ -1374,6 +1376,8 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("grow_bbox",), label="Expand blur bbox", help="Pixels added to the outside edge of the picture, for blur that runs out of it."),
         KnobGroup("bool", ("soft_lines",), label="Soft lines", help="Draw wider lines for a softer blur, at the cost of speed."),
         KnobGroup("bool", ("blur_inside",), label="Blur inside", help="With soft lines on, blur a little where nothing moves."),
+        KnobGroup("bool", ("vector_normalize",), label="Normalize",
+                  help="On, the result is divided by the weight that reaches each pixel, which fills the holes behind moving objects and softens the blur. Off, each pixel is drawn along its vector as it is: holes stay dark and pile-ups are brighter."),
         KnobGroup("enum", ("vector_method",), label="Method"),
         KnobGroup("enum", ("vector_sampling",), label="Vector location"),
         KnobGroup("float_slider", ("max_length",), label="Max length", soft_range=(0, 200)),
@@ -1383,6 +1387,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("out_red",)), KnobGroup("enum", ("out_green",)),
         KnobGroup("enum", ("out_blue",)), KnobGroup("enum", ("out_alpha",))),
     "Roto": _groups(
+        KnobGroup("enum", ("format",), label="Format",
+                  help="The window the shapes are drawn in: a named format, or Custom to type the width and height. Reads the project format on a new node."),
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("bool", ("invert",)),
         KnobGroup("enum", ("premultiply_mode",), label="Premultiply"),
@@ -2930,7 +2936,7 @@ _ROTO_ORDER = ("output", "premultiply_mode", "cliptype", "replace", "maskChannel
                "shape_motionblur_on", "global_motionblur_on", "global_motionblur", "global_motionblur_shutter",
                "global_motionblur_shutter_offset_type", "global_motionblur_shutter_offset", "tracking_channels")
 NUKE_LAYOUT_LANE9.update({
-    "Roto": (*_ROTO_ORDER[:4], "width", "height", *_ROTO_ORDER[4:]),
+    "Roto": (*_ROTO_ORDER[:4], "format", "width", "height", *_ROTO_ORDER[4:]),
     "RotoPaint": (*_ROTO_ORDER[:-1], "channels", "tracking_channels", "pretrack_filter", "adjust_for_luminance_changes",
                   "clamp_footage", "hide_progress_bar", "export_menu", "link_output",
                   *(f"pt{i}_x" for i in range(1, 5)), *(f"of{i}_x" for i in range(1, 5)), "reference_frame"),
@@ -2971,7 +2977,7 @@ NUKE_LAYOUT_LANE9.update({
     "VolumeRays": ("style", "luma_tol", "edge_size", "blur_size", "center_x", "raylength", "pre_blur", "ray_quality", "comp_me", "chk_flicker", "flicker_speed",
                    "flicker_size", "xform_flicker", "chk_desat", "CCorrect1_gamma", "CCorrect1_gain", "initcolor", "volume_end_red", "chk_radial", "radial_size",
                    "rad_softness", "chk_use_mask", "mask_blur", "chk_xform_mask"),
-    "EdgeBlur": ("channels", "edge_matte", "edgeblur_size", "kernel_filter", "quality", "crop", "edge_mult", "edgeblur_tint", "edgeblur_brightness"),
+    "EdgeBlur": ("channels", "edge_matte", "edgeblur_size", "kernel_filter", "quality", "crop", "edge_mult", "edgeblur_tint", "edgeblur_brightness", "edgeblur_output"),
 })
 
 # Lane 9 step H (11/3): GridWarp and SplineWarp in the guide's order (docs/parity/nuke_nodes.json): channels and the mask strip lead GridWarp, channels

@@ -16,9 +16,16 @@
   sample is also taken one pixel to either side of the line (weights 1/4, 1/2, 1/4). "Apply a small blur inside regions with zero
   motion": with soft lines on, a pixel whose vector is zero takes the 3 x 3 average of its neighbours.
 
+* normalize (`vector_normalize`, step X6): "normalize the results to compensate for tearing (holes appearing behind moving objects) and
+  collisions (objects moving on top of one another) in the rendered output ... it tends to give a softer blur than not normalizing". The
+  node blurs "each pixel into a straight line", which is a scatter. On (the guide's default) is the blur NodeBased always did, which divides
+  by the weight taken at each pixel. Off draws each source pixel's line with its energy shared along it (the weights of one line sum to 1)
+  and does not divide by the weight that arrives: a hole behind a moving object stays dark and transparent, and where lines pile up the
+  picture is brighter (`scatter`). The guide gives no formula, so the off result is one reading of those two sentences, not a measured match;
+  it ignores `vector_alpha` weighting and the vector location setting, which are gather refinements.
+
 Not built, and listed in PARITY_2D_FIDELITY.md: `mv_presets` (the guide names the presets' purpose, "a scale and offset specific to the
-renderer", and gives no values) and `normalize` (it compensates for tearing and collisions of a scatter, "blurring each pixel into a
-straight line"; NodeBased's blur gathers along each pixel's vector, which divides by the samples taken and so has neither).
+renderer", and gives no values).
 
 A saved node reads the older blur (`vector_blur_type` uniform, no preprocessing, no soft lines), so it renders as it did.
 """
@@ -29,9 +36,9 @@ import numpy as np
 BLUR_UV = ("none", "uniform", "linear")
 BLUR_TYPES = ("uniform", "gaussian")
 NEW = {"blur_uv": "none", "uv_offset": 0.0, "vector_blur_type": "gaussian", "motion_falloff": 0.33, "grow_bbox": 0, "soft_lines": 0,
-       "blur_inside": 1}
+       "blur_inside": 1, "vector_normalize": 1}
 UPGRADE = {**NEW, "vector_blur_type": "uniform"}
-LIMITS = {"uv_offset": (-1000.0, 1000.0), "motion_falloff": (0.0, 1.0), "grow_bbox": (0, 4096), "soft_lines": (0, 1), "blur_inside": (0, 1)}
+LIMITS = {"uv_offset": (-1000.0, 1000.0), "motion_falloff": (0.0, 1.0), "grow_bbox": (0, 4096), "soft_lines": (0, 1), "blur_inside": (0, 1), "vector_normalize": (0, 1)}
 CHOICES = {"blur_uv": list(BLUR_UV), "vector_blur_type": list(BLUR_TYPES)}
 TENT_RADIUS = 4
 
@@ -79,3 +86,73 @@ def box3(image):
     padded = np.pad(image.astype(np.float64), ((1, 1), (1, 1), (0, 0)), mode="edge")
     h, w = image.shape[:2]
     return (sum(padded[dy:dy + h, dx:dx + w] for dy in range(3) for dx in range(3)) / 9.0).astype(np.float32)
+
+
+def scatter(src, u, v, p):
+    """VectorBlur with normalize off: each source pixel is drawn along its own vector instead of each pixel reading along its vector.
+
+    The vector is (u, v) * vector_scale capped at max_length, as in the gather; the line runs from vector_offset to vector_offset + 1 of the
+    vector, forward (the streak follows the motion) or backward, one sample about every pixel (or `samples` of them). The weights of one
+    line (uniform, or the gaussian of blur type and motion falloff; soft lines adds a quarter of the weight a pixel to either side) sum to 1,
+    and each sample is drawn on its four neighbouring pixels by bilinear weights. Nothing divides by what arrives, so a hole stays dark and
+    transparent and a pile-up is brighter.
+    """
+    vx = u.astype(np.float64) * float(p["vector_scale"])
+    vy = v.astype(np.float64) * float(p["vector_scale"])
+    length = np.hypot(vx, vy)
+    cap = float(p.get("max_length", 0.0))
+    if cap > 0:
+        shrink = np.where(length > cap, cap / np.maximum(length, 1e-12), 1.0)
+        vx, vy, length = vx * shrink, vy * shrink, np.minimum(length, cap)
+    steps = np.maximum(1, np.ceil(length - 1e-9)).astype(np.int32)
+    sign = 1.0 if p["vector_method"] == "forward" else -1.0
+    height, width = src.shape[:2]
+    ix = np.arange(width, dtype=np.float64)[None, :] * np.ones((height, 1))
+    iy = np.arange(height, dtype=np.float64)[:, None] * np.ones((1, width))
+    offset = float(p["vector_offset"])
+    fixed = int(p["samples"]) if p.get("samples") else 0
+    count = fixed if fixed else int(steps.max()) + 1
+    soft = bool(int(p.get("soft_lines", 0)))
+    across_x, across_y = -vy / np.maximum(length, 1e-12), vx / np.maximum(length, 1e-12)
+    pixels = src.astype(np.float64)
+
+    def sample_at(k):
+        if fixed:
+            live = np.ones((height, width), bool)
+            t = np.full((height, width), offset + (0.5 if fixed == 1 else k / (fixed - 1)))
+        else:
+            live = k <= steps
+            t = offset + k / steps
+        profile = line_weight(t, offset, p)
+        share = live.astype(np.float64) * (1.0 if profile is None else np.asarray(profile, np.float64))
+        return t, share
+
+    line_total = np.zeros((height, width))
+    for k in range(count):
+        line_total += sample_at(k)[1]
+    line_total = np.maximum(line_total, 1e-12)
+    flat = np.zeros((4, height * width))
+    taps = ((0.0, 1.0),) if not soft else ((0.0, 0.5), (-1.0, 0.25), (1.0, 0.25))
+
+    def draw(px, py, weight):
+        x0, y0 = np.floor(px).astype(np.int64), np.floor(py).astype(np.int64)
+        fx, fy = px - x0, py - y0
+        for dx, dy, bilinear in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
+            cx, cy = x0 + dx, y0 + dy
+            inside = (cx >= 0) & (cx < width) & (cy >= 0) & (cy < height) & (weight > 0)
+            if not inside.any():
+                continue
+            index = (cy * width + cx)[inside]
+            w = (weight * bilinear)[inside]
+            for c in range(4):
+                flat[c] += np.bincount(index, weights=w * pixels[..., c][inside], minlength=height * width)
+
+    for k in range(count):
+        t, share = sample_at(k)
+        px, py = ix + sign * t * vx, iy + sign * t * vy
+        for side, tap in taps:
+            draw(px + side * across_x, py + side * across_y, share / line_total * tap)
+    out = flat.reshape(4, height, width).transpose(1, 2, 0)
+    if soft and int(p.get("blur_inside", 1)):
+        out = np.where((length <= 1e-9)[..., None], box3(src), out)
+    return out.astype(np.float32)

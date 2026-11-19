@@ -109,9 +109,7 @@ NOT_PIXEL = {
     "Reconcile3D": {"calc_output": "NodeBased's Reconcile3D always evaluates live, so there is no frozen output to switch (nodebased/track3dknobs.py)",
                     "output": "XY output: the projected point, read from the evaluated track: an output is never a stored param (tests/test_2d_behaviour_transform_n.py)",
                     "outputxyz": "XYZ output: the 3D point after the axis input, read from the evaluated track: an output is never a stored param (tests/test_2d_behaviour_transform_n.py)"},
-    "Flare": {"chroma_shift_angle_add": "adds the image-centre-to-Position angle only when the flare is off-centre and chroma shift is non-zero; verified by FlareTests, while the one-knob audit fixture is centred",
-              "vis_in": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",
-              "vis_out": "the audit fixture places Position at image centre; visibility range only matters when Position is displaced (tests/test_2d_behaviour_extra_draw.py)",
+    "Flare": {"vis_out": "the visibility falloff starts at vis_in and ends at vis_out, in half-widths from the centre: it shows only when the Position's distance falls between them; the probe's Position is 0.45 out, inside the default vis_in of 1.0, and the probe moves vis_out alone (tests/test_2d_behaviour_extra_draw.py)",
               "MultiPenta": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",
               "LgRainbow": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",
               "Bright": "preset button writes a collection of other controls; the guide gives no values for its preset (Flare reference guide, Presets tab)",
@@ -288,7 +286,9 @@ PROBE_BASE = {
     "MarkerRemoval": {"mode": "bilinear", "linearsearch": 1, "ctrlMask": "fixture.control"},
     "CopyRectangle": {"area_x": 3.0, "area_y": 2.0, "area_r": 11.0, "area_t": 9.0},     # Nuke's 512 389 1536 1167 lies off a 16 x 12 picture
     # Lane 2 step H (11/3): Flare's centre and radii, Glint's 50 pixel rays and Sparkles's 300 pixel rays all lie off a 16 x 12 picture.
-    "Flare": {"position_x": 8.0, "position_y": 6.0, "flare_radius_inner": 2.0, "flare_radius_middle": 4.0, "flare_radius_outer": 7.0},
+    # Lane 9 step X6 (11/19): Flare's Position sits off the image centre, where the three "relative to the angle from the centre" knobs (the corners angle, the chroma
+    # shift angle) and the visibility range have an angle and a distance to act on; at the centre both are zero and a polygon needs a flattening too (tests/test_l9_x6_flare.py).
+    "Flare": {"position_x": 11.0, "position_y": 4.0, "flare_radius_inner": 2.0, "flare_radius_middle": 4.0, "flare_radius_outer": 7.0},
     "Glint": {"length": 6.0, "glint_steps": 3, "tolerance": 0.3},
     "Sparkles": {"spark_x": 8.0, "spark_y": 6.0, "spark_size": 7.0, "spark_ray_nb": 6},
 }

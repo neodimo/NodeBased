@@ -766,7 +766,7 @@ SPECS = {
     # see docs/ROTO_TRACKING.md. A wired optional "bg" is Nuke's Roto input: the plate passes
     # through and the shape's coverage becomes its alpha, at the plate's own format. Nuke's
     # premultiply control defaults to none.
-    "Roto": {"inputs": [], "optional_inputs": ["bg", "mask"], "params": {"width": 960, "height": 540, "invert": 0, "premultiply_mode": "none",
+    "Roto": {"inputs": [], "optional_inputs": ["bg", "mask"], "params": {"format": "Custom", "width": 960, "height": 540, "invert": 0, "premultiply_mode": "none",
                                                                     **_trackerknobs.new_params("Roto"),
                                                                     "reference_frame": 1, "export_menu": "CornerPin2D (relative)", "link_output": 1,
                                                                     **{f"pt{i}_{axis}": 0.0 for i in range(1, 5) for axis in ("x", "y")},
@@ -1618,12 +1618,15 @@ def _resolve_reformat_format(params, doc=None):
     name = params.get("format")
     entry = document_formats(doc).get(name) if doc is not None else None
     if entry is not None:
-        params["width"], params["height"], params["pixel_aspect"] = (
-            entry["width"], entry["height"], entry["pixel_aspect"])
+        params["width"], params["height"] = entry["width"], entry["height"]
+        if "pixel_aspect" in params:      # a Roto holds the window only (its format knob, lane 9 step X6)
+            params["pixel_aspect"] = entry["pixel_aspect"]
         return
     preset = REFORMAT_FORMATS.get(name)
     if preset is not None:
-        params["width"], params["height"], params["pixel_aspect"] = preset
+        params["width"], params["height"] = preset[0], preset[1]
+        if "pixel_aspect" in params:
+            params["pixel_aspect"] = preset[2]
 
 
 # The nodes a new project format sizes: generators with a window of their own (Nuke makes a Constant, a Ramp or a
@@ -1645,6 +1648,8 @@ def _apply_project_format(doc, kind, params, given):
         window = _projectsettings.format_window(doc, name)
         if window is not None:
             params["width"], params["height"] = window[0], window[1]
+            if kind == "Roto" and "format" not in given and "format" in params:
+                params["format"] = name      # Nuke's Roto format reads root.format: the chooser shows the project's name
 
 
 FORMAT_NAME_LIMIT = 64
@@ -1704,7 +1709,7 @@ def _edit_format(doc, cmd):
     name = cmd.get("name")
     settings = doc["settings"]
     formats = settings.setdefault("formats", builtin_formats())
-    nodes = [n for n in doc["nodes"].values() if n["type"] == "Reformat"]
+    nodes = [n for n in doc["nodes"].values() if n["type"] in ("Reformat", "Roto")]
     if action == "set":
         entry = {"width": cmd.get("width"), "height": cmd.get("height"),
                  "pixel_aspect": cmd.get("pixel_aspect", 1.0)}
@@ -2336,6 +2341,7 @@ CHOICES = {"adjdir": ["Up", "Down", "Both"], "hist_eq_mode": ["luminance", "chan
            "whitepoint_in": ["D65", "D60", "DCI", "A", "B", "C", "D50", "D55", "D75", "E"], "whitepoint_out": ["D65", "D60", "DCI", "A", "B", "C", "D50", "D55", "D75", "E"],
            "height_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "edge_matte": ["rgba.alpha", "rgba.red", "rgba.green", "rgba.blue"],
+           "edgeblur_output": list(_filterbehaviour.OUTPUT_CHANNELS),
            "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],
@@ -3292,6 +3298,7 @@ def upgrade_document(document):
                         # so the settings, corners and offsets take their defaults and render nothing differently.
                         for name in _ROTO_TRACKING_PARAMS:
                             params.setdefault(name, SPECS["Roto"]["params"][name])
+                        params.setdefault("format", "Custom")      # the format chooser (step X6): Custom keeps the saved width and height
                     if isinstance(params, dict) and current.get("type") == "Blend":
                         # Blend's invert beside the mask (lane 11 step B3) is additive: off renders as before.
                         params.setdefault("invert_mask", 0)
@@ -3747,7 +3754,7 @@ def validate(doc, _depth=0, _trusted=None):
             raise ValueError(f"Invalid parameters for {kind}")
         for name, default in spec["params"].items():
             value = node["params"][name]
-            if kind == "Reformat" and name == "format":
+            if kind in ("Reformat", "Roto") and name == "format":
                 # A Reformat may name any format in the document registry, so the static CHOICES
                 # list (the built-ins, kept for discovery) is not the whole set of valid values.
                 if value != "Custom" and value not in document_formats(doc):
@@ -4122,7 +4129,7 @@ class Dispatcher:
             params = {**SPECS[kind]["params"], **cmd.get("params", {})}
             if kind == "Read" and params["path"]:
                 params["path"] = _projectsettings.resolve_media_path(doc, params["path"])
-            if kind == "Reformat" and "format" in cmd.get("params", {}):
+            if kind in ("Reformat", "Roto") and "format" in cmd.get("params", {}):
                 # Only when the caller actually named a format: an explicit width/height passed
                 # alongside a default, unmentioned "format" must not be clobbered back to preset.
                 _resolve_reformat_format(params, doc)
@@ -4334,7 +4341,7 @@ class Dispatcher:
                 # A split value is stored as a plain list of floats (whole numbers included), so a document holds one form of it.
                 value = [float(v) if type(v) in (float, int) else v for v in value]
             node["params"][name] = value
-            if node["type"] == "Reformat" and name == "format":
+            if node["type"] in ("Reformat", "Roto") and name == "format":
                 _resolve_reformat_format(node["params"], doc)
         elif op == "connect":
             slot = cmd["input"]

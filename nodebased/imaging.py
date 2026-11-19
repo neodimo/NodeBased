@@ -5583,6 +5583,8 @@ class Evaluator:
         destination position before choosing the image sample. `vector_alpha` "weighted" averages the straight colour with
         the samples' alpha as weight and keeps the pixel's own alpha (the matte does not smear).
         """
+        if not int(p.get("vector_normalize", 1)):
+            return _vectorblurknobs.scatter(src, u, v, p)       # normalize off (step X6): each pixel drawn along its vector, nothing divided
         vx = u.astype(np.float64) * p["vector_scale"]
         vy = v.astype(np.float64) * p["vector_scale"]
         length = np.hypot(vx, vy)

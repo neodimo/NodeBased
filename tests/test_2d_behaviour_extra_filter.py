@@ -190,7 +190,7 @@ class EdgeBlurTests(unittest.TestCase):
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("EdgeBlur")]
         self.assertEqual(labels, ["Channels", "Matte input", "Size", "Filter", "Quality", "Crop to format", "Edge mult", "Tint", "Brightness",
-                                  "Mask", "Inject", "Invert", "Fringe", "Mix"])
+                                  "Output", "Mask", "Inject", "Invert", "Fringe", "Mix"])
 
 
 # --------------------------------------------------------------------------------------------------------------- GodRays

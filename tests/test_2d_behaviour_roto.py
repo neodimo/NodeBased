@@ -120,7 +120,7 @@ def labels_of(kind):
 
 
 class RotoMainTabTests(unittest.TestCase):
-    NUKE_ORDER = ["output", "premultiply_mode", "cliptype", "replace", "width", "height", "maskChannelInput", "inject", "invert_mask", "fringe",
+    NUKE_ORDER = ["output", "premultiply_mode", "cliptype", "replace", "format", "width", "height", "maskChannelInput", "inject", "invert_mask", "fringe",
                   "outputMask", "opacity", "shape_motionblur_on", "global_motionblur_on", "global_motionblur", "global_motionblur_shutter",
                   "global_motionblur_shutter_offset_type", "global_motionblur_shutter_offset", "tracking_channels"]  # Nuke's track channels; step U split them from the output channels
 
