@@ -1,10 +1,10 @@
 # 2D node fidelity against Nuke
 
-**Overall fidelity: 97.5 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
+**Overall fidelity: 97.6 / 100** (170 nodes scored, rank-weighted; 99.4 counting only the nodes NodeBased has).
 
-Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.4 (99.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
+Under the previous formula (knob presence, defaults, sockets, chrome and formula cases only, used from 2026-10-25 to 2026-11-02) the same tree scores 97.6 (99.4 counting only the nodes NodeBased has). The difference is the requirements added on 2026-11-02: knobs that act, Nuke's layout, per-channel splits, and behaviour that counts against a node until a pixel case checks it.
 
-Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.5 (99.5 counting only the nodes NodeBased has).
+Since 2026-11-04 the layout component is four equal quarters (order, labels, shared rows, widget types). Under the layout formula used from 2026-11-02 to 2026-11-04 (order and labels as two halves) the same tree scores 97.7 (99.5 counting only the nodes NodeBased has).
 
 This is the score measured by `tools/audit_nuke_fidelity.py` (re-run it from a checkout; a test fails when this file drifts); the first measurement, step A on 2026-10-25, was 54.5. [PARITY_2D.md](PARITY_2D.md) answers *is there a node*; this file answers *how much of the real Nuke node is in it*. Every number is computed from the Nuke 17.0 Reference Guide's own tables, an explicit knob-by-knob mapping and formula tests on NodeBased's evaluator. Nothing here has been compared with a real Nuke render yet: the pixel-truth column is `unmeasured` until a folder of renders exists (`tools/make_nuke_reference_pack.py` writes the scripts that produce them).
 
@@ -39,14 +39,14 @@ Root is the one Nuke node scored against something that is not a node: the proje
 | Time | 99.8 | 99.0 | 99.8 | 13 |
 | Channel | 99.8 | 99.7 | 99.8 | 5 |
 | Color | 99.5 | 98.7 | 99.4 | 34 |
-| Filter | 98.1 | 94.1 | 97.9 | 32 |
+| Filter | 99.4 | 97.0 | 99.2 | 32 |
 | Keyer | 93.4 | 80.7 | 93.3 | 11 |
 | Merge | 99.9 | 99.7 | 99.9 | 13 |
 | Transform | 98.9 | 96.5 | 98.6 | 20 |
 | Metadata | 100.0 | 100.0 | 100.0 | 5 |
 | Other | 83.7 | 53.0 | 83.7 | 14 |
 
-Behaviour checked: 137 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
+Behaviour checked: 138 of the 170 scored nodes have at least one scored pixel case against what the node computes (the `math` column below); 0 nodes whose kernel runs on the fixture have none and score 0 on `math`.
 
 Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 change nothing on the fixture (listed per node below). Splits: 14 of the 14 nodes with split knobs in the table split all of them.
 
@@ -235,7 +235,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 18 | LevelSet | `LevelSet` | supported | 100.0 | 100.0 | 100 (8/8) | - | 100 | 100 | - | - | 100 | - | unmeasured |
 | 18 | VolumeRays | `VolumeRays` | supported | 80.5 | 65.3 | 48 (11/24) | 100 (11/11) | 100 | 100 | - | - | 100 | - | unmeasured |
 | 19 | ZSlice | `ZSlice` | supported | 100.0 | 100.0 | 100 (3/3) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
-| 20 | Bokeh | - | supported | 0.0 | 0.0 | 0 (0/42) | - | - | 0 | - | - | - | - | no fixture |
+| 20 | Bokeh | `Bokeh` | supported | 93.3 | 92.8 | 95 (40/42) | - | 100 | 60 | - | 100 (21/21) | 99 | - | unmeasured |
 
 ### Keyer
 
@@ -443,7 +443,7 @@ Rows count paired knobs in consecutive same-label groups from the guide that Nod
 | LevelSet | — | 100.0% (7/7) | 1 |
 | VolumeRays | — | 100.0% (11/11) | 0 |
 | ZSlice | — | 100.0% (3/3) | 0 |
-| Bokeh | — | — | 0 |
+| Bokeh | — | 97.2% (35/36) | 4 |
 | Keyer | — | 100.0% (7/7) | 3 |
 | ChromaKeyer | — | 100.0% (15/15) | 2 |
 | Difference | 100.0% (2/2) | 100.0% (3/3) | 1 |
@@ -536,28 +536,28 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 2 | Primatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 3 | Ultimatte (Keyer #6) | - | 8.33 | 0.0 | no node: commercial keying algorithm (PARITY_2D.md Keyer #6) |
 | 4 | AudioRead (Other #14) | - | 7.14 | 0.0 | no node: no audio pipeline (PARITY_2D.md Other #14) |
-| 5 | Bokeh (Filter #20) | - | 5.00 | 0.0 | provided as ZDefocus bokeh kernels, not a node (PARITY_2D.md Filter #20) |
-| 6 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
-| 7 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 8 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 9 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 10 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
-| 11 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
-| 12 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
-| 13 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
-| 14 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
-| 15 | Write (Image #2) | `Write` | 1.05 | 97.9 | nothing missing that the guide lists |
-| 16 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
-| 17 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
-| 18 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
-| 19 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
-| 20 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
-| 21 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
-| 22 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
-| 23 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
-| 24 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
-| 25 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
-| 26 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
+| 5 | Root (Other #11) | `time and settings` | 4.48 | 50.7 | primary knobs missing: `is_live`, `render_mode`; 24 secondary knobs missing |
+| 6 | Link (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 7 | LiveGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 8 | LiveInput (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 9 | VariableGroup (Other #8) | - | 3.12 | 0.0 | no node (PARITY_2D.md Other #8) |
+| 10 | Viewer (Image #3) | `Viewer` | 2.65 | 92.0 | primary knobs missing: `gl_buffer_depth`, `useGPUForInputs`, `disableGPUDitherForViewer`, `GPUDitherAlgoithmForViewer` |
+| 11 | Reconcile3D (Transform #18) | `Reconcile3D` | 1.30 | 76.7 | 7 secondary knobs missing: `filter`, `clamp`, `black_outside`, `motionblur`, `shutter` ... |
+| 12 | Roto (Draw #1) | `Roto` | 1.25 | 98.8 | 3 secondary knobs missing: `view`, `stereo_offset`, `source_view` |
+| 13 | BurnIn (Other #7) | `BurnIn` | 1.19 | 91.7 | nothing missing that the guide lists |
+| 14 | Write (Image #2) | `Write` | 1.05 | 97.9 | nothing missing that the guide lists |
+| 15 | ColorLookup (Color #10) | `ColorLookup` | 0.79 | 92.1 | primary knobs missing: `use_precomputed`, `range` |
+| 16 | LensDistortion (Transform #20) | `Undistort` | 0.65 | 87.1 | 22 secondary knobs missing |
+| 17 | Constant (Image #4) | `Constant` | 0.60 | 97.6 | nothing missing that the guide lists |
+| 18 | MotionBlur3D (Filter #13) | `MotionBlur3D` | 0.48 | 75.0 | primary knobs missing: `uv`, `Z`, `distance` |
+| 19 | Encryptomatte (Keyer #8) | `Encryptomatte` | 0.45 | 92.9 | 1 secondary knob missing: `exportWrite` |
+| 20 | GridWarp (Transform #14) | `GridWarp` | 0.41 | 88.4 | 12 secondary knobs missing: `source_grid_keys`, `source_grid_visible`, `source_grid_locked`, `source_image_size`, `destination_grid_keys` ... |
+| 21 | Ramp (Draw #4) | `Ramp` | 0.40 | 98.4 | nothing missing that the guide lists |
+| 22 | Reformat (Transform #5) | `Reformat` | 0.39 | 98.0 | primary knobs missing: `box_pixel_aspect` |
+| 23 | VolumeRays (Filter #18) | `VolumeRays` | 0.36 | 80.5 | 13 secondary knobs missing |
+| 24 | Text (Draw #2) | `Text` | 0.35 | 99.3 | 1 secondary knob missing: `group_animation` |
+| 25 | Remove (Channel #5) | `Remove` | 0.35 | 98.3 | nothing missing that the guide lists |
+| 26 | Bokeh (Filter #20) | `Bokeh` | 0.34 | 93.3 | primary knobs missing: `integrateFrontAndBackSeperately`; 1 secondary knob missing: `expandBBoxToMaxKernelSize`; sockets missing: `Deep Input`, `Camera` |
 | 27 | SplineWarp (Transform #14) | `SplineWarp` | 0.32 | 91.1 | 4 secondary knobs missing: `transform_matrix`, `boundary_curverez`, `previewrez`, `rbf`; sockets missing: `B` |
 | 28 | Expression (Color #17) | `Expression` | 0.31 | 94.7 | nothing missing that the guide lists |
 | 29 | ChromaKeyer (Keyer #2) | `ChromaKeyer` | 0.30 | 99.4 | nothing missing that the guide lists |
@@ -1221,6 +1221,36 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `denoise_amount_0_noise_output_is_nothing` | guide | pass | within tolerance | - |
 | `denoise_lift_blacks_lifts_sub_blacks` | convention | pass | within tolerance | - |
 | `denoise_default_result` | convention | not scored: the guide names no algorithm; Foundry's Denoise is a trained model (the node 'requires' its analysis). NodeBased uses an edge-preserving window average (nodebased/denoiseknobs.py); the step's tests show the residual variance falling with the amount | - | - |
+| `bokeh_circular_point_behind_the_plane_is_a_disc` | convention | pass | within tolerance | - |
+| `bokeh_blur_grows_with_distance_from_the_plane` | convention | pass | within tolerance | - |
+| `bokeh_point_on_the_focal_plane_stays_sharp` | guide | pass | within tolerance | - |
+| `bokeh_focus_region_size_widens_the_plane_in_focus` | guide | pass | within tolerance | - |
+| `bokeh_back_multiplier_scales_the_back_region_blur` | convention | pass | within tolerance | - |
+| `bokeh_front_multiplier_leaves_the_back_region_alone` | convention | pass | within tolerance | - |
+| `bokeh_front_multiplier_scales_the_front_region_blur` | convention | pass | within tolerance | - |
+| `bokeh_max_kernel_size_clamps_the_blur` | guide | pass | within tolerance | - |
+| `bokeh_no_depth_defocuses_uniformly_by_the_multiplier` | guide | pass | within tolerance | - |
+| `bokeh_multiplier_zero_is_no_defocus` | guide | pass | within tolerance | - |
+| `bokeh_blade_count_four_is_a_square` | convention | pass | within tolerance | - |
+| `bokeh_rotation_turns_the_blades` | convention | pass | within tolerance | - |
+| `bokeh_curvature_one_rounds_the_blades_into_a_disc` | convention | pass | within tolerance | - |
+| `bokeh_aspect_ratio_above_one_widens_the_kernel` | convention | pass | within tolerance | - |
+| `bokeh_softness_one_is_a_gaussian` | convention | not scored: the guide gives no profile; NodeBased dissolves the flat disc into a Gaussian of sigma half the radius as softness goes from 0 to 1 (tests/test_l9_x1_bokeh.py asserts the middle weighs more than the rim and the weights sum to 1) | - | - |
+| `bokeh_visualization_is_red_on_the_focal_plane` | guide | pass | within tolerance | - |
+| `bokeh_visualization_behind_the_plane_is_not_green` | guide | pass | within tolerance | - |
+| `bokeh_visualization_in_front_of_the_plane_is_not_blue` | guide | pass | within tolerance | - |
+| `bokeh_visualization_amounts` | convention | not scored: the guide names the colours and the regions they mark and no values; NodeBased shows red as one minus the blur amount, green the amount in front and blue the amount behind (nodebased/bokehknobs.py) | - | - |
+| `bokeh_filter_shape_output_draws_the_kernel` | guide | pass | within tolerance | - |
+| `bokeh_focus_mattes_on_the_plane_are_empty` | guide | pass | within tolerance | - |
+| `bokeh_focus_mattes_channels` | convention | not scored: the guide says only 'Front/Back mattes for the focus'; NodeBased puts the front matte in red and the back matte in green, blue 0 | - | - |
+| `bokeh_bloom_below_the_threshold_adds_nothing` | guide | pass | within tolerance | - |
+| `bokeh_lens_bloom_output_without_bloom_is_empty` | guide | pass | within tolerance | - |
+| `bokeh_bloom_amount` | convention | not scored: the guide gives no bloom formula; NodeBased adds bloom times the part of each colour above the threshold, gathered through the kernel at the pixel's blur size (nodebased/bokehknobs.py) | - | - |
+| `bokeh_real_world_lens` | convention | not scored: the guide says the lens controls match 'physical lens characteristics' and gives no formula; NodeBased uses the thin-lens circle of confusion c = f^2 |d - s| / (N d (s - f)) (a textbook form) in pixels by the film width (nodebased/bokehknobs.py) | - | - |
+| `bokeh_corrective_slices` | convention | not scored: the guide names the effect, that 1 slice can overlap and 2 slices separate the front and back regions, and gives no ordering rule; NodeBased lets a pixel gather from its own depth slice and nearer ones (tests/test_l9_x1_bokeh.py) | - | - |
+| `bokeh_spherical_aberration` | convention | not scored: the direction is the guide's; the profile is not (NodeBased: weight 1 + k (2 q^curvature - 1)); the test module asserts the direction | - | - |
+| `bokeh_chromatic_aberration` | convention | not scored: the guide gives no numbers; NodeBased scales the bloom's radius per colour by 1 + k (offset - 1) | - | - |
+| `bokeh_focus_region_output` | convention | not scored: the guide does not say what a pixel outside the chosen region shows; NodeBased keeps its input colour | - | - |
 | `vectorcornerpin_pins_on_the_frame_are_the_identity` | convention | pass | within tolerance | - |
 | `vectorcornerpin_pins_moved_carry_the_picture` | convention | pass | within tolerance | - |
 | `vectorcornerpin_swapped_pins_mirror_the_picture` | convention | pass | within tolerance | - |
