@@ -168,6 +168,7 @@ OUTPUT_CHOICES = ["rgba", "rgb", "alpha", "red", "green", "blue", "none"]
 # SmartVector nodes write their vectors under (nodebased/flow_nodes.py).
 UV_LAYER_CHOICES = ["", "motion.forward", "motion.backward", "vector.forward", "vector.backward", "smartvector.forward", "smartvector.backward"]
 MERGE_OPEN_CHOICES = ("Achannels", "Bchannels", "merge_output", "also_merge")
+EXPRESSION_CHANNEL_PARAMS = ("expr_channels_r", "expr_channels_g", "expr_channels_b", "expr_channels_a")
 OPEN_CHOICE_PARAMS = frozenset({"channels", "maskChannelInput", "unpremult", "output", "premult", "width_channel", "blur_channel",
                                 "filter_channel", "ctrlMask"})
 
@@ -200,6 +201,8 @@ def is_open_choice(kind, name):
         return True              # Write's channels (fidelity step C) take a layer name too
     if kind == "VectorBlur" and name == "uv_layer":
         return True              # VectorBlur's UV channels (Nuke's channel picker, panel sweep S5 finish) name a layer the image carries
+    if kind == "Expression" and name in EXPRESSION_CHANNEL_PARAMS:
+        return True              # Expression's four channel sets (Nuke's channel0 to channel3; lane 2 step X5) take a layer name too
     if name == "premult_by":
         return kind in ("Premult", "Unpremult")
     if kind in ("Merge", "AddMix") and name in MERGE_OPEN_CHOICES:
@@ -218,7 +221,8 @@ def suggestions(name):
             "width_channel": MASK_CHANNEL_CHOICES, "blur_channel": MASK_CHANNEL_CHOICES,
             "filter_channel": PREMULT_BY_CHOICES, "ctrlMask": MASK_CHANNEL_CHOICES,
             "Achannels": MERGE_CHANNEL_CHOICES, "Bchannels": MERGE_CHANNEL_CHOICES, "merge_output": MERGE_CHANNEL_CHOICES,
-            "also_merge": ["none", "all"], "uv_layer": UV_LAYER_CHOICES}[name]
+            "also_merge": ["none", "all"], "uv_layer": UV_LAYER_CHOICES,
+            **{param: CHANNEL_CHOICES for param in EXPRESSION_CHANNEL_PARAMS}}[name]
 
 
 def step_c_params(kind):

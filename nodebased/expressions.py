@@ -380,7 +380,8 @@ def evaluate(expression, frame, lookup):
 # is a plain link, the bare `Node.knob` reference, and it may only read a knob of the same family. The channel sets mirror
 # `channelpicker.CHANNEL_SET_PARAMS` and `SINGLE_CHANNEL_PARAMS` (that module needs Qt; tests keep the two in step).
 LINK_FAMILIES = {
-    "channels": frozenset({"channels", "output", "Achannels", "Bchannels", "merge_output"}),
+    "channels": frozenset({"channels", "output", "Achannels", "Bchannels", "merge_output",
+                           "expr_channels_r", "expr_channels_g", "expr_channels_b", "expr_channels_a"}),
     "channel": frozenset({"maskChannelInput", "unpremult", "premult", "premult_by", "width_channel", "blur_channel",
                           "filter_channel", "ctrlMask"}),
     "format": frozenset({"format", "lens_format", "lens_scaling_format"}),

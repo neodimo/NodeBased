@@ -157,7 +157,8 @@ NOT_PIXEL = {
     # Lane 2 step D (11/2): knobs that act only in a state the one-knob probe does not reach; tests/test_2d_behaviour_knobs_color.py shows each acting in that state.
     "Shuffle": {k: "routes a Raster or a layer (the other input, a second output layer), which the array kernel the probe calls never sees; shown on the graph" for k in ("fromInput1", "fromInput2", "out2")},
     "ColorLookup": {**{k: "feeds the Set RGB, Set RGBA and Set A buttons, which add curve points; the kernel reads the curves, not these two" for k in ("source", "target")},
-                    "use_precomputed": "a speed setting (the guide: a precomputed table to increase processing speed); NodeBased evaluates the curves exactly, so the pixels are the same either way"},
+                    "use_precomputed": "a speed setting (the guide: a precomputed table to increase processing speed); NodeBased evaluates the curves exactly, so the pixels are the same either way",
+                    "range": "the reach of that precomputed table (the guide: sets the precomputed LUT search range between 0 and this value to increase processing speed); a new node evaluates the curves exactly, so the pixels are the same at any range (tests/test_l2_x5_colorlookup.py)"},
     "HSVTool": {k: "acts only with Color Replacement on (source and destination colour)" for k in ("srccolor", "dstcolor")}
     | {k: "acts only with a range narrower than the whole and an adjustment to roll off, which is two other knobs moved" for k in ("huerolloffrange", "satrolloffrange", "brtrolloffrange")}
     | {k: "inverts the range's mask, which acts only once the matching mask channel (or socket) is chosen and an adjustment is made (tests/test_2d_behaviour_hsv_vf_p.py)" for k in ("invert_hue_mask", "invert_sat_mask", "invert_bright_mask")},

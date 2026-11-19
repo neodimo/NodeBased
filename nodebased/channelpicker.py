@@ -30,7 +30,8 @@ LAYER_CHANNELS = {"rgb": RGBA[:3], "rgba": RGBA, "all": RGBA, "alpha": ("alpha",
 _WORDS = {"r": "red", "g": "green", "b": "blue", "a": "alpha", "red": "red", "green": "green", "blue": "blue", "alpha": "alpha"}
 
 # Which open-choice knobs (ops2d_chrome.is_open_choice) are Nuke channel sets and which are single channels.
-CHANNEL_SET_PARAMS = frozenset({"channels", "output", "Achannels", "Bchannels", "merge_output"})
+CHANNEL_SET_PARAMS = frozenset({"channels", "output", "Achannels", "Bchannels", "merge_output",
+                                "expr_channels_r", "expr_channels_g", "expr_channels_b", "expr_channels_a"})
 SINGLE_CHANNEL_PARAMS = frozenset({"maskChannelInput", "unpremult", "premult", "premult_by", "width_channel",
                                    "blur_channel", "filter_channel", "ctrlMask"})
 

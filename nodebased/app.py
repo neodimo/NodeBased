@@ -16040,6 +16040,15 @@ class Window(QMainWindow):
                 if node["type"] == "Flare" and set(group.params) & {"tracker_id", "track_index"}:
                     # The two stored link fields are presented as one validated track picker below.
                     continue
+                if group.kind == "button":
+                    # Nuke's Reset buttons (HSVTool's huereset, satreset and brtreset): the section's knobs back to their defaults, in one undo step.
+                    reset_button = QPushButton(group.label or "Reset")
+                    reset_button.setObjectName(f"{group.params[0]}-button")
+                    if group.help:
+                        reset_button.setToolTip(group.help)
+                    reset_button.clicked.connect(lambda _checked=False, k=key, c=group.params[0]: self.hsvtool_reset(k, c))
+                    form.addRow(reset_button)
+                    continue
                 if group.kind == "xyz":
                     # One row, three typed fields, as in Nuke. Each axis keys on its own, so every
                     # field carries its own diamond instead of the row sharing one.
@@ -22685,6 +22694,12 @@ class Window(QMainWindow):
         first, last = retimeknobs.reset_range(self.graph_document())
         self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": "input_start", "value": first},
                                                   {"op": "set", "id": key, "param": "input_end", "value": last}]})
+
+    def hsvtool_reset(self, key, counter):
+        """Nuke's Reset beside a Hue, Saturation or Brightness range: that section's range, adjustment and rolloff back to their defaults, in one undo step."""
+        from . import hsvtoolknobs
+        params = self.graph_nodes()[key]["params"]
+        self.command({"op": "batch", "commands": hsvtoolknobs.reset_commands(key, params, counter, SPECS["HSVTool"]["params"])})
 
     def colorlookup_set(self, key, channels):
         """Nuke's Set RGB, Set RGBA and Set A: add a point mapping source to target on the chosen channel curves, in one undo step."""

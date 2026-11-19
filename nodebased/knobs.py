@@ -8,7 +8,7 @@ from .core import CHOICES, LIMITS, SPECS
 
 
 KNOB_KINDS = ("float_slider", "int", "bool", "enum", "xy", "xyz", "float", "color", "file_read",
-              "file_write", "string", "multiline", "split", "row")
+              "file_write", "string", "multiline", "split", "row", "button")
 
 
 def _default_label(params):
@@ -809,12 +809,14 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("hue_range_max",), label="Hue range max", soft_range=(0, 360)),
         KnobGroup("float_slider", ("hue_rolloff",), label="Hue rolloff", soft_range=(0, 180)),
         KnobGroup("float_slider", ("hue_rotation",), label="Hue rotation", soft_range=(-180, 180)),
+        KnobGroup("button", ("huereset",), label="Reset", help="Put the hue range, rotation and rolloff back to their defaults."),
         KnobGroup("enum", ("HMask",), label="HMask", help="A channel of the input that limits the hue adjustment to where it is white. A mask wired to the hue mask socket takes its place."),
         KnobGroup("bool", ("invert_hue_mask",), label="Invert hue mask"),
         KnobGroup("float_slider", ("saturation_range_min",), label="Saturation range min", soft_range=(0, 1)),
         KnobGroup("float_slider", ("saturation_range_max",), label="Saturation range max", soft_range=(0, 1)),
         KnobGroup("float_slider", ("saturation_rolloff",), label="Saturation rolloff", soft_range=(0, 1)),
         KnobGroup("float_slider", ("sat_adjust",), label="Saturation adjustment", soft_range=(-1, 2)),
+        KnobGroup("button", ("satreset",), label="Reset", help="Put the saturation range, adjustment and rolloff back to their defaults."),
         KnobGroup("bool", ("set_saturation",), label="Force saturation"),
         KnobGroup("enum", ("SMask",), label="SMask", help="A channel of the input that limits the saturation adjustment to where it is white. A mask wired to the saturation mask socket takes its place."),
         KnobGroup("bool", ("invert_sat_mask",), label="Invert saturation mask"),
@@ -822,6 +824,7 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("brightness_range_max",), label="Brightness range max", soft_range=(0, 1)),
         KnobGroup("float_slider", ("brightness_rolloff",), label="Brightness rolloff", soft_range=(0, 1)),
         KnobGroup("float_slider", ("brt_adjust",), label="Brightness adjustment", soft_range=(-1, 2)),
+        KnobGroup("button", ("brtreset",), label="Reset", help="Put the brightness range, adjustment and rolloff back to their defaults."),
         KnobGroup("bool", ("set_brightness",), label="Force brightness"),
         KnobGroup("enum", ("BMask",), label="BMask", help="A channel of the input that limits the brightness adjustment to where it is white. A mask wired to the brightness mask socket takes its place."),
         KnobGroup("bool", ("invert_bright_mask",), label="Invert brightness mask"),
@@ -930,7 +933,7 @@ KNOB_LAYOUT = {
         *[group for slot in range(4) for group in (KnobGroup("string", (f"temp_name{slot}",), label=f"Variable {slot + 1} name",
                                                              help="A name for the expression on the right, usable in the channel expressions below."),
                                                    KnobGroup("string", (f"temp_expr{slot}",), label=f"Variable {slot + 1} expression"))],
-        *[group for c in "rgba" for group in (KnobGroup("string", (f"expr_channels_{c}",), label=f"{c.upper()} channels",
+        *[group for c in "rgba" for group in (KnobGroup("enum", (f"expr_channels_{c}",), label=f"{c.upper()} channels",
                                                         help="The channels this row's expression is written to: red, green, blue, alpha, rgb, rgba or several of them."),
                                               KnobGroup("string", (f"expr_{c}",), label=f"{c.upper()} expression",
                                                         help="C-like syntax: + - * / %, comparisons, && || !, c ? a : b, the functions of Nuke's Expression page, "
@@ -2685,9 +2688,9 @@ NUKE_LAYOUT = {
     "HueCorrect": ("channels", "curve_sat", "curve_lum", "curve_red", "curve_green", "curve_blue", "curve_r_sup", "curve_g_sup", "curve_b_sup",
                    "sat_thrsh", "hue_shift", "older_curve_maths", "maskChannelInput", "inject", "invert_mask", "fringe", "unpremult", "invert_unpremult", "mix_luminance"),
     "HSVTool": ("color_replace", "srccolor_r", "dstcolor_r",
-                _range_row("hue_range_min", "hue_range_max", "Hue range"), "hue_rotation", "hue_rolloff", "HMask", "invert_hue_mask",
-                _range_row("saturation_range_min", "saturation_range_max", "Saturation range"), "sat_adjust", "saturation_rolloff", "set_saturation", "SMask", "invert_sat_mask",
-                _range_row("brightness_range_min", "brightness_range_max", "Brightness range"), "brt_adjust", "brightness_rolloff", "set_brightness", "BMask", "invert_bright_mask",
+                _range_row("hue_range_min", "hue_range_max", "Hue range"), "hue_rotation", "huereset", "hue_rolloff", "HMask", "invert_hue_mask",
+                _range_row("saturation_range_min", "saturation_range_max", "Saturation range"), "sat_adjust", "satreset", "saturation_rolloff", "set_saturation", "SMask", "invert_sat_mask",
+                _range_row("brightness_range_min", "brightness_range_max", "Brightness range"), "brt_adjust", "brtreset", "brightness_rolloff", "set_brightness", "BMask", "invert_bright_mask",
                 "output_alpha", "invert_alpha_mask"),
     "Toe": ("channels", "toe_lift"),
     "SoftClip": ("conversion", "softclip_min", "softclip_max"),

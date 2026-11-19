@@ -12,8 +12,26 @@ from __future__ import annotations
 import numpy as np
 
 CHANNELS = ["none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"]
-NEW = {"HMask": "none", "invert_hue_mask": 0, "SMask": "none", "invert_sat_mask": 0, "BMask": "none", "invert_bright_mask": 0, "invert_alpha_mask": 0}
-LIMITS = {"invert_hue_mask": (0, 1), "invert_sat_mask": (0, 1), "invert_bright_mask": (0, 1), "invert_alpha_mask": (0, 1)}
+# The three Reset buttons of the guide's Hue, Saturation and Brightness sections (`huereset`, `satreset`, `brtreset`; lane 2 step X5). Each button puts
+# its section's range, adjustment and rolloff back to the defaults in one undo step; the counter beside it records the press, as Reload's does, so
+# the press is a change the document and the undo history can hold. It changes no pixel by itself.
+RESET_COUNTERS = {"huereset": 0, "satreset": 0, "brtreset": 0}
+RESETS = {"huereset": ("hue_range_min", "hue_range_max", "hue_rotation", "hue_rolloff"),
+          "satreset": ("saturation_range_min", "saturation_range_max", "sat_adjust", "saturation_rolloff"),
+          "brtreset": ("brightness_range_min", "brightness_range_max", "brt_adjust", "brightness_rolloff")}
+
+
+def reset_commands(key, params, counter, defaults):
+    """The commands of one Reset button: each knob of its section back to `defaults`, and its counter up by one; run as one batch they are one undo step."""
+    commands = [{"op": "set", "id": key, "param": name, "value": defaults[name]} for name in RESETS[counter]]
+    commands.append({"op": "set", "id": key, "param": counter, "value": int(params.get(counter, 0)) + 1})
+    return commands
+
+
+NEW = {"HMask": "none", "invert_hue_mask": 0, "SMask": "none", "invert_sat_mask": 0, "BMask": "none", "invert_bright_mask": 0, "invert_alpha_mask": 0,
+       **RESET_COUNTERS}
+LIMITS = {"invert_hue_mask": (0, 1), "invert_sat_mask": (0, 1), "invert_bright_mask": (0, 1), "invert_alpha_mask": (0, 1),
+          **{name: (0, 2147483647) for name in RESET_COUNTERS}}
 CHOICES = {"HMask": CHANNELS, "SMask": CHANNELS, "BMask": CHANNELS}
 
 
@@ -38,6 +56,8 @@ VECTORFIELD = {"reload": 0, "vector_file_type": "auto", "vector_output_bitdepth"
                "vector_gpu_extrapolate": 1, "vector_format_3dl": "auto"}
 def upgrade_params(kind):
     """What a Vectorfield saved before each of its knobs existed gets on load: the knobs at the values that change nothing."""
+    if kind == "HSVTool":
+        return dict(RESET_COUNTERS)                    # the Reset buttons' counters (lane 2 step X5)
     return dict(VECTORFIELD) if kind == "Vectorfield" else {}
 
 
