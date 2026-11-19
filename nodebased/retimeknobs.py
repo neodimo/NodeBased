@@ -284,14 +284,10 @@ def estimate_flows(first, second, params, backend):
     # sampling. (Estimating on the averaged-down picture instead was measured noisier on a plate with two motions: it lost the detail the estimator
     # matches on, so a lower value gave a rougher field, not a smoother one.)
     fw, bw, occ = flow_pair(grey_a, grey_b, vector_detail=levels, smoothness=smoothness, backend=backend)
-    blocks = [_block_means(np.asarray(field, np.float32), step) for field in (fw, bw)]
-    if regularized:
-        # The edge-aware pass runs on the block vectors (one per step x step pixels), guided by the picture averaged to the same blocks: the vectors
-        # are that sparse already, and a pass over every pixel would cost step squared more for the same field.
-        from .motionblurknobs import _down, _regularize
-        guide = lambda grey: _down(np.asarray(grey, np.float32)[..., 0], step)          # noqa: E731
-        blocks = [_regularize(blocks[0], guide(grey_a)), _regularize(blocks[1], guide(grey_b))]
-    return tuple(_block_sample(b, step, height, width) for b in blocks) + (occ,)
+    fw, bw = (_block_field(np.asarray(field, np.float32), step) for field in (fw, bw))
+    # Regularized then smooths the field at full size: run on the sparse block vectors instead it came out rougher at a low density (the picture
+    # averaged to blocks has lost the detail that tells an edge), so a lower Vector Detail would not give the smoother field the guide describes.
+    return finish(fw, bw, occ)
 
 
 def _block_means(field, step):

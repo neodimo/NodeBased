@@ -8,7 +8,7 @@ import unittest
 import uuid
 
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QSlider, QSpinBox, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QSlider, QSpinBox, QToolButton, QWidget)
 
 from nodebased.app import Window
 from nodebased.knobfit import WrappingRow
@@ -426,11 +426,14 @@ class PanelSweepTests(unittest.TestCase):
         self.widget(panel, "shutter_samples-field", QSpinBox)
         self.assertNoSlider(panel, "shutter_samples-field")
 
-    def test_ibkcolor_size_is_a_whole_number_and_patch_black_a_check_box(self):
+    def test_ibkcolor_size_and_patch_black_are_whole_number_fields_and_darks_and_lights_split(self):
         panel = self.panel("IBKColor")
         self.widget(panel, "fill_size-field", QSpinBox)
         self.assertNoSlider(panel, "fill_size-field")
-        self.widget(panel, "patch_black-switch", QCheckBox)
+        self.widget(panel, "patch_black-field", QSpinBox)         # the guide types patch black `number` (lane 2 step X6); it was a check box
+        self.assertNoSlider(panel, "patch_black-field")
+        for name in ("darks", "lights"):
+            self.widget(panel, f"{name}-split", QToolButton)       # darks and lights are red, green, blue split knobs, Nuke's number lists
 
     def test_oflow_input_range_row_and_frame_is_a_number(self):
         panel = self.panel("OFlow")
@@ -456,7 +459,7 @@ class PanelSweepTests(unittest.TestCase):
         self.assertEqual((rows["matched"], rows["total"]), (2, 2))
         self.assertEqual([m[0] for m in types["missed"]], [])      # Vector Detail is the guide's 0 to 1 density since lane 2 step W1
         rows, types = metrics("IBKColor")
-        self.assertEqual([m[0] for m in types["missed"]], ["off", "mult"])      # single numbers here, RGB triples in Nuke
+        self.assertEqual([m[0] for m in types["missed"]], [])      # darks and lights are red, green, blue split knobs since lane 2 step X6
         self.assertEqual(types["unknown"], 3)
 
     def test_grid_number_is_one_row_of_whole_numbers(self):

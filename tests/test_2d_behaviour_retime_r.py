@@ -163,7 +163,7 @@ class DefaultsAndOlderDocuments(unittest.TestCase):
         a, b = LuminanceWeights.pair(3)
         node = {"type": "Kronos", "params": {}}
         ops2d_chrome.upgrade_nodes({"n": node})
-        params = dict(SPECS["Kronos"]["params"], **{k: node["params"][k] for k in ("weight_red", "weight_green", "weight_blue", "resample_type", "vector_density", "legacy_vector_density")})
+        params = dict(SPECS["Kronos"]["params"], **{k: node["params"][k] for k in ("weight_red", "weight_green", "weight_blue", "resample_type", "vector_density", "legacy_vector_density", "motion_method")})
         params.update(interpolation="motion", vector_detail=3)
         new = retimeknobs.retimed_picture(a, b, 0.5, "motion", params, flow_backend="cpu")
         fw, bw, occ = flow_pair(a, b, vector_detail=3, smoothness=float(params["smoothness"]), backend="cpu")
