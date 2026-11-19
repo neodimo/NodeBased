@@ -4506,7 +4506,12 @@ class Evaluator:
                 depth_plane = depth_input.fit(source.data)[..., 0]
             elif p.get("depthChannel", "depth.Z") in layers or "." in p.get("depthChannel", "depth.Z") and p.get("depthChannel", "depth.Z").rsplit(".", 1)[0] in layers:
                 depth_plane = Evaluator._layer_of(kind, source, p.get("depthChannel", "depth.Z")).pixels[..., 0]
-            planes = bokehknobs.planes_for(source.pixels, p, lambda name: Evaluator._layer_of(kind, source, name).pixels[..., 0])
+            def named_plane(name):
+                try:
+                    return Evaluator._layer_of(kind, source, name).pixels[..., 0]
+                except ValueError:
+                    return None                  # a channel the picture does not have reads as black
+            planes = bokehknobs.planes_for(source.pixels, p, named_plane)
             filtered = bokehknobs.render(source.pixels, depth_plane, p, None if kernel_input is None else kernel_input.pixels, planes)
             pixels = Evaluator._apply_mask_mix(source.pixels, filtered, None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
             return Raster(pixels, source.data, source.display, source.layers, source.meta)

@@ -35,7 +35,7 @@ Bokeh's per-pixel blur sizes; Bokeh adds the depth reading, the focus region, th
   pixel outside the chosen region keeps its input colour.
 * Matte channels (`defocusMatteChannel`, `bloomMatteChannel`, `chromicAberrationMatteChannel`): "the channel to use as a mask. By default, the
   defocus effect is limited to the non-black areas of this channel" (and likewise the bloom and chromatic aberration): the effect is mixed in by
-  the channel's value; "none" is no mask.
+  the channel's value; "none" is no mask, and a channel the picture does not have reads as black (so the effect shows nowhere).
 * Bloom (`bokeh_bloom`, `bloomThreshold`, `bloomCurvature`): "the brightness of any bloom applied to the image when the Bloom Threshold is reached. Any
   pixels with a brightness less than the Bloom Threshold are not affected". Ours: the bloom is bloom times the part of each colour above the
   threshold, gathered through the same filter at the pixel's blur size and added to the result.
@@ -52,7 +52,8 @@ Bokeh's per-pixel blur sizes; Bokeh adds the depth reading, the focus region, th
   amount (ZDefocus's `shape` is one minus it). Curvature "lower values produce sharper angles on the kernel shape and higher values smooth the kernel
   shape" and Rotation turn the polygon (ZDefocus's roundness and rotation). Aspect Ratio is the filter's width over its height. Maximum Kernel Size
   "sets an upper limit on the size of the kernel": a diameter, so a radius of half of it. Missing Kernel Channel: the channel read when the kernel
-  input's alpha is empty; it "has no effect on the Circular and Aperture Blades presets".
+  input's alpha is empty; it "has no effect on the Circular and Aperture Blades presets". With the Input type and nothing wired to the Kernel input
+  the page says nothing; NodeBased uses the circular kernel.
 * Corrective slices (`correctiveSlices`, `overrideNearAndFarForSlices`, `slices_near`, `slices_far`): "the number of slices the depth channel is
   divided into during defocus calculations, which can help avoid objects at different depths overlapping incorrectly. The depth volume sliced is
   defined by the Focal Plane and Focus Region Size": 1 slice, no ordering (pixels gather from any depth: the overlap); 2, the front and back processed
@@ -121,7 +122,7 @@ def matte_plane(pixels, name, named):
         return pixels[..., _WORDS[low.rsplit(".", 1)[1]]]
     got = named(name)
     if got is None:
-        raise ValueError(f"Bokeh: missing channel {name!r}")
+        return np.zeros(pixels.shape[:2], np.float32)      # a channel the picture does not have reads as black, as in Nuke
     got = np.asarray(got)
     return got[..., 0] if got.ndim == 3 else got
 
@@ -207,9 +208,12 @@ def occlusion(dist, p):
     return np.clip(np.floor((dist - near) / (far - near) * n), 0, n - 1).astype(np.float32)
 
 
-def zdefocus_params(p, radius):
-    """The ZDefocus parameters that make `_zdefocus` gather through Bokeh's kernel: the disc or the polygon, the filter image, softness and aspect."""
+def zdefocus_params(p, radius, kernel_wired=True):
+    """The ZDefocus parameters that make `_zdefocus` gather through Bokeh's kernel: the disc or the polygon, the filter image, softness and aspect.
+    The Input kernel with nothing wired to the Kernel input is the circular one (the page says nothing of that case)."""
     kernel = p.get("kernelType", "Circular")
+    if kernel == "Input" and not kernel_wired:
+        kernel = "Circular"
     return {"zdefocus_math": "depth", "legacy_zdefocus": 0, "legacy_zdefocus_focus": 0, "legacy_zdefocus_filters": 0, "focal_plane": 0.0,
             "depth_of_field": 0.0, "blur_dof": 0, "size": 1.0, "max_size": float(radius), "autoLayerSpacing": 1, "nLayers": 20, "layerCurve": 1.0,
             "bokeh_shape": {"Input": "image", "Circular": "disc", "Aperture Blades": "blades"}.get(kernel, "disc"),
@@ -223,7 +227,7 @@ def zdefocus_params(p, radius):
 
 def _gather(image, z, radii, sides, p, kernel):
     from .imaging import Evaluator
-    zp = zdefocus_params(p, max(1.0, abs(float(p.get("max_kernelsize", 256.0))) / 2.0))
+    zp = zdefocus_params(p, max(1.0, abs(float(p.get("max_kernelsize", 256.0))) / 2.0), kernel is not None)
     if p.get("kernelType") == "Input" and kernel is not None and p.get("missingKernelChannel", "none") not in ("none", ""):
         if not np.any(kernel[..., 3] > 0):
             zp["filter_channel"] = str(p["missingKernelChannel"])
@@ -265,7 +269,7 @@ def render(image, depth, p, kernel=None, planes=None):
     z = np.zeros((h, w), np.float32) if dist is None else occlusion(dist, p)
     if output == "Filter Shape":
         from .imaging import Evaluator
-        zp = zdefocus_params(p, max(1.0, abs(float(p.get("max_kernelsize", 256.0))) / 2.0))
+        zp = zdefocus_params(p, max(1.0, abs(float(p.get("max_kernelsize", 256.0))) / 2.0), kernel is not None)
         zp["zdefocus_output"] = "filter shape setup"
         return Evaluator._zdefocus(image, z, zp, kernel, override={"z": z, "radii": radii, "sides": sides, "sph": None})
     result = _gather(image, z, radii, sides, p, kernel)
