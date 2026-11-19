@@ -7912,6 +7912,8 @@ class Evaluator:
                 result[..., channel:channel + 1] = Evaluator._blur(image[..., channel:channel + 1].repeat(4, axis=2), {"radius": amount})[..., :1]
         return result
 
+    _zdefocus_reference = False       # tests and tools/benchmark_defocus_gather.py set it to run the per-pixel loop
+
     @staticmethod
     def _zdefocus(image, depth, p, kernel=None, override=None):
         """Depth-radius disc blur, composited nearest-to-farthest to protect foreground edges.
@@ -8001,38 +8003,13 @@ class Evaluator:
         if radius <= 0: return image.copy()
         pad_img = np.pad(zdefocusknobs.encode(image, p) if modern else image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
         pad_z = np.pad(z, radius, mode="edge")
-        out = np.empty_like(image)
-        yy, xx = np.ogrid[-radius:radius + 1, -radius:radius + 1]
         fill = not modern or bool(int(p.get("fill_foreground", 1)))
-        for y in range(h):
-            for x in range(w):
-                r = float(radii[y, x])
-                if override is not None and r < 1.0 and p.get("bokeh_shape") != "image":
-                    out[y, x] = pad_img[y + radius, x + radius]      # a filter under a pixel across is the pixel itself
-                    continue
-                disk, kernel_grid = shape(r, yy, xx, radius)
-                if override is not None and override.get("sph") and p.get("bokeh_shape") != "image" and r > 0:
-                    kernel_grid = zdefocusknobs_sph(disk, kernel_grid, yy, xx, r, override["sph"])
-                samples_z = pad_z[y:y + 2 * radius + 1, x:x + 2 * radius + 1]
-                # Near objects remain in front; reject farther samples around a foreground pixel.
-                visible = disk & (samples_z <= z[y, x] + 1e-6)
-                if not np.any(visible): visible[radius, radius] = True
-                samples = pad_img[y:y + 2 * radius + 1, x:x + 2 * radius + 1]
-                if p.get("bokeh_shape") == "image" and kernel is not None:
-                    if kernel_grid.ndim == 3:                  # use input channels: each of the image's channels by the filter's own
-                        weights = kernel_grid * visible[..., None]
-                        out[y, x] = np.sum(samples * weights, axis=(0, 1)) / np.maximum(weights.sum(axis=(0, 1)), 1e-20)
-                    else:
-                        weights = kernel_grid * visible
-                        out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
-                elif kernel_grid is not None:
-                    weights = kernel_grid * visible              # filter shape: a Gaussian dissolved into the disc
-                    out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
-                elif not fill and sides[y, x] < 0:
-                    # Fill foreground off: what a foreground pixel cannot see behind it counts as empty, so its edge fades.
-                    out[y, x] = samples[visible].sum(axis=0) / max(1, int(disk.sum()))
-                else:
-                    out[y, x] = samples[visible].mean(axis=0)
+        from . import defocusgather
+        sph_apply = lambda disk, grid, r: zdefocusknobs_sph(disk, grid, yy_sph, xx_sph, r, override["sph"])
+        yy_sph, xx_sph = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+        # The gather is grouped by blur radius (nodebased/defocusgather.py); `reference_gather` there is the per-pixel loop it replaces.
+        gather = defocusgather.reference_gather if Evaluator._zdefocus_reference else defocusgather.gather
+        out = gather(pad_img, pad_z, z, radii, radius, shape, p, kernel, override, fill, sides, sph_apply, image.dtype)
         return zdefocusknobs.decode(out, p) if modern else out
 
     @staticmethod
