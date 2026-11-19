@@ -18,12 +18,12 @@ import nuke_panel_interactions as interactions  # noqa: E402
 PASSING = ("curve.add_key", "curve.move_one_axis", "curve.move_ctrl_free", "curve.numeric_xy", "curve.tangent_handles",
            "curve.interpolation_menu", "curve.interp_constant_linear", "curve.interp_smooth", "curve.interp_catmull_cubic",
            "curve.interp_horizontal", "curve.interp_break", "curve.zoom", "curve.pan", "curve.frame_all",
-           "curve.frame_selected",
+           "curve.frame_selected", "curve.select_several", "curve.select_all", "curve.several_curves", "curve.move_dialog",
+           "curve.expression_field", "curve.frame_snap",
            "dope.key_markers", "dope.current_frame", "dope.select_key", "dope.name_selects_keys", "dope.delete_key",
-           "dope.add_key", "dope.no_passing")
-OPEN = ("curve.frame_snap", "curve.select_several", "curve.select_all", "curve.several_curves", "curve.move_dialog",
-        "curve.expression_field", "dope.project_range", "dope.marquee", "dope.move_field", "dope.copy_paste",
-        "dope.clip_bars")
+           "dope.add_key", "dope.no_passing", "dope.project_range", "dope.marquee", "dope.move_field", "dope.copy_paste",
+           "dope.clip_bars")
+OPEN = ()
 
 
 class CurveEditorAndDopeSheetTests(unittest.TestCase):

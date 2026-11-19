@@ -120,7 +120,7 @@ CLOCK_RAMP_TIER = 2
 from .raster import Raster
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
-from .nodelists import BookmarkPanel, DopeSheet
+from .nodelists import BookmarkPanel, DopeSheet, DopeSheetPanel
 from .timeline import (PLAY_ICON, STEP_BACK_ICON, STEP_FORWARD_ICON, STOP_ICON, TimelineBar, TimeRow, KEY_COLOR,
                        transport_icon, UNIT_CONTROL, START_ICON, END_ICON, PREV_KEY_ICON, NEXT_KEY_ICON, STEP_BACK_ONE_ICON,
                        STEP_FORWARD_ONE_ICON, PLAY_BACK_ICON, LOOP_ICONS, LOOP_MODES, LOOP_LABELS, playhead_at)
@@ -12029,7 +12029,8 @@ class Window(QMainWindow):
         dope_scroll.setWidgetResizable(True)
         dope_scroll.setFrameShape(QFrame.Shape.NoFrame)
         dope_scroll.setWidget(self.dope_sheet)
-        self.dope_sheet_dock.setWidget(dope_scroll)
+        self.dope_sheet_panel = DopeSheetPanel(self.dope_sheet, dope_scroll)
+        self.dope_sheet_dock.setWidget(self.dope_sheet_panel)
         for dock in (self.bookmark_dock, self.dope_sheet_dock):
             self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
             self.tabifyDockWidget(self.properties_dock, dock)
@@ -12162,8 +12163,10 @@ class Window(QMainWindow):
         self.server = LocalBridge(name, self.agent_command, self)
         self.agent_panel.set_endpoint(name, name)
 
-    def show_curve_editor(self, title, value, on_change, default=None):
-        editor = CurveEditorDialog(title, value, on_change, self.curve_editor_dock, default=default)
+    def show_curve_editor(self, title, value, on_change, default=None, node=None, param=None):
+        curves = self._node_curve_knobs(node) if node is not None else []
+        editor = CurveEditorDialog(title, value, on_change, self.curve_editor_dock, default=default, curves=curves,
+                                   current=param)
         editor.setWindowFlags(Qt.WindowType.Widget)
         old = self.curve_editor_dock.widget()
         self.curve_editor_dock.setWidget(editor)
@@ -12171,6 +12174,61 @@ class Window(QMainWindow):
             old.deleteLater()
         self.curve_editor_dock.setWindowTitle("CURVE EDITOR · " + title)
         self.curve_editor_dock.show()
+
+    def show_keyframe_curve(self, key, param):
+        """The Curve Editor on an animated knob: x is the frame, y the value. A moved key snaps to whole frames (Nuke),
+        and every edit is one set_curve command. The document keeps one interpolation per curve (constant, linear or
+        smooth) and whole-frame keys, so the canvas hides tangent handles here."""
+        from .colorcurves import encode as encode_curve
+        curve = self.node_curve(key, param)
+        if curve is None or len(curve["keys"]) < 2:
+            return None
+        points = [(k["frame"], k["value"]) for k in curve["keys"]]
+        interpolation = curve["interpolation"]
+        if interpolation == "constant":
+            value = encode_curve(points, "linear", [[0.0, 0.0]] * len(points), ["constant"] * len(points),
+                                 [False] * len(points))
+        else:
+            value = encode_curve(points, interpolation)
+
+        def write(text, k=key, p=param):
+            from .colorcurves import decode as decode_curve
+            drawn = decode_curve(text)
+            modes = drawn.get("modes") or []
+            interp = "constant" if modes and all(m == "constant" for m in modes[:-1]) else (
+                drawn["interpolation"] if drawn["interpolation"] in ("linear", "smooth") else "linear")
+            keys = []
+            for x, y in drawn["points"]:
+                frame = int(round(x))
+                if keys and frame <= keys[-1]["frame"]:
+                    frame = keys[-1]["frame"] + 1
+                keys.append({"frame": frame, "value": float(y)})
+            self.defer_command({"op": "set_curve", "id": k, "param": p,
+                                "curve": {"interpolation": interp, "keys": keys}})
+
+        name = self.graph_nodes()[key]["name"]
+        self.show_curve_editor(f"{name} · {param}", value, write)
+        editor = self.curve_editor_dock.widget()
+        editor.canvas.snap_frames = True
+        editor.canvas.update()
+        return editor
+
+    def _node_curve_knobs(self, key):
+        """(param, label, read value, on_change, default) for each curve knob of node `key`, for the Curve Editor's list."""
+        from .knobs import knob_layout
+        node = self.graph_nodes().get(key)
+        if node is None:
+            return []
+        out = []
+        groups = [g for g in knob_layout(node["type"]) if g.kind == "curve" and len(g.params) == 1]
+        for group in groups:
+            param, label = group.params[0], group.label
+            default = SPECS[node["type"]]["params"].get(param)
+            out.append((param, label,
+                        lambda k=key, p=param: self.graph_nodes()[k]["params"][p],
+                        lambda text, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": text}),
+                        default))
+        return out
 
     def _timeline(self):
         """Playhead strip under the viewer. Scrubbing is a document edit, so it undoes like one.
@@ -15758,7 +15816,7 @@ class Window(QMainWindow):
                             self.graph_nodes()[k]["params"][p],
                             lambda text, node_id=k, knob=p: self.defer_command(
                                 {"op": "set", "id": node_id, "param": knob, "value": text}),
-                            SPECS[self.graph_nodes()[k]["type"]]["params"].get(p)))
+                            SPECS[self.graph_nodes()[k]["type"]]["params"].get(p), node=k, param=p))
                     line.addWidget(edit, 1)
                     reset = QPushButton("Reset")
                     reset.setFixedWidth(54)
@@ -19874,6 +19932,9 @@ class Window(QMainWindow):
         clear = menu.addAction("Clear animation", clear_animation)
         clear.setObjectName("no-animation")
         clear.setEnabled(curve is not None)
+        curve_editor = menu.addAction("Curve editor…", lambda: self.show_keyframe_curve(key, param))
+        curve_editor.setObjectName("knob-curve-editor")
+        curve_editor.setEnabled(curve is not None and len(curve["keys"]) >= 2)
         if curve is not None:
             menu.addSeparator()
             interpolation = menu.addMenu("Interpolation")

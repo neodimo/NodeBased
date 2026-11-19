@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
-from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QSpinBox, QVBoxLayout,
+                               QWidget)
 
 from .core import bookmarked_nodes, dope_sheet_rows
 
@@ -68,6 +69,9 @@ class DopeSheet(QWidget):
         self.first, self.last, self.current = 1, 100, 1
         self.selected = set()   # {(node key, frame)}: Nuke selects keys, not whole rows
         self.drag = None
+        self.marquee = None     # (start, end, shift) while a marquee is dragged over empty space
+        self.bar_drag = None    # (Read key, start frame, frame offset at press) while a clip bar is dragged
+        self.clipboard = None   # {"origin": frame, "keys": {node: {param: [(frame, value), ...]}}} from Ctrl/Cmd+C
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def refresh(self):
@@ -82,6 +86,7 @@ class DopeSheet(QWidget):
         time_range = window.dispatcher.document["time"]
         state = (rows, time_range["first"], time_range["last"], time_range["current"])
         if state == (self.rows, self.first, self.last, self.current):
+            self.update()      # a Read's clip bar follows its knobs without changing the rows
             return
         self.rows = rows
         self.first, self.last, self.current = state[1:]
@@ -90,15 +95,46 @@ class DopeSheet(QWidget):
         self.setMinimumHeight(RULER_HEIGHT + ROW_HEIGHT * max(1, len(rows)))
         self.update()
 
+    def view_range(self):
+        """The frames the time area spans: the project range with a margin each side, so the first and last frames
+        show as their own lines (Nuke 17.0 User Guide, Using the Dope Sheet)."""
+        pad = max(2, (self.last - self.first) // 20)
+        return self.first - pad, self.last + pad
+
     def frame_x(self, frame):
-        span = max(1, self.last - self.first)
+        lo, hi = self.view_range()
         width = max(1, self.width() - NAME_WIDTH - 16)
-        return NAME_WIDTH + 8 + (frame - self.first) / span * width
+        return NAME_WIDTH + 8 + (frame - lo) / max(1, hi - lo) * width
 
     def frame_at(self, x):
-        span = max(1, self.last - self.first)
+        lo, hi = self.view_range()
         width = max(1, self.width() - NAME_WIDTH - 16)
-        return int(round(min(max(self.first + (x - NAME_WIDTH - 8) / width * span, self.first), self.last)))
+        return int(round(min(max(lo + (x - NAME_WIDTH - 8) / width * (hi - lo), lo), hi)))
+
+    def range_lines(self):
+        """x of the project's first and last frame lines."""
+        return self.frame_x(self.first), self.frame_x(self.last)
+
+    def clip_bar(self, row_index):
+        """(first, last) timeline frames of a Read row's clip bar, or None. Read shows source frame
+        `frame + frame_offset`, so its clip [first, last] sits at [first - offset, last - offset] on the timeline."""
+        key = self.rows[row_index][0]
+        node = self.window.graph_nodes().get(key)
+        if node is None or node["type"] != "Read":
+            return None
+        params = node["params"]
+        first, last = int(params.get("first", 0)), int(params.get("last", 0))
+        if first == 0 and last == 0:
+            return None
+        offset = int(params.get("frame_offset", 0))
+        return min(first, last) - offset, max(first, last) - offset
+
+    def _clip_rect(self, row_index):
+        span = self.clip_bar(row_index)
+        if span is None:
+            return None
+        top = RULER_HEIGHT + row_index * ROW_HEIGHT
+        return QRectF(QPointF(self.frame_x(span[0]), top + 4), QPointF(self.frame_x(span[1]), top + ROW_HEIGHT - 4))
 
     def key_points(self, row_index):
         """Scene positions of the diamonds on row `row_index`, for tests and hit testing."""
@@ -120,8 +156,14 @@ class DopeSheet(QWidget):
             painter.setPen(QPen(faint, 1))
             painter.drawLine(QPointF(x, RULER_HEIGHT), QPointF(x, self.height()))
             painter.setPen(text)
+        painter.setPen(QPen(QColor("#d8d8d8"), 1))           # the project's first and last frames
+        for x in self.range_lines():
+            painter.drawLine(QPointF(x, RULER_HEIGHT), QPointF(x, self.height()))
         for index, (_key, name, frames) in enumerate(self.rows):
             top = RULER_HEIGHT + index * ROW_HEIGHT
+            bar = self._clip_rect(index)
+            if bar is not None:                              # a Read's clip, gray, dragged to reposition it
+                painter.fillRect(bar, QColor("#6b6b70"))
             painter.setPen(text)
             painter.drawText(QRectF(8, top, NAME_WIDTH - 12, ROW_HEIGHT),
                              int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), name)
@@ -138,6 +180,10 @@ class DopeSheet(QWidget):
                     painter.drawText(QRectF(point.x() + 7, top, 48, ROW_HEIGHT),
                                      int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), str(frame))
                     painter.setPen(QPen(QColor("#1c1c1e"), 1))
+        if self.marquee is not None:
+            painter.setPen(QPen(QColor("#ff9a2e"), 1, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(QRectF(self.marquee[0], self.marquee[1]).normalized())
         painter.setPen(QPen(QColor("#58d7ff"), 2))
         x = self.frame_x(self.current)
         painter.drawLine(QPointF(x, 0), QPointF(x, self.height()))
@@ -212,6 +258,55 @@ class DopeSheet(QWidget):
         self.window.command({"op": "batch", "commands": commands})
         return delta
 
+    def keys_in(self, rect):
+        """{(node, frame)} of the diamonds inside `rect`."""
+        rect = rect.normalized()
+        return {(self.rows[i][0], frame) for i in range(len(self.rows))
+                for frame, point in self.key_points(i) if rect.contains(point)}
+
+    def copy_selected(self):
+        """Ctrl/Cmd+C: keep every knob's value on the selected keys' frames, relative to the earliest of them."""
+        if not self.selected:
+            return False
+        curves = self._curves()
+        keys = {}
+        for key, frame in sorted(self.selected):
+            for param, curve in sorted((curves.get(key) or {}).items()):
+                for k in curve["keys"]:
+                    if k["frame"] == frame:
+                        keys.setdefault(key, {}).setdefault(param, []).append((frame, k["value"]))
+        self.clipboard = {"origin": min(frame for _key, frame in self.selected), "keys": keys}
+        return True
+
+    def paste(self):
+        """Ctrl/Cmd+V: the copied keys land relative to the current frame (the earliest on it), one undo step."""
+        if not self.clipboard:
+            return False
+        nodes = self.window.graph_nodes()
+        shift = int(self.current) - self.clipboard["origin"]
+        commands, chosen = [], set()
+        for key, params in sorted(self.clipboard["keys"].items()):
+            if key not in nodes:
+                continue
+            for param, keys in sorted(params.items()):
+                for frame, value in keys:
+                    commands.append({"op": "set_key", "id": key, "param": param, "frame": frame + shift, "value": value})
+                    chosen.add((key, frame + shift))
+        if not commands:
+            return False
+        self.selected = chosen
+        self.window.command({"op": "batch", "commands": commands})
+        return True
+
+    def move_clip(self, key, delta):
+        """Drag a Read's clip bar `delta` frames later: the Read's frame offset falls by as much, one undo step."""
+        node = self.window.graph_nodes().get(key)
+        if node is None or not delta:
+            return False
+        offset = int(node["params"].get("frame_offset", 0)) - int(delta)
+        self.window.command({"op": "set", "id": key, "param": "frame_offset", "value": offset})
+        return True
+
     def mousePressEvent(self, event):
         position = event.position()
         self.setFocus()
@@ -242,11 +337,23 @@ class DopeSheet(QWidget):
                 and 0 <= row < len(self.rows)):
             self.add_key(row, self.frame_at(position.x()))
             return
+        if 0 <= row < len(self.rows) and position.y() >= RULER_HEIGHT:
+            bar = self._clip_rect(row)
+            if bar is not None and bar.contains(position):
+                node = self.window.graph_nodes()[self.rows[row][0]]
+                self.bar_drag = (self.rows[row][0], self.frame_at(position.x()), int(node["params"].get("frame_offset", 0)))
+                return
         if not shift:
             self.selected = set()
+        if position.y() >= RULER_HEIGHT:      # a drag on empty space draws a marquee; a click moves the playhead
+            self.marquee = (position, position, shift)
         self.frame_chosen.emit(self.frame_at(position.x()))
 
     def mouseMoveEvent(self, event):
+        if self.marquee is not None:
+            self.marquee = (self.marquee[0], event.position(), self.marquee[2])
+            self.update()
+            return
         if self.drag is None:
             return
         start, frame, _moved = self.drag
@@ -254,6 +361,20 @@ class DopeSheet(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, event):
+        if self.bar_drag is not None:
+            key, frame, _offset = self.bar_drag
+            self.bar_drag = None
+            self.move_clip(key, self.frame_at(event.position().x()) - frame)
+            return
+        if self.marquee is not None:
+            start, _end, shift = self.marquee
+            self.marquee = None
+            end = event.position()
+            if abs(end.x() - start.x()) > 3 or abs(end.y() - start.y()) > 3:
+                inside = self.keys_in(QRectF(start, end))
+                self.selected = (self.selected ^ inside) if shift else inside
+            self.update()
+            return
         if self.drag is None:
             return
         _start, frame, _moved = self.drag
@@ -264,4 +385,42 @@ class DopeSheet(QWidget):
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             self.delete_selected()
             return
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_C:
+            self.copy_selected()
+            return
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_V:
+            self.paste()
+            return
         super().keyPressEvent(event)
+
+
+class DopeSheetPanel(QWidget):
+    """The Dope Sheet with Nuke's bottom row: a Move field and < > buttons that move the selected keys by that many
+    frames (negative moves them back)."""
+
+    def __init__(self, sheet, view):
+        super().__init__()
+        self.sheet = sheet
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        layout.addWidget(view, 1)
+        row = QHBoxLayout()
+        row.setContentsMargins(6, 0, 6, 4)
+        row.addWidget(QLabel("Move"))
+        self.move_field = QSpinBox()
+        self.move_field.setObjectName("dope-move-field")
+        self.move_field.setRange(-100000, 100000)
+        self.move_field.setValue(1)
+        self.move_field.setToolTip("Frames to move the selected keys by; negative moves them back")
+        row.addWidget(self.move_field)
+        self.back = QPushButton("<")
+        self.back.setObjectName("dope-move-back")
+        self.forward = QPushButton(">")
+        self.forward.setObjectName("dope-move-forward")
+        for button, sign in ((self.back, -1), (self.forward, 1)):
+            button.setFixedWidth(28)
+            button.clicked.connect(lambda _checked=False, s=sign: self.sheet.move_selected(s * self.move_field.value()))
+            row.addWidget(button)
+        row.addStretch(1)
+        layout.addLayout(row)

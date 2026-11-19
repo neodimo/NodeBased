@@ -1923,9 +1923,31 @@ def _curve_free(bench):
 
 @probe("curve.frame_snap")
 def _curve_snap(bench):
-    (x, _y), _undo = _move_probe(bench, None)
-    return abs(x - round(x)) < 1e-9, (f"x stored as {x:.3f}: the canvas edits lookup curves on a 0..1 input, where rounding to "
-                                       "whole frames would collapse every key; frame snap waits for a keyframe curve view")
+    from PySide6.QtCore import QEvent, Qt
+    key, _sheet, _row = _dope_bench(bench)          # a Grade whose gamma is keyed on 5, 10 and 20
+    editor = bench.window.show_keyframe_curve(key, "gamma")
+    canvas = editor.canvas
+    canvas.resize(500, 320); canvas.show(); bench.settle()
+    before = repr(bench.window.node_curve(key, "gamma"))
+    _drag(bench, canvas, _pt(canvas, 10, 2.0), _pt(canvas, 13.4, 2.0))
+    snapped = _frames(bench, key)
+    one = _undo_back(bench, lambda: repr(bench.window.node_curve(key, "gamma")), before)
+    bench.window.dispatcher.execute({"op": "undo"}); bench.settle(8)
+    editor = bench.window.show_keyframe_curve(key, "gamma")
+    canvas = editor.canvas
+    canvas.resize(500, 320); canvas.show(); bench.settle()
+    shift = Qt.KeyboardModifier.ShiftModifier
+    start, end = _pt(canvas, 10, 2.0), _pt(canvas, 13.4, 2.0)
+    _mouse(canvas, QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+           Qt.KeyboardModifier.NoModifier)
+    _mouse(canvas, QEvent.Type.MouseMove, end, Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton, shift)
+    free = canvas.curve["points"][1][0]
+    _mouse(canvas, QEvent.Type.MouseButtonRelease, end, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton, shift)
+    bench.settle(8)
+    ok = snapped == [5, 13, 20] and one and abs(free - 13.4) < 0.15
+    return ok, (f"in the keyframe Curve Editor (knob menu > Curve editor), dragging the key on frame 10 to 13.4 stored "
+                f"{snapped}, one undo {one}; with Shift it followed the pointer to {free:.2f} while dragging (the document "
+                f"keeps whole-frame keys, so it lands on {_frames(bench, key)})")
 
 
 @probe("curve.numeric_xy")
@@ -2079,27 +2101,105 @@ def _curve_frame_sel(bench):
 
 @probe("curve.select_several")
 def _curve_several(bench):
-    return False, "the canvas keeps one selected key; Shift+click and marquee selection are not built"
+    from PySide6.QtCore import Qt
+    pts = ((0, 0), (0.25, 0.2), (0.5, 0.4), (0.75, 0.6), (1, 1))
+    key, canvas = _curve_bench(bench, pts)
+    shift = Qt.KeyboardModifier.ShiftModifier
+    _click(bench, canvas, _pt(canvas, 0.25, 0.2))
+    _click(bench, canvas, _pt(canvas, 0.5, 0.4), shift)
+    clicked = set(canvas.chosen)
+    a, b = _pt(canvas, 0.4, 0.1), _pt(canvas, 0.85, 0.7)
+    _drag(bench, canvas, a, b)                                  # a marquee over the keys on 0.5 and 0.75
+    swept = set(canvas.chosen)
+    before = bench.params(key)["curve_master"]
+    _drag(bench, canvas, _pt(canvas, 0.5, 0.4), _pt(canvas, 0.5, 0.6))   # drag one of them up: both move
+    curve = _stored_curve(bench, key)
+    ys = [round(p[1], 3) for p in curve["points"]]
+    one = _undo_back(bench, lambda: bench.params(key)["curve_master"], before)
+    ok = (clicked == {1, 2} and swept == {2, 3} and abs(ys[2] - 0.6) < 0.03 and abs(ys[3] - 0.8) < 0.03
+          and ys[1] == 0.2 and one)
+    return ok, (f"Shift+click selected keys {sorted(clicked)}; a marquee selected {sorted(swept)}; dragging one up moved "
+                f"both: values {ys}, one undo {one}")
 
 
 @probe("curve.select_all")
 def _curve_all(bench):
-    return False, "Ctrl/Cmd+A does not select every key; the canvas keeps one selected key"
+    from PySide6.QtCore import Qt
+    _k, canvas = _curve_bench(bench)
+    _key(bench, canvas, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    return canvas.chosen == {0, 1, 2}, f"Ctrl/Cmd+A selected keys {sorted(canvas.chosen)} of 3"
 
 
 @probe("curve.several_curves")
 def _curve_curves(bench):
-    return False, "the editor shows one knob's curve at a time and has no parameter tree"
+    from PySide6.QtCore import QEvent, Qt
+    from nodebased.colorcurves import encode
+    key, canvas = _curve_bench(bench)
+    dialog = bench.window.curve_editor_dock.widget()
+    listing = dialog.curve_list
+    listing.show(); listing.resize(130, 200); bench.settle()
+    names = [listing.item(i).text() for i in range(listing.count())]
+    def pick(row, modifiers):
+        from PySide6.QtTest import QTest
+        QTest.mouseClick(listing.viewport(), Qt.MouseButton.LeftButton, modifiers,
+                         listing.visualItemRect(listing.item(row)).center())
+        bench.settle()
+    pick(0, Qt.KeyboardModifier.NoModifier)                                                # Master
+    pick(2, Qt.KeyboardModifier.ShiftModifier)                    # Shift: Master..Green
+    run = dialog.shown_curves()
+    pick(4, Qt.KeyboardModifier.ControlModifier)                  # and Alpha
+    picked = dialog.shown_curves()
+    overlays = len(dialog.canvas.overlays)
+    active = dialog._active
+    before = bench.params(key)["curve_alpha"]
+    dialog.canvas.select(0)
+    dialog.canvas.set_point(0, 0.0, 0.3)
+    bench.settle(8)
+    edited = bench.params(key)["curve_alpha"] != before and bench.params(key)["curve_master"] == encode(((0, 0), (0.5, 0.4), (1, 1)))
+    ok = (names[:5] == ["Master", "Red", "Green", "Blue", "Alpha"] and run == ["curve_master", "curve_red", "curve_green"]
+          and picked == ["curve_master", "curve_red", "curve_green", "curve_alpha"] and overlays == 3
+          and active == "curve_alpha" and edited)
+    return ok, (f"the list holds {names}; Shift+click showed {run} curves, Ctrl+click one more ({len(picked)}, "
+                f"{overlays} drawn under the one being edited, {active}); an edit changed only that knob {edited}")
 
 
 @probe("curve.move_dialog")
 def _curve_move(bench):
-    return False, "there is no Edit > Move dialog; keys move by drag or by the Key X and Y fields"
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    key, canvas = _curve_bench(bench, ((0, 0), (0.3, 0.2), (0.5, 0.4), (1, 1)))
+    canvas.select(1); canvas.select(2, add=True)
+    before = bench.params(key)["curve_master"]
+    dialog = canvas.open_move_dialog()
+    for field, text in ((dialog.x_field, "x+0.1"), (dialog.y_field, "y*2")):
+        field.selectAll(); QTest.keyClicks(field, text)
+    QTest.keyClick(dialog.y_field, Qt.Key.Key_Return)
+    curve = _stored_curve(bench, key)
+    got = [[round(v, 4) for v in p] for p in curve["points"]]
+    one = _undo_back(bench, lambda: bench.params(key)["curve_master"], before)
+    ok = got == [[0, 0], [0.4, 0.4], [0.6, 0.8], [1, 1]] and one and not dialog.isVisible()
+    return ok, f"Edit > Move with x+0.1 and y*2 on the two selected keys stored {got}; one undo restores them {one}"
 
 
 @probe("curve.expression_field")
 def _curve_expression(bench):
-    return False, "the editor has no expression field; a knob's expression is typed under the knob in its panel"
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from nodebased.colorcurves import evaluate
+    key, canvas = _curve_bench(bench)
+    dialog = bench.window.curve_editor_dock.widget()
+    before = bench.params(key)["curve_master"]
+    QTest.keyClicks(dialog.expression, "pow(x, 2)")
+    QTest.keyClick(dialog.expression, Qt.Key.Key_Return)
+    curve = _stored_curve(bench, key)
+    err = max(abs(evaluate(curve, x / 40) - (x / 40) ** 2) for x in range(41))
+    one = _undo_back(bench, lambda: bench.params(key)["curve_master"], before)
+    QTest.mouseClick(dialog.revert, Qt.MouseButton.LeftButton)
+    bench.settle(8)
+    reverted = bench.params(key)["curve_master"] == before
+    ok = err < 1e-3 and one and reverted
+    return ok, (f"typing pow(x, 2) in the expression field made the curve follow x squared to {err:.1e}; one undo "
+                f"{one}; Revert put the keys back {reverted}")
 
 
 # -- the Dope Sheet (lane 10, step T7) ----------------------------------------------------------------------------------------
@@ -2157,7 +2257,13 @@ def _dope_current(bench):
 
 @probe("dope.project_range")
 def _dope_range(bench):
-    return False, "the sheet spans the project range edge to edge; the first and last frames have no lines of their own"
+    _key_id, sheet, _row = _dope_bench(bench)
+    first_x, last_x = sheet.range_lines()
+    lo, hi = sheet.view_range()
+    inside = sheet.frame_x(lo) < first_x < last_x < sheet.frame_x(hi)
+    exact = abs(first_x - sheet.frame_x(1)) < 1e-9 and abs(last_x - sheet.frame_x(40)) < 1e-9
+    return inside and exact, (f"the project's frames 1 and 40 have lines at x {first_x:.0f} and {last_x:.0f}, inside the "
+                              f"time area that spans frames {lo} to {hi}")
 
 
 @probe("dope.select_key")
@@ -2169,7 +2275,16 @@ def _dope_select(bench):
 
 @probe("dope.marquee")
 def _dope_marquee(bench):
-    return False, "a drag on empty space does not draw a marquee; keys are picked by click and Shift+click"
+    from PySide6.QtCore import Qt
+    key, sheet, row = _dope_bench(bench)
+    y = _dope_point(sheet, row, 10)[1]
+    _drag(bench, sheet, (sheet.frame_x(7), y - 9), (sheet.frame_x(25), y + 9))
+    swept = set(sheet.selected)
+    _drag(bench, sheet, (sheet.frame_x(3), y - 9), (sheet.frame_x(7), y + 9), Qt.KeyboardModifier.ShiftModifier)
+    added = set(sheet.selected)
+    ok = swept == {(key, 10), (key, 20)} and added == {(key, 5), (key, 10), (key, 20)}
+    return ok, (f"a marquee from frame 7 to 25 selected {sorted(f for _k, f in swept)}; a Shift marquee over frame 5 made it "
+                f"{sorted(f for _k, f in added)}")
 
 
 @probe("dope.name_selects_keys")
@@ -2224,17 +2339,75 @@ def _dope_no_pass(bench):
 
 @probe("dope.move_field")
 def _dope_move_field(bench):
-    return False, "there is no Move field; selected keys move by dragging them in time"
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    key, sheet, row = _dope_bench(bench)
+    panel = bench.window.dope_sheet_panel
+    _click(bench, sheet, _dope_point(sheet, row, 10))
+    before = repr(bench.window.dispatcher.document["animation"]["curves"].get(key))
+    field = panel.move_field
+    field.lineEdit().selectAll()
+    QTest.keyClicks(field.lineEdit(), "4")
+    QTest.keyClick(field.lineEdit(), Qt.Key.Key_Return)
+    QTest.mouseClick(panel.forward, Qt.MouseButton.LeftButton)
+    bench.settle(8)
+    forward = _frames(bench, key)
+    one = _undo_back(bench, lambda: repr(bench.window.dispatcher.document["animation"]["curves"].get(key)), before)
+    bench.window.dispatcher.execute({"op": "undo"}); bench.settle(8)
+    sheet.refresh(); sheet.selected = {(key, 10)}
+    field.setValue(-3)
+    QTest.mouseClick(panel.forward, Qt.MouseButton.LeftButton)
+    bench.settle(8)
+    backward = _frames(bench, key)
+    ok = forward == [5, 14, 20] and backward == [5, 7, 20] and one
+    return ok, (f"Move 4 then > moved frame 10 to {forward}, one undo moves it back {one}; Move -3 then > gave {backward}")
 
 
 @probe("dope.copy_paste")
 def _dope_copy(bench):
-    return False, "Ctrl/Cmd+C and Ctrl/Cmd+V do not copy keys in the sheet"
+    from PySide6.QtCore import Qt
+    key, sheet, row = _dope_bench(bench)
+    _click(bench, sheet, _dope_point(sheet, row, 5))
+    _click(bench, sheet, _dope_point(sheet, row, 10), Qt.KeyboardModifier.ShiftModifier)
+    _key(bench, sheet, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    bench.window.command({"op": "time", "current": 30})
+    bench.settle(); sheet.refresh()
+    before = repr(bench.window.dispatcher.document["animation"]["curves"].get(key))
+    _key(bench, sheet, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+    bench.settle(8)
+    g = _frames(bench, key)
+    values = {k["frame"]: k["value"] for k in bench.window.node_curve(key, "multiply")["keys"]}
+    one = _undo_back(bench, lambda: repr(bench.window.dispatcher.document["animation"]["curves"].get(key)), before)
+    ok = g == [5, 10, 20, 30, 35] and values.get(30) == 2.0 and values.get(35) == 3.0 and one
+    return ok, (f"copied keys 5 and 10, pasted with the current frame on 30: gamma keys {g}, multiply on 30 and 35 "
+                f"{values.get(30)}, {values.get(35)}; one undo removes the paste {one}")
 
 
 @probe("dope.clip_bars")
 def _dope_bars(bench):
-    return False, "a Read with an open panel gets a row, drawn without a clip bar to drag"
+    from PySide6.QtCore import Qt
+    window = bench.window
+    window.dispatcher.execute({"op": "time", "first": 1, "last": 40, "current": 1})
+    key = bench.node("Read", {"first": 1, "last": 20})
+    window.pinned_panels.insert(0, key)                   # a Read with an open (pinned) panel gets a row
+    window.dope_sheet_dock.show()
+    sheet = window.dope_sheet
+    sheet.setMinimumWidth(800)
+    bench.settle()
+    sheet.resize(max(sheet.width(), 800), 200)
+    sheet.rows = []; sheet.refresh(); bench.settle()
+    row = next(i for i, r in enumerate(sheet.rows) if r[0] == key)
+    bar = sheet.clip_bar(row)
+    before = bench.params(key)["frame_offset"]
+    y = sheet._clip_rect(row).center().y()
+    _drag(bench, sheet, (sheet.frame_x(10), y), (sheet.frame_x(15), y))
+    after = bench.params(key)["frame_offset"]
+    moved = sheet.clip_bar(row)
+    one = _undo_back(bench, lambda: bench.params(key)["frame_offset"], before)
+    window.pinned_panels.remove(key)
+    ok = bar == (1, 20) and after == -5 and moved == (6, 25) and one
+    return ok, (f"the Read's clip shows as a gray bar on frames {bar}; dragging it 5 frames later set its frame offset "
+                f"{before} -> {after} (bar now {moved}), one undo puts it back {one}")
 
 # -- run -------------------------------------------------------------------------------------------------------------------
 
