@@ -901,9 +901,11 @@ class DesktopTests(unittest.TestCase):
         w.set_time(current=3)
         QTest.keyClick(viewer, Qt.Key.Key_L)
         self.assertTrue(w.playing)
-        QTest.keyClick(viewer, Qt.Key.Key_J)
+        QTest.keyClick(viewer, Qt.Key.Key_J)          # Nuke 17.0 Keyboard Shortcuts: "J Play Backward", also while playing forward
+        self.assertTrue(w.playing)
+        self.assertEqual(w.play_direction, -1)
+        QTest.keyClick(viewer, Qt.Key.Key_K)
         self.assertFalse(w.playing)
-        self.assertEqual(w.dispatcher.document['time']['current'], 2)
 
     def test_timeline_edits_scrub_step_and_follow_undo(self):
         w = self.window

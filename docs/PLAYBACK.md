@@ -129,7 +129,8 @@ How it fits the playback contract above:
   the pointer is on, or `A/B` for the combining modes, where it shows the combined value).
 - **Click priority.** A roto point, a tracker pick and a Transform handle keep their clicks; the wipe
   only takes a click they left alone. The wipe centre and rotation handle are dragged with the left
-  button; Ctrl-click on the wipe resets it, and so does `Shift+W`.
+  button; Ctrl-click on the wipe resets it, and so does `Shift+W`. `W` turns the wipe on and off and
+  `Alt+W` starts a new region of interest (Nuke 17.0 User Guide, Keyboard Shortcuts).
 
 Limits: the wipe position and angle are display state and are not saved in the document; B failing to
 evaluate leaves A on screen and says why in the status line; `Write` and "export image" use the A frame

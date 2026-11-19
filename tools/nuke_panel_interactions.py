@@ -2438,6 +2438,66 @@ def _key(bench, widget, key, modifiers=None):
     bench.settle()
 
 
+# Lane 10 step T9: the 2D Compositing Viewer keys from the Nuke 17.0 User Guide's Keyboard Shortcuts page.
+
+@probe("viewer.jkl")
+def _viewer_jkl(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    window = bench.window
+    seen = []
+    for key in (Qt.Key.Key_L, Qt.Key.Key_J, Qt.Key.Key_K, Qt.Key.Key_J, Qt.Key.Key_K):
+        _key(bench, viewer, key)
+        seen.append((window.playing, window.play_direction if window.playing else 0))
+    window.toggle_playback(False)
+    ok = seen == [(True, 1), (True, -1), (False, 0), (True, -1), (False, 0)]
+    return ok, f"L, J (while playing forward), K, J, K gave {seen}"
+
+
+@probe("viewer.wipe")
+def _viewer_wipe(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench, 2)
+    bench.window.command({"op": "viewer_compare", "b": None, "mode": "A only"})
+    bench.settle()
+    _key(bench, viewer, Qt.Key.Key_W)
+    on = viewer.compare_mode()
+    _key(bench, viewer, Qt.Key.Key_W)
+    off = viewer.compare_mode()
+    bench.window.command({"op": "viewer_compare", "b": None, "mode": "A only"})
+    return (on, off) == ("wipe", "A only"), f"W then W gave {on} then {off}"
+
+
+@probe("viewer.proxy_roi")
+def _viewer_proxy_roi(bench):
+    from PySide6.QtCore import Qt
+    from nodebased.core import viewer_proxy, viewer_roi
+    viewer, _ = _viewer(bench)
+    window = bench.window
+    window.set_viewer_roi(on=False)
+    before = viewer_proxy(window.dispatcher.document)
+    _key(bench, viewer, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
+    toggled = viewer_proxy(window.dispatcher.document)
+    _key(bench, viewer, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
+    back = viewer_proxy(window.dispatcher.document)
+    _key(bench, viewer, Qt.Key.Key_W, Qt.KeyboardModifier.AltModifier)
+    roi = viewer_roi(window.dispatcher.document)
+    window.set_viewer_roi(on=False)
+    ok = toggled != before and back == before and roi["on"]
+    return ok, f"Ctrl+P proxy {before} -> {toggled} -> {back}; Alt+W region on {roi['on']} at {roi['rect']}"
+
+
+@probe("viewer.luminance_y")
+def _viewer_luminance_y(bench):
+    from PySide6.QtCore import Qt
+    viewer, _ = _viewer(bench)
+    bench.window.channels.setCurrentText("RGB")
+    _key(bench, viewer, Qt.Key.Key_Y)
+    shown = bench.window.channels.currentText()
+    bench.window.channels.setCurrentText("RGB")
+    return shown in ("Y", "Luminance"), f"Y showed {shown}; the Viewer's channel choices have no luminance display"
+
+
 @probe("viewer.channel_keys")
 def _viewer_channel_keys(bench):
     from PySide6.QtCore import Qt

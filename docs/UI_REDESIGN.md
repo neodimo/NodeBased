@@ -259,8 +259,8 @@ Screenshots (offscreen, 1920 x 1080, `examples/mixed_scene`): `docs/images/ui-re
 - **Transport.** Start, previous keyframe, step back, play backwards, stop, play, step forward, next
   keyframe, end, and a loop mode toggle (play once, loop, ping-pong; remembered per machine). Icon-only, in the
   left column's stroke language. Keys: Left / Right step, Alt+Left / Alt+Right previous / next keyframe,
-  Home / End, Space play / stop, in the viewer L plays, J plays backwards (while playing forwards J still
-  stops and steps back, as before) and K stops.
+  Home / End, Space play / stop, in the viewer L plays, J plays backwards (also while playing forwards,
+  as Nuke 17.0's Keyboard Shortcuts page says) and K stops.
 - **Accent.** The default accent is an amber in the family of Nuke's selection orange, `#e0a24a` (HSL 35, 71, 58;
   the old mint `#5ee0b5` was 160, 68, 62), with `acc2` `#c0842f`, ink `#2a1a05` and washes at 12 and 40 percent.
   DiMo chose it on 10/11 over the muted teal `#66b7ac` first proposed; both the mint and the muted teal stay as

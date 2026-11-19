@@ -220,11 +220,13 @@ SHORTCUT_SECTIONS = (
                 ("S (Roto or RotoPaint)", "cycle through the modes of the selected tool, as the guide says (the graph's S still creates a Shuffle there)"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
                 ("?", "list the viewer's zoom and navigation keys (works on the direct picture too)"),
-                ("J", "play backwards (while playing forwards: stop and step back)"), ("K", "stop"),
+                ("J", "play backwards"), ("K", "stop"),
                 ("L", "play forwards"),
                 ("1-9", "show viewer input 1-9 (the A buffer; empty inputs are ignored)"),
                 ("Alt+1-9", "set viewer input 1-9 as the B buffer (Alt+0 clears B)"),
+                ("W", "turn the wipe on or off (needs a B input)"),
                 ("Shift+W", "reset the wipe to the centre, vertical"),
+                ("Alt+W", "region of interest: draw a new region"),
                 ("Ctrl+P", "toggle the viewer proxy (off / the last proxy chosen)"),
                 ("M", "alpha as a red overlay on the RGB (press again to turn it off)"),
                 ("Alt+Z", "prevent auto zoom: a picture of another size keeps the zoom"),
@@ -2798,6 +2800,20 @@ class Viewer(PanZoomView):
 
     def set_compare_mode(self, mode):
         self.window.command({"op": "viewer_compare", "mode": mode})
+
+    def toggle_wipe(self):
+        """W: the wipe on (with the B input, or the next wired input when none is chosen) or back to A only."""
+        state = self.input_state()
+        if self.compare_mode() == "wipe":
+            self.set_compare_mode("A only")
+            return
+        if state["b"] is None or state["inputs"][state["b"] - 1] is None:
+            wired = [slot for slot, node in enumerate(state["inputs"], 1) if node is not None and slot != state["active"]]
+            if not wired:
+                return
+            self.set_b(wired[0])
+            return
+        self.set_compare_mode("wipe")
 
     def reset_wipe(self):
         self.wipe = dict(compare_model.WIPE_DEFAULT)
@@ -5586,6 +5602,15 @@ class Viewer(PanZoomView):
             self.reset_wipe()
             event.accept()
             return
+        # Nuke 17.0 User Guide, Keyboard Shortcuts, 2D Compositing Viewer: "W Toggle wipe tool"; "Alt+W ROI - Activate new region".
+        if not event.modifiers() and event.key() == Qt.Key.Key_W:
+            self.toggle_wipe()
+            event.accept()
+            return
+        if event.modifiers() == Qt.KeyboardModifier.AltModifier and event.key() == Qt.Key.Key_W:
+            self.window.set_viewer_roi(on=True, rect=[0.25, 0.25, 0.75, 0.75])   # a fresh region, as the ROI button proposes
+            event.accept()
+            return
         # Nuke 17.0 User Guide, Viewers and Using the Viewer Controls (lane 10 step T8 finish): M the alpha overlay,
         # Alt+Z prevent auto zoom, { and } the top and bottom toolbars, U refresh, Alt+G Go to frame.
         mods = event.modifiers() & ~Qt.KeyboardModifier.KeypadModifier
@@ -5623,12 +5648,8 @@ class Viewer(PanZoomView):
             self.window.toggle_playback(False)
             event.accept()
         elif event.key() == Qt.Key.Key_J and not event.modifiers():
-            # Nuke's J plays backwards. While playing forwards it keeps its older meaning: stop and
-            # step back one frame.
-            if self.window.playing and self.window.play_direction > 0:
-                self.window.step_frame(-1)
-            else:
-                self.window.play(-1)
+            # Nuke 17.0 User Guide, Keyboard Shortcuts, 2D Compositing Viewer: "J Play Backward", also while playing forward.
+            self.window.play(-1)
             event.accept()
         elif view_key_action(event.key(), event.modifiers()) == "fit":
             # F is the direct fit command. H is the familiar home/frame alias: with a
