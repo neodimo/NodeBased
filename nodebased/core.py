@@ -926,7 +926,7 @@ SPECS = {
     # Motion blur samples the animated upstream image across a shutter. MotionBlur3D can also use
     # an explicit camera plus depth pass to blur a still beauty through camera motion.
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask", "transf"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
-    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"uv": "motion", "Z": "none", "distance": 1.0, "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
     "Kronos": {"inputs": ["image"], "optional_inputs": ["matte", "mosrc", "fgvecs", "bgvecs"], "params": {"speed": 0.5, "frame": 1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto",
               **_retimeknobs.new_params("Kronos")}},
@@ -2230,7 +2230,11 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                             "center_y": (-1000000.0, 1000000.0), "bumpsize": (-1000.0, 1000.0), "light_height": (-1000.0, 1000.0),
                             "intensity": (-1000.0, 1000.0), "minshadow": (0.0, 1000.0), "legacy_bumpboss": (0, 1)},
                "MotionBlur2D": {"samples": (1, 64)},
-               "MotionBlur3D": {"samples": (1, 64)},
+               "MotionBlur3D": {"samples": (1, 64), "distance": (0.0, 1000000.0)},
+               "VolumeRays": {"edge_size": (-1000.0, 1000.0), "blur_size": (0.0, 500.0), "raylength": (0.0, 100000.0), "chk_flicker": (0, 1),
+                              "flicker_speed": (0.0, 1000.0), "flicker_size": (0.0, 100000.0), "xform_flicker": (0, 1), "initcolor": (-1000.0, 1000.0),
+                              **{f"volume_end_{c}": (-1000.0, 1000.0) for c in ("red", "green", "blue", "alpha")},
+                              "chk_use_mask": (0, 1), "mask_blur": (0.0, 500.0), "chk_xform_mask": (0, 1)},
                "GridWarp": {"rows": (2, 15), "columns": (2, 15)},
                "GridWarpTracker": {"rows": (2, 15), "columns": (2, 15),
                                    "local_motion": (0.0, 1.0), "fb_threshold": (0.0, 100.0)},
@@ -2593,6 +2597,7 @@ LIMITS.update({"match_strength": (0.1, 10.0), "inpainting": (0, 1), "matte_dilat
 LIMITS.update({"sRGB": (0, 1), "screen_alpha": (0, 1), "quality": (1.0, 1000.0), "detail_amount": (0.0, 1.0), "edge_mask": (0, 1), "legacy_defocus_disc": (0, 1)})
 CHOICES["kernel_filter"] = list(_blurknobs.FILTERS)
 CHOICES["style"] = ["RGB Luminance", "Alpha Solid"]      # VolumeRays Volumetric Creation: the two styles the guide describes plainly
+CHOICES["ray_quality"] = list(_raysbehaviour.QUALITY)     # VolumeRays Quality (lane 2 step X4)
 CHOICES["output_mode"] = list(_vectorcornerpinknobs.OUTPUT_MODES)
 CHOICES["image_filter"] = list(_transformbehaviour.CHOICES)        # VectorDistort Filter (lane 9 step N)
 LIMITS.update(_vectordistortknobs.LIMITS)

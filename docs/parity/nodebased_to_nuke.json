@@ -2746,10 +2746,11 @@
     {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
     {"nodebased": ["samples"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
-    {"nodebased": [], "nuke": ["uv"], "kind": "unsupported", "reason": "Output UV names the channel the node writes the motion vectors to; the guide's page for this node describes only the shutter, and NodeBased's node writes no vector channel, so the knob would change nothing (lane 9 step O)"},
-    {"nodebased": [], "nuke": ["Z"], "kind": "unsupported", "reason": "Z input names the depth channel; NodeBased reads depth from its own depth socket, and the guide's page gives the knob no description (lane 9 step O)"},
-    {"nodebased": [], "nuke": ["distance"], "kind": "unsupported", "reason": "the guide's page for this node gives distance no description and no formula, so what it scales cannot be written down without guessing (lane 9 step O)"}
-   ]
+    {"nodebased": ["uv"], "nuke": ["uv"], "kind": "same"},
+    {"nodebased": ["Z"], "nuke": ["Z"], "kind": "same"},
+    {"nodebased": ["distance"], "nuke": ["distance"], "kind": "same"}
+   ],
+   "default_notes": {"uv": "The guide's page describes only the shutter; Foundry's overview says the node 'collates UV motion information from the cam input to output UV vectors down the node tree to a VectorBlur node'. So Output UV names the layer the camera motion is written to, in pixels (u in red, v in green), `none` writes no layer, and the picture is still blurred along the same vectors (X4).", "Z": "Names the layer of the image that holds the depth; `none` reads the depth input, then the image's depth.Z layer. The guide gives the knob no description (X4).", "distance": "The guide gives distance no description. NodeBased takes it as the depth of every pixel when no depth is available (scene units from the camera), so a node with a camera and no depth renders; it changes nothing when a depth is there (X4)."}
   },
   "VectorBlur": {
    "nodebased": "VectorBlur",
@@ -3021,25 +3022,26 @@
     {"nodebased": ["CCorrect1_gamma"], "nuke": ["CCorrect1_gamma"], "kind": "same"},
     {"nodebased": ["CCorrect1_gain"], "nuke": ["CCorrect1_gain"], "kind": "same"},
     {"nodebased": ["style"], "nuke": ["style"], "kind": "same"},
-    {"nodebased": [], "nuke": ["edge_size"], "kind": "unsupported", "reason": "Edge Size belongs to the Alpha Edges and Shadow Making styles, which are not built: Volumetric Creation offers RGB Luminance and Alpha Solid, the two the guide describes plainly (it says only that positive Edge Size lets fewer rays past the edges)."},
-    {"nodebased": [], "nuke": ["blur_size"], "kind": "unsupported", "reason": "Edge Blur belongs to the Alpha Edges and Shadow Making styles, which are not built: Volumetric Creation offers RGB Luminance and Alpha Solid, the two the guide describes plainly (it says only that positive Edge Size lets fewer rays past the edges)."},
-    {"nodebased": [], "nuke": ["raylength"], "kind": "unsupported", "reason": "Ray Length is in the units of the gizmo's inner transform (default 20), which the guide does not state; NodeBased's `translate` is a fraction of the way to the far edge, so the two cannot be matched without guessing"},
+    {"nodebased": ["edge_size"], "nuke": ["edge_size"], "kind": "same"},
+    {"nodebased": ["blur_size"], "nuke": ["blur_size"], "kind": "same"},
+    {"nodebased": ["raylength"], "nuke": ["raylength"], "kind": "same"},
     {"nodebased": ["pre_blur"], "nuke": ["pre_blur"], "kind": "same"},
-    {"nodebased": [], "nuke": ["quality"], "kind": "unsupported", "reason": "Quality picks Low to Very High, the gizmo's number of samples; the guide gives no counts (NodeBased's `steps` is the count)"},
-    {"nodebased": [], "nuke": ["chk_flicker"], "kind": "unsupported", "reason": "Flickering is noise driven by the gizmo's noise node; the guide states no noise form, so the flicker knobs (Use Flickering, Flicker Speed, Flicker Size, Transform Noise with Volume Center) are not built and the rays are steady"},
-    {"nodebased": [], "nuke": ["flicker_speed"], "kind": "unsupported", "reason": "see `chk_flicker`: no noise form is stated"},
-    {"nodebased": [], "nuke": ["flicker_size"], "kind": "unsupported", "reason": "see `chk_flicker`: no noise form is stated"},
-    {"nodebased": [], "nuke": ["xform_flicker"], "kind": "unsupported", "reason": "see `chk_flicker`: no noise form is stated"},
-    {"nodebased": [], "nuke": ["initcolor"], "kind": "unsupported", "reason": "Initial Volume Color has no description in the guide, and the ramp from it to the end colour is not stated"},
-    {"nodebased": [], "nuke": ["volume_end_color"], "kind": "unsupported", "reason": "End Volume Color has no description in the guide (see `initcolor`)"},
+    {"nodebased": ["ray_quality"], "nuke": ["quality"], "kind": "renamed", "reason": "NodeBased's `quality` is the Defocus-style number shared by other nodes; the guide's Low, Medium, High and Very High menu is `ray_quality`"},
+    {"nodebased": ["chk_flicker"], "nuke": ["chk_flicker"], "kind": "same"},
+    {"nodebased": ["flicker_speed"], "nuke": ["flicker_speed"], "kind": "same"},
+    {"nodebased": ["flicker_size"], "nuke": ["flicker_size"], "kind": "same"},
+    {"nodebased": ["xform_flicker"], "nuke": ["xform_flicker"], "kind": "same"},
+    {"nodebased": ["initcolor"], "nuke": ["initcolor"], "kind": "same"},
+    {"nodebased": ["volume_end_red", "volume_end_green", "volume_end_blue", "volume_end_alpha"], "nuke": ["volume_end_color"], "kind": "components", "reason": "NodeBased stores the colour as four scalar params; Nuke has one colour knob"},
     {"nodebased": ["chk_radial"], "nuke": ["chk_radial"], "kind": "same"},
     {"nodebased": ["radial_size"], "nuke": ["radial_size"], "kind": "same"},
     {"nodebased": ["rad_softness"], "nuke": ["rad_softness"], "kind": "same"},
-    {"nodebased": [], "nuke": ["chk_use_mask"], "kind": "unsupported", "reason": "Mask Options use the mask input's alpha as a matte for the rays with their own blur and transform; NodeBased's mask input gates the result, and the guide states no matte arithmetic"},
-    {"nodebased": [], "nuke": ["mask_blur"], "kind": "unsupported", "reason": "see `chk_use_mask`"},
-    {"nodebased": [], "nuke": ["chk_xform_mask"], "kind": "unsupported", "reason": "see `chk_use_mask`"}
+    {"nodebased": ["chk_use_mask"], "nuke": ["chk_use_mask"], "kind": "same"},
+    {"nodebased": ["mask_blur"], "nuke": ["mask_blur"], "kind": "same"},
+    {"nodebased": ["chk_xform_mask"], "nuke": ["chk_xform_mask"], "kind": "same"}
    ],
-   "skip_default": ["vol_pos"]
+   "skip_default": ["vol_pos"],
+   "default_notes": {"edge_size": "Alpha Options belong to the Alpha Edges and Shadow Making styles, which are not built (Volumetric Creation offers RGB Luminance and Alpha Solid); the knob is on the node and changes no pixel yet (X4).", "blur_size": "see `edge_size`: changes no pixel yet (X4).", "raylength": "NodeBased scales the rays' reach linearly with Ray Length over the guide's default of 20, so 20 leaves `translate` as set; the guide gives the length no unit (X4).", "quality": "NodeBased's Low, Medium, High and Very High take half, one, two and four times `steps`; the guide gives no counts, and Medium is the node's own (X4).", "chk_flicker": "Flicker is noise from the gizmo's noise node and the guide states no form: the four flicker knobs are on the node at the guide's defaults and change no pixel yet (X4).", "initcolor": "The guide describes neither Initial Volume Color nor End Volume Color, so the colour ramp between them is not built: both are on the node and change no pixel yet (X4).", "chk_use_mask": "Kept on on purpose: the guide's input table says the effect 'by default' is limited to the non-black areas of a wired mask, and a saved node always used its mask; the guide lists the check box as off. Off ignores the mask (X4).", "chk_xform_mask": "The guide gives no reference position for the volume center, so the mask is not moved with it: the knob changes no pixel yet (X4)."}
   },
   "LevelSet": {
    "nodebased": "LevelSet",
@@ -3802,7 +3804,7 @@
    "knobs": [
     {"nodebased": ["width", "height"], "nuke": ["box_width", "box_height"], "kind": "components", "reason": "to-box size"},
     {"nodebased": ["reformat_type"], "nuke": ["type"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'type', scripting name `type`"},
-    {"nodebased": ["pixel_aspect"], "kind": "extra", "reason": "NodeBased-only: NodeBased works in square pixels, so the value is carried with the format and changes no pixels (unpaired in lane 9 step B because a paired knob has to act)"},
+    {"nodebased": ["pixel_aspect"], "nuke": ["box_pixel_aspect"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'pixel aspect', scripting name `box_pixel_aspect`. The guide says only that it 'sets the pixel aspect ratio for the output image'; NodeBased carries it with the format (named formats set it) and works in square pixels, so it changes no pixel (lane 2 step X4)"},
     {"nodebased": ["resize_type"], "nuke": ["resize"], "kind": "renamed", "reason": "resize type"},
     {"nodebased": ["preserve_bbox"], "nuke": ["pbb"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'preserve bounding box', scripting name `pbb`"},
     {"nodebased": ["format"], "nuke": ["format"], "kind": "same"},
@@ -3814,7 +3816,6 @@
     {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["box_fixed"], "nuke": ["box_fixed"], "kind": "same"},
-    {"nodebased": [], "nuke": ["box_pixel_aspect"], "kind": "unsupported", "reason": "NodeBased works in square pixels throughout (Reformat's pixel_aspect is carried with the format and changes no pixels), so a to-box pixel aspect has nothing to act on; non-square pixels are a product decision listed in docs/parity/review/DECISIONS.md"},
     {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"},
     {"nodebased": ["black_outside"], "nuke": ["black_outside"], "kind": "same"},
     {"nodebased": ["legacy_reformat_layout"], "kind": "extra", "reason": "NodeBased-only: graphs saved before center off lined up the lower left corners and turn rotated counter-clockwise keep the older layout (top left corners lined up, turn as a transpose); lane 9 step B"}
@@ -4183,19 +4184,20 @@
     {"nodebased": ["track_x", "track_y"], "nuke": ["track"], "kind": "components", "reason": "NodeBased stores the point as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["offset_x", "offset_y"], "nuke": ["offset"], "kind": "components", "reason": "NodeBased stores the offset as two scalar params; Nuke has one two-value knob"},
     {"nodebased": ["stabilize"], "nuke": ["stabilize"], "kind": "same"},
-    {"nodebased": [], "nuke": ["filter"], "kind": "unsupported", "reason": "the guide: 'the filtering algorithm to use when remapping pixels from their original positions to new positions': it resamples the img input's pixels, and NodeBased's Reconcile3D outputs the transform as a track, not the moved picture (needs a node with an image output beside the track)"},
-    {"nodebased": [], "nuke": ["clamp"], "kind": "unsupported", "reason": "the guide: 'sets negative intermediate and final results to zero ... when using a filter that has negative lobes': it acts on the resampled picture, which this node does not output"},
-    {"nodebased": [], "nuke": ["black_outside"], "kind": "unsupported", "reason": "the guide: 'renders as black pixels outside the image boundary' of the moved picture (and adds a solid alpha over it): it acts on the picture, which this node does not output"},
-    {"nodebased": [], "nuke": ["motionblur"], "kind": "unsupported", "reason": "the guide: 'the number of motion blur samples' of the moved picture: it acts on the picture, which this node does not output"},
-    {"nodebased": [], "nuke": ["shutter"], "kind": "unsupported", "reason": "the guide: 'the number of frames the shutter stays open when motion blurring' the picture: it acts on the picture, which this node does not output"},
-    {"nodebased": [], "nuke": ["shutteroffset"], "kind": "unsupported", "reason": "the guide: how the picture's motion-blur shutter 'behaves with respect to the current frame': it acts on the picture, which this node does not output"},
-    {"nodebased": [], "nuke": ["shuttercustomoffset"], "kind": "unsupported", "reason": "the guide: the frames added to the current frame when the shutter offset is custom, for the picture's motion blur: it acts on the picture, which this node does not output"},
+    {"nodebased": ["filter"], "nuke": ["filter"], "kind": "same"},
+    {"nodebased": ["clamp"], "nuke": ["clamp"], "kind": "same"},
+    {"nodebased": ["black_outside"], "nuke": ["black_outside"], "kind": "same"},
+    {"nodebased": ["motionblur"], "nuke": ["motionblur"], "kind": "same"},
+    {"nodebased": ["shutter"], "nuke": ["shutter"], "kind": "same"},
+    {"nodebased": ["shutter_offset"], "nuke": ["shutteroffset"], "kind": "renamed", "reason": "NodeBased uses the control's label; Nuke's scripting name is `shutteroffset`"},
+    {"nodebased": ["custom_offset"], "nuke": ["shuttercustomoffset"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'shutter offset', scripting name `shuttercustomoffset`"},
     {"nodebased": ["frame_start"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["frame_end"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["image_width"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["image_height"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["vertex_index"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"}
-   ]
+   ],
+   "default_notes": {"filter": "The seven knobs of the 2D transform tab (filter, clamp, black outside, motionblur, shutter, shutter offset, custom offset) are on the node at the guide's defaults (Parzen, off, on, 0, 0.5, start, 0), and the evaluated track carries them as `transform_settings`. Nothing in NodeBased renders the moved picture from a track yet (Reconcile3D outputs the transform as a track, not an image), so they change no pixel; a node that applies the track to a plate reads them (X4, nodebased/track3dknobs.py).", "clamp": "The seven knobs of the 2D transform tab (filter, clamp, black outside, motionblur, shutter, shutter offset, custom offset) are on the node at the guide's defaults (Parzen, off, on, 0, 0.5, start, 0), and the evaluated track carries them as `transform_settings`. Nothing in NodeBased renders the moved picture from a track yet (Reconcile3D outputs the transform as a track, not an image), so they change no pixel; a node that applies the track to a plate reads them (X4, nodebased/track3dknobs.py).", "black_outside": "The seven knobs of the 2D transform tab (filter, clamp, black outside, motionblur, shutter, shutter offset, custom offset) are on the node at the guide's defaults (Parzen, off, on, 0, 0.5, start, 0), and the evaluated track carries them as `transform_settings`. Nothing in NodeBased renders the moved picture from a track yet (Reconcile3D outputs the transform as a track, not an image), so they change no pixel; a node that applies the track to a plate reads them (X4, nodebased/track3dknobs.py).", "motionblur": "The seven knobs of the 2D transform tab (filter, clamp, black outside, motionblur, shutter, shutter offset, custom offset) are on the node at the guide's defaults (Parzen, off, on, 0, 0.5, start, 0), and the evaluated track carries them as `transform_settings`. Nothing in NodeBased renders the moved picture from a track yet (Reconcile3D outputs the transform as a track, not an image), so they change no pixel; a node that applies the track to a plate reads them (X4, nodebased/track3dknobs.py).", "shutter": "The seven knobs of the 2D transform tab (filter, clamp, black outside, motionblur, shutter, shutter offset, custom offset) are on the node at the guide's defaults (Parzen, off, on, 0, 0.5, start, 0), and the evaluated track carries them as `transform_settings`. Nothing in NodeBased renders the moved picture from a track yet (Reconcile3D outputs the transform as a track, not an image), so they change no pixel; a node that applies the track to a plate reads them (X4, nodebased/track3dknobs.py).", "shutteroffset": "The seven knobs of the 2D transform tab (filter, clamp, black outside, motionblur, shutter, shutter offset, custom offset) are on the node at the guide's defaults (Parzen, off, on, 0, 0.5, start, 0), and the evaluated track carries them as `transform_settings`. Nothing in NodeBased renders the moved picture from a track yet (Reconcile3D outputs the transform as a track, not an image), so they change no pixel; a node that applies the track to a plate reads them (X4, nodebased/track3dknobs.py).", "shuttercustomoffset": "The seven knobs of the 2D transform tab (filter, clamp, black outside, motionblur, shutter, shutter offset, custom offset) are on the node at the guide's defaults (Parzen, off, on, 0, 0.5, start, 0), and the evaluated track carries them as `transform_settings`. Nothing in NodeBased renders the moved picture from a track yet (Reconcile3D outputs the transform as a track, not an image), so they change no pixel; a node that applies the track to a plate reads them (X4, nodebased/track3dknobs.py)."}
   },
   "TVIScale": {
    "nodebased": "TVIScale",

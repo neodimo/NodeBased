@@ -368,14 +368,14 @@ class Reconcile3DBehaviour(unittest.TestCase):
         result = reconcile(track_rig(reconcile_params={"track_x": 10.0})[0])
         self.assertEqual([k["frame"] for k in result["transform"]["x"]["curve"]["keys"]], [1, 2, 3])
 
-    def test_the_unbuilt_knobs_are_listed_with_reasons(self):
+    def test_the_resampling_knobs_are_paired_and_the_panel_knobs_listed(self):
         import json
         docs = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "parity")
         entries = json.load(open(os.path.join(docs, "nodebased_to_nuke.json")))["pairs"]["Reconcile3D"]["knobs"]
         for name in ("filter", "clamp", "black_outside", "motionblur", "shutter", "shutteroffset", "shuttercustomoffset"):
             entry = next(e for e in entries if e["nuke"] == [name])
-            self.assertEqual((entry["kind"], entry["nodebased"]), ("unsupported", []), name)
-            self.assertTrue(entry["reason"])
+            self.assertIn(entry["kind"], ("same", "renamed"), name)          # lane 2 step X4 built them (tests/test_l2_x4_reconcile3d.py)
+            self.assertTrue(entry["nodebased"], name)
         for name in ("calc_output", "output", "outputxyz"):
             entry = next(e for e in entries if e["nuke"] == [name])
             self.assertEqual(entry["kind"], "panel", name)
@@ -393,7 +393,7 @@ class TrackHelperSavedGraphs(unittest.TestCase):
 
     def test_old_documents_load_with_the_old_reading(self):
         doc, _, _ = track_rig()
-        for kind, names in (("tri", ("camera_mov_type",)), ("rec", ("track_x", "track_y", "offset_x", "offset_y", "stabilize"))):
+        for kind, names in (("tri", ("camera_mov_type",)), ("rec", ("track_x", "track_y", "offset_x", "offset_y", "stabilize", "filter", "clamp", "black_outside", "motionblur", "shutter", "shutter_offset", "custom_offset"))):
             for name in names:
                 doc["nodes"][kind]["params"].pop(name, None)
         migrated = upgrade_document(copy.deepcopy(doc))

@@ -58,6 +58,9 @@ from . import motionblurknobs as _motionblur    # noqa: E402
 from . import vectorblurknobs as _vectorblur    # noqa: E402
 UPGRADE_EXTRA = {"Denoise": _denoise.UPGRADE, "MotionBlur": _motionblur.UPGRADE, "VectorBlur": _vectorblur.UPGRADE, "VectorCornerPin": _vcp.UPGRADE, "Bilateral": _bilateral.UPGRADE, "EdgeDetect": {"edge_blur_size": 0.0, "edge_erode_size": 0.0, "edge_blur_quality": 15.0},
                  "Laplacian": {"laplacian_size": 3.0},
+                 # MotionBlur3D (lane 2 step X4): Output UV, Z input and distance. A saved node blurs through the same vectors as before; the
+                 # new layer is extra data on the output, and a depth source it had keeps winning over the constant distance.
+                 "MotionBlur3D": {"uv": "motion", "Z": "none", "distance": 1.0},
                  "Convolve": {"normalize": 1, "filter_channel": "rgba.alpha", "use_input_channels": 0, "filter_bounds": "shape"}}
 
 

@@ -23,7 +23,8 @@ Reconcile3D ("turns a point in 3D space into an x, y position in the camera"):
   transform is its translation per frame: T = (projected point - track) + offset, and T reversed (negated, offset included) with stabilize. It is the
   value's `transform` curves and each sample's `translate_x` and `translate_y`. The XY output is the projected point and does not change.
 * calc_output is always on (the node evaluates live). filter, clamp, black_outside, motionblur, shutter, shutter offset and its custom offset resample or
-  blur the moved picture, which this node does not output; they are listed `unsupported` in the mapping.
+  blur the moved picture, which this node does not output. They are knobs on the node, in the guide's tab, order, labels and defaults, and the
+  evaluated track carries them as `transform_settings`; no pixel here changes with them (stated in `default_notes` of the mapping and in the report).
 """
 from __future__ import annotations
 
@@ -31,8 +32,17 @@ import numpy as np
 
 CAMERA_TYPES = ("free move", "nodal")
 POINTS_NEW = {"camera_mov_type": "free move"}
-RECONCILE_NEW = {"track_x": 0.0, "track_y": 0.0, "offset_x": 0.0, "offset_y": 0.0, "stabilize": 0}
+# The 2D transform's resampling knobs (lane 2 step X4), at the Reference Guide's defaults: Filter Parzen, clamp off, black outside on,
+# motionblur 0, shutter 0.5, shutter offset start, custom offset 0. They describe how the moved picture is resampled and blurred, which this
+# node does not output, so they travel on the evaluated track as `transform_settings` for whatever applies the transform.
+RESAMPLE_NEW = {"filter": "parzen", "clamp": 0, "black_outside": 1, "motionblur": 0, "shutter": 0.5, "shutter_offset": "start", "custom_offset": 0.0}
+RECONCILE_NEW = {"track_x": 0.0, "track_y": 0.0, "offset_x": 0.0, "offset_y": 0.0, "stabilize": 0, **RESAMPLE_NEW}
 LIMITS = {"stabilize": (0, 1), **{name: (-1000000.0, 1000000.0) for name in ("track_x", "track_y", "offset_x", "offset_y")}}
+
+
+def transform_settings(p):
+    """The resampling settings of Reconcile3D's 2D transform, read from its params (an older node, which has none, reads the defaults)."""
+    return {name: p.get(name, default) for name, default in RESAMPLE_NEW.items()}
 
 
 def plate_size(img, tier, width, height):

@@ -39,6 +39,22 @@ NOT_PIXEL = {
     # (tests/test_2d_behaviour_filter_l.py). The Denoise and VectorBlur knobs are probed on the fixture.
     "MotionBlur": {"shutterSamples": "the points along the motion vector; a still fixture has no motion, and the probe wires no FgVecs (tests/test_2d_behaviour_filter_l.py streaks a plate moving a whole number of pixels)",
                    "shutterTime": "the exposure as a share of the motion between frames; a still fixture has none, and the probe wires no FgVecs (tests/test_2d_behaviour_filter_l.py)"},
+    # Lane 2 step X4: MotionBlur3D's Output UV, Z input and distance act only with a camera and an animated shutter, which the one-frame fixture lacks.
+    "MotionBlur3D": {name: "needs a camera input and a depth source; tests/test_l2_x4_motionblur3d.py moves each knob on a camera rig"
+                     for name in ("uv", "Z", "distance")},
+    # Lane 2 step X4: VolumeRays' knobs that change no pixel yet, each for the reason its default_notes entry in the mapping gives; quality and
+    # raylength act on the rays but the one-frame probe sees them only with the mask and flicker off, and tests/test_l2_x4_volumerays.py moves every knob.
+    "VolumeRays": {**{name: "the guide states no flicker noise form, so it changes no pixel yet (tests/test_l2_x4_volumerays.py)"
+                      for name in ("chk_flicker", "flicker_speed", "flicker_size", "xform_flicker")},
+                   **{name: "Alpha Edges and Shadow Making are not built, so the alpha options change no pixel yet (tests/test_l2_x4_volumerays.py)"
+                      for name in ("edge_size", "blur_size")},
+                   **{name: "the guide describes neither colour, so the ramp is not built and they change no pixel yet (tests/test_l2_x4_volumerays.py)"
+                      for name in ("initcolor", "volume_end_color")},
+                   "chk_xform_mask": "the guide gives no reference position for the volume center, so the mask is not moved (tests/test_l2_x4_volumerays.py)",
+                   "chk_use_mask": "acts only with a mask wired, which the one-frame probe leaves out (tests/test_l2_x4_volumerays.py)",
+                   "mask_blur": "acts only with a mask wired, which the one-frame probe leaves out (tests/test_l2_x4_volumerays.py)"},
+    # Lane 2 step X4: Reformat's pixel aspect is the output format's, carried with it; the guide gives no effect on the pixels.
+    "Reformat": {"box_pixel_aspect": "the guide says only that it sets the output's pixel aspect ratio; NodeBased carries it with the format and works in square pixels (tests/test_l2_x4_reformat.py)"},
     # Lane 9 step P: viewer controls and undocumented rendering switches have no documented image-pixel behavior.
     "GridWarp": {"source_grid_visible": "viewer overlay only; does not change warped pixels",
                  "source_grid_locked": "viewer editing lock only; does not change warped pixels",

@@ -2528,6 +2528,7 @@ class Evaluator:
                                                      "curve": {"interpolation": "linear", "keys": [{"frame": int(s["frame"]), "value": s[f"translate_{axis}"]} for s in samples]}}
                                               for axis in "xy"}
                         value["transform_value"] = (current["translate_x"], current["translate_y"])
+                        value["transform_settings"] = _t3k.transform_settings(params)
                         self.track3d_tracks = getattr(self, "track3d_tracks", {})
                         self.track3d_tracks[key] = value
                 elif kind == "Camera3D":
@@ -2819,6 +2820,7 @@ class Evaluator:
             vectorgenerator_pair = None
             kronos_frames = None
             motion3d_camera_data = None
+            motion3d_uv = None
             motion2d_transf = None
             reference_paint = None
             inpaint_samples = None
@@ -3638,17 +3640,26 @@ class Evaluator:
                         from . import scene3d
                         current_camera, camera_start, camera_end, depth_key = motion3d_camera_data
                         base_raster = values[node["inputs"]["image"]]
-                        depth_raster = values.get(depth_key) if depth_key else None
-                        if depth_raster is None:
-                            depth_raster = (base_raster.layers or {}).get("depth.Z")
-                        if depth_raster is None:
-                            raise ValueError("MotionBlur3D: connect a depth pass and a camera")
-                        if not isinstance(depth_raster, Raster):
+                        # Depth, in the order the Reference Guide's Z input implies: the layer `Z` names on the image, else the depth input, else the
+                        # image's own depth.Z, else the constant `distance` from the camera (lane 2 step X4; nothing else gave a flow before).
+                        z_name = str(params.get("Z", "none"))
+                        if z_name.lower() != "none":
+                            depth_raster = (base_raster.layers or {}).get(z_name)
+                            if depth_raster is None:
+                                raise ValueError(f"MotionBlur3D: the image has no layer {z_name!r} for Z input")
+                        else:
+                            depth_raster = values.get(depth_key) if depth_key else None
+                            if depth_raster is None:
+                                depth_raster = (base_raster.layers or {}).get("depth.Z")
+                        if depth_raster is not None and not isinstance(depth_raster, Raster):
                             raise ValueError("MotionBlur3D: depth input must be an image or depth layer")
                         if not all(isinstance(camera, scene3d.Camera) for camera in
                                    (current_camera, camera_start, camera_end)):
                             raise ValueError("MotionBlur3D: camera input must evaluate to a camera")
-                        depth_values = depth_raster.fit(output_data)[..., 0]
+                        if depth_raster is None:
+                            depth_values = np.full((output_data.height, output_data.width), float(params.get("distance", 1.0)), np.float32)
+                        else:
+                            depth_values = depth_raster.fit(output_data)[..., 0]
                         flow = self._camera_depth_flow(depth_values, current_camera, camera_start,
                                                        camera_end, reference.display, output_data)
                         blur_params = {"vector_scale": 1.0, "max_length": 0.0,
@@ -3657,9 +3668,19 @@ class Evaluator:
                                        "samples": int(params["samples"])}
                         pixels = self._vector_blur(base_raster.fit(output_data),
                                                    flow[..., 0], flow[..., 1], blur_params)
+                        uv_name = str(params.get("uv", "none"))
+                        if uv_name.lower() != "none":
+                            # Output UV: the camera motion across the shutter, in pixels, written as a layer (u in red, v in green) for a
+                            # VectorBlur downstream; the picture is blurred with the same vectors as before.
+                            uv_layer = np.zeros((*flow.shape[:2], 4), np.float32)
+                            uv_layer[..., 0], uv_layer[..., 1], uv_layer[..., 3] = flow[..., 0], flow[..., 1], 1.0
+                            motion3d_uv = (uv_name, uv_layer)
                     if kind == "MotionBlur2D" and motion2d_transf is not None:
                         pixels = self._transf_blur(frames[0], motion2d_transf[0], motion2d_transf[1], output_data)
-                    raster = Raster(pixels.astype(np.float32), output_data, reference.display, reference.layers, reference.meta)
+                    out_layers = reference.layers
+                    if motion3d_uv is not None:
+                        out_layers = {**(reference.layers or {}), motion3d_uv[0]: Raster(motion3d_uv[1], output_data, reference.display)}
+                    raster = Raster(pixels.astype(np.float32), output_data, reference.display, out_layers, reference.meta)
                     if kind in ("MotionBlur2D", "MotionBlur3D") or transform_blur:
                         mask_slot = "mask"
                         mask_id = node["inputs"].get(mask_slot)
@@ -3667,7 +3688,7 @@ class Evaluator:
                         base = values[node["inputs"]["image"]].fit(output_data)
                         raster = Raster(self._apply_mask_mix(base, raster.fit(output_data),
                                              None if mask is None else mask.fit(output_data), params["mix"]),
-                                        output_data, reference.display, reference.layers, reference.meta)
+                                        output_data, reference.display, out_layers, reference.meta)
                 else:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
@@ -4623,7 +4644,7 @@ class Evaluator:
             elif kind in ("GodRays", "VolumeRays"):
                 filtered = Evaluator._godrays(base, p, (out.x, out.y), None if matte is None else matte.fit(out))
             else: filtered = Evaluator._scanned_grain(base, None if plate is None else plate.fit(out), p, frame)
-            pixels = Evaluator._apply_mask_mix(base, filtered, None if mask is None else mask.fit(out), p.get("mix", 1.0))
+            pixels = Evaluator._apply_mask_mix(base, filtered, Evaluator._rays_mask(kind, p, None if mask is None else mask.fit(out)), p.get("mix", 1.0))
             return Raster(pixels, out, source.display, source.layers, source.meta)
         if kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
             return Evaluator._warp_node(kind, p, inputs, data, frame)
@@ -6339,6 +6360,7 @@ class Evaluator:
                 else: filtered = getattr(Evaluator, {"Posterize": "_posterize", "SoftClip": "_softclip"}[kind])(inputs[0], p)
             mask_index = 2 if kind == "ScannedGrain" or kind == "VolumeRays" else 1
             mask = None if kind == "HSVTool" else (inputs[mask_index] if len(inputs) > mask_index else None)
+            mask = Evaluator._rays_mask(kind, p, mask)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=mask,
                                               mix=p.get("mix", 1.0))
         if kind == "AddMix":
@@ -8396,6 +8418,17 @@ class Evaluator:
         return out
 
     @staticmethod
+    def _rays_mask(kind, p, mask):
+        """VolumeRays' Mask Options: the mask input limits the rays only with Enable Mask on, and Mask Blur softens its edges (a Gaussian, the Blur
+        node's own). Other kinds (and a saved node, which always used its mask) pass the mask through."""
+        if mask is None or kind != "VolumeRays":
+            return mask
+        if not int(p.get("chk_use_mask", 1)):
+            return None
+        blur = float(p.get("mask_blur", 0.0))
+        return Evaluator._gaussian_2d(np.asarray(mask, np.float32), blur) if blur > 0.0 else mask
+
+    @staticmethod
     def _godrays(image, p, origin=(0, 0), matte=None):
         # Nuke's GodRays (nodebased/raysbehaviour.py); VolumeRays and an older GodRays node (no legacy_godrays, or 1) run the smear below.
         from . import raysbehaviour
@@ -8405,6 +8438,8 @@ class Evaluator:
         add_on_top = bool(int(p.get("comp_me", 1)))
         if decay == 0.0 and add_on_top: return image.copy()
         steps = max(1, min(256, int(p.get("steps", 32))))
+        if matte is not None or "ray_quality" in p:      # VolumeRays: the Quality menu (nodebased/raysbehaviour.py)
+            steps = raysbehaviour.volume_steps(p, steps)
         h, w = image.shape[:2]
         yy, xx = np.mgrid[:h, :w].astype(np.float32)
         cx, cy = float(p.get("center_x", w/2))-origin[0], float(p.get("center_y", h/2))-origin[1]
@@ -8422,7 +8457,7 @@ class Evaluator:
         # Pre-Ray Blur: the ray source is blurred before the rays are cast, Nuke's blur size in pixels (a Gaussian, the Blur node's own).
         bright = Evaluator._gaussian_2d(bright, float(p.get("pre_blur", 0.0)))
         out = image.copy(); acc = np.zeros_like(bright)
-        translate = float(p.get("translate", 1.0))
+        translate = raysbehaviour.volume_translate(p) if "raylength" in p else float(p.get("translate", 1.0))
         for i in range(1, steps+1):
             t = translate * i / steps
             sx = np.clip(np.rint(xx + (xx-cx)*t).astype(int), 0, w-1)

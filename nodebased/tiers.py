@@ -903,7 +903,7 @@ PIXEL_UNIT_PARAMS = {
     "Grain": ("red_size", "green_size", "blue_size"),
     "Flare": ("position_x", "position_y", "length", "size", "flare_radius_inner", "flare_radius_middle", "flare_radius_outer", "flare_chroma_shift"),
     "Glint": ("length",), "Sparkles": ("size", "spark_x", "spark_y", "spark_size", "spark_thick"),
-    "GodRays": ("center_x", "center_y"), "VolumeRays": ("center_x", "center_y"),
+    "GodRays": ("center_x", "center_y"), "VolumeRays": ("center_x", "center_y", "edge_size", "blur_size", "flicker_size", "mask_blur"),
     "BumpBoss": ("lightposition_x", "lightposition_y", "center_x", "center_y"),
     "CopyRectangle": ("area_x", "area_y", "area_r", "area_t"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),

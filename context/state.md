@@ -1,3 +1,7 @@
+## Lane 2 step X4 (11/19): missing knobs on Reconcile3D, MotionBlur3D, VolumeRays and Reformat
+
+Reconcile3D has the seven 2D-transform resampling knobs (carried on the track as `transform_settings`; no pixel changes), MotionBlur3D has Output UV, Z input and distance (the uv layer, depth source and constant-depth fallback act), Reformat's `box_pixel_aspect` is paired with `pixel_aspect`, VolumeRays has all 13 knobs with Ray Length, Quality, Enable Mask and Mask Blur acting and the rest listed as changing no pixel. Schema stays 37. Fidelity: Reconcile3D 76.7 to 99.5, MotionBlur3D 75.0 to 100, VolumeRays 80.5 to 99.5, Reformat 98.0 to 100, overall 97.7 to 97.8. Open: the MotionBlur2D/3D shutter offset reads opposite to the guide; Alpha Edges and Shadow Making, flicker noise and the volume colour ramp are not built. Tests: `tests/test_l2_x4_*.py`.
+
 ## Lane 2 step X3 (11/19): OCIO config menu and the Views tab of Project Settings
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (3:06 AM on 2026-11-19 PDT)

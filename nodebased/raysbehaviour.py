@@ -24,10 +24,19 @@ LEGACY = {"GodRays": {"legacy_godrays": 1}}
 # A saved VolumeRays keeps its picture: Add on Top on, no radial falloff (Nuke's default is on), no pre-blur, the luminance style.
 VOLUME_UPGRADE = {"comp_me": 1, "luma_tol": 0.0, "chk_desat": 0, "CCorrect1_gamma": 1.0, "CCorrect1_gain": 1.0,
                   "style": "RGB Luminance", "pre_blur": 0.0, "chk_radial": 0, "radial_size": 500.0, "rad_softness": 1.0}
-NEW = {"VolumeRays": {**VOLUME_UPGRADE, "comp_me": 0, "chk_radial": 1}, "GodRays": {"legacy_godrays": 0, "rays_translate_x": 0.0, "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_scale": 1.0, "rays_skew": 0.0,
+# The secondary knobs of the Nuke 17.0 Reference Guide's VolumeRays tabs (lane 2 step X4), at the guide's defaults. `ray_quality` is the guide's `quality`
+# (NodeBased's `quality` is the shared Defocus number). Output Mask on: a wired mask limits the rays, as the guide's input table says, so a saved node
+# (which always used its mask) keeps its picture; the guide lists the check box itself as off.
+VOLUME_EXTRA = {"edge_size": 0.0, "blur_size": 3.0, "raylength": 20.0, "ray_quality": "Medium", "chk_flicker": 1, "flicker_speed": 2.0,
+                "flicker_size": 40.0, "xform_flicker": 0, "initcolor": 1.0, "volume_end_red": 0.0, "volume_end_green": 0.0, "volume_end_blue": 0.0,
+                "volume_end_alpha": 0.0, "chk_use_mask": 1, "mask_blur": 0.0, "chk_xform_mask": 0}
+QUALITY = ("Low", "Medium", "High", "Very High")
+QUALITY_STEPS = {"Low": 0.5, "Medium": 1.0, "High": 2.0, "Very High": 4.0}      # a share of the node's `steps`; the guide gives no counts
+RAY_LENGTH_DEFAULT = 20.0                                                        # the guide's default: the length at which `translate` is as set
+NEW = {"VolumeRays": {**VOLUME_UPGRADE, **VOLUME_EXTRA, "comp_me": 0, "chk_radial": 1}, "GodRays": {"legacy_godrays": 0, "rays_translate_x": 0.0, "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_scale": 1.0, "rays_skew": 0.0,
                    "rays_from_color": 1.0, "rays_to_color": 1.0, "rays_gamma": 1.0, "rays_max": 0}}
 # An older document's node: the legacy flag, and the old step count (a saved node has its own; this is for one saved without).
-UPGRADE = {"VolumeRays": dict(VOLUME_UPGRADE), "GodRays": {"legacy_godrays": 1, "rays_translate_x": 0.0, "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_scale": 1.0, "rays_skew": 0.0,
+UPGRADE = {"VolumeRays": {**VOLUME_UPGRADE, **VOLUME_EXTRA, "chk_flicker": 0}, "GodRays": {"legacy_godrays": 1, "rays_translate_x": 0.0, "rays_translate_y": 0.0, "rays_rotate": 0.0, "rays_scale": 1.0, "rays_skew": 0.0,
                        "rays_from_color": 1.0, "rays_to_color": 1.0, "rays_gamma": 1.0, "rays_max": 0}}
 
 
@@ -37,6 +46,16 @@ def new_params(kind):
 
 def upgrade_params(kind):
     return dict(UPGRADE.get(kind, {}))
+
+
+def volume_steps(p, steps):
+    """`steps` scaled by the Quality menu (Medium is the node's own count)."""
+    return max(1, min(256, int(round(steps * QUALITY_STEPS.get(p.get("ray_quality", "Medium"), 1.0)))))
+
+
+def volume_translate(p):
+    """The rays' reach: `translate`, scaled by Ray Length over the guide's default of 20 (longer rays reach further; the guide states no unit)."""
+    return float(p.get("translate", 1.0)) * max(float(p.get("raylength", RAY_LENGTH_DEFAULT)), 0.0) / RAY_LENGTH_DEFAULT
 
 
 def is_legacy(p):

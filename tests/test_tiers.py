@@ -327,13 +327,18 @@ class ProxyTierTests(unittest.TestCase):
                        "flare_radius_inner", "flare_radius_middle", "flare_radius_outer", "flare_chroma_shift",
                        "spark_x", "spark_y", "spark_size", "spark_thick",
                        # Lane 9 step O: BumpBoss's light position and image center are pixel positions.
-                       "lightposition_x", "lightposition_y", "x_offset", "y_offset"}
+                       "lightposition_x", "lightposition_y", "x_offset", "y_offset",
+                       # Lane 2 step X4: VolumeRays' alpha edge size, flicker size and mask blur are pixel lengths.
+                       "edge_size", "flicker_size", "mask_blur"}
         for kind, spec in SPECS.items():
             present = pixel_names & set(spec["params"])
             # The fluid `max_size` knob caps simulated cells. Its meaning must stay fixed when
             # the viewer resolution drops, otherwise proxy playback forks the simulation cache.
             if kind in ("FluidSolver3D", "FluidLiquidSolver3D"):
                 present.discard("max_size")
+            # MotionBlur3D's distance is a depth in scene units from the camera, not a pixel length.
+            if kind == "MotionBlur3D":
+                present.discard("distance")
             with self.subTest(kind=kind):
                 self.assertEqual(present, set(PIXEL_UNIT_PARAMS.get(kind, ())))
 

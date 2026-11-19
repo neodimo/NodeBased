@@ -425,8 +425,12 @@ class VolumeRaysTests(unittest.TestCase):
 
     def test_the_main_tab_reads_in_the_guides_order(self):
         labels = [group.label for group in knobs.knob_layout("VolumeRays")]
-        self.assertEqual(labels[:11], ["Volumetric Creation", "Luma Tolerance", "Volumetrics Center", "Pre-Ray Blur", "Add on Top", "Desaturate before Coloring",
-                                       "Volume Gamma", "Volume Gain", "Enable Radial Falloff", "Radial Size", "Radial Falloff"])
+        # Lane 2 step X4 added the guide's other thirteen knobs in their places.
+        self.assertEqual(labels[:24], ["Volumetric Creation", "Luma Tolerance", "Edge Size", "Edge Blur", "Volumetrics Center", "Ray Length", "Pre-Ray Blur",
+                                       "Quality", "Add on Top", "Use Flickering", "Flicker Speed", "Flicker Size", "Transform Noise with Volume Center",
+                                       "Desaturate before Coloring", "Volume Gamma", "Volume Gain", "Initial Volume Color", "End Volume Color",
+                                       "Enable Radial Falloff", "Radial Size", "Radial Falloff", "Enable Mask", "Mask Blur",
+                                       "Transform Mask with Volume Center"])
 
 
 # -------------------------------------------------------------------------------------------------------------- BumpBoss
