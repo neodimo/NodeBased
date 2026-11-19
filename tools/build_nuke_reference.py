@@ -172,10 +172,14 @@ def short_tab(tab):
 
 # Knobs whose name ends in "channels" but that are check boxes in the guide (the guide's text: "When enabled, ...").
 BOOL_CHANNELS_NAMED = {"use_input_channels"}
+# Bokeh's check boxes, which the page writes as on or off ("when enabled, you can use the Lens controls"; lane 9 step X1): typed bool with a bool default.
+ON_OFF_BOOLS_NAMED = {"realWorldLens", "normalizeVisualization", "overrideNearAndFarForSlices"}
 
 
 def knob_type(name, ui, default, choices):
     if name in BOOL_CHANNELS_NAMED and isinstance(default, bool):
+        return "bool"
+    if name in ON_OFF_BOOLS_NAMED and default in ("on", "off", True, False):
         return "bool"
     if name == "channels" or ui.lower().endswith("channels"):
         return "channels"
@@ -219,8 +223,11 @@ def build_node(name, slug, group, cache, fetch):
             role, counted, why = "gpu_option", False, "GPU selection option common to GPU nodes"
         if name in KEEP_TABS and tab not in KEEP_TABS[name] and counted and not role.startswith("chrome:"):
             role, counted, why = "format_option", False, "per-format or display option tab, not scored"
+        ktype = knob_type(kname, k["ui"], default, ch)
+        if ktype == "bool" and isinstance(default, str):
+            default = default == "on"
         entry = {"name": kname, "label": k["ui"], "tab": tab, "primary": None, "role": role, "counted": counted,
-                 "type": knob_type(kname, k["ui"], default, ch), "default": default}
+                 "type": ktype, "default": default}
         if ch:
             entry["choices"] = ch
         if why:

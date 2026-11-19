@@ -2807,9 +2807,9 @@
     {"name": "focusRegionFalloff", "label": "Focus Region Falloff", "tab": "Bokeh Tab", "primary": true, "role": "knob", "counted": true, "type": "string", "default": "Linear"},
     {"name": "N/A", "label": "Defocus Matte Channel", "tab": "Bokeh Tab", "primary": true, "role": "ui_only", "counted": false, "type": "string", "default": "off", "reason": "enable checkbox or label without a scripting name"},
     {"name": "defocusMatteChannel", "label": "Defocus Matte Channel", "tab": "Bokeh Tab", "primary": true, "role": "knob", "counted": true, "type": "string", "default": "none"},
-    {"name": "normalizeVisualization", "label": "Normalize Visualization", "tab": "Bokeh Tab", "primary": true, "role": "knob", "counted": true, "type": "string", "default": "on"},
+    {"name": "normalizeVisualization", "label": "Normalize Visualization", "tab": "Bokeh Tab", "primary": true, "role": "knob", "counted": true, "type": "bool", "default": true},
     {"name": "integrateFrontAndBackSeperately", "label": "Integrate Deep Front and Back Separately", "tab": "Bokeh Tab", "primary": true, "role": "knob", "counted": true, "type": "string", "default": "off"},
-    {"name": "realWorldLens", "label": "Real World Lens Simulation", "tab": "Lens Tab", "primary": false, "role": "knob", "counted": true, "type": "string", "default": "off"},
+    {"name": "realWorldLens", "label": "Real World Lens Simulation", "tab": "Lens Tab", "primary": false, "role": "knob", "counted": true, "type": "bool", "default": false},
     {"name": "focalLength", "label": "Focal Length", "tab": "Lens Tab", "primary": false, "role": "knob", "counted": true, "type": "number", "default": 35},
     {"name": "fStop", "label": "Aperture", "tab": "Lens Tab", "primary": false, "role": "knob", "counted": true, "type": "number", "default": 6},
     {"name": "worldScale", "label": "World Scale", "tab": "Lens Tab", "primary": false, "role": "knob", "counted": true, "type": "string", "default": "cm"},
@@ -2838,7 +2838,7 @@
     {"name": "kCurvature", "label": "Curvature", "tab": "Kernel Tab", "primary": false, "role": "knob", "counted": true, "type": "number", "default": 0.1},
     {"name": "kRotation", "label": "Rotation", "tab": "Kernel Tab", "primary": false, "role": "knob", "counted": true, "type": "number", "default": 0},
     {"name": "correctiveSlices", "label": "Number of Corrective Slices", "tab": "Corrective Slices Tab", "primary": false, "role": "knob", "counted": true, "type": "number", "default": 10, "choices": ["1 slice", "2 slices", "3+ slices"]},
-    {"name": "overrideNearAndFarForSlices", "label": "Override Near/Far", "tab": "Corrective Slices Tab", "primary": false, "role": "knob", "counted": true, "type": "string", "default": "off"},
+    {"name": "overrideNearAndFarForSlices", "label": "Override Near/Far", "tab": "Corrective Slices Tab", "primary": false, "role": "knob", "counted": true, "type": "bool", "default": false},
     {"name": "depthSlicesNearAndFar", "label": "Near and Far", "tab": "Corrective Slices Tab", "primary": false, "role": "knob", "counted": true, "type": "number_list", "default": [0, 0]}
    ]
   },
