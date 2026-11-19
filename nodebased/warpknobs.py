@@ -38,7 +38,12 @@ GRID_OUTPUTS = ["source", "source warped", "destination", "destination warped"]
 BACKGROUNDS = ["on black", "on src", "on dst", "on bg"]
 _GRID_TRANSFORM = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0,
                    "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "center_x": 0.0, "center_y": 0.0}
-GRIDWARP = {"grid_output": "source warped", "warp": 1.0, "background": "on src", "background_mix": 0.0,
+# The overlay colours of the two grids as a Viewer draws them (Nuke's Colors tab, `source_color` and `destination_color`; the guide lists no default, so
+# these are the cyan and yellow the grids were always drawn in). Stored as r, g, b in 0 to 1.
+GRID_COLORS = {"source": (0x58 / 255.0, 0xd7 / 255.0, 1.0), "destination": (0xf4 / 255.0, 0xce / 255.0, 0x63 / 255.0)}
+GRID_VIEW = {**{f"{side}_grid_visible": 1 for side in GRID_COLORS}, **{f"{side}_grid_locked": 0 for side in GRID_COLORS},
+             **{f"{side}_color_{channel}": value for side, rgb in GRID_COLORS.items() for channel, value in zip("rgb", rgb)}}
+GRIDWARP = {"grid_output": "source warped", "warp": 1.0, "background": "on src", "background_mix": 0.0, **GRID_VIEW,
             **{f"source_grid_transform_{key}": value for key, value in _GRID_TRANSFORM.items()},
             "use_source_transform": 1,
             **{f"destination_grid_transform_{key}": value for key, value in _GRID_TRANSFORM.items()},
@@ -49,7 +54,9 @@ SPLINEWARP = {"premultiply": 0, "outputMask": "mask_splinwarp.a", "crop_to_forma
               "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "center_x": 0.0, "center_y": 0.0}
 # A saved SplineWarp had no mask layer and no crop, so it keeps both off.
 SPLINEWARP_SAVED = {**SPLINEWARP, "outputMask": "none", "crop_to_format": 0}
-LIMITS = {"background_mix": (0.0, 1.0), "warp": (0.0, 10.0), "use_source_transform": (0, 1),
+LIMITS = {**{f"{side}_{name}": (0, 1) for side in GRID_COLORS for name in ("grid_visible", "grid_locked")},
+          **{f"{side}_color_{channel}": (0.0, 1.0) for side in GRID_COLORS for channel in "rgb"},
+          "background_mix": (0.0, 1.0), "warp": (0.0, 10.0), "use_source_transform": (0, 1),
           "premultiply": (0, 1), "crop_to_format": (0, 1), "boundary_bbox": (0, 1),
           "layer_warp": (0.0, 1.0), "pair_warp": (0.0, 1.0), "root_warp": (0.0, 1.0), "render_res": (1.0, 100.0),
           **{f"{grid}_grid_transform_{name}": bounds
@@ -62,6 +69,42 @@ CHOICES = {"warp_direction": ("A", "B"), "grid_output": GRID_OUTPUTS, "backgroun
            "source_grid_transform_skew_order": ("XY", "YX"),
            "destination_grid_transform_skew_order": ("XY", "YX")}
 OPEN_CHOICES = ("outputMask",)
+
+
+def grid_visible(p, side):
+    """Whether the Viewer draws the `side` ("source" or "destination") grid and lets its points be picked (Nuke's `visible`)."""
+    return bool(int(p.get(f"{side}_grid_visible", 1)))
+
+
+def grid_locked(p, side):
+    """Whether the `side` grid is locked: Nuke's `locked` keeps its points from being dragged in the Viewer; it never changes the warp."""
+    return bool(int(p.get(f"{side}_grid_locked", 0)))
+
+
+def grid_color(p, side):
+    """The colour (#rrggbb) the Viewer draws the `side` grid in (Nuke's Colors tab)."""
+    default = GRID_COLORS[side]
+    rgb = [min(1.0, max(0.0, float(p.get(f"{side}_color_{c}", d)))) for c, d in zip("rgb", default)]
+    return "#" + "".join(f"{int(round(v * 255)):02x}" for v in rgb)
+
+
+def grid_keys(payload, side):
+    """The frames at which the `side` grid has a key (Nuke's `keys` list): every key frame of every point's animated scalars, ascending."""
+    frames = set()
+    for row in (payload or {}).get(side, []):
+        for point in row:
+            for value in point.values():
+                curve = value.get("curve") if isinstance(value, dict) else None
+                for key in (curve or {}).get("keys", []):
+                    frames.add(int(key["frame"]))
+    return sorted(frames)
+
+
+def resized_grid(rows, columns, width, height):
+    """A plain grid of `rows` x `columns` points laid across a `width` x `height` image, as animated-point records (Nuke's Resize to Image)."""
+    from . import warps
+    return [[{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0} for x, y in row]
+            for row in warps.default_grid(width, height, rows, columns)]
 
 
 def new_params(kind):

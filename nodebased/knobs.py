@@ -1263,7 +1263,11 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("warp",), label="Warp"),
         KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
-        KnobGroup("enum", ("grid_output",), label="Output"),
+        KnobGroup("bool", ("source_grid_visible",), label="Visible", section="Source Grid", help="Draw the source grid in the Viewer; off, its points cannot be picked either."),
+        KnobGroup("bool", ("source_grid_locked",), label="Locked", help="Keep the source grid's points from being dragged in the Viewer; the warp itself is unchanged."),
+        KnobGroup("bool", ("destination_grid_visible",), label="Visible", section="Destination Grid", help="Draw the destination grid in the Viewer; off, its points cannot be picked either."),
+        KnobGroup("bool", ("destination_grid_locked",), label="Locked", help="Keep the destination grid's points from being dragged in the Viewer; the warp itself is unchanged."),
+        KnobGroup("enum", ("grid_output",), label="Output", section="Settings"),
         KnobGroup("enum", ("background",), label="Background"),
         KnobGroup("float_slider", ("background_mix",), label="Background mix", soft_range=(0, 1)),
         KnobGroup("xy", ("source_grid_transform_translate_x", "source_grid_transform_translate_y"), label="Translate xy"),
@@ -1282,7 +1286,9 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("destination_grid_transform_skew_order",), label="Skew order"),
         KnobGroup("xy", ("destination_grid_transform_center_x", "destination_grid_transform_center_y"), label="Center xy"),
         KnobGroup("int", ("render_res",), label="Submesh resolution"),
-        KnobGroup("enum", ("bbox",), label="Bounding box"), KnobGroup("enum", ("filter",))),
+        KnobGroup("enum", ("bbox",), label="Bounding box"), KnobGroup("enum", ("filter",)),
+        KnobGroup("color", ("source_color_r", "source_color_g", "source_color_b"), label="Source color", section="Colors", help="The colour the Viewer draws the source grid in."),
+        KnobGroup("color", ("destination_color_r", "destination_color_g", "destination_color_b"), label="Destination color", help="The colour the Viewer draws the destination grid in.")),
     "GridWarpTracker": _groups(
         KnobGroup("enum", ("drive",), label="Drive"),
         KnobGroup("string", ("tracker_id",), label="Tracker"), KnobGroup("string", ("track_indices",), label="Track indices"),
@@ -2900,12 +2906,12 @@ NUKE_LAYOUT_LANE9.update({
 # Lane 9 step H (11/3): GridWarp and SplineWarp in the guide's order (docs/parity/nuke_nodes.json): channels and the mask strip lead GridWarp, channels
 # and the Output group lead SplineWarp; rows, columns, the curve resolution and NodeBased's own box choice keep their place after these.
 NUKE_LAYOUT_LANE9.update({
-    "GridWarp": ("channels", "maskChannelInput", "inject", "invert_mask", "fringe", "grid_output", "warp", "mix", "background", "background_mix", "bbox",
+    "GridWarp": ("channels", "maskChannelInput", "inject", "invert_mask", "fringe", "source_grid_visible", "source_grid_locked", "destination_grid_visible", "destination_grid_locked", "grid_output", "warp", "mix", "background", "background_mix", "bbox",
                  "source_grid_transform_translate_x", "source_grid_transform_rotate", "source_grid_transform_scale",
                  "source_grid_transform_skew_x", "source_grid_transform_skew_y", "source_grid_transform_skew_order", "source_grid_transform_center_x",
                  "use_source_transform", "destination_grid_transform_translate_x", "destination_grid_transform_rotate", "destination_grid_transform_scale",
                  "destination_grid_transform_skew_x", "destination_grid_transform_skew_y", "destination_grid_transform_skew_order", "destination_grid_transform_center_x",
-                 "render_res", "filter"),
+                 "render_res", "filter", "source_color_r", "destination_color_r"),
     "SplineWarp": ("channels", "premultiply", "outputMask", "crop_to_format", "boundary_bbox", "output", "mix", "root_warp", "layer_warp", "pair_warp",
                    "translate_x", "rotate", "scale", "skew_x", "skew_y", "skew_order", "center_x"),
 })

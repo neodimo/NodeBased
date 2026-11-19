@@ -56,7 +56,11 @@ NOT_PIXEL = {
     # Lane 2 step X4: Reformat's pixel aspect is the output format's, carried with it; the guide gives no effect on the pixels.
     "Reformat": {"box_pixel_aspect": "the guide says only that it sets the output's pixel aspect ratio; NodeBased carries it with the format and works in square pixels (tests/test_l2_x4_reformat.py)"},
     # Lane 9 step P: viewer controls and undocumented rendering switches have no documented image-pixel behavior.
-    "GridWarp": {"source_grid_visible": "viewer overlay only; does not change warped pixels",
+    "GridWarp": {"source_grid_keys": "a readout of the frames at which the grid has a key (nodebased/warpknobs.py `grid_keys`); it is derived from the warp payload and changes no pixels",
+                 "destination_grid_keys": "a readout of the frames at which the grid has a key (nodebased/warpknobs.py `grid_keys`); it is derived from the warp payload and changes no pixels",
+                 "source_image_size": "the Resize to Image button (the window's `_gridwarp_resize`): it rewrites the warp payload, a button and not a param",
+                 "destination_image_size": "the Resize to Image button (the window's `_gridwarp_resize`): it rewrites the warp payload, a button and not a param",
+                 "source_grid_visible": "viewer overlay only; does not change warped pixels",
                  "source_grid_locked": "viewer editing lock only; does not change warped pixels",
                  "destination_grid_visible": "viewer overlay only; does not change warped pixels",
                  "destination_grid_locked": "viewer editing lock only; does not change warped pixels",

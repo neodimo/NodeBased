@@ -3970,7 +3970,8 @@
   },
   "GridWarp": {
    "nodebased": "GridWarp",
-   "default_notes": {"mix": "Nuke's GridWarp mix dissolves the A/B morph (0 = source, 1 = destination) and acts only with output set to AB morph; NodeBased's mix is the masked dissolve of the whole result, so its 1 keeps the warp visible"},
+   "skip_default": ["source_grid_visible"],
+   "default_notes": {"source_grid_visible": "the guide lists the source grid off and the destination on, with the toolbar's auto toggle choosing the grid that suits the output; NodeBased has no auto toggle and has always drawn both grids, so both start shown", "source_color": "the guide lists no default; the grids were always drawn cyan (source) and yellow (destination), so those are the defaults", "destination_color": "the guide lists no default; the grids were always drawn cyan (source) and yellow (destination), so those are the defaults", "mix": "Nuke's GridWarp mix dissolves the A/B morph (0 = source, 1 = destination) and acts only with output set to AB morph; NodeBased's mix is the masked dissolve of the whole result, so its 1 keeps the warp visible"},
    "inputs": [
     {"nodebased": "image", "nuke": "src", "kind": "mapped"},
     {"nodebased": "mask", "nuke": "mask", "kind": "mapped"},
@@ -4010,16 +4011,16 @@
     {"nodebased": ["destination_grid_transform_center_x", "destination_grid_transform_center_y"], "nuke": ["destination_grid_transform_center"], "kind": "components", "reason": "The dependent destination-grid pivot is stored as XY components."},
     {"nodebased": [], "nuke": ["destination_grid_transform_matrix"], "kind": "unsupported", "reason": "The guide names an extra matrix control but gives no matrix interpretation or pixel behavior."},
     {"nodebased": ["render_res"], "nuke": ["render_res"], "kind": "same"},
-    {"nodebased": [], "nuke": ["source_grid_keys"], "kind": "unsupported", "reason": "The key list edits animated source-grid points stored in the warp payload; it is an editor payload control, not an image parameter."},
-    {"nodebased": [], "nuke": ["source_grid_visible"], "kind": "unsupported", "reason": "This visibility toggle only draws the source-grid overlay in the viewer."},
-    {"nodebased": [], "nuke": ["source_grid_locked"], "kind": "unsupported", "reason": "This lock only prevents source-grid editing in the viewer."},
-    {"nodebased": [], "nuke": ["source_image_size"], "kind": "unsupported", "reason": "Resize to Image is a viewer action that rewrites the source-grid payload, not a persistent pixel parameter."},
-    {"nodebased": [], "nuke": ["destination_grid_keys"], "kind": "unsupported", "reason": "The key list edits animated destination-grid points stored in the warp payload; it is an editor payload control, not an image parameter."},
-    {"nodebased": [], "nuke": ["destination_grid_visible"], "kind": "unsupported", "reason": "This visibility toggle only draws the destination-grid overlay in the viewer."},
-    {"nodebased": [], "nuke": ["destination_grid_locked"], "kind": "unsupported", "reason": "This lock only prevents destination-grid editing in the viewer."},
-    {"nodebased": [], "nuke": ["destination_image_size"], "kind": "unsupported", "reason": "Resize to Image is a viewer action that rewrites the destination-grid payload, not a persistent pixel parameter."},
-    {"nodebased": [], "nuke": ["source_color"], "kind": "unsupported", "reason": "This color is used to draw the source grid overlay in the viewer; it does not tint the warped image."},
-    {"nodebased": [], "nuke": ["destination_color"], "kind": "unsupported", "reason": "This color is used to draw the destination grid overlay in the viewer; it does not tint the warped image."}
+    {"nodebased": [], "nuke": ["source_grid_keys"], "kind": "panel", "reason": "the keys list of the Source Grid tab: the frames at which the grid has a key, read from the animation curves in the warp payload (nodebased/warpknobs.py `grid_keys`) and shown in the properties panel; it is derived, not a param"},
+    {"nodebased": ["source_grid_visible"], "nuke": ["source_grid_visible"], "kind": "same"},
+    {"nodebased": ["source_grid_locked"], "nuke": ["source_grid_locked"], "kind": "same"},
+    {"nodebased": [], "nuke": ["source_image_size"], "kind": "panel", "reason": "the Resize to Image button of the Source Grid tab (the window's `_gridwarp_resize`): it lays the grid out again across the image and writes the warp payload, not a node param"},
+    {"nodebased": [], "nuke": ["destination_grid_keys"], "kind": "panel", "reason": "the keys list of the Destination Grid tab: the frames at which the grid has a key, read from the animation curves in the warp payload (nodebased/warpknobs.py `grid_keys`) and shown in the properties panel; it is derived, not a param"},
+    {"nodebased": ["destination_grid_visible"], "nuke": ["destination_grid_visible"], "kind": "same"},
+    {"nodebased": ["destination_grid_locked"], "nuke": ["destination_grid_locked"], "kind": "same"},
+    {"nodebased": [], "nuke": ["destination_image_size"], "kind": "panel", "reason": "the Resize to Image button of the Destination Grid tab (the window's `_gridwarp_resize`): it lays the grid out again across the image and writes the warp payload, not a node param"},
+    {"nodebased": ["source_color_r", "source_color_g", "source_color_b"], "nuke": ["source_color"], "kind": "components", "reason": "NodeBased stores the red, green and blue of the source grid's overlay colour as three scalar params; Nuke has one colour knob"},
+    {"nodebased": ["destination_color_r", "destination_color_g", "destination_color_b"], "nuke": ["destination_color"], "kind": "components", "reason": "NodeBased stores the red, green and blue of the destination grid's overlay colour as three scalar params; Nuke has one colour knob"}
    ]
   },
   "SplineWarp": {

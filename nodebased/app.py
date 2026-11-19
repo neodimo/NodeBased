@@ -3122,7 +3122,10 @@ class Viewer(PanZoomView):
         else:
             resolved = shape_model.resolve_warp_data("GridWarp", payload,
                                                        self.window.dispatcher.document["time"]["current"])
+            from . import warpknobs
             for side in ("source", "destination"):
+                if not warpknobs.grid_visible(node["params"], side) or warpknobs.grid_locked(node["params"], side):
+                    continue                        # a hidden grid cannot be picked and a locked one cannot be dragged (Nuke's visible and locked)
                 for row, points in enumerate(resolved[side]):
                     for column, point in enumerate(points):
                         x, y = point[:2]
@@ -3209,8 +3212,12 @@ class Viewer(PanZoomView):
                     painter.setPen(QPen(QColor(color), 1)); painter.setBrush(QColor("#202127"))
                     for point in points: painter.drawEllipse(point, radius, radius)
         else:
+            from . import warpknobs
             source, destination = resolved["source"], resolved["destination"]
-            for grid, color in ((source, "#58d7ff"), (destination, "#f4ce63")):
+            # Nuke's `visible` toggles and Colors tab: a hidden grid is not drawn, each shown grid takes its own colour.
+            shown = [(grid, warpknobs.grid_color(node["params"], side)) for grid, side in ((source, "source"), (destination, "destination"))
+                     if warpknobs.grid_visible(node["params"], side)]
+            for grid, color in shown:
                 painter.setPen(QPen(QColor(color), 1.5)); painter.setBrush(Qt.BrushStyle.NoBrush)
                 for row in grid:
                     draw_bezier(row)
@@ -3220,11 +3227,12 @@ class Viewer(PanZoomView):
                     draw_tangents(row, color)
             join_pen = QPen(QColor("#9494a0"), 1); join_pen.setStyle(Qt.PenStyle.DashLine)
             join_pen.setCosmetic(True); painter.setPen(join_pen)
-            for sr, dr in zip(source, destination):
-                for s, d in zip(sr, dr):
-                    painter.drawLine(self._roto_scene_point({"x": s[0], "y": s[1]}, tier),
-                                     self._roto_scene_point({"x": d[0], "y": d[1]}, tier))
-            for grid, color in ((source, "#58d7ff"), (destination, "#f4ce63")):
+            if len(shown) == 2:
+                for sr, dr in zip(source, destination):
+                    for s, d in zip(sr, dr):
+                        painter.drawLine(self._roto_scene_point({"x": s[0], "y": s[1]}, tier),
+                                         self._roto_scene_point({"x": d[0], "y": d[1]}, tier))
+            for grid, color in shown:
                 painter.setPen(QPen(QColor(color), 1)); painter.setBrush(QColor("#202127"))
                 for row in grid:
                     for point_data in row:
@@ -16662,7 +16670,21 @@ class Window(QMainWindow):
                 hint.setWordWrap(True)
                 form.addRow(hint)
             if node["type"] == "GridWarp":
-                hint = QLabel("Drag yellow destination points; cyan points show the source grid.")
+                from . import warpknobs
+                payload = self.dispatcher.document.get("node_data", {}).get(key)
+                for side in ("source", "destination"):
+                    # Nuke's Source Grid and Destination Grid tabs: the keys list and the Resize to Image button.
+                    frames = warpknobs.grid_keys(payload, side)
+                    keys_label = QLabel(", ".join(str(f) for f in frames) if frames else "none")
+                    keys_label.setObjectName(f"gridwarp-{side}-keys")
+                    keys_label.setWordWrap(True)
+                    form.addRow(f"{side.capitalize()} grid keys", keys_label)
+                    resize = QPushButton("Resize to Image")
+                    resize.setObjectName(f"gridwarp-{side}-resize")
+                    resize.setToolTip(f"Lay the {side} grid out again across the image, at the node's rows and columns")
+                    resize.clicked.connect(lambda checked=False, k=key, s=side: self._gridwarp_resize(k, s))
+                    form.addRow(f"{side.capitalize()} grid", resize)
+                hint = QLabel("Drag the destination grid's points; the source grid is drawn beside it. Hide or lock either grid, and pick its colour, in the knobs above.")
                 hint.setWordWrap(True)
                 form.addRow(hint)
             if node["type"] == "DustBust":
@@ -18204,6 +18226,35 @@ class Window(QMainWindow):
         if node is None or node["type"] != "Roto":
             self._show_command_error(ValueError("Roto drawing requires a Roto node"))
             return False
+    def _lens_reset(self, key):
+        """LensDistortion's Reset (nodebased/lensdistortion.py `reset_edits`): one undo step that puts the distortion terms back to no distortion."""
+        from . import lensdistortion
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] not in lensdistortion.KINDS:
+            return False
+        edits = lensdistortion.reset_edits(node["type"], node["params"])
+        if not edits:
+            return False
+        self.command({"op": "batch", "commands": [{"op": "set", "id": key, "param": name, "value": value} for name, value in edits.items()]})
+        return True
+
+    def _gridwarp_resize(self, key, side):
+        """GridWarp's Resize to Image (Nuke's Source Grid and Destination Grid tabs): the `side` grid is laid out again across the image at the node's
+        rows and columns, losing its edits and keys; the other grid stays."""
+        from . import warpknobs, warps
+        node = self.dispatcher.document["nodes"].get(key)
+        rect = self.viewer.format_rect
+        if node is None or node["type"] != "GridWarp" or rect is None or side not in ("source", "destination"):
+            return False
+        payload = fast_copy(self.dispatcher.document.get("node_data", {}).get(key))
+        if payload is None:
+            payload = {name: warpknobs.resized_grid(node["params"]["rows"], node["params"]["columns"], rect.width(), rect.height())
+                       for name in ("source", "destination")}
+        else:
+            payload[side] = warpknobs.resized_grid(node["params"]["rows"], node["params"]["columns"], rect.width(), rect.height())
+        self.command({"op": "set_warp_data", "id": key, "data": payload})
+        return True
+
         if self.dispatcher.document.get("view") != key:
             self.command({"op": "view", "id": key})
         frame = int(self.dispatcher.document["time"]["current"])
