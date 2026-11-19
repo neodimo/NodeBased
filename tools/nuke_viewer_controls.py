@@ -53,6 +53,9 @@ class Bench:
         dispatcher.execute({"op": "create", "id": "crop", "type": "Crop", "pos": [150, 120]})
         dispatcher.execute({"op": "connect", "id": "crop", "input": "image", "source": "c"})
         dispatcher.execute({"op": "create", "id": "text", "type": "Text", "pos": [300, 120]})
+        dispatcher.execute({"op": "create", "id": "ct", "type": "ColorTransfer", "pos": [300, 240]})
+        dispatcher.execute({"op": "connect", "id": "ct", "input": "A", "source": "c"})
+        dispatcher.execute({"op": "connect", "id": "ct", "input": "B", "source": "c"})
         dispatcher.execute({"op": "create", "id": "tr", "type": "Tracker", "pos": [450, 120]})
         dispatcher.execute({"op": "connect", "id": "tr", "input": "image", "source": "c"})
         dispatcher.execute({"op": "create", "id": "gw", "type": "GridWarp", "pos": [600, 120]})
@@ -356,6 +359,55 @@ def _text_center(bench):
     ok = (p["center_x"], p["center_y"]) == (30.0, -20.0) and p["box_x"] == 100.0 and bench.undo_steps() == 1
     bench.focus("text", box_x=40.0, box_y=40.0, box_width=880.0, box_height=460.0, center_x=0.0, center_y=0.0)
     return ok, f"Ctrl-drag moved the centre to {p['center_x']}, {p['center_y']} and left the box at {p['box_x']}"
+
+
+# -- ColorTransfer: the ROI box (lane 10, step T8) -------------------------------------------------------------------------------
+
+def _roi(bench, key="ct"):
+    p = bench.params(key)
+    return tuple(float(p[f"roi_{k}"]) for k in "xyrt")
+
+
+@probe("ColorTransfer.roi_box")
+def _colortransfer_roi(bench):
+    height = bench.window.viewer.format_rect.height()
+    roi = dict(roi_x=100.0, roi_y=100.0, roi_r=500.0, roi_t=400.0)        # drawn rows down: x 100, y height-400, 400 by 300
+    top = height - 400.0
+    bench.focus("ct", **roi)
+    right = bench.drag((500, top + 150), (550, top + 170))                # the right edge: r only
+    edge = bool(right) and _roi(bench) == (100.0, 100.0, 550.0, 400.0) and bench.undo_steps() == 1
+    bench.focus("ct", **roi)
+    bench.drag((100, top), (130, top + 20))                               # the top-left corner: x and t, the bottom right stays
+    corner = _roi(bench) == (130.0, 100.0, 500.0, 380.0)
+    bench.focus("ct", **roi)
+    bench.drag((300, top + 150), (340, top + 130))                        # inside: the whole box moves (40 right, 20 up)
+    body = _roi(bench) == (140.0, 120.0, 540.0, 420.0) and bench.undo_steps() == 1
+    bench.focus("ct", roi_x=0.0, roi_y=0.0, roi_r=0.0, roi_t=0.0)         # the default: the whole of A, its left edge at 0
+    bench.drag((0, height / 2), (50, height / 2))
+    width = bench.window.viewer.format_rect.width()
+    default = _roi(bench) == (50.0, 0.0, float(width), float(height))
+    bench.focus("ct", **roi)
+    keyed = _keyed_drag(bench, "ct", "roi_r", (500, top + 150), (540, top + 150), 540.0)
+    bench.focus("ct", roi_x=0.0, roi_y=0.0, roi_r=0.0, roi_t=0.0)
+    ok = edge and corner and body and default and keyed
+    return ok, (f"right edge {edge}, corner {corner}, body move {body}, the default box covers the frame {default}, "
+                f"animated r keyed in one step {keyed}")
+
+
+@probe("ColorTransfer.roi_on_input_a")
+def _colortransfer_on_a(bench):
+    window = bench.window
+    bench.focus("ct", roi_x=100.0, roi_y=100.0, roi_r=500.0, roi_t=400.0)
+    window.command({"op": "view", "id": "c"})                             # the Viewer on input A, ColorTransfer still selected
+    for item_key, item in window.graph.items_by_id.items():
+        item.setSelected(item_key == "ct")
+    window.dispatcher.undo_stack.clear()
+    bench.settle()
+    top = window.viewer.format_rect.height() - 400.0
+    taken = bench.drag((500, top + 150), (560, top + 150))
+    ok = bool(taken) and _roi(bench) == (100.0, 100.0, 560.0, 400.0) and bench.undo_steps() == 1
+    bench.focus("ct", roi_x=0.0, roi_y=0.0, roi_r=0.0, roi_t=0.0)
+    return ok, f"with the Viewer on input A the right edge drag stored roi {_roi(bench) if not ok else (100, 100, 560, 400)}"
 
 
 # -- Tracker and GridWarp: controls NodeBased already drew, now measured ------------------------------------------------------

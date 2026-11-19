@@ -3326,9 +3326,20 @@ class Viewer(PanZoomView):
                 continue
             if current == key:
                 return key, node
+            if node["type"] == "ColorTransfer" and current == node["inputs"].get("A"):
+                return key, node           # the guide: "connect the Viewer to input A ... to better see the area you are selecting"
             seen.add(current)
             stack.extend(nodes[current]["inputs"].values())
         return None
+
+    def _box_size(self):
+        """The viewed format's (width, height) in data units, for boxes whose knobs count from the bottom left."""
+        rect = self.format_rect
+        return (rect.width(), rect.height()) if rect is not None else (0.0, 0.0)
+
+    def _box_rect(self, kind, values):
+        """(x, y, w, h) of `kind`'s box in data coordinates, rows counting down."""
+        return handles2d.box_from_knobs(kind, values, *self._box_size())
 
     def _box_values(self):
         """(key, type, values at the current frame with any live drag applied) for the selected Crop or Text, or None."""
@@ -3346,9 +3357,9 @@ class Viewer(PanZoomView):
                 values["center_x"] = float(original["center_x"]) + cx - sx
                 values["center_y"] = float(original["center_y"]) + cy - sy
             else:
-                names = handles2d.BOX_NODES[node["type"]]
-                box = handles2d.box_drag(tuple(float(original[n]) for n in names), drag["part"], cx - sx, cy - sy)
-                for name, value in zip(names, box):
+                kind = node["type"]
+                box = handles2d.box_drag(self._box_rect(kind, original), drag["part"], cx - sx, cy - sy)
+                for name, value in handles2d.knobs_from_box(kind, box, self._box_size()[1]).items():
                     values[name] = int(round(value)) if isinstance(original[name], int) else float(value)
         return key, node["type"], values
 
@@ -6465,7 +6476,7 @@ class Viewer(PanZoomView):
         box = self._box_values()
         if box is not None:
             _, kind, values = box
-            x, y, w, h = (float(values[n]) for n in handles2d.BOX_NODES[kind])
+            x, y, w, h = self._box_rect(kind, values)
             zoom = max(abs(self.view_zoom()), 0.05)
             grip = 4.0 / zoom
             painter.save()
@@ -6900,8 +6911,8 @@ class Viewer(PanZoomView):
                 if kind == "Text" and modifiers & Qt.KeyboardModifier.ControlModifier:
                     part = "center"            # "You can also move it using Ctrl/Cmd +drag."
                 else:
-                    part = handles2d.box_hit(point, *(float(values[n]) for n in handles2d.BOX_NODES[kind]), radius,
-                                             body=kind == "Text")   # Crop: "by dragging its edges"; Text's box also moves
+                    part = handles2d.box_hit(point, *self._box_rect(kind, values), radius,
+                                             body=kind != "Crop")   # Crop: "by dragging its edges"; Text's and the ROI box also move
                 if part is not None:
                     touched = ("center_x", "center_y") if part == "center" else handles2d.BOX_NODES[kind]
                     self.box_drag = {"key": key, "part": part, "start": scene_pos, "scene": scene_pos, "moved": False,

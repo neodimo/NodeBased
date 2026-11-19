@@ -171,7 +171,12 @@ def snap_rotate(value, step=ROTATE_SNAP_STEP, tolerance=ROTATE_SNAP_TOLERANCE):
 # Crop's and Text's on-screen box (lane 10 step T3 finish). Nuke 17.0 Reference Guide, Crop: "You can also adjust the crop box in
 # the Viewer by dragging its edges."; Text: "You can also move and resize the box in the Viewer." and its center "You can also
 # move it using Ctrl/Cmd +drag." Knobs per node: (x, y, width, height) of the box in data coordinates, rows counting down.
-BOX_NODES = {"Crop": ("x", "y", "width", "height"), "Text": ("box_x", "box_y", "box_width", "box_height")}
+BOX_NODES = {"Crop": ("x", "y", "width", "height"), "Text": ("box_x", "box_y", "box_width", "box_height"),
+             "ColorTransfer": ("roi_x", "roi_y", "roi_r", "roi_t")}
+# Nodes whose box knobs are corners counted from the bottom left (Nuke's x, y, r, t), not (x, y, width, height) rows down.
+# ColorTransfer: Nuke 17.0 Reference Guide, ColorTransfer, ROI: "You can also adjust the ROI in the Viewer by dragging its edges."
+# All four zero is the guide's default ("set to cover the entire input"), so that box is drawn over the whole frame.
+CORNER_BOX_NODES = ("ColorTransfer",)
 GRIPS = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
 
 
@@ -216,3 +221,23 @@ def box_drag(start, part, dx, dy, minimum=1.0):
     if "s" in part:
         h = max(minimum, h + dy)
     return x, y, w, h
+
+
+def box_from_knobs(kind, values, width, height):
+    """The box (x, y, w, h) in data coordinates, rows counting down, that `kind`'s box knobs in `values` describe."""
+    names = BOX_NODES[kind]
+    a, b, c, d = (float(values[n]) for n in names)
+    if kind not in CORNER_BOX_NODES:
+        return a, b, c, d
+    if c <= a or d <= b:                       # the default (all zero) or an empty box reads the whole input
+        return 0.0, 0.0, float(width), float(height)
+    return a, float(height) - d, c - a, d - b
+
+
+def knobs_from_box(kind, box, height):
+    """{knob: value} for `kind` from a box (x, y, w, h) in data coordinates, rows counting down."""
+    names = BOX_NODES[kind]
+    x, y, w, h = box
+    if kind not in CORNER_BOX_NODES:
+        return dict(zip(names, (x, y, w, h)))
+    return dict(zip(names, (x, float(height) - (y + h), x + w, float(height) - y)))

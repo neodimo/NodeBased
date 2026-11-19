@@ -143,6 +143,13 @@ Finished in the step's finish pass (all 16 documented controls now pass):
 
 Every drag is one undo step and keys an animated knob at the current frame.
 
+**ColorTransfer's ROI box (lane 10, step T8, 2026-11-18).** The [ColorTransfer](https://learn.foundry.com/nuke/17.0/content/reference_guide/color_nodes/colortransfer.html)
+page: "You can also adjust the ROI in the Viewer by dragging its edges", and "you may want to connect the Viewer to input A
+rather than the ColorTransfer node". NodeBased now draws the ROI as the same box Crop and Text use: corner, edge and body
+grips, one undo step per drag, a key at the current frame on an animated knob. The knobs stay Nuke's x, y, r, t from the
+bottom left; the default (all zero, the whole input) draws over the whole frame. The box also shows with the Viewer on input A.
+The two controls are probed as `ColorTransfer.roi_box` and `ColorTransfer.roi_on_input_a`.
+
 ## The Properties bin and linking knobs (lane 10, step T4, 2026-11-17)
 
 - **Reference:** the `properties_bin` and `linking` entries of `docs/parity/nuke_knob_interactions.json`, quoting the User

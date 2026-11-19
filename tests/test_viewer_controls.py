@@ -58,6 +58,10 @@ class ProbeTests(unittest.TestCase):
         for control in ("Crop.box_edges", "Text.box_move_resize", "Text.center_ctrl"):
             self.assertEqual(self.results[control]["result"], "pass", self.results[control]["detail"])
 
+    def test_colortransfer_roi_box(self):
+        for control in ("ColorTransfer.roi_box", "ColorTransfer.roi_on_input_a"):
+            self.assertEqual(self.results[control]["result"], "pass", self.results[control]["detail"])
+
     def test_tracker_anchor_and_gridwarp_overlays(self):
         for control in ("Tracker.anchor", "GridWarp.grid_handles", "GridWarp.grid_transform"):
             self.assertEqual(self.results[control]["result"], "pass", self.results[control]["detail"])
