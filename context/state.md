@@ -1,3 +1,10 @@
+## Lane 9 step X3 (11/19): the missing knobs on Bokeh, GridWarp and LensDistortion
+
+Bokeh gained Expand Bounding Box To Max Kernel Size (grows the data window by the filter's reach; full-frame only) and Integrate Deep Front and Back Separately
+(Deep input only, no pixel effect). GridWarp gained visible, locked and colour knobs for each grid (the Viewer draws and picks accordingly), a keys readout and Resize
+to Image in the panel. LensDistortion gained a Reset button; its other 21 knobs need a grid detector and a solver, which the guide describes by knob only. Fidelity:
+Bokeh 93.3 to 95.2, GridWarp 88.4 to 97.8, LensDistortion 87.1 to 87.6. No schema bump. Details in TASKLOG.md; tests in `tests/test_l9_x3_*.py`.
+
 ## Lane 2 step X4 (11/19): missing knobs on Reconcile3D, MotionBlur3D, VolumeRays and Reformat
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 10 (Panels like Nuke, Claude Opus 5.5) (7:45 AM on 2026-11-19 PDT)

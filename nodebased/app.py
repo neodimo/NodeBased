@@ -16669,6 +16669,12 @@ class Window(QMainWindow):
                 hint = QLabel("Drag curve points to animate them. Join lines pair source and destination controls.")
                 hint.setWordWrap(True)
                 form.addRow(hint)
+            if node["type"] in ("Undistort", "Redistort"):
+                reset = QPushButton("Reset")
+                reset.setObjectName("lens-reset-distortion")
+                reset.setToolTip("Put the distortion terms, the centre and the anamorphic twist and scale back to no distortion")
+                reset.clicked.connect(lambda checked=False, k=key: self._lens_reset(k))
+                form.addRow("Reset distortion", reset)
             if node["type"] == "GridWarp":
                 from . import warpknobs
                 payload = self.dispatcher.document.get("node_data", {}).get(key)
@@ -18220,12 +18226,6 @@ class Window(QMainWindow):
         # Do not destroy an editor while it is emitting editingFinished.
         QTimer.singleShot(0, lambda: self.command(cmd))
 
-    def begin_roto_draw(self, key):
-        """Enter viewer drawing mode for a Roto node after making it the viewed format."""
-        node = self.dispatcher.document["nodes"].get(key)
-        if node is None or node["type"] != "Roto":
-            self._show_command_error(ValueError("Roto drawing requires a Roto node"))
-            return False
     def _lens_reset(self, key):
         """LensDistortion's Reset (nodebased/lensdistortion.py `reset_edits`): one undo step that puts the distortion terms back to no distortion."""
         from . import lensdistortion
@@ -18255,6 +18255,12 @@ class Window(QMainWindow):
         self.command({"op": "set_warp_data", "id": key, "data": payload})
         return True
 
+    def begin_roto_draw(self, key):
+        """Enter viewer drawing mode for a Roto node after making it the viewed format."""
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "Roto":
+            self._show_command_error(ValueError("Roto drawing requires a Roto node"))
+            return False
         if self.dispatcher.document.get("view") != key:
             self.command({"op": "view", "id": key})
         frame = int(self.dispatcher.document["time"]["current"])

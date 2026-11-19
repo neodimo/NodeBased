@@ -84,6 +84,8 @@ NOT_PIXEL = {
     },
     # Lane 9 step Y (11/4): these controls are exposed/mapped, but their formulas are absent or their behavior is descriptive only.
     "LensDistortion": {
+        # Lane 9 step X3 (11/19): Reset is a button that writes other knobs back to their defaults.
+        "resetDistortion": "the Reset button of the Solve section: it writes the distortion terms back to no distortion (tests/test_l9_x3_lens.py), a button and not a param",
         "distortionModelDisplayX": "equation display only (Nuke 17.0 LensDistortion reference guide)",
         "distortionModelDisplayY": "equation display only (Nuke 17.0 LensDistortion reference guide)",
         "distortionModelType": "the guide names Radial Asymmetric and Radial-Tangential variants without equations; only Radial Standard is specified",

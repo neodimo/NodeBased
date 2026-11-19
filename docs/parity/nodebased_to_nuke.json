@@ -4294,7 +4294,7 @@
     {"nodebased": [], "nuke": ["preview"], "kind": "unsupported", "reason": "NodeBased has no grid detector or solver, so there is no detected grid or solved line set to show over the picture"},
     {"nodebased": [], "nuke": ["solveDistortion"], "kind": "unsupported", "reason": "NodeBased has no distortion solver: the coefficients are typed in, never calculated from lines, so there is no solve to run, no solve error to report and no solved result to reset"},
     {"nodebased": [], "nuke": ["solveError"], "kind": "unsupported", "reason": "NodeBased has no distortion solver: the coefficients are typed in, never calculated from lines, so there is no solve to run, no solve error to report and no solved result to reset"},
-    {"nodebased": [], "nuke": ["resetDistortion"], "kind": "unsupported", "reason": "NodeBased has no distortion solver: the coefficients are typed in, never calculated from lines, so there is no solve to run, no solve error to report and no solved result to reset"}
+    {"nodebased": [], "nuke": ["resetDistortion"], "kind": "panel", "reason": "the Reset button of the Analysis tab's Solve section (the window's `_lens_reset`, nodebased/lensdistortion.py `reset_edits`): it writes the distortion terms back to no distortion in one undo step, a button, not a node param"}
    ]
   },
   "ViewMetaData": {

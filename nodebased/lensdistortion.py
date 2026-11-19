@@ -64,6 +64,20 @@ _COMMON = {"distortionModelPreset": CLASSIC, "lens_type": "Spherical", "distorti
 NEW = {"Undistort": {**_COMMON, "lens_output": "Undistort"}, "Redistort": dict(_COMMON)}
 
 
+# Reset (Nuke's `resetDistortion`, Solve section of the Analysis tab): the guide only says the button resets the distortion. Ours: every solved term goes back to
+# the value that leaves the picture as it is, that is the numerator and denominator coefficients, the centre, the anamorphic twist and scale, and the
+# older Brown-Conrady lens's own coefficients. The model's kind, the lens type, the projection and the output settings are choices, not solved terms, and stay.
+RESET_PARAMS = ("distortionNumerator0", "distortionNumerator1", "distortionDenominator0", "distortionDenominator1", "centre_x", "centre_y",
+                "anamorphicTwist", "anamorphicScale_x", "anamorphicScale_y", "lens_k1", "lens_k2", "lens_k3", "lens_p1", "lens_p2", "lens_cx", "lens_cy")
+
+
+def reset_edits(kind, p):
+    """{param: value} that Reset writes to a node of `kind` whose params are `p`: only the terms that are not already at their no-distortion value."""
+    from . import core
+    defaults = core.SPECS[kind]["params"]
+    return {name: defaults[name] for name in RESET_PARAMS if name in defaults and p.get(name, defaults[name]) != defaults[name]}
+
+
 def new_params(kind):
     return dict(NEW.get(kind, {}))
 

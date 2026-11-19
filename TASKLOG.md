@@ -1,3 +1,28 @@
+## 2026-11-19 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step X3 (Thu 11/19): the missing knobs on Bokeh, GridWarp and LensDistortion
+
+- **What was done (evidence):** (1) Bokeh: `expandBBoxToMaxKernelSize` (Kernel tab, after Maximum Kernel Size, default off, Nuke's label) grows the output's
+  data window by `bokehknobs.reach` (half the maximum kernel size) on every side, as VectorBlur's Expand blur bbox does (`Evaluator` Bokeh branch pads the
+  colour with zeros, the depth with its edge, the mattes with zeros); on, the node needs the whole frame (`needs_full_frame`), so tiles are not asked.
+  `integrateFrontAndBackSeperately` (Bokeh tab, last row, off) acts on the Deep input only; NodeBased has no Deep image, so it changes no pixels (a test
+  says so; `NOT_PIXEL` carries the reason). Both saved-node-safe through `bokehknobs.upgrade_params` in `ops2d_chrome.upgrade_nodes`.
+  (2) GridWarp: `source_grid_visible`, `source_grid_locked`, `destination_grid_visible`, `destination_grid_locked` (Viewer: `_draw_warp_overlay` skips a hidden
+  grid and its join lines, `_warp_hit` skips a hidden or locked grid, so it cannot be picked or dragged), `source_color_r/g/b` and `destination_color_r/g/b`
+  (the grid colours), a keys readout and a Resize to Image button per grid in the panel (`warpknobs.grid_keys`, `resized_grid`, `Window._gridwarp_resize`),
+  all in the guide's order (visible and locked, then the Settings knobs, the Colors tab after Render). (3) LensDistortion: Reset (`resetDistortion`), a panel
+  button (`Window._lens_reset`, `lensdistortion.reset_edits`, one undo step).
+- **Fidelity (tools/audit_nuke_fidelity.py):** Bokeh 93.3 -> 95.2 (the two knobs; only the Deep Input and Camera sockets remain), GridWarp 88.4 -> 97.8
+  (10 of 12 secondary knobs; the two extra matrix knobs stay unsupported: the guide gives no matrix interpretation), LensDistortion 87.1 -> 87.6 (1 of 22).
+  Overall stays 97.7. No schema bump. Mapping: `source_grid_visible` is in `skip_default` (the guide lists it off; both grids start shown, as they were
+  always drawn, because NodeBased has no auto toggle).
+- **Not done, and why:** LensDistortion's other 21 knobs (Detect, the frame type, Preview, the feature and linking thresholds, the line drawing modes, Solve,
+  Reject, Solve Error, Show) belong to a grid detector (feature corners, linking by angle and distance) and a distortion solver. The guide gives the knob
+  names and defaults and no algorithm, so building them means inventing a detector; Needs Gonzo: a lane step of its own, with a decision on whether NodeBased
+  should have an automatic solve. GridWarp's keys are a readout; Nuke's copy and paste of keys and its toolbar's auto visibility toggle are not built.
+- **Tests:** `tests/test_l9_x3_bokeh.py` (11), `tests/test_l9_x3_gridwarp.py` (12, the on-screen grid is drawn to an image and hit-tested through the real
+  Viewer methods), `tests/test_l9_x3_lens.py` (3); `tests.test_l9_x1_bokeh` lists the two new knobs as tested elsewhere.
+- **Failure mode to know:** a Bokeh behind a Crop with expand on shows its ring inside the format only when the source's data window is smaller than the
+  format; on a plate that fills the format the visible change is the picture's edge softening into the black ring.
+
 ## 2026-11-19 — continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) step X4 (Thu 11/19): the missing knobs on Reconcile3D, MotionBlur3D, VolumeRays and Reformat, Lane 10 (Panels like Nuke, Claude Opus 5.5) step T8 (Wed 11/18): the Viewer works like Nuke's, and ColorTransfer's ROI box (finish 1) (integrator tick)
 
 - **What was done:** `main` `8916a30d` -> `ab5b31fa` plus this docs commit. Evidence and per-lane commit
