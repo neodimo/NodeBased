@@ -52,7 +52,7 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 
 ## Panels that work like Nuke
 
-**111 of 111 documented knob-widget behaviours work as Nuke's do** (23 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**119 of 132 documented knob-widget behaviours work as Nuke's do** (28 more listed as undocumented by the guide pages read). The reference is `docs/parity/nuke_knob_interactions.json` (Foundry's Nuke 17.0 User Guide, one entry per behaviour); `tools/nuke_panel_interactions.py` drives NodeBased's real widgets with Qt key and mouse events and reads what the document stores. This count is reported beside the fidelity score and is not part of its formula. See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Widget | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -72,10 +72,11 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 | node graph | 25 / 25 | - | `swap_inputs_shift`, `select_downstream`, `duplicate_alt_c` |
 | curve editor | 21 / 21 | - | `delete_key`, `undo_step` |
 | dope sheet | 12 / 12 | - | `drag_keys`, `scale_keys`, `time_ruler` |
+| viewer | 8 / 21 | `alpha_overlay` (not probed), `recenter_middle_click` (not probed), `zoom_drag` (not probed), `prevent_auto_zoom` (not probed), `toolbars` (not probed), `info_bar` (not probed), `sample_pixel` (not probed), `sample_region` (not probed), `sample_cancel` (not probed), `gain_gamma_toggle` (not probed), `refresh` (not probed), `goto_frame` (not probed), `frame_field_math` (not probed) | `luminance_y`, `wheel_zoom`, `jkl`, `wipe`, `proxy_roi` |
 
 ## On-screen controls that work like Nuke
 
-**16 of 16 documented on-screen controls work as Nuke's do**, over 5 nodes whose guide pages describe Viewer controls. The reference is `docs/parity/nuke_viewer_controls.json` (Nuke 17.0 Reference Guide node pages and the User Guide's Transforming in 2D page); `tools/nuke_viewer_controls.py` presses, drags and releases on NodeBased's Viewer and checks the knob values, the single undo step and the key on an animated knob. Reported beside the fidelity score, not part of it. Roto and RotoPaint are measured in [ROTO_NUKE_UI.md](ROTO_NUKE_UI.md). See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
+**18 of 18 documented on-screen controls work as Nuke's do**, over 6 nodes whose guide pages describe Viewer controls. The reference is `docs/parity/nuke_viewer_controls.json` (Nuke 17.0 Reference Guide node pages and the User Guide's Transforming in 2D page); `tools/nuke_viewer_controls.py` presses, drags and releases on NodeBased's Viewer and checks the knob values, the single undo step and the key on an animated knob. Reported beside the fidelity score, not part of it. Roto and RotoPaint are measured in [ROTO_NUKE_UI.md](ROTO_NUKE_UI.md). See [PANEL_INTERACTIONS.md](PANEL_INTERACTIONS.md).
 
 | Node | Passing / documented | Not yet like Nuke | Undocumented |
 |---|---|---|---|
@@ -87,6 +88,7 @@ Knobs that act: 451 of the 452 paired knobs probed change the output pixels; 1 c
 | Ramp | 0 / 0 | - | `points` |
 | Rectangle | 0 / 0 | - | `area` |
 | Text | 2 / 2 | - | - |
+| ColorTransfer | 2 / 2 | - | - |
 | Tracker | 1 / 1 | - | - |
 | GridWarp | 2 / 2 | - | - |
 | Position | 0 / 0 | - | `translate` |
