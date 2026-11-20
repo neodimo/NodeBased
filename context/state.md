@@ -1,5 +1,24 @@
 ## Lane 9 step X6 (11/19): the last open marks in Filter and Draw
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (9:57 AM on 2026-11-20 PDT)
+
+`main` moved `cd9de3f4` -> `bc8fdd06` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `bc8fdd06` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1120-0927.log`, started 9:27 AM): **Ran 10579 tests in 1748.933 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback step (Fri 11/20): why the slowest RTX frames double with the on-card display switch on, and tests that prove which card ran.** Commits:
+  - `e0694404` Playback: label on-card display trace stage
+  Diff: 1 file changed, 5 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 9 (2D behaviour B, Claude Sonnet 5.5) (3:36 PM on 2026-11-19 PDT)
 
 `main` moved `0eefc250` -> `c0cbb414` (lane commits cherry-picked onto main in lane order) and then to this
