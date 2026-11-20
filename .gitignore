@@ -17,3 +17,4 @@ noise_test_4k.*.exr
 
 # The Nuke parity review book is build output (tools/parity_review_book.py)
 docs/parity/review/out/
+docs/parity/nuke_renders/

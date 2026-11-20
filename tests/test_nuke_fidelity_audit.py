@@ -495,7 +495,8 @@ class ReferencePackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             n = pack.write_pack(tmp)
             root = Path(tmp)
-            self.assertEqual(n, len(cases.CASES))
+            manifest = json.loads((root / "MANIFEST.json").read_text())
+            self.assertEqual(n + len(manifest["skipped"]) + len(manifest["not_renderable"]), len(cases.CASES))
             self.assertEqual(len(list((root / "scripts").glob("*.py"))), n)
             self.assertEqual(len(list((root / "scripts").glob("*.nk"))), 0)
             for name in ("A", "B", "mask"):
@@ -509,11 +510,11 @@ class ReferencePackTests(unittest.TestCase):
             self.assertNotIn(" -x ", text)
             self.assertIn("NB_RENDER_DIR", text)
             self.assertNotIn("/home/", text)
-            manifest = json.loads((root / "MANIFEST.json").read_text())
-            self.assertEqual({c["id"] for c in manifest["cases"]}, {c.id for c in cases.CASES})
+            self.assertEqual({c["id"] for c in manifest["cases"]} | {c["id"] for c in manifest["skipped"]}
+                             | {c["id"] for c in manifest["not_renderable"]}, {c.id for c in cases.CASES})
             script = (root / "scripts" / "merge_plus.py").read_text()
             self.assertIn("nuke.nodes.Merge2()", script)
-            self.assertIn("node['operation'].setValue('plus')", script)
+            self.assertRegex(script, r"node\['operation'\]\.setValue\(\d+\)  # plus")      # an enumeration by its menu index
             self.assertLess(script.index("node.setInput(0, read_B)"), script.index("node.setInput(1, read_A)"))   # B is Nuke input 0
             self.assertIn("32 bit float", script)
             self.assertIn("raw=True", script)
@@ -530,7 +531,7 @@ class ReferencePackTests(unittest.TestCase):
                     self.assertLessEqual(text.count("nuke.nodes."), 10)
                     self.assertNotIn("toNode", text.replace("nuke.toNode or nuke.allNodes", ""))
                     self.assertNotIn("allNodes(", text)
-                    self.assertIn("nuke.execute(write, 1, 1)", text)
+                    self.assertRegex(text, r"nuke\.execute\(write, (-?\d+), \1\)")          # one frame: 1, or a Time case's own
 
     def test_array_knobs_go_through_fromScript_and_plain_ones_through_setValue(self):
         script = pack.py_script(next(c for c in cases.CASES if c.nuke_class == "ColorMatrix"))
