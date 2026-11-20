@@ -1,0 +1,1609 @@
+{
+  "date": "2026-11-20",
+  "resolution": [
+    960,
+    540
+  ],
+  "samples": 128,
+  "idle_gpu_mib": 24,
+  "variants": {
+    "shot": {
+      "overrides": {},
+      "bake_seconds": 8.186,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4841,
+        "share_above": 0.2989,
+        "mean_abs": 26.221,
+        "p90": 60.077,
+        "rms": 38.727,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 17,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1208,
+        "frames": 17,
+        "core_position_mean": 0.2681,
+        "top_over_bottom_mean": 0.7443,
+        "top_over_bottom_of_means": 1.1536,
+        "tongues_per_slice_mean": 1.1315,
+        "vorticity_mean": 67.6009,
+        "density_contrast_mean": 0.4444,
+        "sway_cells_mean": 1.7818
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0065850019454956055,
+          "smoke_image": {
+            "structure": 0.06453,
+            "mean_luminance": 0.15509,
+            "noise_rms_over_mean": 0.04127
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06453,
+            "mean_luminance": 0.15509,
+            "noise_rms_over_mean": 0.04127
+          },
+          "seconds_median": 0.825,
+          "seconds_min": 0.822
+        },
+        "16": {
+          "grain_rms": 0.006484363228082657,
+          "smoke_image": {
+            "structure": 0.08421,
+            "mean_luminance": 0.13713,
+            "noise_rms_over_mean": 0.04541
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08421,
+            "mean_luminance": 0.13713,
+            "noise_rms_over_mean": 0.04541
+          },
+          "seconds_median": 0.801,
+          "seconds_min": 0.799
+        },
+        "24": {
+          "grain_rms": 0.006598778069019318,
+          "smoke_image": {
+            "structure": 0.07987,
+            "mean_luminance": 0.13089,
+            "noise_rms_over_mean": 0.04524
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07987,
+            "mean_luminance": 0.13089,
+            "noise_rms_over_mean": 0.04524
+          },
+          "seconds_median": 0.759,
+          "seconds_min": 0.758
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 29.0
+    },
+    "v0.3": {
+      "overrides": {
+        "vorticity": 0.3
+      },
+      "bake_seconds": 8.756,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4839,
+        "share_above": 0.1984,
+        "mean_abs": 19.714,
+        "p90": 47.111,
+        "rms": 30.648,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 17,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1192,
+        "frames": 17,
+        "core_position_mean": 0.291,
+        "top_over_bottom_mean": 0.8344,
+        "top_over_bottom_of_means": 1.6865,
+        "tongues_per_slice_mean": 1.0549,
+        "vorticity_mean": 44.6598,
+        "density_contrast_mean": 0.3788,
+        "sway_cells_mean": 1.8058
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006510320119559765,
+          "smoke_image": {
+            "structure": 0.06358,
+            "mean_luminance": 0.15443,
+            "noise_rms_over_mean": 0.04072
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06269,
+            "mean_luminance": 0.15473,
+            "noise_rms_over_mean": 0.04065
+          },
+          "seconds_median": 0.879,
+          "seconds_min": 0.863
+        },
+        "16": {
+          "grain_rms": 0.0066096242517232895,
+          "smoke_image": {
+            "structure": 0.08398,
+            "mean_luminance": 0.13113,
+            "noise_rms_over_mean": 0.04674
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08717,
+            "mean_luminance": 0.13126,
+            "noise_rms_over_mean": 0.04669
+          },
+          "seconds_median": 0.771,
+          "seconds_min": 0.748
+        },
+        "24": {
+          "grain_rms": 0.0068294391967356205,
+          "smoke_image": {
+            "structure": 0.0769,
+            "mean_luminance": 0.13703,
+            "noise_rms_over_mean": 0.04547
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07798,
+            "mean_luminance": 0.13765,
+            "noise_rms_over_mean": 0.04593
+          },
+          "seconds_median": 0.781,
+          "seconds_min": 0.777
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 29.3
+    },
+    "v0.6": {
+      "overrides": {
+        "vorticity": 0.6
+      },
+      "bake_seconds": 8.69,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4843,
+        "share_above": 0.2348,
+        "mean_abs": 22.385,
+        "p90": 52.381,
+        "rms": 33.231,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 16,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1171,
+        "frames": 17,
+        "core_position_mean": 0.2931,
+        "top_over_bottom_mean": 0.8829,
+        "top_over_bottom_of_means": 1.544,
+        "tongues_per_slice_mean": 1.0848,
+        "vorticity_mean": 53.7458,
+        "density_contrast_mean": 0.4025,
+        "sway_cells_mean": 1.7513
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006607210263609886,
+          "smoke_image": {
+            "structure": 0.06347,
+            "mean_luminance": 0.15614,
+            "noise_rms_over_mean": 0.04115
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06297,
+            "mean_luminance": 0.15625,
+            "noise_rms_over_mean": 0.04115
+          },
+          "seconds_median": 0.904,
+          "seconds_min": 0.865
+        },
+        "16": {
+          "grain_rms": 0.006728168576955795,
+          "smoke_image": {
+            "structure": 0.08277,
+            "mean_luminance": 0.13355,
+            "noise_rms_over_mean": 0.04695
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08587,
+            "mean_luminance": 0.13368,
+            "noise_rms_over_mean": 0.04694
+          },
+          "seconds_median": 0.818,
+          "seconds_min": 0.776
+        },
+        "24": {
+          "grain_rms": 0.006950002629309893,
+          "smoke_image": {
+            "structure": 0.07779,
+            "mean_luminance": 0.13855,
+            "noise_rms_over_mean": 0.0458
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07888,
+            "mean_luminance": 0.13902,
+            "noise_rms_over_mean": 0.04637
+          },
+          "seconds_median": 0.788,
+          "seconds_min": 0.779
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 30.1
+    },
+    "v2.0": {
+      "overrides": {
+        "vorticity": 2.0
+      },
+      "bake_seconds": 8.891,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4747,
+        "share_above": 0.3998,
+        "mean_abs": 33.654,
+        "p90": 74.754,
+        "rms": 49.699,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 16,
+        "flame_field_core_position_mean": 0.1441,
+        "frames": 17,
+        "core_position_mean": 0.2981,
+        "top_over_bottom_mean": 0.7061,
+        "top_over_bottom_of_means": 1.0175,
+        "tongues_per_slice_mean": 1.1013,
+        "vorticity_mean": 108.4857,
+        "density_contrast_mean": 0.5287,
+        "sway_cells_mean": 1.8374
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006402276922017336,
+          "smoke_image": {
+            "structure": 0.07143,
+            "mean_luminance": 0.14491,
+            "noise_rms_over_mean": 0.04189
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07083,
+            "mean_luminance": 0.14521,
+            "noise_rms_over_mean": 0.04198
+          },
+          "seconds_median": 0.898,
+          "seconds_min": 0.869
+        },
+        "16": {
+          "grain_rms": 0.006579939741641283,
+          "smoke_image": {
+            "structure": 0.0873,
+            "mean_luminance": 0.12883,
+            "noise_rms_over_mean": 0.04684
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09147,
+            "mean_luminance": 0.12851,
+            "noise_rms_over_mean": 0.04665
+          },
+          "seconds_median": 0.824,
+          "seconds_min": 0.784
+        },
+        "24": {
+          "grain_rms": 0.006602539215236902,
+          "smoke_image": {
+            "structure": 0.0858,
+            "mean_luminance": 0.1224,
+            "noise_rms_over_mean": 0.04705
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08685,
+            "mean_luminance": 0.12372,
+            "noise_rms_over_mean": 0.04673
+          },
+          "seconds_median": 0.807,
+          "seconds_min": 0.789
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 30.3
+    },
+    "v4.0": {
+      "overrides": {
+        "vorticity": 4.0
+      },
+      "bake_seconds": 8.913,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 1894,
+        "share_above": 1.0,
+        "mean_abs": 76366.876,
+        "p90": 181615.44,
+        "rms": 141680.32,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 9,
+        "flame_field_core_in_lowest_third_frames": 9,
+        "flame_field_core_position_mean": 0.3372,
+        "frames": 17,
+        "core_position_mean": 0.3399,
+        "top_over_bottom_mean": 0.7998,
+        "top_over_bottom_of_means": 0.6464,
+        "tongues_per_slice_mean": 0.3636,
+        "vorticity_mean": 302742.2218,
+        "density_contrast_mean": 0.6606,
+        "sway_cells_mean": 3.8954
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.002239302033558488,
+          "smoke_image": {
+            "structure": 0.08322,
+            "mean_luminance": 0.05169,
+            "noise_rms_over_mean": 0.03312
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07939,
+            "mean_luminance": 0.05191,
+            "noise_rms_over_mean": 0.02956
+          },
+          "seconds_median": 0.812,
+          "seconds_min": 0.806
+        },
+        "16": {
+          "grain_rms": 0.0006402457365766168,
+          "smoke_image": {
+            "structure": 0.09019,
+            "mean_luminance": 0.02657,
+            "noise_rms_over_mean": 0.02621
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08746,
+            "mean_luminance": 0.02743,
+            "noise_rms_over_mean": 0.0278
+          },
+          "seconds_median": 0.807,
+          "seconds_min": 0.737
+        },
+        "24": {
+          "grain_rms": 0.00042339731589891016,
+          "smoke_image": {
+            "structure": 0.084,
+            "mean_luminance": 0.02315,
+            "noise_rms_over_mean": 0.02208
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06756,
+            "mean_luminance": 0.02753,
+            "noise_rms_over_mean": 0.02219
+          },
+          "seconds_median": 0.125,
+          "seconds_min": 0.114
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 25.2
+    },
+    "r1.5": {
+      "overrides": {
+        "division_size": 0.020833333333333332
+      },
+      "bake_seconds": 36.067,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4750,
+        "share_above": 0.1842,
+        "mean_abs": 19.007,
+        "p90": 42.755,
+        "rms": 29.175,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        96,
+        96,
+        96
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 17,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1147,
+        "frames": 17,
+        "core_position_mean": 0.2765,
+        "top_over_bottom_mean": 0.7872,
+        "top_over_bottom_of_means": 1.206,
+        "tongues_per_slice_mean": 1.0062,
+        "vorticity_mean": 86.126,
+        "density_contrast_mean": 0.4966,
+        "sway_cells_mean": 2.6572
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006901990622282028,
+          "smoke_image": {
+            "structure": 0.07208,
+            "mean_luminance": 0.16135,
+            "noise_rms_over_mean": 0.04312
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07214,
+            "mean_luminance": 0.1613,
+            "noise_rms_over_mean": 0.04293
+          },
+          "seconds_median": 1.257,
+          "seconds_min": 1.095
+        },
+        "16": {
+          "grain_rms": 0.006660915911197662,
+          "smoke_image": {
+            "structure": 0.09755,
+            "mean_luminance": 0.13793,
+            "noise_rms_over_mean": 0.04822
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09896,
+            "mean_luminance": 0.13783,
+            "noise_rms_over_mean": 0.04817
+          },
+          "seconds_median": 1.042,
+          "seconds_min": 1.025
+        },
+        "24": {
+          "grain_rms": 0.0065598213113844395,
+          "smoke_image": {
+            "structure": 0.08598,
+            "mean_luminance": 0.13111,
+            "noise_rms_over_mean": 0.04727
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08769,
+            "mean_luminance": 0.13142,
+            "noise_rms_over_mean": 0.04744
+          },
+          "seconds_median": 0.99,
+          "seconds_min": 0.951
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 63.8
+    },
+    "r2": {
+      "overrides": {
+        "division_size": 0.015625
+      },
+      "bake_seconds": 14.542,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4724,
+        "share_above": 0.1442,
+        "mean_abs": 16.595,
+        "p90": 36.067,
+        "rms": 26.241,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        128,
+        128,
+        128
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 16,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1147,
+        "frames": 17,
+        "core_position_mean": 0.2809,
+        "top_over_bottom_mean": 0.7305,
+        "top_over_bottom_of_means": 1.293,
+        "tongues_per_slice_mean": 1.0385,
+        "vorticity_mean": 100.057,
+        "density_contrast_mean": 0.454,
+        "sway_cells_mean": 3.6395
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.007036210037767887,
+          "smoke_image": {
+            "structure": 0.07477,
+            "mean_luminance": 0.16625,
+            "noise_rms_over_mean": 0.04392
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07625,
+            "mean_luminance": 0.16609,
+            "noise_rms_over_mean": 0.0438
+          },
+          "seconds_median": 1.799,
+          "seconds_min": 1.579
+        },
+        "16": {
+          "grain_rms": 0.006711195223033428,
+          "smoke_image": {
+            "structure": 0.09403,
+            "mean_luminance": 0.13796,
+            "noise_rms_over_mean": 0.04943
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09595,
+            "mean_luminance": 0.13781,
+            "noise_rms_over_mean": 0.04929
+          },
+          "seconds_median": 1.422,
+          "seconds_min": 1.397
+        },
+        "24": {
+          "grain_rms": 0.006305130198597908,
+          "smoke_image": {
+            "structure": 0.09157,
+            "mean_luminance": 0.13006,
+            "noise_rms_over_mean": 0.04793
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09379,
+            "mean_luminance": 0.13048,
+            "noise_rms_over_mean": 0.04785
+          },
+          "seconds_median": 1.381,
+          "seconds_min": 1.341
+        }
+      },
+      "peak_gpu_mib": 709,
+      "peak_gpu_mib_over_idle": 685,
+      "wall_seconds": 69.6
+    },
+    "semi": {
+      "overrides": {
+        "advection": "semi_lagrangian"
+      },
+      "bake_seconds": 8.141,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4732,
+        "share_above": 0.2975,
+        "mean_abs": 25.954,
+        "p90": 60.011,
+        "rms": 38.49,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 15,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1172,
+        "frames": 17,
+        "core_position_mean": 0.3059,
+        "top_over_bottom_mean": 0.698,
+        "top_over_bottom_of_means": 1.1771,
+        "tongues_per_slice_mean": 1.1071,
+        "vorticity_mean": 69.5668,
+        "density_contrast_mean": 0.4433,
+        "sway_cells_mean": 1.8134
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006765727885067463,
+          "smoke_image": {
+            "structure": 0.06547,
+            "mean_luminance": 0.15597,
+            "noise_rms_over_mean": 0.04177
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.0653,
+            "mean_luminance": 0.15601,
+            "noise_rms_over_mean": 0.04174
+          },
+          "seconds_median": 0.884,
+          "seconds_min": 0.873
+        },
+        "16": {
+          "grain_rms": 0.006939288228750229,
+          "smoke_image": {
+            "structure": 0.08567,
+            "mean_luminance": 0.13756,
+            "noise_rms_over_mean": 0.04746
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08493,
+            "mean_luminance": 0.13771,
+            "noise_rms_over_mean": 0.04725
+          },
+          "seconds_median": 0.839,
+          "seconds_min": 0.77
+        },
+        "24": {
+          "grain_rms": 0.006899931002408266,
+          "smoke_image": {
+            "structure": 0.08191,
+            "mean_luminance": 0.13595,
+            "noise_rms_over_mean": 0.04601
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08152,
+            "mean_luminance": 0.13651,
+            "noise_rms_over_mean": 0.04645
+          },
+          "seconds_median": 0.808,
+          "seconds_min": 0.805
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 29.3
+    },
+    "v3.0": {
+      "overrides": {
+        "vorticity": 3.0
+      },
+      "bake_seconds": 9.043,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 5332,
+        "share_above": 0.7562,
+        "mean_abs": 173.71,
+        "p90": 322.408,
+        "rms": 595.25,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 11,
+        "flame_field_core_in_lowest_third_frames": 16,
+        "flame_field_core_position_mean": 0.1778,
+        "frames": 17,
+        "core_position_mean": 0.2616,
+        "top_over_bottom_mean": 0.7224,
+        "top_over_bottom_of_means": 0.3907,
+        "tongues_per_slice_mean": 0.6574,
+        "vorticity_mean": 730.3793,
+        "density_contrast_mean": 0.572,
+        "sway_cells_mean": 2.6715
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0052795084193348885,
+          "smoke_image": {
+            "structure": 0.07238,
+            "mean_luminance": 0.11318,
+            "noise_rms_over_mean": 0.04076
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07833,
+            "mean_luminance": 0.11404,
+            "noise_rms_over_mean": 0.04092
+          },
+          "seconds_median": 0.876,
+          "seconds_min": 0.836
+        },
+        "16": {
+          "grain_rms": 0.005020755343139172,
+          "smoke_image": {
+            "structure": 0.09617,
+            "mean_luminance": 0.0924,
+            "noise_rms_over_mean": 0.04245
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09626,
+            "mean_luminance": 0.08973,
+            "noise_rms_over_mean": 0.04071
+          },
+          "seconds_median": 0.841,
+          "seconds_min": 0.807
+        },
+        "24": {
+          "grain_rms": 0.0006507621728815138,
+          "smoke_image": {
+            "structure": 0.08466,
+            "mean_luminance": 0.0267,
+            "noise_rms_over_mean": 0.02755
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07516,
+            "mean_luminance": 0.02672,
+            "noise_rms_over_mean": 0.02749
+          },
+          "seconds_median": 0.718,
+          "seconds_min": 0.712
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 29.9
+    },
+    "r2_v2.0": {
+      "overrides": {
+        "division_size": 0.015625,
+        "vorticity": 2.0
+      },
+      "bake_seconds": 4.844,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4736,
+        "share_above": 0.1772,
+        "mean_abs": 18.458,
+        "p90": 40.25,
+        "rms": 27.836,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        128,
+        128,
+        128
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 16,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1119,
+        "frames": 17,
+        "core_position_mean": 0.2307,
+        "top_over_bottom_mean": 0.6273,
+        "top_over_bottom_of_means": 0.7377,
+        "tongues_per_slice_mean": 0.9738,
+        "vorticity_mean": 167.4409,
+        "density_contrast_mean": 0.5044,
+        "sway_cells_mean": 4.1266
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006711257621645927,
+          "smoke_image": {
+            "structure": 0.07706,
+            "mean_luminance": 0.15482,
+            "noise_rms_over_mean": 0.04453
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07854,
+            "mean_luminance": 0.15486,
+            "noise_rms_over_mean": 0.04434
+          },
+          "seconds_median": 1.549,
+          "seconds_min": 1.518
+        },
+        "16": {
+          "grain_rms": 0.006439431570470333,
+          "smoke_image": {
+            "structure": 0.09498,
+            "mean_luminance": 0.13112,
+            "noise_rms_over_mean": 0.04955
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09883,
+            "mean_luminance": 0.13097,
+            "noise_rms_over_mean": 0.04952
+          },
+          "seconds_median": 1.478,
+          "seconds_min": 1.397
+        },
+        "24": {
+          "grain_rms": 0.0059808045625686646,
+          "smoke_image": {
+            "structure": 0.09563,
+            "mean_luminance": 0.12224,
+            "noise_rms_over_mean": 0.04778
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09857,
+            "mean_luminance": 0.12281,
+            "noise_rms_over_mean": 0.04723
+          },
+          "seconds_median": 1.447,
+          "seconds_min": 1.428
+        }
+      },
+      "peak_gpu_mib": 709,
+      "peak_gpu_mib_over_idle": 685,
+      "wall_seconds": 60.7
+    },
+    "r2_v4.0": {
+      "overrides": {
+        "division_size": 0.015625,
+        "vorticity": 4.0
+      },
+      "bake_seconds": 13.267,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4505,
+        "share_above": 0.994,
+        "mean_abs": 11107.526,
+        "p90": 29690.099,
+        "rms": 20140.159,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        128,
+        128,
+        128
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 11,
+        "flame_field_core_in_lowest_third_frames": 9,
+        "flame_field_core_position_mean": 0.3055,
+        "frames": 17,
+        "core_position_mean": 0.2859,
+        "top_over_bottom_mean": 1.3567,
+        "top_over_bottom_of_means": 3.0758,
+        "tongues_per_slice_mean": 0.2368,
+        "vorticity_mean": 442372.176,
+        "density_contrast_mean": 0.6806,
+        "sway_cells_mean": 6.8625
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0032918585930019617,
+          "smoke_image": {
+            "structure": 0.08509,
+            "mean_luminance": 0.07446,
+            "noise_rms_over_mean": 0.03808
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08589,
+            "mean_luminance": 0.0752,
+            "noise_rms_over_mean": 0.03784
+          },
+          "seconds_median": 1.469,
+          "seconds_min": 1.423
+        },
+        "16": {
+          "grain_rms": 0.0006913490942679346,
+          "smoke_image": {
+            "structure": 0.08594,
+            "mean_luminance": 0.02862,
+            "noise_rms_over_mean": 0.02622
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.0841,
+            "mean_luminance": 0.02936,
+            "noise_rms_over_mean": 0.02755
+          },
+          "seconds_median": 1.272,
+          "seconds_min": 1.194
+        },
+        "24": {
+          "grain_rms": 0.00042339731589891016,
+          "smoke_image": {
+            "structure": 0.084,
+            "mean_luminance": 0.02315,
+            "noise_rms_over_mean": 0.02208
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06756,
+            "mean_luminance": 0.02753,
+            "noise_rms_over_mean": 0.02219
+          },
+          "seconds_median": 0.48,
+          "seconds_min": 0.467
+        }
+      },
+      "peak_gpu_mib": 721,
+      "peak_gpu_mib_over_idle": 697,
+      "wall_seconds": 57.2
+    },
+    "r1.5_v2.0": {
+      "overrides": {
+        "division_size": 0.020833333333333332,
+        "vorticity": 2.0
+      },
+      "bake_seconds": 35.456,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 4667,
+        "share_above": 0.2306,
+        "mean_abs": 21.574,
+        "p90": 48.432,
+        "rms": 31.849,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        96,
+        96,
+        96
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 16,
+        "flame_field_core_in_lowest_third_frames": 16,
+        "flame_field_core_position_mean": 0.1266,
+        "frames": 17,
+        "core_position_mean": 0.2655,
+        "top_over_bottom_mean": 0.6555,
+        "top_over_bottom_of_means": 0.8643,
+        "tongues_per_slice_mean": 0.952,
+        "vorticity_mean": 141.6219,
+        "density_contrast_mean": 0.5436,
+        "sway_cells_mean": 2.984
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.006677510216832161,
+          "smoke_image": {
+            "structure": 0.07555,
+            "mean_luminance": 0.1554,
+            "noise_rms_over_mean": 0.0432
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07589,
+            "mean_luminance": 0.15542,
+            "noise_rms_over_mean": 0.04308
+          },
+          "seconds_median": 1.119,
+          "seconds_min": 1.09
+        },
+        "16": {
+          "grain_rms": 0.006396477576345205,
+          "smoke_image": {
+            "structure": 0.09055,
+            "mean_luminance": 0.12713,
+            "noise_rms_over_mean": 0.04852
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09063,
+            "mean_luminance": 0.12663,
+            "noise_rms_over_mean": 0.04825
+          },
+          "seconds_median": 0.995,
+          "seconds_min": 0.976
+        },
+        "24": {
+          "grain_rms": 0.006265613250434399,
+          "smoke_image": {
+            "structure": 0.09312,
+            "mean_luminance": 0.12226,
+            "noise_rms_over_mean": 0.04772
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09171,
+            "mean_luminance": 0.12342,
+            "noise_rms_over_mean": 0.04728
+          },
+          "seconds_median": 0.978,
+          "seconds_min": 0.971
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 62.6
+    },
+    "t1_s3": {
+      "overrides": {
+        "turbulence": 1.0,
+        "swirl_size": 3.0
+      },
+      "bake_seconds": 9.962,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 5890,
+        "share_above": 0.3156,
+        "mean_abs": 25.039,
+        "p90": 53.514,
+        "rms": 33.31,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 12,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1454,
+        "frames": 17,
+        "core_position_mean": 0.3269,
+        "top_over_bottom_mean": 0.7359,
+        "top_over_bottom_of_means": 0.93,
+        "tongues_per_slice_mean": 1.2405,
+        "vorticity_mean": 96.1975,
+        "density_contrast_mean": 0.5032,
+        "sway_cells_mean": 1.8958
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0056586069986224174,
+          "smoke_image": {
+            "structure": 0.06889,
+            "mean_luminance": 0.12994,
+            "noise_rms_over_mean": 0.03961
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07271,
+            "mean_luminance": 0.12989,
+            "noise_rms_over_mean": 0.03972
+          },
+          "seconds_median": 0.916,
+          "seconds_min": 0.902
+        },
+        "16": {
+          "grain_rms": 0.0062110889703035355,
+          "smoke_image": {
+            "structure": 0.0829,
+            "mean_luminance": 0.12,
+            "noise_rms_over_mean": 0.04497
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08639,
+            "mean_luminance": 0.11992,
+            "noise_rms_over_mean": 0.0447
+          },
+          "seconds_median": 0.902,
+          "seconds_min": 0.874
+        },
+        "24": {
+          "grain_rms": 0.006373079493641853,
+          "smoke_image": {
+            "structure": 0.08626,
+            "mean_luminance": 0.12715,
+            "noise_rms_over_mean": 0.04413
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08744,
+            "mean_luminance": 0.1292,
+            "noise_rms_over_mean": 0.04383
+          },
+          "seconds_median": 0.855,
+          "seconds_min": 0.839
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 32.6
+    },
+    "t3_s3": {
+      "overrides": {
+        "turbulence": 3.0,
+        "swirl_size": 3.0
+      },
+      "bake_seconds": 10.495,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 7017,
+        "share_above": 0.5886,
+        "mean_abs": 44.483,
+        "p90": 91.303,
+        "rms": 56.013,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 12,
+        "flame_field_core_in_lowest_third_frames": 17,
+        "flame_field_core_position_mean": 0.1726,
+        "frames": 17,
+        "core_position_mean": 0.2972,
+        "top_over_bottom_mean": 0.7415,
+        "top_over_bottom_of_means": 0.57,
+        "tongues_per_slice_mean": 0.6738,
+        "vorticity_mean": 229.0245,
+        "density_contrast_mean": 0.5549,
+        "sway_cells_mean": 1.4988
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0028120754286646843,
+          "smoke_image": {
+            "structure": 0.08624,
+            "mean_luminance": 0.06068,
+            "noise_rms_over_mean": 0.03614
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.0755,
+            "mean_luminance": 0.06222,
+            "noise_rms_over_mean": 0.03117
+          },
+          "seconds_median": 0.862,
+          "seconds_min": 0.857
+        },
+        "16": {
+          "grain_rms": 0.003973145037889481,
+          "smoke_image": {
+            "structure": 0.08028,
+            "mean_luminance": 0.09395,
+            "noise_rms_over_mean": 0.03503
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07638,
+            "mean_luminance": 0.0925,
+            "noise_rms_over_mean": 0.03473
+          },
+          "seconds_median": 1.027,
+          "seconds_min": 0.973
+        },
+        "24": {
+          "grain_rms": 0.00292224925942719,
+          "smoke_image": {
+            "structure": 0.0883,
+            "mean_luminance": 0.06894,
+            "noise_rms_over_mean": 0.03267
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.08209,
+            "mean_luminance": 0.06576,
+            "noise_rms_over_mean": 0.031
+          },
+          "seconds_median": 0.944,
+          "seconds_min": 0.932
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 34.6
+    },
+    "t3_s6": {
+      "overrides": {
+        "turbulence": 3.0,
+        "swirl_size": 6.0
+      },
+      "bake_seconds": 10.32,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 3876,
+        "share_above": 0.7611,
+        "mean_abs": 127.466,
+        "p90": 296.097,
+        "rms": 232.126,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 11,
+        "flame_field_core_in_lowest_third_frames": 14,
+        "flame_field_core_position_mean": 0.1744,
+        "frames": 17,
+        "core_position_mean": 0.2849,
+        "top_over_bottom_mean": 0.6722,
+        "top_over_bottom_of_means": 0.3385,
+        "tongues_per_slice_mean": 0.4515,
+        "vorticity_mean": 1815.5659,
+        "density_contrast_mean": 0.796,
+        "sway_cells_mean": 4.9884
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.002086363034322858,
+          "smoke_image": {
+            "structure": 0.10361,
+            "mean_luminance": 0.0553,
+            "noise_rms_over_mean": 0.03522
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.0897,
+            "mean_luminance": 0.05645,
+            "noise_rms_over_mean": 0.02747
+          },
+          "seconds_median": 0.849,
+          "seconds_min": 0.845
+        },
+        "16": {
+          "grain_rms": 0.0023067884612828493,
+          "smoke_image": {
+            "structure": 0.17903,
+            "mean_luminance": 0.04792,
+            "noise_rms_over_mean": 0.05686
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.09998,
+            "mean_luminance": 0.04561,
+            "noise_rms_over_mean": 0.03059
+          },
+          "seconds_median": 0.844,
+          "seconds_min": 0.786
+        },
+        "24": {
+          "grain_rms": 0.0004957144265063107,
+          "smoke_image": {
+            "structure": 0.09977,
+            "mean_luminance": 0.02387,
+            "noise_rms_over_mean": 0.02515
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.07078,
+            "mean_luminance": 0.02824,
+            "noise_rms_over_mean": 0.02213
+          },
+          "seconds_median": 0.564,
+          "seconds_min": 0.559
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 30.2
+    },
+    "col_shot": {
+      "overrides": {},
+      "bake_seconds": 7.816,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 2667,
+        "share_above": 0.1834,
+        "mean_abs": 18.449,
+        "p90": 41.192,
+        "rms": 26.775,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 0,
+        "flame_field_core_in_lowest_third_frames": 0,
+        "flame_field_core_position_mean": null,
+        "frames": 17,
+        "core_position_mean": null,
+        "top_over_bottom_mean": null,
+        "top_over_bottom_of_means": null,
+        "tongues_per_slice_mean": 0.0,
+        "vorticity_mean": 45.2455,
+        "density_contrast_mean": 0.4154,
+        "sway_cells_mean": 0.0
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.001434333622455597,
+          "smoke_image": {
+            "structure": 0.06665,
+            "mean_luminance": 0.02303,
+            "noise_rms_over_mean": 0.07251
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06202,
+            "mean_luminance": 0.02825,
+            "noise_rms_over_mean": 0.07096
+          },
+          "seconds_median": 0.476,
+          "seconds_min": 0.453
+        },
+        "16": {
+          "grain_rms": 0.0018841141136363149,
+          "smoke_image": {
+            "structure": 0.06119,
+            "mean_luminance": 0.02871,
+            "noise_rms_over_mean": 0.08064
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.05101,
+            "mean_luminance": 0.02958,
+            "noise_rms_over_mean": 0.08088
+          },
+          "seconds_median": 0.492,
+          "seconds_min": 0.485
+        },
+        "24": {
+          "grain_rms": 0.001861648983322084,
+          "smoke_image": {
+            "structure": 0.06428,
+            "mean_luminance": 0.02885,
+            "noise_rms_over_mean": 0.07859
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.05197,
+            "mean_luminance": 0.02912,
+            "noise_rms_over_mean": 0.07952
+          },
+          "seconds_median": 0.462,
+          "seconds_min": 0.438
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 20.8
+    },
+    "col_v0.3": {
+      "overrides": {
+        "vorticity": 0.3
+      },
+      "bake_seconds": 7.469,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 2498,
+        "share_above": 0.0897,
+        "mean_abs": 12.816,
+        "p90": 28.616,
+        "rms": 17.904,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 0,
+        "flame_field_core_in_lowest_third_frames": 0,
+        "flame_field_core_position_mean": null,
+        "frames": 17,
+        "core_position_mean": null,
+        "top_over_bottom_mean": null,
+        "top_over_bottom_of_means": null,
+        "tongues_per_slice_mean": 0.0,
+        "vorticity_mean": 27.4395,
+        "density_contrast_mean": 0.3759,
+        "sway_cells_mean": 0.0
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.001412368263117969,
+          "smoke_image": {
+            "structure": 0.06801,
+            "mean_luminance": 0.02294,
+            "noise_rms_over_mean": 0.07159
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06104,
+            "mean_luminance": 0.02807,
+            "noise_rms_over_mean": 0.07044
+          },
+          "seconds_median": 0.418,
+          "seconds_min": 0.409
+        },
+        "16": {
+          "grain_rms": 0.001875810557976365,
+          "smoke_image": {
+            "structure": 0.0606,
+            "mean_luminance": 0.0289,
+            "noise_rms_over_mean": 0.08017
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.04967,
+            "mean_luminance": 0.02983,
+            "noise_rms_over_mean": 0.08148
+          },
+          "seconds_median": 0.466,
+          "seconds_min": 0.452
+        },
+        "24": {
+          "grain_rms": 0.0018511192174628377,
+          "smoke_image": {
+            "structure": 0.06456,
+            "mean_luminance": 0.0286,
+            "noise_rms_over_mean": 0.07798
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.05137,
+            "mean_luminance": 0.02937,
+            "noise_rms_over_mean": 0.08103
+          },
+          "seconds_median": 0.445,
+          "seconds_min": 0.44
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 20.0
+    },
+    "col_v2.0": {
+      "overrides": {
+        "vorticity": 2.0
+      },
+      "bake_seconds": 8.365,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 2843,
+        "share_above": 0.3648,
+        "mean_abs": 31.144,
+        "p90": 63.622,
+        "rms": 49.571,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        64,
+        64,
+        64
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 0,
+        "flame_field_core_in_lowest_third_frames": 0,
+        "flame_field_core_position_mean": null,
+        "frames": 17,
+        "core_position_mean": null,
+        "top_over_bottom_mean": null,
+        "top_over_bottom_of_means": null,
+        "tongues_per_slice_mean": 0.0,
+        "vorticity_mean": 81.8551,
+        "density_contrast_mean": 0.4505,
+        "sway_cells_mean": 0.0
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0014381513465195894,
+          "smoke_image": {
+            "structure": 0.06524,
+            "mean_luminance": 0.02295,
+            "noise_rms_over_mean": 0.07235
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06292,
+            "mean_luminance": 0.02818,
+            "noise_rms_over_mean": 0.07133
+          },
+          "seconds_median": 0.468,
+          "seconds_min": 0.441
+        },
+        "16": {
+          "grain_rms": 0.0018794150091707706,
+          "smoke_image": {
+            "structure": 0.06006,
+            "mean_luminance": 0.02879,
+            "noise_rms_over_mean": 0.08136
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.05131,
+            "mean_luminance": 0.02929,
+            "noise_rms_over_mean": 0.0802
+          },
+          "seconds_median": 0.439,
+          "seconds_min": 0.438
+        },
+        "24": {
+          "grain_rms": 0.0017133853398263454,
+          "smoke_image": {
+            "structure": 0.06721,
+            "mean_luminance": 0.02752,
+            "noise_rms_over_mean": 0.07433
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.05481,
+            "mean_luminance": 0.02818,
+            "noise_rms_over_mean": 0.07518
+          },
+          "seconds_median": 0.466,
+          "seconds_min": 0.439
+        }
+      },
+      "peak_gpu_mib": 388,
+      "peak_gpu_mib_over_idle": 364,
+      "wall_seconds": 21.0
+    },
+    "col_r2": {
+      "overrides": {
+        "division_size": 0.015625
+      },
+      "bake_seconds": 6.415,
+      "device": "NVIDIA GeForce RTX 3080 Ti",
+      "projected_curl": {
+        "cells": 2486,
+        "share_above": 0.0752,
+        "mean_abs": 11.637,
+        "p90": 26.415,
+        "rms": 16.953,
+        "threshold": 30.0,
+        "cell_metres": 0.02
+      },
+      "grid": [
+        128,
+        128,
+        128
+      ],
+      "summary": {
+        "core_in_lowest_third_frames": 0,
+        "flame_field_core_in_lowest_third_frames": 0,
+        "flame_field_core_position_mean": null,
+        "frames": 17,
+        "core_position_mean": null,
+        "top_over_bottom_mean": null,
+        "top_over_bottom_of_means": null,
+        "tongues_per_slice_mean": 0.0,
+        "vorticity_mean": 64.79,
+        "density_contrast_mean": 0.4652,
+        "sway_cells_mean": 0.0
+      },
+      "render": {
+        "8": {
+          "grain_rms": 0.0013710367493331432,
+          "smoke_image": {
+            "structure": 0.07316,
+            "mean_luminance": 0.02273,
+            "noise_rms_over_mean": 0.06991
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.06767,
+            "mean_luminance": 0.02782,
+            "noise_rms_over_mean": 0.06928
+          },
+          "seconds_median": 1.143,
+          "seconds_min": 0.946
+        },
+        "16": {
+          "grain_rms": 0.0017952058697119355,
+          "smoke_image": {
+            "structure": 0.06385,
+            "mean_luminance": 0.02824,
+            "noise_rms_over_mean": 0.07848
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.05267,
+            "mean_luminance": 0.02934,
+            "noise_rms_over_mean": 0.07932
+          },
+          "seconds_median": 1.061,
+          "seconds_min": 0.994
+        },
+        "24": {
+          "grain_rms": 0.001796599361114204,
+          "smoke_image": {
+            "structure": 0.06674,
+            "mean_luminance": 0.02803,
+            "noise_rms_over_mean": 0.07603
+          },
+          "smoke_image_own_mask": {
+            "structure": 0.05325,
+            "mean_luminance": 0.02896,
+            "noise_rms_over_mean": 0.07862
+          },
+          "seconds_median": 0.996,
+          "seconds_min": 0.984
+        }
+      },
+      "peak_gpu_mib": 707,
+      "peak_gpu_mib_over_idle": 683,
+      "wall_seconds": 43.3
+    }
+  }
+}

@@ -2465,6 +2465,65 @@ The card and the processor agree on `u_fine` to 1e-5 in a single step and to 2 %
 
 **Not verified.** Windows (no Windows machine here); the real display (stills read from saved images); factor 4 with swirl; the 3 s render frame (measured, not fixed). `make_shot.build_document(smoke_upres={"swirl": 0.5, "swirl_life": 2.0})` builds the shot with the persistent swirl. **Default stays off**: the stills do not curl, so there is nothing to turn on.
 
+### Fluids 18 A: where the smoke's curl has to come from, the main simulation or the up-res (2026-11-20)
+
+Fluids 17 A to C could only detail rolls the main simulation already makes. This step tests whether the main simulation can make them at all: the fire shot's solver (up-res off) swept over the base vorticity confinement, the base resolution
+and the advection scheme, with the same measures as Fluids 17 and the same stills. **Result: no setting curls the smoke.** The tool is `examples/fire_shot/base_sweep.py` (one process per setting; `--sweep`, `--curl-only`, `--bake-only`),
+the numbers are in `benchmarks/fire_shot/fire-base-sweep-2026-11-20.json`, and the stills are summarised in `docs/images/fire_shot/fire-base-sweep-contact-2026-11-20.png` (rows: the shot, vorticity 0.3, vorticity 2.0, 96 cells, 128 cells, 128 cells with vorticity 2.0, Fluids 17 C's best;
+columns: frames 8, 16, 24). All numbers: RTX 3080 Ti, 960 x 540, 128 samples, nothing else on the card (checked with `nvidia-smi` before each run).
+
+**Measures.** The shot today is 64 cells, MacCormack, vorticity 1.0 (`SHAPED_SOLVER`); the node's own default is 0.3. "Curl share" is the share of smoke cells whose image-plane curl is above 30 per second at frame 16 (`flame_metrics.projected_curl`), taken two ways:
+on the main grid's own velocity and smoke ("own"), and the way Fluids 17 took it, with both put on a grid twice as fine ("17 measure"; the shot reads 18.6 % this way, the 18.4 % of Fluids 17 A's swirl-off row, so the two are comparable; Fluids 17 C's best reads 19.5 %).
+Contrast is the field's density contrast averaged over frames 8 to 24, structure and grain are from the stills at frame 16 (gate for grain 0.0071), flame is the core position / tongues per slice / top over bottom averaged over frames 8 to 24, and the render times are the median of five 128-sample frames at frames 8 / 16 / 24 (gate 0.75 s).
+
+| Setting | Bake (s) | Curl share own / 17 measure | Contrast | Structure | Grain | Flame core / tongues / top over bottom | 128-sample frame (s) | Card, over idle (MiB) |
+|---|---|---|---|---|---|---|---|---|
+| **Shot today** (64 cells, vorticity 1.0) | 8.2 | 29.9 % / 18.6 % | 0.444 | 0.0842 | 0.00648 | 0.268 / 1.13 / 0.744 | 0.83 / 0.80 / 0.76 | 364 |
+| Vorticity 0.3 (node default) | 8.8 | 19.8 % / 15.8 % | 0.379 | 0.0840 | 0.00661 | 0.291 / 1.05 / 0.834 | 0.88 / 0.77 / 0.78 | 364 |
+| Vorticity 0.6 | 8.7 | 23.5 % / 16.2 % | 0.403 | 0.0828 | 0.00673 | 0.293 / 1.08 / 0.883 | 0.90 / 0.82 / 0.79 | 364 |
+| Vorticity 2.0 | 8.9 | 40.0 % / 20.1 % | 0.529 | 0.0873 | 0.00658 | 0.298 / 1.10 / 0.706 | 0.90 / 0.82 / 0.81 | 364 |
+| Vorticity 3.0 | 9.0 | breaks (curl rms 595 per second) | 0.572 | 0.0962 | 0.00502 | 0.262 / 0.66 / 0.722 | 0.88 / 0.84 / 0.72 | 364 |
+| Vorticity 4.0 | 8.9 | breaks (curl rms 141,680 per second; smoke and flame gone by frame 16) | 0.661 | 0.0902 | 0.00064 | 0.340 / 0.36 / 0.800 | 0.81 / 0.81 / 0.13 | 364 |
+| 96 cells (1.5 times finer) | 36.1 (35.6 and 35.7 on two repeats) | 18.4 % / 16.1 % | 0.497 | 0.0976 | 0.00666 | 0.277 / 1.01 / 0.787 | 1.26 / 1.04 / 0.99 | 364 |
+| 128 cells (2 times finer) | 14.5 (10.2 and 7.9 on repeats) | 14.4 % / 13.9 % | 0.454 | 0.0940 | 0.00671 | 0.281 / 1.04 / 0.731 | 1.80 / 1.42 / 1.38 | 685 |
+| 96 cells, vorticity 2.0 | 35.5 | 23.1 % / 17.5 % | 0.544 | 0.0906 | 0.00640 | 0.266 / 0.95 / 0.656 | 1.12 / 1.00 / 0.98 | 364 |
+| 128 cells, vorticity 2.0 | 4.8 (10.6 and 9.8 on repeats) | 17.7 % / 14.3 % | 0.504 | 0.0950 | 0.00644 | 0.231 / 0.97 / 0.627 | 1.55 / 1.48 / 1.45 | 685 |
+| 128 cells, vorticity 4.0 | 13.3 | breaks | 0.681 | 0.0859 | 0.00069 | 0.286 / 0.24 / 1.357 | 1.47 / 1.27 / 0.48 | 697 |
+| Semi-Lagrangian advection (64 cells) | 8.1 | 29.8 % / 19.7 % | 0.443 | 0.0857 | 0.00694 | 0.306 / 1.11 / 0.698 | 0.88 / 0.84 / 0.81 | 364 |
+| Solver turbulence 1, swirl size 3 (existing knobs) | 10.0 | 31.6 % / n.m. | 0.503 | 0.0829 | 0.00621 | 0.327 / 1.24 / 0.736 | 0.92 / 0.90 / 0.86 | 364 |
+| Solver turbulence 3, swirl size 3 | 10.5 | 58.9 % / n.m. | 0.555 | 0.0803 | 0.00397 | 0.297 / 0.67 / 0.742 | 0.86 / 1.03 / 0.94 | 364 |
+| Solver turbulence 3, swirl size 6 | 10.3 | 76.1 % / n.m. | 0.796 | 0.1790 | 0.00231 | 0.285 / 0.45 / 0.672 | 0.85 / 0.84 / 0.56 | 364 |
+| **Fluids 17 C best** on the shot's 64 cells (factor 2, swirl 0.5, life 2; from the 11/12 run) | 20.4 | n.m. / 19.5 % | 0.470 | 0.0815 | 0.00629 | (fine-volume measure) | 1.56 / 1.84 / 5.50 | |
+| Fluids 17 C best on 96 cells | 81.9 (up-res included) | n.m. / 16.7 % | 0.505 | | | | | |
+| Fluids 17 C best on 128 cells | 119.0 (up-res included) | n.m. / 14.0 % | 0.452 | | | | not measured | |
+
+("n.m." = not measured that way. The card column is the highest `nvidia-smi` reading of the whole process, polled every 0.4 s, 24 MiB idle; it covers the bake, the stills and the timing, and it can read low for a short peak: the 64 and 96 cell runs read the same.
+The turbulence rows are not in the brief's list; they were run because that knob already exists. The up-res rows measure the field: its flame numbers come from the fine volume and are not comparable with the main-grid ones, and the 17 C row's flame measures are the ones of the 11/12 report.)
+
+**Does the smoke curl at any setting? No.** Looking at the stills at frames 8, 16 and 24 (and the same frames brightened and enlarged), every row is a soft billowing cloud with the same overall shape.
+- *Vorticity.* 0.3 gives the smoothest cloud with a few streaky filaments along its edge and larger billows (the same in a plain smoke column without fire: a rolled bulge on the plume's flank at frame 24). 1.0 (the shot) shows cell-sized speckle in the thin outer smoke.
+  2.0 draws the cloud narrower and more upright and makes the flame look stacked in puffs; it also raises the curl measure to 40 %, but the mid-plane slices of the field show that this is more cell-scale speckle, not rolled structure. 3.0 and 4.0 break the solver: the curl measure goes to hundreds and then hundreds of thousands per second, and the picture falls apart into sparks (at 3.0 the flame loses its tongues and the smoke is scattered specks, nearly gone by frame 24; at 4.0, and at 128 cells with 4.0, both are gone by frame 16).
+  Vorticity 2.0 is the highest stable setting and the picture does not curl there.
+- *Resolution.* Finer grids add fine texture (structure 0.084 to 0.094 at 128 cells, 0.098 at 96) and the smoke's edge gets finer-grained, but the plume is the same cloud; the curl measure goes down (18.6 to 16.1 to 13.9 % in the 17 measure) because the finer grid's speckle is finer than the 2 cm measure cells (the measure averages it away).
+  A mid-plane slice of the smoke field at frame 16 (64 and 128 cells, vorticity 0.3, 1.0 and 2.0, semi-Lagrangian, and Fluids 17 C's fine field) shows a smooth dense core with cell-scale noise at its edge on every grid and no roll-ups or vortex pairs: the noise is the size of one cell, so it shrinks as the grid refines and never forms curls.
+- *Advection.* Semi-Lagrangian looks the same as MacCormack at the shot's settings (curl 29.8 against 29.9 %, structure 0.0857 against 0.0842, a little more grain: 0.00694 against 0.00648, still under the 0.0071 gate); the edge speckle is a little coarser.
+- *Solver turbulence* (existing knob, not asked for): 1 with swirl size 3 spreads the smoke into a halo and keeps the flame; 3 breaks the flame into sparks (tongues per slice fall from 1.13 to 0.67 and 0.45) and by frame 24 at swirl size 6 leaves almost no smoke or flame. It does not curl the smoke either.
+- *Fluids 17 C's swirl on top of a finer main grid* (the combination the 11/12 note predicted would work): 17 measure 14.0 % on 128 cells against 13.9 % without it, and 16.7 % on 96 cells against 16.1 %. It adds nothing that the measure can see, and the stills agree (128 cells with the swirl at frame 24 is the same cloud as 128 cells without it, a little more mottled; the 96-cell one was not rendered).
+
+**Does the flame still look like the shot's?** At 96 and 128 cells with vorticity 1.0 the flame measures stay within a few percent of the shot's (core 0.277 and 0.281 against 0.268; tongues 1.01 and 1.04 against 1.13; top over bottom 0.79 and 0.73 against 0.74) and the flame looks the same in the stills.
+Vorticity 2.0 changes it (stacked puffs, top over bottom 0.71) and combined with the finer grids it narrows further (0.63 and 0.66). Vorticity 0.3 and 0.6 keep the flame but make its top brighter relative to its bottom (0.83 and 0.88 against 0.74).
+
+**Cost against today's shot.** 128 cells: bake 8 to 14 s (the shot's 8.2 s; the first run was 14.5 and the repeats 10.2 and 7.9, so about the same), but the 128-sample frame goes from 0.76 to 0.83 s up to 1.4 to 1.8 s and the card from 364 to 685 MiB (the card's reading of the bake alone is about 550 to 610 MiB). Grain stays under its gate (0.0067).
+96 cells: the bake takes 36 s on three runs (the 30 s gate is missed; why a 96-cell grid is four times slower than a 128-cell one was not investigated), the frame 1.0 to 1.3 s. Neither is a shot setting worth adopting for the picture, since neither curls the smoke. Today's shot already misses the 0.75 s frame gate on two of the three frames (0.83, 0.80, 0.76 s here).
+Up-res factor 2 on top of the finer grids costs 82 s (96 cells) and 119 s (128 cells) of bake against the 30 s gate.
+
+**Proposal.** Leave the shot, the node defaults and the up-res defaults as they are: nothing in the base simulation's vorticity, resolution or advection makes the smoke curl, so there is no setting to propose and the hot-pour and smoke-column scenes were not run for a setting (the plain smoke column was run once at 64 cells with vorticity 0.3, 1.0 and 2.0 and at 128 cells as a check on whether the solver rolls smoke with a clear edge: it makes plume-scale billows,
+clearest at vorticity 0.3 and at 128 cells, and no tight curls). The numbers point at the mechanism Fluids 17 C named and did not build: the main simulation's smoke is a smooth core with cell-scale noise at its edge at every setting, so the swirl has nothing to wrap, and extra velocity detail (17 B and C, and the 17 C swirl on 96 and 128 cells) moves what little density there is without rolling it.
+What is missing is fine density structure that travels with the flow: a texture carried by the combined (main plus fine) velocity and seeded where smoke is born, as wavelet turbulence does, rather than detail added to the density that exists. A turbulence term in the base solver is the other candidate, but the solver's existing turbulence knob spreads the smoke and breaks the flame (rows above), so it would need a different shape (curl-noise forcing limited to the smoke, away from the flame) to be worth building.
+Neither was built.
+
+**Not verified.** The 128-sample frame times, structure and grain of the up-res rows on 96 and 128 cells (the 128-cell timing run was stopped after about 20 minutes at the time box, with stills but no timings; the 96-cell one was measured for the field only); Windows and the real display (stills read from saved images); the hot-pour scene (not run: no setting curled the fire shot's smoke); vorticity values between 2.0 and 3.0; resolution above 128 cells; why the 96-cell bake is slow; anything with a different camera or lighting that might read the smoke's structure better (the smoke in this shot is a thin haze, and the curl measure and the pictures were read at its brightness).
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
