@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import stat
 import sys
 from pathlib import Path
@@ -102,7 +103,28 @@ def enum_value(cls, knob, value, values):
     return matches[0] if len(matches) == 1 else None
 
 
-def knob_statement(cls, knob, value, table):
+# NodeBased names the mask input's channels mask.<c>; in Nuke a Read fixture on the mask input carries them as rgba.<c>.
+CHANNEL_VALUE = {"mask.a": "rgba.alpha", "mask.r": "rgba.red", "mask.g": "rgba.green", "mask.b": "rgba.blue"}
+
+
+def case_files(case):
+    """{file name: path} for the files a case made for itself (a .cube LUT in a temporary folder), found in its NodeBased params."""
+    found = {}
+
+    def walk(v):
+        if isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+        elif isinstance(v, str) and len(v) < 4096 and os.path.isabs(v) and os.path.isfile(v):
+            found[os.path.basename(v)] = v
+    walk(case.nb_params or {})
+    return found
+
+
+def knob_statement(cls, knob, value, table, files=()):
     """The Python line that sets one knob of the node under test, written for the knob's kind in Nuke 17 (the table): an enumeration by
     its menu index, an integer knob with an int, a text knob with the text, and a number, colour or XY knob given as text ("4 6", "12",
     a Tcl list or an expression) through fromScript, which is how Nuke reads a knob from text. Raises ValueError with the reason when
@@ -124,6 +146,15 @@ def knob_statement(cls, knob, value, table):
     if kind == "Boolean_Knob":
         on = value if isinstance(value, bool) else str(value).strip().lower() in ("1", "1.0", "true", "on", "yes")
         return f"node[{knob!r}].setValue({bool(on)!r})"
+    if kind == "File_Knob" and isinstance(value, str) and value and not os.path.isabs(value):
+        if value not in files:
+            raise ValueError(f"the case's file {value} is not one the pack can write (NodeBased's case makes it under another name)")
+        return f"node[{knob!r}].setValue(os.path.join(fixtures, {value!r}).replace(os.sep, '/'))"
+    if kind == "Format_Knob" and isinstance(value, str) and len(value.split()) == 2 and all(v.isdigit() for v in value.split()):
+        w, h = value.split()
+        return f"nuke.addFormat('{w} {h} 1 nb_{w}x{h}')\nnode[{knob!r}].setValue('nb_{w}x{h}')"
+    if kind in ("Channel_Knob", "ChannelMask_Knob", "Input_Channel_Knob") and value in CHANNEL_VALUE:
+        value = CHANNEL_VALUE[value]
     if kind in INT_KINDS and not isinstance(value, str):
         return f"node[{knob!r}].setValue({int(round(float(value)))!r})"
     if kind in STRING_KINDS or kind == "Enumeration_Knob":
@@ -168,7 +199,7 @@ def unrenderable(case, table):
         return "the case reads a picture the pack does not write: " + ", ".join(n for n in case.nuke_inputs if n not in FIXTURE_NAMES)
     try:
         for knob, value in case.nuke_knobs:
-            knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table)
+            knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table, case_files(case))
     except ValueError as exc:
         return str(exc)
     return ""
@@ -235,7 +266,8 @@ def py_script(case, table=None):
                          "first=1, last=1, origfirst=1, origlast=1, raw=True)")
         plates = [f"read_{name}" for name in case.nuke_inputs]
     lines.append(f"node = nuke.nodes.{cls}()")
-    lines += [knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table) for knob, value in case.nuke_knobs]
+    files = case_files(case)
+    lines += [knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table, files) for knob, value in case.nuke_knobs]
     for param, (interpolation, keys) in (stamp or {}).get("curves", {}).items():
         knob = CURVE_KNOB[(case.nuke_class, param)]
         lines.append(f"node[{knob!r}].setAnimated()")
@@ -326,6 +358,8 @@ def write_pack(pack, table=None):
             manifest["not_renderable"].append({"id": case.id, "nuke": case.nuke, "nuke_class": nuke17_class(case), "reason": reason})
             continue
         (pack / "scripts" / f"{case.id}.py").write_text(py_script(case, table), encoding="utf-8")
+        for name, path in case_files(case).items():           # a LUT the case made for itself, beside the fixtures
+            shutil.copyfile(path, pack / "fixtures" / name)
         manifest["cases"].append({"id": case.id, "nuke": case.nuke, "nuke_class": nuke17_class(case),
                                   "nuke_knobs": [[k, v] for k, v in case.nuke_knobs], "nuke_inputs": list(case.nuke_inputs),
                                   "nodebased_kind": case.nb_kind, "nodebased_params": case.nb_params, "source": case.source})

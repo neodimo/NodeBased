@@ -875,11 +875,46 @@ def worklist_markdown(items):
         if len(rows) > 40:
             w.append(f"\n{len(rows) - 40} more in worklist.json.")
         w.append("")
+    w += nuke_pixel_section(owner)
     acc = [i for i in items if i["status"] == "accepted"]
     w += ["## Accepted default differences", "", "| Node | Knob | Nuke | NodeBased | Why |", "|---|---|---|---|---|"]
     for i in acc:
         w.append(f"| {i['node']} | `{i['knob']}` | {i['nuke']} | {i['nodebased_value']} | {i['reason'].replace('|', '/')} |")
     return "\n".join(w) + "\n"
+
+
+def nuke_pixel_section(owner, data=None):
+    """WORKLIST.md's list of the cases where NodeBased's pixels differ from Nuke's own render (docs/parity/review/nuke_pixels.json,
+    written by tools/nuke_pixel_mismatches.py from a folder of renders; the renders themselves stay out of git)."""
+    if data is None:
+        from nuke_pixel_mismatches import load
+        data = load()
+    if not data:
+        return []
+    s = data["summary"]
+    w = ["## Differences from Nuke's own pixels", "",
+         f"Rendered in Nuke 17.0v6 Non-commercial: {s['cases']} cases of {s['nodes']} nodes, {s['pass']} match within 1e-4 and "
+         f"{s['nodes_all_pass']} nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and "
+         "its worst pixel (row, column). \"Nuke vs guide\" is Nuke's render against the result the guide states; **guide** marks a "
+         "case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. "
+         "Up to 40 rows per lane; all of them are in `nuke_pixels.json`.", ""]
+    for lane in sorted({r["lane"] for r in data["rows"]}):
+        rows = [r for r in data["rows"] if r["lane"] == lane and r["status"] != "pass"]
+        w += [f"### Lane {lane} ({owner.get(lane, '')}): {len(rows)} cases", ""]
+        if not rows:
+            w += ["Every rendered case matches Nuke.", ""]
+            continue
+        w += ["| Node | Case | Largest error | Channel | Worst pixel | Nuke vs guide | |", "|---|---|---|---|---|---|---|"]
+        for r in rows[:40]:
+            err = f"{r['max_error']:.4g}" if "max_error" in r else r.get("note", r["status"])[:60].replace("|", "/")
+            pixel = ", ".join(str(v) for v in r.get("worst_pixel", []))
+            guide = f"{r['nuke_vs_guide']:.4g}" if "nuke_vs_guide" in r else ""
+            w.append(f"| {r['node']} | `{r['id']}` | {err} | {r.get('channel', '')} | {pixel} | {guide} | "
+                     f"{'**guide**' if r.get('nuke_disagrees_with_guide') else ''} |")
+        if len(rows) > 40:
+            w.append(f"\n{len(rows) - 40} more in nuke_pixels.json.")
+        w.append("")
+    return w
 
 
 def write_worklist(items, md_path=WORKLIST_MD, json_path=WORKLIST_JSON):

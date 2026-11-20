@@ -129,6 +129,13 @@ class PackScriptTests(unittest.TestCase):
         self.assertIn("nuke.nodes.FrameRange(first_frame=11, last_frame=15)", clip)
         self.assertLessEqual(clip.count("nuke.nodes."), 10)
 
+    def test_files_formats_and_mask_channels_are_written_the_way_nuke_reads_them(self):
+        self.assertTrue((self.root / "fixtures" / "affine.cube").exists())     # the LUT the Vectorfield case made, beside the fixtures
+        self.assertIn("node['vfield_file'].setValue(os.path.join(fixtures, 'affine.cube')",
+                      self.script("vectorfield_trilinear_applies_the_lut_0.2_0.5_0.8"))
+        self.assertIn("nuke.addFormat('10 7 1 nb_10x7')\nnode['format'].setValue('nb_10x7')", self.script("constant_format"))
+        self.assertIn("node['maskChannelInput'].setValue('rgba.alpha')", self.script("copy_mask"))
+
     def test_renamed_classes_and_knobs_reach_the_scripts(self):
         self.assertIn("nuke.nodes.Keylight()", self.script(next(c.id for c in cases.CASES if c.nuke_class == "ScreenKeyer"
                                                                 and (self.root / "scripts" / f"{c.id}.py").exists())))
@@ -152,3 +159,32 @@ class DisplayWindowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PixelMismatchTests(unittest.TestCase):
+    """tools/nuke_pixel_mismatches.py on renders made here: one matching Nuke, one off by 0.5 at a known pixel."""
+
+    def test_rows_sort_by_lane_and_mark_where_nuke_disagrees_with_the_guide(self):
+        import nuke_pixel_mismatches as mism
+        from nodebased.media import write_exr
+        plus, over = _case("merge_plus"), _case("merge_over")
+        with tempfile.TemporaryDirectory() as tmp:
+            write_exr(Path(tmp) / "merge_plus.exr", cases.run_nodebased(plus).astype(np.float32), bits="float", compression="none")
+            off = cases.run_nodebased(over).astype(np.float32)
+            off[3, 5, 1] += 0.5
+            write_exr(Path(tmp) / "merge_over.exr", off, bits="float", compression="none")
+            data = mism.build(tmp)
+        rows = {r["id"]: r for r in data["rows"]}
+        self.assertEqual(set(rows), {"merge_plus", "merge_over"})
+        self.assertEqual(rows["merge_plus"]["status"], "pass")
+        bad = rows["merge_over"]
+        self.assertEqual((bad["status"], bad["lane"], bad["channel"], bad["worst_pixel"]), ("fail", 11, "G", [3, 5]))
+        self.assertAlmostEqual(bad["max_error"], 0.5, places=4)
+        self.assertTrue(bad["nuke_disagrees_with_guide"])            # NodeBased does what the guide states, the 'render' does not
+        self.assertFalse(rows["merge_plus"]["nuke_disagrees_with_guide"])
+        self.assertEqual(data["summary"]["mismatch_by_lane"], {"11": 1})
+        import parity_review_book as book
+        text = "\n".join(book.nuke_pixel_section({11: "Image, Merge"}, data))
+        self.assertIn("### Lane 11 (Image, Merge): 1 cases", text)
+        self.assertIn("| Merge | `merge_over` | 0.5 | G | 3, 5 |", text)
+        self.assertIn("**guide**", text)
