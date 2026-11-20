@@ -56,6 +56,23 @@ VARIANTS = {
     # Fluids 18 C: the automatic substep rule (`auto_substeps`) against the old one substep a frame, at the shot's three grid sizes
     'off96': dict(division_size=DIVISION / 1.5, auto_substeps=0), 'off128': dict(division_size=DIVISION / 2, auto_substeps=0),
     'auto64': dict(auto_substeps=1), 'auto96': dict(division_size=DIVISION / 1.5, auto_substeps=1), 'auto128': dict(division_size=DIVISION / 2, auto_substeps=1),
+    # and the flame's own knobs on the automatic rule at 64 cells (burn rate 1.2 and flame lifespan 1 in the shot; cooling 1.0 per frame)
+    'auto64_burn.6': dict(auto_substeps=1, burn_rate=.6), 'auto64_burn.3': dict(auto_substeps=1, burn_rate=.3),
+    'auto64_life2': dict(auto_substeps=1, flame_lifespan=2.0), 'auto64_cool.5': dict(auto_substeps=1, cooling_rate=.5),
+    'auto64_target3': dict(auto_substeps=1, substep_target=3.0), 'auto64_target4': dict(auto_substeps=1, substep_target=4.0),
+    'auto64_burn.9': dict(auto_substeps=1, burn_rate=.9), 'auto64_burn.8': dict(auto_substeps=1, burn_rate=.8),
+    'auto64_heat2': dict(auto_substeps=1, temperature_output=2.0), 'auto64_heat2.4': dict(auto_substeps=1, temperature_output=2.4),
+    'auto64_exp2.5': dict(auto_substeps=1, burn_expansion=2.5), 'auto64_burn.9_exp2.5': dict(auto_substeps=1, burn_rate=.9, burn_expansion=2.5),
+    # Fluids 18 C part 4: Fluids 17 C's carried swirl (factor 2, swirl 0.5, life 2) on the shot as it was and on the automatic rule
+    'off64_upresC': dict(auto_substeps=0, smoke_upres=UPRES_C),
+    'auto64_upresC': dict(auto_substeps=1, smoke_upres=UPRES_C), 'auto96_upresC': dict(division_size=DIVISION / 1.5, auto_substeps=1, smoke_upres=UPRES_C),
+    'auto64_heat2.3': dict(auto_substeps=1, temperature_output=2.3), 'auto96_heat2.3': dict(division_size=DIVISION / 1.5, auto_substeps=1, temperature_output=2.3),
+    'auto128_heat2.3': dict(division_size=DIVISION / 2, auto_substeps=1, temperature_output=2.3),
+    'auto64h_upresC': dict(auto_substeps=1, temperature_output=2.3, smoke_upres=UPRES_C),
+    'auto96h_upresC': dict(division_size=DIVISION / 1.5, auto_substeps=1, temperature_output=2.3, smoke_upres=UPRES_C),
+    # the cap, not the target, binds in the shot (the fastest cell needs 17 to 33 substeps at 2 cells each): 16 and 32 at 64 cells, 16 at 128
+    'auto64h_cap16': dict(auto_substeps=1, temperature_output=2.3, substep_cap=16), 'auto64h_cap32': dict(auto_substeps=1, temperature_output=2.3, substep_cap=32),
+    'auto128h_cap16': dict(division_size=DIVISION / 2, auto_substeps=1, temperature_output=2.3, substep_cap=16),
     't1_s3': dict(turbulence=1.0, swirl_size=3.0),
     't3_s3': dict(turbulence=3.0, swirl_size=3.0),
     't3_s6': dict(turbulence=3.0, swirl_size=6.0),

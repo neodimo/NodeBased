@@ -1,0 +1,297 @@
+{
+ "shot": {
+  "overrides": {
+   "auto_substeps": 0
+  },
+  "bake_seconds": 1.747,
+  "grid": [
+   64,
+   64,
+   64
+  ],
+  "own_grid": {
+   "cells": 4853,
+   "share_above": 0.2895,
+   "mean_abs": 26.198,
+   "p90": 60.17,
+   "rms": 39.146,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 5201,
+   "share_above": 0.1963,
+   "mean_abs": 18.647,
+   "p90": 45.374,
+   "rms": 28.68,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.4701189398765564
+ },
+ "off96": {
+  "overrides": {
+   "division_size": 0.020833333333333332,
+   "auto_substeps": 0
+  },
+  "bake_seconds": 2.624,
+  "grid": [
+   96,
+   96,
+   96
+  ],
+  "own_grid": {
+   "cells": 4741,
+   "share_above": 0.1825,
+   "mean_abs": 18.895,
+   "p90": 41.634,
+   "rms": 28.967,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 4830,
+   "share_above": 0.1569,
+   "mean_abs": 17.151,
+   "p90": 37.95,
+   "rms": 26.016,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.508119523525238
+ },
+ "off128": {
+  "overrides": {
+   "division_size": 0.015625,
+   "auto_substeps": 0
+  },
+  "bake_seconds": 3.972,
+  "grid": [
+   128,
+   128,
+   128
+  ],
+  "own_grid": {
+   "cells": 4724,
+   "share_above": 0.1442,
+   "mean_abs": 16.595,
+   "p90": 36.067,
+   "rms": 26.241,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 4787,
+   "share_above": 0.1387,
+   "mean_abs": 15.961,
+   "p90": 34.032,
+   "rms": 24.992,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.4524490237236023
+ },
+ "auto64_heat2.3": {
+  "overrides": {
+   "auto_substeps": 1,
+   "temperature_output": 2.3
+  },
+  "bake_seconds": 3.644,
+  "grid": [
+   64,
+   64,
+   64
+  ],
+  "own_grid": {
+   "cells": 5199,
+   "share_above": 0.2702,
+   "mean_abs": 22.141,
+   "p90": 50.595,
+   "rms": 30.353,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 5434,
+   "share_above": 0.1824,
+   "mean_abs": 17.086,
+   "p90": 39.361,
+   "rms": 24.07,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.36677148938179016
+ },
+ "auto96_heat2.3": {
+  "overrides": {
+   "division_size": 0.020833333333333332,
+   "auto_substeps": 1,
+   "temperature_output": 2.3
+  },
+  "bake_seconds": 6.215,
+  "grid": [
+   96,
+   96,
+   96
+  ],
+  "own_grid": {
+   "cells": 5669,
+   "share_above": 0.2055,
+   "mean_abs": 18.893,
+   "p90": 43.861,
+   "rms": 26.139,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 5733,
+   "share_above": 0.1901,
+   "mean_abs": 18.022,
+   "p90": 41.529,
+   "rms": 24.927,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.5269968509674072
+ },
+ "auto128_heat2.3": {
+  "overrides": {
+   "division_size": 0.015625,
+   "auto_substeps": 1,
+   "temperature_output": 2.3
+  },
+  "bake_seconds": 9.69,
+  "grid": [
+   128,
+   128,
+   128
+  ],
+  "own_grid": {
+   "cells": 5213,
+   "share_above": 0.226,
+   "mean_abs": 19.584,
+   "p90": 44.323,
+   "rms": 27.47,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 5270,
+   "share_above": 0.2171,
+   "mean_abs": 19.204,
+   "p90": 43.319,
+   "rms": 26.684,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.4822939932346344
+ },
+ "off64_upresC": {
+  "overrides": {
+   "auto_substeps": 0,
+   "smoke_upres": {
+    "swirl": 0.5,
+    "swirl_scale": 6.0,
+    "swirl_life": 2.0
+   }
+  },
+  "bake_seconds": 11.314,
+  "grid": [
+   64,
+   64,
+   64
+  ],
+  "own_grid": {
+   "cells": 4853,
+   "share_above": 0.2895,
+   "mean_abs": 26.198,
+   "p90": 60.17,
+   "rms": 39.146,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 5334,
+   "share_above": 0.2028,
+   "mean_abs": 19.8,
+   "p90": 46.017,
+   "rms": 29.933,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.4701189398765564
+ },
+ "auto64h_upresC": {
+  "overrides": {
+   "auto_substeps": 1,
+   "temperature_output": 2.3,
+   "smoke_upres": {
+    "swirl": 0.5,
+    "swirl_scale": 6.0,
+    "swirl_life": 2.0
+   }
+  },
+  "bake_seconds": 16.32,
+  "grid": [
+   64,
+   64,
+   64
+  ],
+  "own_grid": {
+   "cells": 5199,
+   "share_above": 0.2702,
+   "mean_abs": 22.141,
+   "p90": 50.595,
+   "rms": 30.353,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 5603,
+   "share_above": 0.1856,
+   "mean_abs": 18.257,
+   "p90": 40.697,
+   "rms": 25.557,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.36677148938179016
+ },
+ "auto96h_upresC": {
+  "overrides": {
+   "division_size": 0.020833333333333332,
+   "auto_substeps": 1,
+   "temperature_output": 2.3,
+   "smoke_upres": {
+    "swirl": 0.5,
+    "swirl_scale": 6.0,
+    "swirl_life": 2.0
+   }
+  },
+  "bake_seconds": 315.396,
+  "grid": [
+   96,
+   96,
+   96
+  ],
+  "own_grid": {
+   "cells": 5669,
+   "share_above": 0.2055,
+   "mean_abs": 18.893,
+   "p90": 43.861,
+   "rms": 26.139,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "fluids17_measure": {
+   "cells": 5900,
+   "share_above": 0.2002,
+   "mean_abs": 18.677,
+   "p90": 41.625,
+   "rms": 25.398,
+   "threshold": 30.0,
+   "cell_metres": 0.02
+  },
+  "density_contrast_16": 0.5269968509674072
+ }
+}
