@@ -1,5 +1,24 @@
 ## Lane 9 step X6 (11/19): the last open marks in Filter and Draw
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (11:57 AM on 2026-11-20 PDT)
+
+`main` moved `f5b3295f` -> `89f0ef49` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `89f0ef49` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1120-1117.log`, started 11:17 AM): **Ran 10579 tests in 1838.658 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), Fluids 18 step A (Fri 11/20): find where the smoke's curl has to come from, the main simulation or the up-res.** Commits:
+  - `0dc03ed7` Fluids 18 A: sweep the main fire simulation for smoke curl (vorticity, resolution, advection); nothing curls, measurements and proposal in the notes
+  Diff: 6 files changed, 2371 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (9:57 AM on 2026-11-20 PDT)
 
 `main` moved `cd9de3f4` -> `bc8fdd06` (lane commits cherry-picked onto main in lane order) and then to this
