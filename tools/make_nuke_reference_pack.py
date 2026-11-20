@@ -62,6 +62,8 @@ NUKE17_KNOB = {("Bilateral", "size"): "Size", ("Bilateral", "colourSigma"): "Col
 # Enumeration values the cases spell differently from Nuke 17's menu, keyed by Nuke class and knob. Case and spaces are matched anyway.
 NUKE17_ENUM = {("Colorspace", "colorspace_in"): {"Gamma1.8": "1.80", "Gamma2.2": "2.20", "Gamma2.4": "2.40", "Gamma2.6": "2.60"},
                ("Colorspace", "colorspace_out"): {"Gamma1.8": "1.80", "Gamma2.2": "2.20", "Gamma2.4": "2.40", "Gamma2.6": "2.60"},
+               # Nuke's Colorspace keeps the white apart (illuminant_in/out, D65 by default): P3-D65 is the DCI-P3 primaries on a D65 white.
+               ("Colorspace", "primary_in"): {"P3-D65": "DCI-P3"}, ("Colorspace", "primary_out"): {"P3-D65": "DCI-P3"},
                ("Bokeh", "outputType"): {"Focus Mattes": "Focus Matte"},
                ("Vectorfield", "interpolation"): {"trilinear": "trilinear field"}}
 NOT_IN_NC = {"Primatte", "Ultimatte", "GenerateLUT"}            # Nuke Non-commercial refuses to create these nodes
