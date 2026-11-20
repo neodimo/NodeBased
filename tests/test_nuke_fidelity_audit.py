@@ -535,7 +535,7 @@ class ReferencePackTests(unittest.TestCase):
 
     def test_array_knobs_go_through_fromScript_and_plain_ones_through_setValue(self):
         script = pack.py_script(next(c for c in cases.CASES if c.nuke_class == "ColorMatrix"))
-        self.assertIn("node['matrix'].fromScript('{{0.5 1 2} {0 1 0} {0.25 0 1}}')", script)
+        self.assertIn("node['matrix'].setValue([0.5, 1.0, 2.0, 0.0, 1.0, 0.0, 0.25, 0.0, 1.0])", script)    # numbers, not Tcl text
         script = pack.py_script(next(c for c in cases.CASES if c.nuke_class == "Grade"))
         self.assertIn("node['black_clamp'].setValue(False)", script)
 

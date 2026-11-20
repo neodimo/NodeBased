@@ -75,6 +75,10 @@ SKIPPED_SUFFIXES = ("_not_a_pixel_behaviour", "_not_in_nodebased")
 CURVE_KNOB = {("TimeWarp", "lookup"): "lookup", ("Kronos", "frame"): "timingFrame2", ("OFlow", "frame"): "timingFrame2"}
 CURVE_INTERPOLATION = {"linear": "nuke.LINEAR", "constant": "nuke.CONSTANT", "smooth": "nuke.SMOOTH", "cubic": "nuke.CUBIC",
                        "catmull_rom": "nuke.CATMULL_ROM"}
+# Frame-range knobs Nuke's GUI fills from the input's range when a node is created on it; a script's nuke.nodes.X() keeps the
+# defaults (1 to 100) instead, read on 11/20. The scripts set them the way the GUI would, before the case's own knobs.
+GUI_INPUT_RANGE = {"Retime": ("input.first", "input.last", "output.first", "output.last"), "TimeClip": ("first", "last", "origfirst", "origlast"),
+                   "Kronos": ("input.first", "input.last"), "OFlow2": ("input.first", "input.last")}
 STAMP_BLUE = 0.5                                               # tools/nuke_fidelity_cases.py: the stamped plate's green 0.25 and blue 0.5
 
 
@@ -128,6 +132,14 @@ def case_files(case):
     return found
 
 
+def _number_list(text):
+    """The numbers of a Tcl-style list of plain numbers ('{3 2}', '{{0.5 1 2} {0 1 0}}'), flattened, or None for anything else."""
+    try:
+        return [float(t) for t in text.replace("{", " ").replace("}", " ").split()] or None
+    except ValueError:
+        return None
+
+
 def knob_statement(cls, knob, value, table, files=()):
     """The Python line that sets one knob of the node under test, written for the knob's kind in Nuke 17 (the table): an enumeration by
     its menu index, an integer knob with an int, a text knob with the text, and a number, colour or XY knob given as text ("4 6", "12",
@@ -164,6 +176,9 @@ def knob_statement(cls, knob, value, table, files=()):
     if kind in STRING_KINDS or kind == "Enumeration_Knob":
         return f"node[{knob!r}].setValue({str(value)!r})"
     if isinstance(value, str):
+        numbers = _number_list(value)
+        if numbers is not None and "{" in value:   # fromScript('{3 2}') on an XY knob sets only x (11/20), so a braced list of numbers goes in as numbers
+            return f"node[{knob!r}].setValue({numbers[0]!r})" if len(numbers) == 1 else f"node[{knob!r}].setValue({numbers!r})"
         return f"node[{knob!r}].fromScript({value!r})"
     if isinstance(value, (list, tuple)):
         return f"node[{knob!r}].setValue({[float(v) for v in value]!r})"
@@ -272,6 +287,10 @@ def py_script(case, table=None):
                          "first=1, last=1, origfirst=1, origlast=1, raw=True)")
         plates = [f"read_{name}" for name in case.nuke_inputs]
     lines.append(f"node = nuke.nodes.{cls}()")
+    lines += [f"node.setInput({index}, {plate})" for index, plate in enumerate(plates)]
+    for knob in GUI_INPUT_RANGE.get(cls, ()) if plates else ():
+        end = "firstFrame" if knob.endswith("first") else "lastFrame"
+        lines.append(f"node[{knob!r}].setValue(node.input(0).{end}())          # as the GUI sets it on creation")
     files = case_files(case)
     lines += [knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table, files) for knob, value in case.nuke_knobs]
     for param, (interpolation, keys) in (stamp or {}).get("curves", {}).items():
@@ -280,7 +299,6 @@ def py_script(case, table=None):
         lines += [f"node[{knob!r}].setValueAt({float(v)!r}, {float(f)!r})" for f, v in keys]
         lines.append(f"node[{knob!r}].animation(0).changeInterpolation(node[{knob!r}].animation(0).keys(), "
                      f"{CURVE_INTERPOLATION.get(interpolation, 'nuke.LINEAR')})")
-    lines += [f"node.setInput({index}, {plate})" for index, plate in enumerate(plates)]
     lines += ["crop = nuke.nodes.Crop()",
               "crop['box'].setValue([0, 0, 0, 0])",
               "crop['box'].setExpression('input.format.x', 0)", "crop['box'].setExpression('input.format.y', 1)",
@@ -435,7 +453,10 @@ def compare_case(case, folder):
     theirs = load_render(folder, case.id)
     if theirs is None:
         return None
-    ours = run_nodebased(case)
+    try:
+        ours = run_nodebased(case)
+    except Exception as exc:  # noqa: BLE001 - a case NodeBased cannot run is a finding against the render, not a crash
+        return {"id": case.id, "status": "error", "note": f"NodeBased raised {type(exc).__name__}: {str(exc)[:80]}", "channels": {}}
     if ours is None:
         return {"id": case.id, "status": "fail", "note": "NodeBased cannot express this setting: " + case.inexpressible, "channels": {}}
     out = compare_arrays(ours, theirs)

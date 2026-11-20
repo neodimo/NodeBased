@@ -59,12 +59,15 @@ class Nuke17TableTests(unittest.TestCase):
         self.assertRegex(pack.knob_statement("Merge2", "operation", "plus", t), r"setValue\(\d+\)  # plus$")
         self.assertEqual(pack.knob_statement("Blur", "size", "12", t), "node['size'].fromScript('12')")        # text to a number knob
         self.assertEqual(pack.knob_statement("Grade", "black_clamp", False, t), "node['black_clamp'].setValue(False)")
-        self.assertIn("fromScript('{{0.5 1 2}", pack.knob_statement("ColorMatrix", "matrix", "{{0.5 1 2} {0 1 0} {0.25 0 1}}", t))
+        self.assertEqual(pack.knob_statement("ColorMatrix", "matrix", "{{0.5 1 2} {0 1 0} {0.25 0 1}}", t),
+                         "node['matrix'].setValue([0.5, 1.0, 2.0, 0.0, 1.0, 0.0, 0.25, 0.0, 1.0])")
+        self.assertEqual(pack.knob_statement("Transform", "translate", "{3 2}", t), "node['translate'].setValue([3.0, 2.0])")   # both values
+        self.assertEqual(pack.knob_statement("HueCorrect", "hue", "{{lum {curve L 2.0}}}", t), "node['hue'].fromScript('{{lum {curve L 2.0}}}')")
         self.assertRegex(pack.knob_statement("Saturation", "mode", "average", t), r"setValue\(2\)  # Average$")
         self.assertRegex(pack.knob_statement("Defocus", "method", "fullprecision", t), r"# full precision$")   # spaces and case ignored
         self.assertRegex(pack.knob_statement("Colorspace", "colorspace_out", "Gamma2.2", t), r"# 2\.20$")
         self.assertEqual(pack.knob_statement("Keyer", "range", "{0.05 0.4 0.75 1.5}", t),           # Keyer_Knob holds numbers
-                         "node['range'].fromScript('{0.05 0.4 0.75 1.5}')")
+                         "node['range'].setValue([0.05, 0.4, 0.75, 1.5])")
         with self.assertRaisesRegex(ValueError, "has no knob"):
             pack.knob_statement("Bilateral", "filter", "median", t)
         with self.assertRaisesRegex(ValueError, "no menu entry 'lin'"):
