@@ -573,17 +573,17 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 |---|---|---|---|---|
 | `merge_atop` | guide | pass | within tolerance | - |
 | `merge_average` | guide | pass | within tolerance | - |
-| `merge_color-burn` | guide | pass | within tolerance | - |
-| `merge_color-dodge` | guide | pass | within tolerance | - |
+| `merge_color-burn` | render | pass | within tolerance | - |
+| `merge_color-dodge` | render | pass | within tolerance | - |
 | `merge_conjoint-over` | guide | pass | within tolerance | - |
 | `merge_copy` | guide | pass | within tolerance | - |
 | `merge_difference` | guide | pass | within tolerance | - |
 | `merge_disjoint-over` | guide | pass | within tolerance | - |
 | `merge_divide` | guide | pass | within tolerance | - |
-| `merge_exclusion` | guide | pass | within tolerance | - |
+| `merge_exclusion` | render | pass | within tolerance | - |
 | `merge_from` | guide | pass | within tolerance | - |
 | `merge_geometric` | guide | pass | within tolerance | - |
-| `merge_hard-light` | guide | pass | within tolerance | - |
+| `merge_hard-light` | render | pass | within tolerance | - |
 | `merge_hypot` | guide | pass | within tolerance | - |
 | `merge_in` | guide | pass | within tolerance | - |
 | `merge_mask` | guide | pass | within tolerance | - |
@@ -594,10 +594,10 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `merge_multiply` | guide | pass | within tolerance | - |
 | `merge_out` | guide | pass | within tolerance | - |
 | `merge_over` | guide | pass | within tolerance | - |
-| `merge_overlay` | guide | pass | within tolerance | - |
+| `merge_overlay` | render | pass | within tolerance | - |
 | `merge_plus` | guide | pass | within tolerance | - |
 | `merge_screen` | guide | pass | within tolerance | - |
-| `merge_soft-light` | guide | pass | within tolerance | - |
+| `merge_soft-light` | render | pass | within tolerance | - |
 | `merge_stencil` | guide | pass | within tolerance | - |
 | `merge_under` | guide | pass | within tolerance | - |
 | `merge_xor` | guide | pass | within tolerance | - |

@@ -51,9 +51,9 @@ No open panel or behaviour items.
 
 ## Differences from Nuke's own pixels
 
-Rendered in Nuke 17.0v6 Non-commercial: 1001 cases of 150 nodes, 351 match within 1e-4 and 27 nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and its worst pixel (row, column). "Nuke vs guide" is Nuke's render against the result the guide states; **guide** marks a case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. Before changing a kernel for a row, open its script from `tools/make_nuke_reference_pack.py`: the pack's scripts first ran on 11/20, and a row can still come from the pack (a legacy node class kept under the guide's name, or a knob the case sets differently) rather than from NodeBased. Up to 40 rows per lane; all of them are in `nuke_pixels.json`.
+Rendered in Nuke 17.0v6 Non-commercial: 976 cases of 147 nodes, 391 match within 1e-4 and 28 nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and its worst pixel (row, column). "Nuke vs guide" is Nuke's render against the result the guide states; **guide** marks a case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. Before changing a kernel for a row, open its script from `tools/make_nuke_reference_pack.py`: the pack's scripts first ran on 11/20, and a row can still come from the pack (a legacy node class kept under the guide's name, or a knob the case sets differently) rather than from NodeBased. Up to 40 rows per lane; all of them are in `nuke_pixels.json`.
 
-### Lane 2 (Color, Keyer, Channel, Time): 317 cases
+### Lane 2 (Color, Keyer, Channel, Time): 286 cases
 
 | Node | Case | Largest error | Channel | Worst pixel | Nuke vs guide | |
 |---|---|---|---|---|---|---|
@@ -76,7 +76,6 @@ Rendered in Nuke 17.0v6 Non-commercial: 1001 cases of 150 nodes, 351 match withi
 | PLogLin | `ploglin_custom_reference` | 26.69 | A | 0, 5 | 26.69 | **guide** |
 | PLogLin | `ploglin_negative_gamma_and_density` | 25.47 | A | 0, 5 | 25.47 | **guide** |
 | HueCorrect | `huecorrect_blue_gain` | 24 | B | 0, 4 | 24 | **guide** |
-| ColorMatrix | `colormatrix_rows` | 22 | R | 0, 4 | 22 | **guide** |
 | TimeWarp | `timewarp_length_1_is_the_blend` | 20 | R | 0, 0 | 20 | **guide** |
 | TimeWarp | `timewarp_length_2_covers_two_frames` | 19.75 | R | 0, 0 | 19.75 | **guide** |
 | TimeWarp | `timewarp_length_3_averages_three_frames` | 19.67 | R | 0, 0 | 19.67 | **guide** |
@@ -91,20 +90,21 @@ Rendered in Nuke 17.0v6 Non-commercial: 1001 cases of 150 nodes, 351 match withi
 | FrameRange | `framerange_outside_at_10` | 15 | R | 0, 0 | 15 | **guide** |
 | PLogLin | `ploglin_defaults` | 14.2 | A | 0, 5 | 14.2 | **guide** |
 | Copy | `copy_mask` | 12.5 | R | 6, 10 | 12.5 | **guide** |
-| Shuffle | `shuffle_from_the_second_input` | 12.5 | G | 2, 9 | 12.5 | **guide** |
-| Shuffle | `shuffle_mix_of_both_and_constants` | 12.5 | G | 2, 1 | 12.5 | **guide** |
-| ShuffleCopy | `shufflecopy_constant_black_and_white` | 12.5 | R | 2, 1 | 12.5 | **guide** |
-| ShuffleCopy | `shufflecopy_mixed_routing` | 12.5 | B | 5, 13 | 12.5 | **guide** |
-| ShuffleCopy | `shufflecopy_swap_inputs` | 12.5 | G | 2, 9 | 12.5 | **guide** |
 | Expression | `expression_blank_is_zero` | 12 | B | 0, 4 | 12 | **guide** |
+| HueCorrect | `huecorrect_lum_2` | 12 | B | 0, 4 | 12 | **guide** |
+| HueCorrect | `huecorrect_red_gain` | 12 | R | 0, 10 | 12 | **guide** |
+| HueCorrect | `huecorrect_g_sup_0` | 11.95 | G | 0, 7 | 11.95 | **guide** |
+| HueCorrect | `huecorrect_r_sup_0` | 11.95 | R | 0, 10 | 11.95 | **guide** |
+| MinColor | `mincolor_sets_the_darkest_value_to_the_target` | 11.9 | B | 0, 4 | 11.9 | **guide** |
+| Vectorfield | `vectorfield_trilinear_applies_the_lut_0.9_0.1_0.4` | 11.9 | G | 0, 7 | 11.9 | **guide** |
 
-277 more in nuke_pixels.json.
+246 more in nuke_pixels.json.
 
-### Lane 9 (Filter, Draw): 222 cases
+### Lane 9 (Filter, Draw): 215 cases
 
 | Node | Case | Largest error | Channel | Worst pixel | Nuke vs guide | |
 |---|---|---|---|---|---|---|
-| Matrix | `matrix_edge_detect_example` | 29 | B | 0, 15 | 18.5 | **guide** |
+| Matrix | `matrix_edge_detect_example` | 88.77 | G | 1, 2 | 88.77 | **guide** |
 | Laplacian | `laplacian_box_1` | 21.97 | G | 1, 2 | 21.97 | **guide** |
 | Sharpen | `sharpen_unsharp_mask_amount_2.0` | 19.95 | G | 1, 2 | 19.95 | **guide** |
 | Soften | `soften_amount_2.0` | 19.95 | G | 1, 2 | 19.95 | **guide** |
@@ -145,15 +145,12 @@ Rendered in Nuke 17.0v6 Non-commercial: 1001 cases of 150 nodes, 351 match withi
 | Sharpen | `sharpen_unsharp_mask_amount_1.0` | 9.974 | G | 1, 2 | 9.974 | **guide** |
 | Blur | `blur_box_1` | 9.974 | G | 1, 2 | 9.974 | **guide** |
 
-182 more in nuke_pixels.json.
+175 more in nuke_pixels.json.
 
-### Lane 11 (Image, Merge, Metadata, Other, Transform): 111 cases
+### Lane 11 (Image, Merge, Metadata, Other, Transform): 84 cases
 
 | Node | Case | Largest error | Channel | Worst pixel | Nuke vs guide | |
 |---|---|---|---|---|---|---|
-| Merge | `merge_overlay` | 242 | G | 2, 8 | 242 | **guide** |
-| Merge | `merge_soft-light` | 132 | G | 2, 10 | 132 | **guide** |
-| Merge | `merge_color-burn` | 21 | G | 2, 9 | 21 | **guide** |
 | IDistort | `idistort_guide_example_u_minus_1_v_5` | 13 | R | 5, 11 | 13 | **guide** |
 | IDistort | `idistort_u_and_v_channels_choose_what_is_read` | 13 | R | 0, 0 | 13 | **guide** |
 | AdjustBBox | `adjustbbox_grows_and_repeats_the_edge` | 12.5 | G | 1, 2 | 12.5 | **guide** |
@@ -162,37 +159,40 @@ Rendered in Nuke 17.0v6 Non-commercial: 1001 cases of 150 nodes, 351 match withi
 | CopyRectangle | `copyrectangle_channels` | 12.5 | G | 2, 9 | 12.5 | **guide** |
 | CopyRectangle | `copyrectangle_default_channels` | 12.5 | G | 2, 9 | 12.5 | **guide** |
 | CornerPin2D | `cornerpin_black_outside_off_takes_edge_pixels` | 12.5 | R | 4, 0 | 12.5 | **guide** |
-| Crop | `crop_black_outside_off_takes_edge_pixels` | 12.5 | R | 8, 9 | 12.5 | **guide** |
-| Position | `position_moves_a_partial_picture_and_fills_the_gap` | 12.5 | G | 1, 5 | 12.5 | **guide** |
-| Position | `position_moves_up_and_right_and_repeats_the_edge` | 12.5 | R | 0, 0 | 12.5 | **guide** |
-| Position | `position_negative_moves_down_and_left` | 12.5 | B | 2, 2 | 12.5 | **guide** |
+| Crop | `crop_black_outside_off_takes_edge_pixels` | 12.5 | G | 4, 10 | 12.5 | **guide** |
+| Position | `position_moves_a_partial_picture_and_fills_the_gap` | 12.5 | G | 1, 6 | 12.5 | **guide** |
 | TimeDissolve | `timedissolve_after_out` | 12.5 | G | 2, 9 | 12.5 | **guide** |
-| Transform | `transform_black_outside_off_takes_edge_pixels` | 12.5 | R | 0, 0 | 12.5 | **guide** |
-| Transform | `transform_black_outside_on_is_black` | 12.5 | R | 0, 3 | 12.5 | **guide** |
-| Transform | `transform_invert_undoes_translate` | 12.5 | B | 2, 2 | 12.5 | **guide** |
-| Transform | `transform_translate_right_up` | 12.5 | R | 0, 3 | 12.5 | **guide** |
 | ZMerge | `zmerge_backwards_larger_z_is_nearer` | 12.5 | G | 3, 3 | 12.5 | **guide** |
 | ZMerge | `zmerge_smaller_z_is_nearer` | 12.5 | G | 2, 9 | 12.5 | **guide** |
+| CornerPin2D | `cornerpin_from_points_choose_the_part_that_is_pinned` | 12.25 | B | 6, 6 | 12.25 | **guide** |
 | TimeDissolve | `timedissolve_before_in` | 12.21 | G | 3, 3 | 12.21 | **guide** |
+| CornerPin2D | `cornerpin_perspective` | 12.17 | B | 10, 6 | 12.17 | **guide** |
 | ZMerge | `zmerge_alpha_blends_nearer_over_farther` | 12.12 | G | 2, 9 | 12.12 | **guide** |
-| CornerPin2D | `cornerpin_identity` | 12.01 | G | 11, 7 | 12.01 | **guide** |
 | AddMix | `addmix_premultiplied` | 12 | G | 5, 4 | 12 | **guide** |
 | AdjustBBox | `adjustbbox_negative_crops_the_box` | 12 | G | 0, 2 | 12 | **guide** |
 | BlackOutside | `blackoutside_fills_outside_the_box_with_black` | 12 | B | 0, 4 | 12 | **guide** |
+| CornerPin2D | `cornerpin_identity` | 12 | B | 0, 4 | 12 | **guide** |
 | CornerPin2D | `cornerpin_invert` | 12 | B | 0, 2 | 12 | **guide** |
-| CornerPin2D | `cornerpin_perspective` | 12 | G | 2, 3 | 12 | **guide** |
 | CornerPin2D | `cornerpin_scale_two` | 12 | B | 0, 8 | 12 | **guide** |
 | CornerPin2D | `cornerpin_translation` | 12 | B | 2, 7 | 12 | **guide** |
-| Crop | `crop_keeps_the_box_and_blacks_the_rest` | 12 | G | 1, 2 | 12 | **guide** |
 | IDistort | `idistort_uv_offset_is_subtracted` | 12 | G | 0, 3 | 12 | **guide** |
 | IDistort | `idistort_uv_scale_multiplies_the_vectors` | 12 | B | 2, 2 | 12 | **guide** |
 | IDistort | `idistort_zero_vectors_return_the_source` | 12 | B | 0, 4 | 12 | **guide** |
 | LensDistortion | `lensdistortion_centre_moves_the_fixed_point` | 12 | G | 1, 0 | 10.43 | **guide** |
-| Merge | `merge_exclusion` | 12 | G | 2, 9 | 12 | **guide** |
-| Merge | `merge_hard-light` | 12 | G | 2, 9 | 12 | **guide** |
 | Mirror | `mirror_reflects_a_partial_picture_about_the_format_centre` | 12 | B | 0, 0 | 12 | **guide** |
+| Reformat | `reformat_center_off_lines_up_the_lower_left` | 12 | B | 0, 31 | 12 | **guide** |
+| Reformat | `reformat_fit_letterboxes` | 12 | B | 0, 31 | 12 | **guide** |
+| Reformat | `reformat_none_does_not_resize` | 12 | B | 0, 8 | 12 | **guide** |
+| STMap | `stmap_u_and_v_channels_choose_what_is_read` | 11.97 | R | 1, 5 | 11.97 | **guide** |
+| STMap | `stmap_identity_map_returns_the_source` | 11.6 | B | 0, 15 | 11.6 | **guide** |
+| Viewer | `viewer_passes_input_unchanged` | 11 | R | 0, 10 | 11 | **guide** |
+| LensDistortion | `lensdistortion_classic_two_terms` | 10.85 | B | 11, 15 | 5.158 | **guide** |
+| STMap | `stmap_swapped_channels_read_green_as_u_and_red_as_v` | 9.337 | G | 0, 8 | 9.337 | **guide** |
+| Reformat | `reformat_scale_split_scales_each_direction` | 9.242 | B | 2, 4 | 9.242 | **guide** |
+| LensDistortion | `lensdistortion_classic_undistort` | 9.205 | B | 0, 15 | 5.06 | **guide** |
+| LensDistortion | `lensdistortion_spherical_ignores_the_squeeze` | 9.205 | B | 0, 15 | 5.06 | **guide** |
 
-71 more in nuke_pixels.json.
+44 more in nuke_pixels.json.
 
 ## Accepted default differences
 
