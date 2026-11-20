@@ -562,7 +562,9 @@ class SimCache:
 
 def solve_to_frame(cache: SimCache, run: str, target_frame: int, start_frame: int,
                    substeps: int, seed: int, initial_state, step, cancel=None, on_frame=None,
-                   reuse_from: tuple[str, int] | None = None) -> "State":
+                   reuse_from: tuple[str, int] | None = None, plan=None) -> "State":
+    """`plan(state, frame)`, when given, returns the substep count of `frame` from the state it starts at (the fluid solver's
+    automatic substeps); `substeps` is then only the count recorded for callers that do not plan."""
     if target_frame < start_frame:
         return initial_state(seed)
     if reuse_from is not None:
@@ -586,10 +588,13 @@ def solve_to_frame(cache: SimCache, run: str, target_frame: int, start_frame: in
         anchor_frame, state = anchor
     for frame in range(anchor_frame + 1, target_frame + 1):
         started = time.perf_counter()
-        for substep in range(substeps):
+        count = int(plan(state, frame)) if plan is not None else substeps
+        for substep in range(count):
             if cancel is not None and cancel.is_set():
                 raise Cancelled()
             state = step(state, frame, substep, seed)
+        if plan is not None:
+            state.meta["substeps_used"] = count
         cache.timing[(run, frame)] = (time.perf_counter() - started) * 1000.0
         cache.put(run, frame, state)
         # Publish only after the complete frame has been checkpointed. Consumers can safely

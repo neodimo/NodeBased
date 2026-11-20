@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a, "rgb" is r, g, b and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -1445,6 +1445,10 @@ SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "bounds_max_x": 1.0, "bounds_max_y": 3.0, "bounds_max_z": 1.0,
     "auto_resize": 0, "padding": 8, "max_size": 256,
     "start_frame": 1, "substeps": 1, "seed": 0, "advection": "maccormack", "vorticity": 0.3,
+    # Automatic substeps (Fluids 18 C): a new node picks the substeps of each frame from the flow's speed (the fastest smoke moves at
+    # most `substep_target` cells per substep, never more than `substep_cap` substeps; `substeps` above stays the floor). A node saved
+    # before carries auto_substeps 0 (schema 39), so it solves exactly as it did.
+    "auto_substeps": 1, "substep_target": 2.0, "substep_cap": 8,
     "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
     "boundary_x_min": "closed", "boundary_x_max": "closed",
     "boundary_y_min": "open", "boundary_y_max": "open",
@@ -2246,7 +2250,8 @@ NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000
                "GridWarp": {"rows": (2, 15), "columns": (2, 15)},
                "GridWarpTracker": {"rows": (2, 15), "columns": (2, 15),
                                    "local_motion": (0.0, 1.0), "fb_threshold": (0.0, 100.0)},
-               "FluidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)},
+               "FluidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096),
+                                 "auto_substeps": (0, 1), "substep_target": (0.25, 16.0), "substep_cap": (1, 64)},
                "FluidLiquidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)},
                "Tracker": {"max_iter": (1, 1000), "epsilon": (0.000001, 1.0), "auto_regrab_pattern": (0, 1),
                            "regrab_when_offset": (0, 1), "retrack_on_move": (0, 1)}}
@@ -3249,6 +3254,24 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _motionblur_shutter(doc["nodes"])
         doc["version"] = 38
+    if isinstance(doc, dict) and doc.get("version") == 38:
+        # v38 -> v39: FluidSolver3D picks its substeps from the flow's speed (Fluids 18 C). A solver saved before keeps the substep
+        # count it stored through `auto_substeps` 0, so it bakes the same frames; a node made since carries 1. Group graphs too.
+        def _fluid_auto_substeps(scope):
+            for current in scope.values():
+                if not isinstance(current, dict):
+                    continue
+                params = current.get("params")
+                if isinstance(params, dict) and current.get("type") == "FluidSolver3D":
+                    params.setdefault("auto_substeps", 0)
+                    params.setdefault("substep_target", 2.0)
+                    params.setdefault("substep_cap", 8)
+                graph = current.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _fluid_auto_substeps(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _fluid_auto_substeps(doc["nodes"])
+        doc["version"] = 39
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

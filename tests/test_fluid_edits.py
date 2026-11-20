@@ -14,7 +14,7 @@ class FluidEditClassificationTests(unittest.TestCase):
         "FluidSource3D": "ac9ecf3b4382a92bd2f2a804763f0e4f2c4295a1d7c1f72eca8e39e6ecf4c4f0",
         "FluidForce3D": "5cdda340c49d9ab74b6b99a3ce482533aa69806d9bc05f429a0531d53958d335",
         "FluidCollide3D": "44ae8f26b0979a8a9df7f86b1c0a786f314974ade37cc3ccd9cfa7c4ade23d47",
-        "FluidSolver3D": "e18166f865d76f841fa8ccb2c918ce3ba628d86a52446f59a01a75099491575a",
+        "FluidSolver3D": "0798cada851cdf3a8e4cf67827d3039d530a2779b670b2b08b0a4d1a35827d25",  # + auto_substeps, substep_target, substep_cap (Fluids 18 C): all from-start
         "FluidLiquidSolver3D": "a88dce83744225e1422632b96c062ac48ae96dd58d7557726afc8e5e439872d0",
         "FluidSurface3D": "884498fa7bc40634be1485bc736f7fede9b69a70911df974203393cbe9c46428",
         "FluidFoam3D": "e880f124076259386d054695634a1f3f617ca3fd0732de2fc6ee279c5fe692c5",

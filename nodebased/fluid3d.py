@@ -130,6 +130,8 @@ DEFAULTS = {
     "nx": 32, "ny": 48, "nz": 32,
     "auto_resize": 0, "padding": 8, "max_size": 256,
     "substeps": 1,
+    # Automatic substeps (Fluids 18 C): off for the standalone solver and for saved scenes; the FluidSolver3D node turns it on for new nodes.
+    "auto_substeps": 0, "substep_target": 2.0, "substep_cap": 8,
     "advection": "maccormack",
     "buoyancy_density": 0.05,       # alpha: downward pull of density, cells / frame^2 per unit density
     "buoyancy_temperature": 0.8,    # beta: upward push of temperature, cells / frame^2 per unit
@@ -166,6 +168,15 @@ DEFAULTS = {
     "pulse_length": 30.0,             # frames between one noise pattern and the next it blends toward
     "turbulence_field": "none", "turbulence_range_lo": 0.0, "turbulence_range_hi": 1.0, "turbulence_ramp": 0.0,
 }
+
+def substeps_for_speed(speed, floor=1, target=2.0, cap=8):
+    """The substeps one frame takes so the fastest smoke travels at most `target` cells per substep: ceil(speed / target) for a
+    `speed` in cells per frame, at least `floor` (the node's own Substeps knob) and capped at `cap`; a floor above the cap wins."""
+    floor = max(1, int(floor))
+    target = max(1e-6, float(target))
+    needed = int(math.ceil(float(speed) / target - 1e-9)) if speed > 0.0 else 1
+    return max(floor, min(max(1, int(cap)), max(1, needed)))
+
 
 CONTROL_FIELDS = ("none", "density", "temperature", "speed", "vorticity")
 
@@ -911,6 +922,9 @@ class Smoke3D:
         self.shape = (self.nx, self.ny, self.nz)
         self.substeps = max(1, int(p["substeps"]))
         self.dt = 1.0 / self.substeps
+        self.substep_floor = self.substeps
+        self.auto_substeps = bool(int(p["auto_substeps"]))
+        self.substep_target, self.substep_cap = float(p["substep_target"]), int(p["substep_cap"])
         self.dtype = np.dtype(dtype)
         if p["advection"] not in ADVECTIONS:
             raise ValueError(f"advection must be one of {ADVECTIONS}")
@@ -938,6 +952,37 @@ class Smoke3D:
         self.replace_buoyancy = bool(replace_buoyancy)
         self._systems = {}
         self._system_sources = {}
+
+    # -- automatic substeps (Fluids 18 C) ----------------------------------------------------------
+    def max_face_speed(self, state):
+        """The fastest face velocity of `state`, in cells per frame."""
+        speed = 0.0
+        for name in ("u", "v", "w"):
+            a = state.arrays[name]
+            if a.size:
+                speed = max(speed, float(np.max(np.abs(a))))
+        return speed
+
+    def source_speed(self, frame):
+        """The fastest velocity the emitters inject at `frame`, in cells per frame."""
+        speed = 0.0
+        for source in self.sources:
+            if not (source.start_frame <= frame <= source.end_frame):
+                continue
+            v = np.asarray(source._knobs(frame)["velocity"], np.float64)
+            speed = max(speed, float(np.linalg.norm(v)) / self.voxel)
+        return speed
+
+    def plan_frame(self, state, frame):
+        """Fix the substeps of `frame` (and with them `dt`) from the flow's speed at its start: the same state always gives the same
+        count, so a frame solved from a cached checkpoint matches one solved in a run. Returns the count."""
+        if self.auto_substeps:
+            speed = max(self.max_face_speed(state), self.source_speed(frame))
+            n = substeps_for_speed(speed, self.substep_floor, self.substep_target, self.substep_cap)
+        else:
+            n = self.substep_floor
+        self.substeps, self.dt = n, 1.0 / n
+        return n
 
     # -- simcache API -------------------------------------------------------------------------------
     def initial_state(self, seed=0) -> State:
@@ -1821,6 +1866,8 @@ class FluidStream:
                     face_params.update({f"boundary_{axis}_{side}": value
                                         for side, value in zip(("min", "max"), pair)})
             params = {"nx": nx, "ny": ny, "nz": nz, "substeps": self.substeps, "advection": p["advection"],
+                      "auto_substeps": int(p.get("auto_substeps", 0)), "substep_target": float(p.get("substep_target", 2.0)),
+                      "substep_cap": int(p.get("substep_cap", 8)),
                       "buoyancy_density": NODE_SETTLE / self.voxel, "buoyancy_temperature": NODE_LIFT / self.voxel,
                       "ambient_temperature": 0.0, "vorticity": p["vorticity"], "dissipation": p["dissipation"],
                       "cooling_rate": p["cooling_rate"], "boundary_x": p["boundary_x"], "boundary_y": p["boundary_y"],
@@ -1921,7 +1968,11 @@ def build_stream(doc, key, node, chain, *, params_override=None, tier=1):
         backend = "resident_sparse"
     base = chain if chain is not None else FluidChain()
     fps = float(doc.get("time", {}).get("fps", 24.0))
-    identity = {"kind": "FluidSolver3D", "solver": str(key), "params": params, "backend": backend, "fps": fps,
+    identity_params = params
+    if not int(params.get("auto_substeps", 0)):
+        # A solver with the automatic rule off bakes as it did before the rule existed, so its cached frames keep their run key.
+        identity_params = {k: v for k, v in params.items() if k not in ("auto_substeps", "substep_target", "substep_cap")}
+    identity = {"kind": "FluidSolver3D", "solver": str(key), "params": identity_params, "backend": backend, "fps": fps,
                 "format": 2 if int(params.get("auto_resize", 0)) else 1}
     run = simcache.run_key(base.run, identity)
     stream = FluidStream(base, params, run, fps)
@@ -1937,7 +1988,7 @@ def solve_frame(stream, frame, cache, cancel=None, on_frame=None):
     solver = stream.solver(cancel)
     return simcache.solve_to_frame(cache, stream.run, int(frame), stream.start_frame, stream.substeps,
                                    stream.seed, solver.initial_state, solver.step, cancel, on_frame,
-                                   reuse_from=stream.reuse_from)
+                                   reuse_from=stream.reuse_from, plan=solver.plan_frame)
 
 
 def volume_from_state(state, stream, frame, name=""):

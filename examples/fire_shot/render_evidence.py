@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -31,7 +32,8 @@ except ImportError:  # Windows has no flock; the GPU lock is a Linux workstation
 
 @contextmanager
 def gpu_lock():
-    if fcntl is None:
+    # NB_NO_INNER_LOCK=1: the caller already holds `flock -x /tmp/nb-gpu.lock` around the whole command (a second lock would wait for it).
+    if fcntl is None or os.environ.get('NB_NO_INNER_LOCK'):
         yield
         return
     with open('/tmp/nb-gpu.lock', 'a+b') as handle:

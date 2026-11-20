@@ -1334,6 +1334,18 @@ class GpuSmoke3D(Smoke3D):
         self.substeps_done = 0
         self.stored_tiles = None
 
+    # -- automatic substeps: the fastest face speed without reading the whole state back -----------------
+    def max_face_speed(self, state):
+        g = self._gpu
+        if (g is None or g.sparse or getattr(state, "token", None) is None or state.token != self._token
+                or getattr(state, "_arrays", None) is not None):
+            return super().max_face_speed(state)
+        self._flush_pending()
+        for slot, name in enumerate(("u", "v", "w")):
+            g.reducer.run(g.f[name], g.dummy, g.sizes[name], 1, slot)
+        values = g.ctx.read(g.reducer.red, 12).view(np.float32)
+        return float(max(values[0], values[1], values[2]))
+
     # -- the collider system is built on the GPU; only the boundary facts are kept on the host ----------
     def _system(self, solid, key):
         return _OpenSystem(self.open_faces)
