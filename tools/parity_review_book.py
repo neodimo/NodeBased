@@ -520,7 +520,12 @@ def case_images(case, group, small_fx, big_fx, out_dir, stem):
         from make_nuke_reference_pack import compare_arrays, load_render
         from nuke_fidelity_cases import run_nodebased
         theirs = load_render(RENDERS_DIR, case.id)
-        ours = run_nodebased(case, small_fx)
+        try:
+            ours = run_nodebased(case, small_fx)
+        except Exception as exc:  # noqa: BLE001 - NodeBased failing on the case is a finding on the page, not a stopped book
+            info["nuke"] = {"status": "error", "note": f"NodeBased raised {type(exc).__name__}", "channels": {}}
+            info["images"]["nuke"] = save_png(out_dir / f"{stem}_{slug(case.id)}_nuke.png", to_display(enlarge(theirs)))
+            return info
         cmp = compare_arrays(ours, theirs)
         info["nuke"] = cmp
         info["images"]["nuke"] = save_png(out_dir / f"{stem}_{slug(case.id)}_nuke.png", to_display(enlarge(theirs)))
