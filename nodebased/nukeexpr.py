@@ -293,6 +293,8 @@ def evaluate_rows(image, second, params, frame, origin=(0, 0), canvas_size=None)
     out = image.copy()
     for letter, default in zip("rgba", ("red", "green", "blue", "alpha")):
         text = params.get(f"expr_{letter}", "")
+        if str(text).strip() == "" and not params.get("older_blank_expression", 1):
+            continue                          # Nuke 17.0v6 leaves the channel as it was when its row is blank
         try:
             value = np.asarray(evaluate(parse(text), env), _F32)
             picked = channel_set(params.get(f"expr_channels_{letter}"), default)

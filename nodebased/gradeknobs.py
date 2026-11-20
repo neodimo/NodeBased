@@ -5,11 +5,11 @@ Nuke's Grade is a linear ramp followed by a gamma and the clamps. With `A` the s
     A   = multiply * (white - black) / (whitepoint - blackpoint)
     B   = add + black - A * blackpoint
     out = A * in + B
-    out = out ** (1 / gamma)            where out > 0
+    out = out ** (1 / gamma)            where 0 < out <= 1;  1 + (out - 1) / gamma  above 1 (Nuke 17.0v6's render)
     out = max(out, 0)                   when black clamp is on
     out = min(out, 1)                   when white clamp is on
 
-`reverse` runs it backwards: the opposite gamma (`out ** gamma` where out > 0), then the opposite ramp (`(out - B) / A`), then
+`reverse` runs it backwards: the opposite gamma (`out ** gamma` up to 1, `1 + gamma * (out - 1)` above it), then the opposite ramp (`(out - B) / A`), then
 the clamps. The Nuke guide states the knobs but no formula; this is Nuke's long-standing form (marked *convention* in
 docs/PARITY_2D_FIDELITY.md).
 
@@ -27,12 +27,25 @@ import numpy as np
 # What a new node gets (Nuke's defaults) and what an older document's node gets, which is what that node did before the knob
 # existed. Where they differ the old value is a NodeBased-only choice: no clamp, and an offset that follows alpha.
 NEW = {"blackpoint": 0.0, "whitepoint": 1.0, "black": 0.0, "white": 1.0, "gamma": 1.0, "reverse": 0, "black_clamp": 1,
-       "white_clamp": 0, "offset_by_alpha": 0}
-OLD = dict(NEW, black_clamp=0, offset_by_alpha=1)
+       "white_clamp": 0, "offset_by_alpha": 0, "legacy_gamma_power": 0}
+OLD = dict(NEW, black_clamp=0, offset_by_alpha=1, legacy_gamma_power=1)
 KINDS = ("Grade",)
 # The knobs that hold one value per channel (an AColor knob in Nuke): a list is r, g, b, a. See core.SPLITTABLE.
 SPLIT_NAMES = ("blackpoint", "whitepoint", "black", "white", "multiply", "offset", "gamma")
 SPAN_FLOOR = 1e-12            # a whitepoint equal to the blackpoint would divide by zero: the span is held at this size
+
+
+def bend(values, exponent, legacy):
+    """Grade's gamma curve `values ** exponent` for positive values (zero and below pass unchanged). Nuke 17.0v6 renders it as the power only up
+    to 1 and continues above 1 along the tangent at 1, `1 + exponent * (values - 1)` (Grade at gamma 1.8 turns 12 into 1 + 11 / 1.8 = 7.11,
+    not 12 ** (1 / 1.8) = 3.98); `legacy` (`legacy_gamma_power`, an older document) keeps the plain power. `exponent` is a float or an
+    array of one entry per channel."""
+    values = np.asarray(values, np.float32)
+    exponent = np.asarray(exponent, np.float32)
+    powered = np.power(np.maximum(values, 0), exponent)
+    if not legacy:
+        powered = np.where(values > 1, np.float32(1.0) + exponent * (values - np.float32(1.0)), powered)
+    return np.where(values > 0, powered, values).astype(np.float32)
 
 
 def new_params(kind):
@@ -89,12 +102,13 @@ def grade_rgb(rgb, alpha, p):
     follow = alpha_offset(p)
     gamma = float(_get(p, "gamma"))
     black_clamp, white_clamp = bool(_get(p, "black_clamp")), bool(_get(p, "white_clamp"))
+    legacy = bool(_get(p, "legacy_gamma_power"))
     shifted = np.float32(shift)
     if _get(p, "reverse"):
         # Undo the gamma first, then the ramp: x = ((y ** gamma) - B) / A.
         y = rgb.astype(np.float32)
         if gamma != 1.0:
-            y = np.where(y > 0, np.power(np.maximum(y, 0), np.float32(gamma)), y).astype(np.float32)
+            y = bend(y, gamma, legacy)
         if follow != 0.0:
             y = y - alpha * np.float32(follow)
         if abs(slope) < SPAN_FLOOR:
@@ -106,7 +120,7 @@ def grade_rgb(rgb, alpha, p):
         if follow != 0.0:
             out = out + alpha * np.float32(follow)
         if gamma != 1.0:
-            out = np.where(out > 0, np.power(np.maximum(out, 0), np.float32(1.0 / gamma)), out)
+            out = bend(out, np.float32(1.0 / gamma), legacy)
     if black_clamp:
         out = np.maximum(out, np.float32(0.0))
     if white_clamp:
@@ -140,9 +154,10 @@ def grade_channels(x, alpha, p):
     follow32 = follow.astype(np.float32)
     gamma32, inverse32 = gamma.astype(np.float32), (1.0 / gamma).astype(np.float32)
     flat = np.abs(slope) < SPAN_FLOOR
+    legacy = bool(_get(p, "legacy_gamma_power"))
     if _get(p, "reverse"):
         y = x.astype(np.float32)
-        y = np.where(y > 0, np.power(np.maximum(y, 0), gamma32), y).astype(np.float32)
+        y = bend(y, gamma32, legacy)
         if np.any(follow != 0.0):
             y = y - alpha * follow32
         safe = np.where(flat, np.float32(1.0), slope32)
@@ -151,7 +166,7 @@ def grade_channels(x, alpha, p):
         out = x * slope32 + shift32
         if np.any(follow != 0.0):
             out = out + alpha * follow32
-        out = np.where(out > 0, np.power(np.maximum(out, 0), inverse32), out)
+        out = bend(out, inverse32, legacy)
     if _get(p, "black_clamp"):
         out = np.maximum(out, np.float32(0.0))
     if _get(p, "white_clamp"):

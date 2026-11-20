@@ -6953,9 +6953,13 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
             v = image[..., c]
             g = Evaluator._channel_value(p, "gamma", 1.0, c)
-            # sign * |x|^(1/gamma), as ColorCorrect's gamma does: avoids raising a negative HDR
-            # value to a fractional power.
-            out[..., c] = np.sign(v) * np.abs(v) ** (1.0 / g)
+            if p.get("older_negatives", 1):
+                # sign * |x|^(1/gamma), as ColorCorrect's gamma does: avoids raising a negative HDR
+                # value to a fractional power.
+                out[..., c] = np.sign(v) * np.abs(v) ** (1.0 / g)
+            else:
+                # Nuke 17.0v6 renders a value at or below zero unchanged (Gamma 2.2 leaves -0.5 at -0.5).
+                out[..., c] = np.where(v > 0, np.abs(v) ** (1.0 / g), v)
         return out
 
     @staticmethod
@@ -7034,8 +7038,12 @@ class Evaluator:
             value = np.where(mx > 0, (mx - mn) / np.where(mx > 0, mx, 1.0), 0.0)
         else:
             raise ValueError(f"Unknown Keyer operation: {op}")
-        alpha = Evaluator._range_ramp(value, p.get("range_a", 0.0), p.get("range_b", 0.0),
-                                      p.get("range_c", 1.0), p.get("range_d", 1.0))
+        range_c, range_d = p.get("range_c", 1.0), p.get("range_d", 1.0)
+        if not p.get("older_unclamped_range", 1) and range_c > 1.0:
+            # Nuke 17.0v6 ignores the falling edge when C is above 1 (range {0.1 0.5 4 12.5} keys a value of 5 fully, {0.1 0.5 4 5} too);
+            # with C at 1 or below the edge reaches D as the guide says.
+            range_c = range_d = np.float32(3.0e38)
+        alpha = Evaluator._range_ramp(value, p.get("range_a", 0.0), p.get("range_b", 0.0), range_c, range_d)
         if p.get("invert"):
             alpha = 1.0 - alpha
         output = p.get("key_output", "rgba.alpha")
@@ -7884,7 +7892,14 @@ class Evaluator:
         cineon = p.get("exposure_colorspace", "Linear") == "Cineon"
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
             if cineon:
-                out[..., c] = (image[..., c] - black) + np.float32(math.log10(float(gains[c])) * 0.6 / (0.002 * 1023.0))
+                step = math.log10(float(gains[c])) * 0.6 / (0.002 * 1023.0)
+                if not p.get("older_exposure_maths", 1) and base == 2.0:
+                    step = math.log2(float(gains[c])) * 90.0 / 1023.0       # Nuke 17.0v6 renders a stop as 90 code values (the exact figure is 90.3)
+                out[..., c] = (image[..., c] - black) + np.float32(step)
+            elif not p.get("older_exposure_maths", 1) and black != 0.0 and black != 1.0:
+                # Nuke 17.0v6: the black point is lifted by the gain too, out = gain * in + black * (gain - 1) / (1 - black) (read from its render at two
+                # black points and two gains); with the gain at 1 the black point does nothing.
+                out[..., c] = image[..., c] * gains[c] + black * (gains[c] - np.float32(1.0)) / (np.float32(1.0) - black)
             else:
                 out[..., c] = (image[..., c] - black) * gains[c]
         return out
@@ -9192,9 +9207,23 @@ class Evaluator:
         return write_matte(b, alpha, channel)
 
     @staticmethod
-    def _channel_merge_guide(op, a, b):
+    def _channel_merge_guide(op, a, b, legacy=True):
         """The fourteen operations the Reference Guide lists for ChannelMerge, on one channel of A and one of B. Where the page writes a lower-case
-        `a` or `b` (in, out, stencil) the channel's own value stands in for the alpha, as the node always read them. Division by zero gives 0."""
+        `a` or `b` (in, out, stencil) the channel's own value stands in for the alpha, as the node always read them. Division by zero gives 0.
+        `legacy` False is Nuke 17.0v6's render of union, xor, multiply and divide (checked pixel by pixel over the fixture): union holds A to 0..1
+        before `a + b - a * b`, xor holds both, multiply is the plain product, divide is `a / b` for a positive b and `a` for any other b."""
+        if not legacy:
+            if op == "union":
+                a = np.clip(a, 0, 1)
+                return (a + b - a * b).astype(np.float32)
+            if op == "xor":
+                a, b = np.clip(a, 0, 1), np.clip(b, 0, 1)
+                return (a * (1 - b) + b * (1 - a)).astype(np.float32)
+            if op == "multiply":
+                return (a * b).astype(np.float32)
+            if op == "divide":
+                safe = np.where(b > 0, b, np.float32(1.0))
+                return np.where(b > 0, a / safe, a).astype(np.float32)
         if op == "absminus":
             return np.abs(a - b)
         if op == "b if not a":
@@ -9235,7 +9264,8 @@ class Evaluator:
         if p.get("older_channel_operations", 0):
             combined = Evaluator._channel_merge_op(p.get("operation", "over"), a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1])
         else:
-            combined = Evaluator._channel_merge_guide(p.get("channel_operation", "union"), a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1])
+            combined = Evaluator._channel_merge_guide(p.get("channel_operation", "union"), a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1],
+                                                      legacy=bool(p.get("older_channel_maths", 1)))
         out = b.copy()
         out[..., out_idx:out_idx + 1] = combined
         return out
@@ -10087,6 +10117,8 @@ class Evaluator:
             x[:] = lr * np.power(10.0, np.clip((value * 1023.0 - cr) * slope, -30.0, 30.0))
         else:
             x[:] = (cr + np.log10(np.maximum(value, 1e-10) / max(lr, 1e-10)) / slope) / 1023.0
+        if not p.get("older_alpha", 1):
+            x[..., 3] = image[..., 3]          # Nuke 17.0v6 never converts alpha: channels rgba and all render it as it was
         return x
 
     @staticmethod
@@ -10134,6 +10166,8 @@ class Evaluator:
         low = (rgb >= 0) & (rgb < knee)
         shape = np.square(np.maximum(1.0 - rgb / knee, 0.0))
         rgb[:] = np.where(low, rgb + lift * shape, rgb)
+        if not p.get("older_negatives", 1):
+            rgb[:] = np.where(rgb < 0, np.float32(0.0), rgb)          # Nuke 17.0v6 sets a negative value to 0, whatever the lift
         return result
 
     @staticmethod

@@ -199,6 +199,8 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("white_clamp",), label="White clamp", help="Set output values above 1 to 1."),
         KnobGroup("bool", ("offset_by_alpha",), label="Offset follows alpha",
                   help="Scale the offset by each pixel's alpha, as NodeBased's Grade always did. Off is Nuke's flat offset."),
+        KnobGroup("bool", ("legacy_gamma_power",), label="Older gamma above 1",
+                  help="Raise values above 1 to the gamma power, as NodeBased's Grade did. Off follows Nuke, which continues the curve along its tangent at 1."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     # Laid out like Nuke's: a section per range, each with the same five sliders, then the Ranges
     # lookup curves (Nuke keeps those on a second tab), then mix.
@@ -252,7 +254,10 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Gamma": _groups(
         KnobGroup("split", ("gamma",), soft_range=(0.1, 4), channels="rgba"),
-        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("enum", ("channels",)),
+        KnobGroup("bool", ("older_negatives",), label="Older negatives",
+                  help="Raise a negative value as sign times the power, as NodeBased's Gamma did. Off leaves a negative value as it is, as Nuke does."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Saturation": _groups(
         KnobGroup("float_slider", ("saturation",), soft_range=(0, 4)),
         KnobGroup("enum", ("luminance_math",), label="Luminance math",
@@ -807,7 +812,8 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Posterize": _groups(
         KnobGroup("int", ("colors",), label="Colors"),
-        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("enum", ("channels",)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "SoftClip": _groups(
         KnobGroup("enum", ("conversion",)),
         KnobGroup("float_slider", ("softclip_min",), label="Softclip min", soft_range=(0, 1)),
@@ -891,7 +897,10 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("red",), label="Red", soft_range=(-5, 5)),
         KnobGroup("float_slider", ("green",), label="Green", soft_range=(-5, 5)),
         KnobGroup("float_slider", ("blue",), label="Blue", soft_range=(-5, 5)),
-        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("enum", ("channels",)),
+        KnobGroup("bool", ("older_exposure_maths",), label="Older maths",
+                  help="Subtract the black point before the gain, and step Cineon by 90.3 code values a stop, as NodeBased's Exposure did. Off follows Nuke, which lifts the black point by the gain as well and steps 90 code values."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "HueCorrect": _groups(
         KnobGroup("legacy", tuple(f"{prefix}_{band}" for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta"))),
         *[KnobGroup("curve", (f"curve_{name}",), label=name.replace("_", " ").title()) for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")],
@@ -935,12 +944,16 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("older_log_maths",), label="Older log maths",
                   help="Read the file value as NodeBased's PLogLin did before it followed Nuke: a raw code value with density per code value alone as the slope "
                        "(no division by negative gamma), alpha untouched and log to lin only. Set on graphs saved before."),
+        KnobGroup("bool", ("older_alpha",), label="Older alpha",
+                  help="Convert alpha with the colour when the channels include it, as NodeBased's PLogLin did. Off leaves alpha as it was, as Nuke does."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "CrossTalk": _groups(*[KnobGroup("curve", (f"xt_curve_{o}_{c}",), label=f"{o.upper()} from {c.upper()}") for o in "rgb" for c in "rgb"],
         KnobGroup("bool", ("xt_fringe",), label="Fringe"), KnobGroup("enum", ("xt_unpremult",), label="Unpremult by"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ShuffleCopy": _groups(*[KnobGroup("enum", (f"out{o}_{c}",), label=f"Out{o} {c.upper()}") for o in (1, 2) for c in "rgba"], KnobGroup("string", ("layer1",), label="In1 layer"), KnobGroup("string", ("layer2",), label="In2 layer")),
-    "Toe": _groups(KnobGroup("float_slider", ("toe",), soft_range=(0, 0.99), label="Toe width"), KnobGroup("float_slider", ("toe_lift",), soft_range=(0, 0.2), label="Lift"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Toe": _groups(KnobGroup("float_slider", ("toe",), soft_range=(0, 0.99), label="Toe width"), KnobGroup("float_slider", ("toe_lift",), soft_range=(0, 0.2), label="Lift"),
+                      KnobGroup("bool", ("older_negatives",), label="Older negatives", help="Keep a negative value negative, as NodeBased's Toe did. Off sets it to 0, as Nuke does."),
+                      KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Expression": _groups(
         *[group for slot in range(4) for group in (KnobGroup("string", (f"temp_name{slot}",), label=f"Variable {slot + 1} name",
                                                              help="A name for the expression on the right, usable in the channel expressions below."),
@@ -953,6 +966,8 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("older_expression_syntax",), label="Older expression syntax",
                   help="Read the expressions as NodeBased's Expression did before it followed Nuke: Python syntax, integer pixel indices counted from the top row, "
                        "an error for a blank expression. Set on graphs saved before."),
+        KnobGroup("bool", ("older_blank_expression",), label="Older blank row",
+                  help="A blank row writes zero, as NodeBased's Expression did. Off leaves the channel as it was, as Nuke does."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Vectorfield": _groups(KnobGroup("file_read", ("cube_path",), label="3D LUT (.cube, .3dl)"),
         KnobGroup("int", ("reload",), label="Reload", help="Counts the Reload button: the file is read again."),
@@ -1787,6 +1802,8 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("older_channel_operations",), label="Older operations",
                   help="Use the Older operation below, one of NodeBased's Merge operations with the formulas the node had before it followed the guide's list. Set on graphs saved before."),
         KnobGroup("enum", ("operation",), label="Older operation"),
+        KnobGroup("bool", ("older_channel_maths",), label="Older maths",
+                  help="Union, xor, multiply and divide with the formulas the node had before it followed Nuke's render. Set on graphs saved before."),
         KnobGroup("enum", ("merge_bbox",), label="Set bbox to", help="The output's bounding box: the union of the two inputs', their intersection, A's or B's."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Keyer": _groups(
@@ -1798,7 +1815,9 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("range_b",), label="B", soft_range=(0, 1)),
         KnobGroup("float_slider", ("range_c",), label="C", soft_range=(0, 1)),
         KnobGroup("float_slider", ("range_d",), label="D", soft_range=(0, 1)),
-        KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("bool", ("invert",)),
+        KnobGroup("bool", ("older_unclamped_range",), label="Older range", help="Run the falling edge from C to D even when C is above 1, as NodeBased's Keyer did. Off drops that edge, as Nuke does."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "HueKeyer": _groups(
         KnobGroup("curve", ("curve_amount",), label="Amount",
                   help="The alpha value the key writes for each hue: the x axis is the hue in degrees (0 red, 120 green, 240 blue), the y axis the amount."),

@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 40
+SCHEMA_VERSION = 41
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a, "rgb" is r, g, b and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -390,7 +390,7 @@ SPECS = {
                         "channels": "all", "mix": 1.0}},
     "Multiply": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"multiply": 1.0, "channels": "all", "mix": 1.0}},
     "Add": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"offset": 0.0, "channels": "all", "mix": 1.0}},
-    "Gamma": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"gamma": 1.0, "channels": "all", "mix": 1.0}},
+    "Gamma": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"gamma": 1.0, "channels": "all", "mix": 1.0, **_behaviour2d.new_params("Gamma")}},
     "Saturation": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"saturation": 1.0, "mix": 1.0, **_behaviour2d.new_params("Saturation")}},
     # Erode/Dilate/Median/Sharpen/Glow/Mirror are the lane's group (c) Filter/Transform nodes.
     # Erode's own "erode_size" and Dilate's "dilate_size" share one box min/max kernel
@@ -459,7 +459,7 @@ SPECS = {
     "PLogLin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"log_direction": "log to lin", "linear_reference": 0.18, "log_reference": 445.0, "density_per_code_value": 0.002, "negative_gamma": 0.6, "mix": 1.0, **_behaviour2d.new_params("PLogLin")}},
     "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_curve_{out}_{src}": '{"interpolation":"linear","points":[[0,0],[0.5,0.5],[1,1]]}' if out == src else '{"interpolation":"linear","points":[[0,0],[1,0]]}' for out in "rgb" for src in "rgb"}, "xt_fringe": 0, "xt_unpremult": "none", "mix": 1.0}},
     "ShuffleCopy": {"inputs": ["in1", "in2"], "params": {**{f"out{out}_{channel}": f"in{1 if out == 1 else 2}.{channel}" for out in (1, 2) for channel in "rgba"}, "layer1": "", "layer2": ""}},
-    "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.0, "mix": 1.0}},
+    "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.0, "mix": 1.0, **_behaviour2d.new_params("Toe")}},
     "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {
         **{f"temp_{part}{slot}": "" for slot in range(4) for part in ("name", "expr")},
         "expr_channels_r": "red", "expr_channels_g": "green", "expr_channels_b": "blue", "expr_channels_a": "alpha",
@@ -992,7 +992,7 @@ SPECS = {
     "Keyer": {"inputs": ["image"], "optional_inputs": ["mask"],
               "params": {"keyer_operation": "luminance", "range_a": 0.0, "range_b": 0.0,
                         "range_c": 1.0, "range_d": 1.0, "invert": 0, "mix": 1.0,
-                        **_smallnodes.new_params("Keyer")}},
+                        **_smallnodes.new_params("Keyer"), **_behaviour2d.new_params("Keyer")}},
     # HueKeyer: Nuke's amount and saturation threshold curves over hue (curve_amount, curve_sat_thrsh; the alpha is 1 minus the
     # amount while invert is on, as it is by default). hue_center/hue_width/hue_softness and sat_min/sat_max are the older hue
     # window, read only while older_hue_window is on (graphs saved before).
@@ -2599,7 +2599,7 @@ LIMITS.update({"crop_softness": (0.0, 100000.0), "reformat": (0, 1), "intersect"
 LIMITS.update({"origfirst": (-1000000, 1000000), "origlast": (-1000000, 1000000),
                "raw": (0, 1), "premultiplied": (0, 1), "auto_alpha": (0, 1)})
 # Grade's Nuke knobs (fidelity step E). `black` and `white` are shared names (Log2Lin, Histogram), so Grade's wider ranges are its own.
-LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1)})
+LIMITS.update({"whitepoint": (-1000.0, 1000.0), "black_clamp": (0, 1), "white_clamp": (0, 1), "offset_by_alpha": (0, 1), "legacy_gamma_power": (0, 1)})
 LIMITS.update(_behaviour2d.LIMITS)
 LIMITS.update(_drawfxbehaviour.LIMITS)
 LIMITS.update({"input_speed": (0.0, 100.0), "legacy_retime": (0, 1), "lookup_length": (0.0, 64.0),
@@ -3293,6 +3293,29 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _blur_kernel(doc["nodes"])
         doc["version"] = 40
+    if isinstance(doc, dict) and doc.get("version") == 40:
+        # v40 -> v41 (lane 2 step N1, Nuke 17.0v6's own renders): Grade's gamma continues along its tangent above 1, ChannelMerge's union, xor,
+        # multiply and divide, Gamma and Toe on negative values and Exposure's black point follow Nuke's render, and PLogLin's channels default to rgb.
+        # A node saved before keeps the arithmetic it had through `legacy_gamma_power`, `older_channel_maths`, `older_negatives`, `older_exposure_maths` 1 and
+        # PLogLin's channels all, so it renders the same pixels; a node made since carries 0. Group graphs too.
+        _NUKE_RENDER_FLAGS = {"Grade": {"legacy_gamma_power": 1}, "ChannelMerge": {"older_channel_maths": 1}, "Gamma": {"older_negatives": 1},
+                              "Toe": {"older_negatives": 1}, "Exposure": {"older_exposure_maths": 1}, "PLogLin": {"channels": "all", "older_alpha": 1},
+                              "Expression": {"older_blank_expression": 1}, "Keyer": {"older_unclamped_range": 1}}
+
+        def _nuke_render_flags(scope):
+            for current in scope.values():
+                if not isinstance(current, dict):
+                    continue
+                params = current.get("params")
+                if isinstance(params, dict):
+                    for name, value in _NUKE_RENDER_FLAGS.get(current.get("type"), {}).items():
+                        params.setdefault(name, value)
+                graph = current.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _nuke_render_flags(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _nuke_render_flags(doc["nodes"])
+        doc["version"] = 41
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

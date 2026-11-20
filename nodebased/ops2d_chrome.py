@@ -40,7 +40,7 @@ FILTER_CHROME = {
     "ColorLookup": ("rgba", True, True), "Exposure": (None, True, True), "ColorMatrix": ("rgb", True, True),
     "Colorspace": ("rgb", True, True), "OCIOColorspace": ("rgb", True, True),
     "OCIOLookTransform": ("rgb", True, True), "OCIOFileTransform": ("rgb", True, True),
-    "OCIOLogConvert": (None, True, True), "Log2Lin": ("rgb", True, True), "PLogLin": ("all", True, True),
+    "OCIOLogConvert": (None, True, True), "Log2Lin": ("rgb", True, True), "PLogLin": ("rgb", True, True),
     "Expression": (None, True, True), "CrossTalk": (None, True, True), "Posterize": (None, True, True),
     "Toe": ("rgb", True, True), "Dither": (None, True, True),
     "Blur": ("all", True, False), "Sharpen": (None, True, False), "ErodeFilter": ("all", True, False),

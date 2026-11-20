@@ -32,6 +32,20 @@ a node is run directly with a parameter dict that lacks the knob, the new node's
     ChannelMerge  older_channel_operations
                                       1: the operation is the older `operation` choice (NodeBased's Merge vocabulary, over by default, with the formulas it had), not
                                       the fourteen operations the guide lists for ChannelMerge (`channel_operation`, union by default). Set on graphs saved before.
+    ChannelMerge  older_channel_maths
+                                      1: union, xor, multiply and divide keep the formulas the node had. Nuke 17.0v6 renders union with A held to 0..1
+                                      (`a + b - a * b`), xor with both held to 0..1, multiply as the plain product, and divide as `a / b` for a positive b and
+                                      `a` otherwise (schema 41). Set on graphs saved before.
+    PLogLin       older_alpha         1: alpha is converted with the colour (channels all, the guide's default). Nuke 17.0v6's PLogLin defaults to channels rgb and never converts alpha,
+                                      whichever channels are chosen (schema 41).
+    Expression    older_blank_expression
+                                      1: a blank row is zero. Nuke 17.0v6 leaves the channel as it was (schema 41).
+    Keyer         older_unclamped_range
+                                      1: the falling edge runs from C to D wherever they are. Nuke 17.0v6 drops the falling edge when C is above 1: range 0.1 0.5 4 12.5 keys a green of 5 or 12 fully (schema 41).
+    Gamma         older_negatives     1: a negative value is raised as `sign * |x| ** (1 / gamma)`. Nuke 17.0v6 leaves a value at or below zero as it is (schema 41).
+    Toe           older_negatives     1: a negative value stays negative. Nuke 17.0v6 sets it to 0, whatever the lift (schema 41).
+    Exposure      older_exposure_maths    1: Linear mode is `(in - blackpoint) * gain`. Nuke 17.0v6 renders `gain * in + blackpoint * (gain - 1) / (1 - blackpoint)`,
+                                      the black point lifted by its own gain, and in Cineon a stop is 90 code values, not 90.3 (schema 41). Set on graphs saved before.
     OCIOColorspace, OCIOLogConvert, OCIOLookTransform, OCIODisplay, OCIOFileTransform
                   divide_by_alpha     1: divide the colour by alpha before the OpenColorIO transform and multiply it back after; Nuke transforms the
                                       stored colour (its own (un)premult by does the dividing when asked). Set on graphs saved before.
@@ -64,13 +78,13 @@ NEW = {
     "HSVTool": {"adjust_by_scaling": 0},
     "SoftClip": {"older_grey": 0},
     "Log2Lin": {"older_log_maths": 0},
-    "PLogLin": {"older_log_maths": 0},
+    "PLogLin": {"older_log_maths": 0, "older_alpha": 0},
     "Colorspace": {"divide_by_alpha": 0, "bradford_matrix": 0},
     "ColorLookup": {"older_range_scaling": 0},
-    "Expression": {"older_expression_syntax": 0},
+    "Expression": {"older_expression_syntax": 0, "older_blank_expression": 0},
     "HistEQ": {"histeqbins": 4096},
     "HueKeyer": {"older_hue_window": 0, "curve_amount": FLAT_ZERO, "curve_sat_thrsh": FLAT_ZERO},
-    "ChannelMerge": {"channel_operation": "union", "older_channel_operations": 0, "merge_bbox": "union"},
+    "ChannelMerge": {"channel_operation": "union", "older_channel_operations": 0, "older_channel_maths": 0, "merge_bbox": "union"},
     "OCIOColorspace": {"divide_by_alpha": 0},
     "OCIOLogConvert": {"divide_by_alpha": 0},
     "OCIOLookTransform": {"divide_by_alpha": 0},
@@ -79,7 +93,10 @@ NEW = {
     "IBKGizmo": {"luminance_level_enable": 0},
     "ScreenKeyer": {"older_intermediate_view": 0},
     "GenerateLUT": {"lut_clamp_output": 1, "lut_3dl_format": "autodesk flame/smoke"},
-    "Exposure": {"exposure_colorspace": "Linear"},
+    "Exposure": {"exposure_colorspace": "Linear", "older_exposure_maths": 0},
+    "Gamma": {"older_negatives": 0},
+    "Toe": {"older_negatives": 0},
+    "Keyer": {"older_unclamped_range": 0},
 }
 OLD = {
     "ColorCorrect": {"divide_by_alpha": 1, "mix_luminance": 0.0, "test": 0},       # lane 2 step W2: neutral on a node saved before
@@ -88,13 +105,13 @@ OLD = {
     "HSVTool": {"adjust_by_scaling": 1},
     "SoftClip": {"older_grey": 1},
     "Log2Lin": {"older_log_maths": 1},
-    "PLogLin": {"older_log_maths": 1},
+    "PLogLin": {"older_log_maths": 1, "older_alpha": 1},
     "Colorspace": {"divide_by_alpha": 1, "bradford_matrix": 1},
     "ColorLookup": {"older_range_scaling": 1},
-    "Expression": {"older_expression_syntax": 1},
+    "Expression": {"older_expression_syntax": 1, "older_blank_expression": 1},
     "HistEQ": {"histeqbins": 256},
     "HueKeyer": {"older_hue_window": 1, "curve_amount": FLAT_ZERO, "curve_sat_thrsh": FLAT_ZERO},
-    "ChannelMerge": {"channel_operation": "union", "older_channel_operations": 1, "merge_bbox": "union"},
+    "ChannelMerge": {"channel_operation": "union", "older_channel_operations": 1, "older_channel_maths": 1, "merge_bbox": "union"},
     "OCIOColorspace": {"divide_by_alpha": 1},
     "OCIOLogConvert": {"divide_by_alpha": 1},
     "OCIOLookTransform": {"divide_by_alpha": 1},
@@ -103,13 +120,16 @@ OLD = {
     "IBKGizmo": {"luminance_level_enable": 1, "screen_type": "green", "luminance_level": 1.0},      # lane 2 step W1: a new one starts on C-blue with level 0, as the guide lists
     "ScreenKeyer": {"older_intermediate_view": 1},
     "GenerateLUT": {"lut_clamp_output": 0, "lut_3dl_format": "autodesk lustre"},      # lane 2 step W2: the 3DMESH / Mesh header the node always wrote
-    "Exposure": {"exposure_colorspace": "Linear"},          # lane 2 step W2: Linear is the multiplication the node always did
+    "Exposure": {"exposure_colorspace": "Linear", "older_exposure_maths": 1},          # lane 2 step W2: Linear is the multiplication the node always did
     "Vectorfield": {"interpolation": "tetrahedral"},       # lane 2 step W1: a new Vectorfield starts on trilinear, the guide's default
     # Lane 2 step W1: these start on Nuke's channels "all"; a node saved without the knob keeps the "rgb" it always had.
     "Invert": {"channels": "rgb"}, "Multiply": {"channels": "rgb"}, "Add": {"channels": "rgb"}, "Gamma": {"channels": "rgb"},
     "Clamp": {"channels": "rgb"}, "Posterize": {"channels": "rgb"},
 }
-LIMITS = {"test": (0, 1), "lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_intermediate_view": (0, 1), "older_channel_operations": (0, 1)}
+OLD["Gamma"] = {**OLD["Gamma"], "older_negatives": 1}
+OLD["Toe"] = {"older_negatives": 1}
+OLD["Keyer"] = {"older_unclamped_range": 1}
+LIMITS = {"test": (0, 1), "lut_clamp_output": (0, 1), "divide_by_alpha": (0, 1), "older_curve_maths": (0, 1), "adjust_by_scaling": (0, 1), "older_grey": (0, 1), "older_log_maths": (0, 1), "bradford_matrix": (0, 1), "older_range_scaling": (0, 1), "older_expression_syntax": (0, 1), "histeqbins": (2, 65536), "older_hue_window": (0, 1), "older_intermediate_view": (0, 1), "older_channel_operations": (0, 1), "older_channel_maths": (0, 1), "older_exposure_maths": (0, 1), "older_negatives": (0, 1), "older_alpha": (0, 1), "older_blank_expression": (0, 1), "older_unclamped_range": (0, 1)}
 # The operations the Reference Guide lists for ChannelMerge, in its order (the guide's names; "b if not a" is its `A?A:B`).
 CHANNEL_MERGE_OPERATIONS = ("absminus", "b if not a", "divide", "from", "in", "max", "min", "minus", "multiply", "out", "plus", "stencil", "union", "xor")
 CHOICES = {"exposure_colorspace": ["Linear", "Cineon"], "lut_3dl_format": ["autodesk flame/smoke", "autodesk lustre"], "luminance_math": list(SATURATION_MATH), "channel_operation": list(CHANNEL_MERGE_OPERATIONS)}

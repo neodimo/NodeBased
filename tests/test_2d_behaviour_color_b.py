@@ -219,13 +219,16 @@ class PLogLinOlderDocumentTests(OlderDocumentTests):
         np.testing.assert_allclose(out[0, 0, :2], [floor, floor], rtol=1e-6)
         self.assertAlmostEqual(float(out[0, 0, 2]), 445.0 / 1023.0, places=6)
 
-    def test_alpha_is_converted_only_when_channels_include_it(self):
+    def test_alpha_is_converted_only_by_an_older_node_that_includes_it(self):
         src = log_image()
         everything = render("PLogLin", {"channels": "all"}, source=src).pixels
         colour = render("PLogLin", {"channels": "rgb"}, source=src).pixels
         np.testing.assert_array_equal(colour[..., 3], src[..., 3])
-        self.assertFalse(np.array_equal(everything[..., 3], src[..., 3]))
+        np.testing.assert_array_equal(everything[..., 3], src[..., 3])          # Nuke 17.0v6 never converts alpha (lane 2 step N1)
         np.testing.assert_array_equal(everything[..., :3], colour[..., :3])
+        older = render("PLogLin", {"channels": "all", "older_alpha": 1}, source=src).pixels
+        self.assertFalse(np.array_equal(older[..., 3], src[..., 3]))
+        np.testing.assert_array_equal(older[..., :3], colour[..., :3])
 
 
 # ================================================================================================================ Colorspace

@@ -256,7 +256,7 @@ class UnpremultTests(unittest.TestCase):
         gamma = 2.0
         out = render("Gamma", dict(gamma=gamma, unpremult="rgba.alpha", channels="rgb")).pixels
         straight = source[..., :3] / alpha
-        expected_rgb = np.sign(straight) * np.abs(straight) ** (1.0 / gamma) * alpha
+        expected_rgb = np.where(straight > 0, np.abs(straight) ** (1.0 / gamma), straight) * alpha      # Nuke leaves a value at or below zero as it is
         np.testing.assert_allclose(out[..., :3], expected_rgb, rtol=1e-4, atol=1e-5)
         np.testing.assert_array_equal(out[..., 3], source[..., 3])
         without = render("Gamma", dict(gamma=gamma, channels="rgb")).pixels
@@ -267,7 +267,7 @@ class UnpremultTests(unittest.TestCase):
         alpha = source[..., 3:4]
         out = render("Gamma", dict(gamma=2.0, unpremult="rgba.alpha", invert_unpremult=1)).pixels
         premultiplied = source[..., :3] * alpha
-        expected_rgb = np.sign(premultiplied) * np.abs(premultiplied) ** 0.5 / alpha
+        expected_rgb = np.where(premultiplied > 0, np.abs(premultiplied) ** 0.5, premultiplied) / alpha
         np.testing.assert_allclose(out[..., :3], expected_rgb, rtol=1e-4, atol=1e-5)
 
     def test_a_zero_channel_is_left_alone_instead_of_dividing(self):

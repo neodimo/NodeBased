@@ -18,6 +18,8 @@ Only names defined above `CASES = _cases()` in `nuke_fidelity_cases` are importe
 """
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 
 
@@ -513,9 +515,10 @@ def _toe_cases():
 
     def default_is_identity(fx):
         ref = fx["A"].astype(np.float64)
+        ref[..., :3] = np.maximum(ref[..., :3], 0.0)          # Nuke 17.0v6 sets a negative value to 0 even at lift 0
         return ref, np.ones(ref.shape, bool)
-    out.append(Case("toe_default_lift_is_none", "Toe", "Toe", (), ("A",), "Toe", {}, ("A",), default_is_identity, "guide",
-                    "Toe's lift defaults to 0, so a Toe left alone changes nothing"))
+    out.append(Case("toe_default_lift_is_none", "Toe", "Toe", (), ("A",), "Toe", {}, ("A",), default_is_identity, "convention",
+                    "Toe's lift defaults to 0, so a Toe left alone changes nothing except that Nuke 17.0v6's render sets a negative value to 0 (the Reference Guide says nothing about negatives)"))
     out.append(Case("toe_rolloff_shape", "Toe", "Toe", (("lift", lift),), ("A",), "Toe", None, ("A",), lambda fx: (fx["A"].astype(np.float64), np.zeros(fx["A"].shape, bool)),
                     "guide", _TOE_STATEMENT + ": the curve between black and white", unscored="the guide says only that the lift fades toward the whites; the shape of the "
                     "rolloff, where it ends, and what a negative value does are not published (NodeBased fades it by (1 - x / 0.2) squared up to 0.2, a width its own `toe` knob sets)"))
@@ -683,7 +686,7 @@ def _log2lin_cases():
     return out
 
 
-def _pines_case(case_id, nb_params, nuke_knobs, statement, source="convention", fixture="L", alpha_too=True, **kwargs):
+def _pines_case(case_id, nb_params, nuke_knobs, statement, source="convention", fixture="L", alpha_too=False, **kwargs):
     to_lin = nb_params.get("log_direction", "log to lin") == "log to lin"
     note = statement + ("" if source == "guide" else f" ({_PINES_SOURCE})")
     return Case(case_id, "PLogLin", "PLogLin", tuple(nuke_knobs), (fixture,), "PLogLin", dict(nb_params), (fixture,),
@@ -693,8 +696,8 @@ def _pines_case(case_id, nb_params, nuke_knobs, statement, source="convention", 
 def _ploglin_cases():
     out = []
     out.append(_pines_case("ploglin_defaults", {}, (),
-                           "the defaults (linear reference 0.18, log reference 445, negative gamma 0.6, density 0.002) convert log to linear on every channel: "
-                           "the page's default channels are all, so alpha is converted as well"))
+                           "the defaults (linear reference 0.18, log reference 445, negative gamma 0.6, density 0.002) convert log to linear on red, green and blue: "
+                           "Nuke 17.0v6's default channels are rgb (the guide says all) and its render leaves alpha as it was, whichever channels are chosen", alpha_too=False))
 
     def anchor(fx):
         src = fx["L"].astype(np.float64)
@@ -981,8 +984,9 @@ def _stack(r, g, b, a):
 
 def _expression_cases():
     out = []
-    out.append(_expr_case("expression_blank_is_zero", {"r": "", "b": ""}, lambda fx: _stack(0.0 * _channels_of(fx)[0], _channels_of(fx)[1], 0.0 * _channels_of(fx)[2], _channels_of(fx)[3]),
-                          "a blank expression is the same as zero: the red and blue rows are empty, so those channels become 0 and green and alpha pass through"))
+    _blank = (_expr_case("expression_blank_is_zero", {"r": "", "b": ""}, lambda fx: _stack(_channels_of(fx)[0], _channels_of(fx)[1], _channels_of(fx)[2], _channels_of(fx)[3]),
+                          "a blank row leaves its channel as it was (Nuke 17.0v6's render; the Reference Guide's sentence reads as zero): the red and blue rows are empty, so those channels pass through with green and alpha", source="convention"))
+    out.append(dataclasses.replace(_blank, unscored="a blank row changes nothing in Nuke 17.0v6, so the reference equals the input and the case can only be judged against Nuke's own render"))
     out.append(_expr_case("expression_arithmetic_precedence", {"r": "r + g * b", "g": "(r + g) * b", "b": "-r - g / 2 + b"},
                           lambda fx: _stack(*(lambda r, g, b, a: (r + g * b, (r + g) * b, -r - g / 2 + b, a))(*_channels_of(fx))),
                           "C-like syntax: * and / bind tighter than + and -, parentheses group, a leading minus negates", source="convention"))
@@ -1185,7 +1189,8 @@ def _keyer_expected(operation, rng, invert=False, channel=3, from_alpha=False):
     def expected(fx):
         src = fx["A"].astype(np.float64)
         value = src[..., 3] if from_alpha else _keyer_value(operation, src)
-        matte = keyer_trapezoid(value, *rng)
+        # Nuke 17.0v6's render drops the falling edge when C is above 1 (range {0.1 0.5 4 12.5} keys a value of 5 fully)
+        matte = np.clip((value - rng[0]) / (rng[1] - rng[0]), 0.0, 1.0) if rng[2] > 1.0 else keyer_trapezoid(value, *rng)
         ref = src.copy()
         ref[..., channel] = 1.0 - matte if invert else matte
         return ref, _all_valid(ref)
@@ -1210,7 +1215,7 @@ def _keyer_cases():
                                f"the {operation} operation keys the {'channel' if len(operation) > 3 and operation not in ('max', 'min') else 'value'} through the A, B, C, D trapezoid: "
                                "0 up to A, rising to 1 at B, 1 from B to C, falling to 0 at D, 0 above"))
     out.append(_keyer_case("keyer_triangle_range", "red", (0.0, 0.5, 0.5, 1.0), "with B equal to C the opaque stretch is one point: a triangle from A through B to D"))
-    out.append(_keyer_case("keyer_hdr_range", "green", (-0.25, 0.5, 4.0, 12.5), "the range points are not limited to 0 to 1: negative and above-one values key by the same trapezoid"))
+    out.append(_keyer_case("keyer_hdr_range", "green", (-0.25, 0.5, 4.0, 12.5), "the range points are not limited to 0 to 1: a negative A keys by the same trapezoid, and Nuke 17.0v6's render drops the falling edge when C is above 1, so an above-one value stays keyed"))
     out.append(_keyer_case("keyer_alpha_input", "red", (0.1, 0.3, 0.6, 0.95), "with the input set to the alpha channel the alpha is the keyed quantity",
                            nb_extra={"key_input": "rgba.alpha"}, nuke_extra=(("input", "rgba.alpha"),), from_alpha=True))
     out.append(_keyer_case("keyer_invert", "red", rng, "invert gives the matte's complement, 1 minus the trapezoid", invert=True,
@@ -1441,8 +1446,12 @@ _CM_GUIDE = ("ChannelMerge (Nuke 17.0 Reference Guide): 'Sets how the pixel valu
              "absminus abs(A-B), b if not a A?A:B, divide A/B (0 if A<0 and B<0), from B-A, max, min, minus A-B, multiply AB (A if A<0 and B<0), plus A+B, union A+B-AB, xor A+B-2AB")
 _CM_REFERENCE = {
     "absminus": lambda a, b: np.abs(a - b), "b if not a": lambda a, b: np.where(a != 0, a, b), "from": lambda a, b: b - a, "max": np.maximum, "min": np.minimum,
-    "minus": lambda a, b: a - b, "plus": lambda a, b: a + b, "union": lambda a, b: a + b - a * b, "xor": lambda a, b: a + b - 2 * a * b,
-    "multiply": lambda a, b: np.where((a < 0) & (b < 0), a, a * b), "divide": lambda a, b: np.where((a < 0) & (b < 0), 0.0, a / np.where(b != 0, b, 1.0)),
+    "minus": lambda a, b: a - b, "plus": lambda a, b: a + b,
+    # The four the guide's formulas get wrong at the edges of 0..1 (Nuke 17.0v6's own render is the reference, checked over every fixture pixel):
+    # union holds A to 0..1 before A+B-AB, xor holds both, multiply is the plain product, divide is A/B for a positive B and A for any other B.
+    "union": lambda a, b: np.clip(a, 0, 1) + b - np.clip(a, 0, 1) * b,
+    "xor": lambda a, b: np.clip(a, 0, 1) * (1 - np.clip(b, 0, 1)) + np.clip(b, 0, 1) * (1 - np.clip(a, 0, 1)),
+    "multiply": lambda a, b: a * b, "divide": lambda a, b: np.where(b > 0, a / np.where(b > 0, b, 1.0), a),
 }
 
 
@@ -1456,8 +1465,6 @@ def _cm_expected(op, a_channel, b_channel, out_channel):
         ref[..., "rgba".index(out_channel)] = merged
         valid = np.zeros(ref.shape, bool)
         valid[..., "rgba".index(out_channel)] = np.isfinite(merged)
-        if op == "divide":
-            valid[..., "rgba".index(out_channel)] &= bv != 0                        # the page does not say what A / 0 is
         return ref, valid
     return expected
 
@@ -1471,10 +1478,12 @@ def _cm_case(op, a_channel="r", b_channel="r", out_channel="r", statement=None, 
 
 def _channel_merge_cases():
     out = []
-    for op in ("absminus", "b if not a", "from", "max", "min", "minus", "plus", "union", "xor"):
+    for op in ("absminus", "b if not a", "from", "max", "min", "minus", "plus"):
         out.append(_cm_case(op))
-    out.append(_cm_case("multiply", statement="AB, and A where A and B are both negative"))
-    out.append(_cm_case("divide", statement="A / B, and 0 where A and B are both negative (compared where B is not 0)"))
+    out.append(_cm_case("union", source="convention", statement="Nuke 17.0v6's render: A held to 0..1, then A + B - AB (the guide writes A + B - AB, which differs outside 0..1)"))
+    out.append(_cm_case("xor", source="convention", statement="Nuke 17.0v6's render: A and B both held to 0..1, then A(1 - B) + B(1 - A) (the guide writes A + B - 2AB)"))
+    out.append(_cm_case("multiply", source="convention", statement="Nuke 17.0v6's render: the plain product AB (the guide says A where A and B are both negative; Nuke gives 0.25 for -0.5 and -0.5)"))
+    out.append(_cm_case("divide", source="convention", statement="Nuke 17.0v6's render: A / B for a positive B and A for any other B (the guide says 0 where A and B are both negative; Nuke gives -0.5 for -0.5 and -0.5)"))
     out.append(_cm_case("plus", "g", "b", "a", statement="the A channel is A's green, the B channel B's blue and the result goes to the alpha", case_id="channelmerge_other_channels_selected"))
     out.append(Case("channelmerge_other_channels_are_b", "ChannelMerge", "ChannelMerge", (("A", "rgba.red"), ("operation", "plus"), ("B", "rgba.green"), ("output", "rgba.blue")), ("B", "A"),
                     "ChannelMerge", {"channel_operation": "plus", "a_channel": "A.r", "b_channel": "B.g", "out_channel": "B"}, ("A", "B"),

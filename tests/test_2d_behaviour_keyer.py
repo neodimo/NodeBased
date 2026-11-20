@@ -809,7 +809,7 @@ class CopyTilesTests(unittest.TestCase):
 
 
 # ================================================================================================================ ChannelMerge
-OLD_KNOBS["ChannelMerge"] = ("channel_operation", "older_channel_operations")
+OLD_KNOBS["ChannelMerge"] = ("channel_operation", "older_channel_operations", "older_channel_maths")
 _CM_BASE = {"channel_operation": "plus", "a_channel": "A.r", "b_channel": "B.g", "out_channel": "R"}
 _CM_CHANGES = {
     "bbox": {"merge_bbox": "intersection"},
@@ -844,9 +844,12 @@ class ChannelMergeBehaviourTests(unittest.TestCase):
         self.assertEqual(self.merge(0.5, 0.25, older_channel_operations=1, operation="over")[0], 0.5 + 0.25 * 0.5)
 
     def test_negative_pairs_are_stopped_from_turning_positive(self):
-        self.assertEqual(self.merge(-0.5, -0.25, channel_operation="multiply")[0], -0.5)           # A where both are negative
+        # An older node (older_channel_maths 1) keeps the guide's reading; a new one follows Nuke 17.0v6's render (lane 2 step N1: the plain product, and A for a B at or below 0).
+        self.assertEqual(self.merge(-0.5, -0.25, channel_operation="multiply", older_channel_maths=1)[0], -0.5)           # A where both are negative
         self.assertAlmostEqual(float(self.merge(-0.5, 0.25, channel_operation="multiply")[0]), -0.125)
-        self.assertEqual(self.merge(-0.5, -0.25, channel_operation="divide")[0], 0.0)              # 0 where both are negative
+        self.assertEqual(self.merge(-0.5, -0.25, channel_operation="divide", older_channel_maths=1)[0], 0.0)              # 0 where both are negative
+        self.assertAlmostEqual(float(self.merge(-0.5, -0.25, channel_operation="multiply", older_channel_maths=0)[0]), 0.125)
+        self.assertEqual(self.merge(-0.5, -0.25, channel_operation="divide", older_channel_maths=0)[0], -0.5)
         self.assertAlmostEqual(float(self.merge(0.5, 0.25, channel_operation="divide")[0]), 2.0)
 
     def test_every_operation_of_the_guide_is_there_and_nothing_else(self):

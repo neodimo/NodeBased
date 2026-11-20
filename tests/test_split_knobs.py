@@ -364,12 +364,15 @@ def nuke_grade(x, blackpoint=0.0, whitepoint=1.0, black=0.0, white=1.0, multiply
     x = np.asarray(x, np.float64)
     scale = multiply * (white - black) / (whitepoint - blackpoint)
     shift = offset + black - scale * blackpoint
+    def bend(v, exponent):        # Nuke 17.0v6: the power up to 1, the tangent at 1 above it, zero and below unchanged
+        powered = np.where(v > 1, 1.0 + exponent * (v - 1.0), np.power(np.maximum(v, 0), exponent))
+        return np.where(v > 0, powered, v)
     if reverse:
-        r = np.where(x > 0, np.power(np.maximum(x, 0), gamma), x)
+        r = bend(x, gamma)
         r = (r - shift) / scale
     else:
         r = scale * x + shift
-        r = np.where(r > 0, np.power(np.maximum(r, 0), 1.0 / gamma), r)
+        r = bend(r, 1.0 / gamma)
     if black_clamp:
         r = np.maximum(r, 0.0)
     if white_clamp:
@@ -575,7 +578,7 @@ class SplitChannelNodesTests(unittest.TestCase):
 
     VALUES = {"Multiply": ("multiply", [2.0, 3.0, 0.5, 4.0], lambda x, v: x * v),
               "Add": ("offset", [0.1, -0.2, 0.3, 0.4], lambda x, v: x + v),
-              "Gamma": ("gamma", [2.0, 0.5, 1.5, 3.0], lambda x, v: np.sign(x) * np.abs(x) ** (1.0 / v))}
+              "Gamma": ("gamma", [2.0, 0.5, 1.5, 3.0], lambda x, v: np.where(x > 0, np.abs(x) ** (1.0 / v), x))}      # Nuke leaves a value at or below zero as it is
 
     def test_each_channel_lands_its_own_entry(self):
         src = image(15)
@@ -646,7 +649,7 @@ MAPPING = json.loads(audit.MAP_JSON.read_text(encoding="utf-8"))["pairs"]
 LAYOUTS = {
     'Grade': [
         'Channels', 'Blackpoint', 'Whitepoint', 'Lift', 'Gain', 'Multiply', 'Offset', 'Gamma', 'Reverse', 'Black clamp',
-        'White clamp', 'Exposure', 'Offset follows alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
+        'White clamp', 'Exposure', 'Offset follows alpha', 'Older gamma above 1', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert',
         'Mix'
     ],
     'ColorCorrect': [
@@ -666,7 +669,7 @@ LAYOUTS = {
         'Brightness range', 'Adjustment', 'Reset', 'Range Rolloff', 'Force Value', 'BMask', 'Invert mask', 'Output', 'Invert mask',
         'Adjust by scaling', 'Mix'
     ],
-    'Toe': ['Channels', 'Lift', 'Toe width', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
+    'Toe': ['Channels', 'Lift', 'Toe width', 'Older negatives', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
     'SoftClip': ['Conversion', 'Softclip min', 'Softclip max', 'Older grey', 'Mix'],
     'Posterize': ['Channels', 'Colors', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'],
     'Log2Lin': [
@@ -675,7 +678,7 @@ LAYOUTS = {
     ],
     'PLogLin': [
         'Channels', 'Operation', 'Linear reference value', 'Log reference value', 'Negative gamma', 'Density per code value',
-        'Older log maths', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
+        'Older log maths', 'Older alpha', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'Colorspace': [
         'Channels', 'Input', 'Output',
@@ -692,10 +695,10 @@ LAYOUTS = {
     'Expression': [
         'Variable 1 name', 'Variable 1 expression', 'Variable 2 name', 'Variable 2 expression', 'Variable 3 name',
         'Variable 3 expression', 'Variable 4 name', 'Variable 4 expression', 'Channels', 'R expression', 'Channels',
-        'G expression', 'Channels', 'B expression', 'Channels', 'A expression', 'Older expression syntax', 'Mask', 'Inject',
+        'G expression', 'Channels', 'B expression', 'Channels', 'A expression', 'Older expression syntax', 'Older blank row', 'Mask', 'Inject',
         'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
-    'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'A', 'B', 'C', 'D', 'Mix'],
+    'Keyer': ['Input', 'Output', 'Combine', 'Invert', 'Operation', 'A', 'B', 'C', 'D', 'Older range', 'Mix'],
     'HueKeyer': [
         'Channels', 'Amount', 'Saturation threshold', 'Output', 'Invert', 'Older hue window', 'Hue center',
         'Hue width', 'Hue softness', 'Saturation min', 'Saturation max', 'Mix'
@@ -717,7 +720,7 @@ LAYOUTS = {
         'Range from', 'Mask', 'Inject', 'Invert', 'Fringe', '(Un)premult by', 'Invert', 'Mix'
     ],
     'ChannelMerge': [
-        'A channel', 'Operation', 'B channel', 'Output', 'Set bbox to', 'Older operations', 'Older operation', 'Mask', 'Inject',
+        'A channel', 'Operation', 'B channel', 'Output', 'Set bbox to', 'Older operations', 'Older operation', 'Older maths', 'Mask', 'Inject',
         'Invert', 'Fringe', 'Mix'
     ],
     'Shuffle': [
@@ -787,7 +790,7 @@ class LayoutTests(unittest.TestCase):
                 self.assertEqual(displayed(kind)[0].lower(), "channels")
 
     def test_nodebased_only_knobs_sit_between_nuke_knobs_and_the_mask_strip(self):
-        self.assertEqual(displayed("Grade")[10:14], ["White clamp", "Exposure", "Offset follows alpha", "Mask"])
+        self.assertEqual(displayed("Grade")[10:15], ["White clamp", "Exposure", "Offset follows alpha", "Older gamma above 1", "Mask"])
         self.assertEqual(displayed("ColorCorrect")[21:26], ["Test", "Shadows curve", "Highlights curve", "Divide by alpha", "Mask"])
 
     def test_keyer_range_handles_read_a_b_c_d_and_the_hsv_ranges_are_one_row_each(self):

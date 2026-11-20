@@ -460,18 +460,24 @@ def _cases():
                     {f"matrix_{r}{c}": rows[r][c] for r in range(3) for c in range(3)}, ("A",), colormatrix, "guide",
                     "ColorMatrix: each output channel is the matrix row applied to the input r, g, b"))
 
+    def bend(r, exponent):
+        # Nuke 17.0v6's render: the power up to 1, then the tangent at 1 (Grade gamma 1.8 turns 12 into 1 + 11 / 1.8); zero and below pass unchanged.
+        powered = np.power(np.maximum(r, 0), exponent)
+        powered = np.where(r > 1, 1.0 + exponent * (r - 1.0), powered)
+        return np.where(r > 0, powered, r)
+
     def grade(blackpoint=0.0, whitepoint=1.0, lift=0.0, gain=1.0, multiply=1.0, offset=0.0, gamma=1.0, black_clamp=True, white_clamp=False,
               reverse=False):
         def fn(rgb):
             scale = multiply * (gain - lift) / (whitepoint - blackpoint)
             shift = offset + lift - scale * blackpoint
             if reverse:
-                r = np.where(rgb > 0, np.power(np.maximum(rgb, 0), gamma), rgb) if gamma != 1.0 else rgb
+                r = bend(rgb, gamma) if gamma != 1.0 else rgb
                 r = (r - shift) / scale
             else:
                 r = scale * rgb + shift
                 if gamma != 1.0:
-                    r = np.where(r > 0, np.power(np.maximum(r, 0), 1.0 / gamma), r)
+                    r = bend(r, 1.0 / gamma)
             if black_clamp:
                 r = np.maximum(r, 0.0)
             if white_clamp:
@@ -479,7 +485,8 @@ def _cases():
             return r, np.ones(rgb.shape, bool)
         return _rgb_only(fn)
     grade_note = ("Grade (convention, not stated in the 17.0 page): A = multiply * (white - black) / (whitepoint - blackpoint); B = add + black - A * blackpoint; "
-                  "out = A * in + B, then ** (1 / gamma) for out > 0, then the clamps; reverse is the opposite gamma followed by the opposite ramp")
+                  "out = A * in + B, then ** (1 / gamma) for 0 < out <= 1 and 1 + (out - 1) / gamma above 1 (Nuke 17.0v6's render), then the clamps; reverse is the opposite "
+                  "gamma (the power up to 1, 1 + gamma * (out - 1) above) followed by the opposite ramp")
     out.append(Case("grade_affine", "Grade", "Grade", (("multiply", 1.5), ("add", 0.1), ("black_clamp", False)), ("A",), "Grade",
                     {"multiply": 1.5, "offset": 0.1, "black_clamp": 0}, ("A",), grade(multiply=1.5, offset=0.1, black_clamp=False), "convention", grade_note))
     out.append(Case("grade_default_clamps", "Grade", "Grade", (("multiply", 1.5), ("add", 0.1)), ("A",), "Grade",

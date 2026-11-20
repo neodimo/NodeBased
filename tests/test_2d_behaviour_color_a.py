@@ -476,7 +476,7 @@ class ToeKnobsActTests(KnobsActTests):
     def test_a_new_toe_does_nothing_until_the_lift_is_raised(self):
         self.assertEqual(SPECS["Toe"]["params"]["toe_lift"], 0.0)
         pixels = fixture_image()
-        np.testing.assert_array_equal(Evaluator._toe(pixels, dict(SPECS["Toe"]["params"])), pixels)
+        np.testing.assert_array_equal(Evaluator._toe(pixels, dict(SPECS["Toe"]["params"])), np.concatenate([np.maximum(pixels[..., :3], 0.0), pixels[..., 3:]], axis=-1))      # Nuke sets a negative to 0 (lane 2 step N1)
 
 
 class ToeTilesTests(TilesMatchTests):

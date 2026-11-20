@@ -1436,6 +1436,7 @@
     {"nodebased": ["channel_operation"], "nuke": ["operation"], "kind": "renamed", "reason": "same control under another name: the operation choice that holds the guide's fourteen ChannelMerge operations (the older `operation` kept the Merge vocabulary)"},
     {"nodebased": ["operation"], "kind": "extra", "reason": "NodeBased-only: the Merge-vocabulary operation the node used before it followed the guide's list, read only while Older operations is on"},
     {"nodebased": ["older_channel_operations"], "kind": "extra", "reason": "NodeBased-only: switches the node back to its older operation on graphs saved before (nodebased/behaviour2d.py)"},
+    {"nodebased": ["older_channel_maths"], "kind": "extra", "reason": "NodeBased-only: an older document keeps the union, xor, multiply and divide formulas it had; a new node follows Nuke 17.0v6's render (schema 39)"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
@@ -1483,6 +1484,7 @@
     {"nodebased": ["black_clamp"], "nuke": ["black_clamp"], "kind": "same"},
     {"nodebased": ["white_clamp"], "nuke": ["white_clamp"], "kind": "same"},
     {"nodebased": ["offset_by_alpha"], "kind": "extra", "reason": "NodeBased-only: an older document's offset is scaled by alpha; a new node's offset is Nuke's flat one"},
+    {"nodebased": ["legacy_gamma_power"], "kind": "extra", "reason": "NodeBased-only: an older document raises values above 1 to the gamma power; a new node continues the curve along its tangent at 1, as Nuke 17.0v6 renders it (schema 39)"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"}
    ]
   },
@@ -1610,6 +1612,7 @@
    ],
    "knobs": [
     {"nodebased": ["gamma"], "nuke": ["value"], "kind": "renamed", "reason": "Gamma's one value knob"},
+    {"nodebased": ["older_negatives"], "kind": "extra", "reason": "NodeBased-only: an older document raises a negative value as sign * |x| ** (1 / gamma); a new node leaves a negative value as it is, as Nuke 17.0v6 renders it (schema 39)"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
@@ -1718,6 +1721,7 @@
     {"nodebased": ["exposure_mode"], "nuke": ["mode"], "kind": "renamed", "reason": "PARITY_2D.md Color #11: Nuke's `mode`, renamed because `mode` already belongs to Tracker in the shared CHOICES"},
     {"nodebased": ["exposure_colorspace"], "nuke": ["colorspace"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'colorspace', scripting name `colorspace` (`colorspace` belongs to other nodes in the shared CHOICES)"},
     {"nodebased": ["blackpoint"], "nuke": ["blackpoint"], "kind": "same"},
+    {"nodebased": ["older_exposure_maths"], "kind": "extra", "reason": "NodeBased-only: an older document subtracts the black point before the gain; a new node follows Nuke 17.0v6's render, gain * in + blackpoint * (gain - 1) / (1 - blackpoint) (schema 39)"},
     {"nodebased": ["gang"], "nuke": ["gang"], "kind": "same"},
     {"nodebased": ["red"], "nuke": ["red"], "kind": "same"},
     {"nodebased": ["green"], "nuke": ["green"], "kind": "same"},
@@ -2011,7 +2015,8 @@
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
-    {"nodebased": ["older_log_maths"], "kind": "extra", "reason": "NodeBased-only: the older PLogLin arithmetic (a raw code value, no division by the negative gamma, alpha untouched, log to lin only); a new node follows Josh Pines' formula on a value over 1023, and a graph saved before keeps this on"}
+    {"nodebased": ["older_log_maths"], "kind": "extra", "reason": "NodeBased-only: the older PLogLin arithmetic (a raw code value, no division by the negative gamma, alpha untouched, log to lin only); a new node follows Josh Pines' formula on a value over 1023, and a graph saved before keeps this on"},
+    {"nodebased": ["older_alpha"], "kind": "extra", "reason": "NodeBased-only: an older document converts alpha with the colour; a new node leaves alpha as it was, as Nuke 17.0v6 renders it (schema 39)"}
    ]
   },
   "MatchGrade": {
@@ -2109,7 +2114,8 @@
     {"nodebased": ["unpremult"], "nuke": ["unpremult"], "kind": "same"},
     {"nodebased": ["invert_unpremult"], "nuke": ["invert_unpremult"], "kind": "same"},
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
-    {"nodebased": ["older_expression_syntax"], "kind": "extra", "reason": "NodeBased-only: the older Python-syntax expression reading (integer pixel indices from the top row, blank is an error); a new node reads Nuke's C-like syntax, and a graph saved before keeps this on"}
+    {"nodebased": ["older_expression_syntax"], "kind": "extra", "reason": "NodeBased-only: the older Python-syntax expression reading (integer pixel indices from the top row, blank is an error); a new node reads Nuke's C-like syntax, and a graph saved before keeps this on"},
+    {"nodebased": ["older_blank_expression"], "kind": "extra", "reason": "NodeBased-only: an older document writes zero for a blank row; a new node leaves the channel as it was, as Nuke 17.0v6 renders it (schema 39)"}
    ]
   },
   "CrossTalk": {
@@ -2172,6 +2178,7 @@
    ],
    "knobs": [
     {"nodebased": ["toe_lift"], "nuke": ["lift"], "kind": "renamed", "reason": "same control under another name; Nuke's label is 'lift', scripting name `lift`"},
+    {"nodebased": ["older_negatives"], "kind": "extra", "reason": "NodeBased-only: an older document leaves a negative value negative; a new node sets it to 0, as Nuke 17.0v6 renders it (schema 39)"},
     {"nodebased": ["mix"], "nuke": ["mix"], "kind": "same"},
     {"nodebased": ["toe"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["channels"], "nuke": ["channels"], "kind": "same"},
@@ -3173,6 +3180,7 @@
     {"nodebased": ["range_b"], "nuke": ["range#3"], "kind": "renamed", "reason": "B point"},
     {"nodebased": ["range_c"], "nuke": ["range#4"], "kind": "renamed", "reason": "C point"},
     {"nodebased": ["range_d"], "nuke": ["range#5"], "kind": "renamed", "reason": "D point"},
+    {"nodebased": ["older_unclamped_range"], "kind": "extra", "reason": "NodeBased-only: an older document runs the falling edge from C to D wherever they are; a new node drops it when C is above 1, as Nuke 17.0v6 renders it (schema 39)"},
     {"nodebased": ["invert"], "nuke": ["invert"], "kind": "same"},
     {"nodebased": ["mix"], "kind": "extra", "reason": "NodeBased-only: the reference guide's table for this node has no knob of this name or purpose"},
     {"nodebased": ["key_input"], "nuke": ["input"], "kind": "renamed", "reason": "same control under another name (`input` is the node's input socket in NodeBased); the layer the key reads: rgb, or the alpha"},

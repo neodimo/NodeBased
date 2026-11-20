@@ -222,6 +222,8 @@ def map_grade(p):
         raise Unsupported("Grade reverse has no GPU kernel yet")
     slope, shift = gradeknobs.terms(p)
     gamma = float(gradeknobs._get(p, "gamma"))
+    if gamma != 1.0 and not gradeknobs._get(p, "legacy_gamma_power"):
+        raise Unsupported("Grade gamma continues along its tangent above 1 (Nuke's render); the shader has the plain power only")
     return {
         "mode": 1, "identity": False, "slope": float(np.float32(slope)), "shift": float(np.float32(shift)),
         "alpha_offset": float(np.float32(gradeknobs.alpha_offset(p))),
