@@ -107,8 +107,8 @@ class DisplayOnlyCardTests(unittest.TestCase):
         evaluator.clear()
         ordinary = evaluator.evaluate_raster(document)
         np.testing.assert_allclose(result.pixels, ordinary.pixels, rtol=2e-5, atol=2e-5)
-        expected = to_qimage(ordinary, view="sRGB")
-        actual = to_qimage(result, view="sRGB")
+        expected = to_qimage(ordinary.to_display(), view="sRGB")
+        actual = to_qimage(result.to_display(), view="sRGB")
         delta_codes = np.abs(np.frombuffer(actual.bits(), np.uint8).astype(np.int16) -
                              np.frombuffer(expected.bits(), np.uint8).astype(np.int16))
         self.assertLessEqual(int(delta_codes.max()), 1)
