@@ -63,7 +63,8 @@ NUKE17_ENUM = {("Colorspace", "colorspace_in"): {"Gamma1.8": "1.80", "Gamma2.2":
                ("Vectorfield", "interpolation"): {"trilinear": "trilinear field"}}
 NOT_IN_NC = {"Primatte", "Ultimatte", "GenerateLUT"}            # Nuke Non-commercial refuses to create these nodes
 # Nodes whose input the pack's one-frame fixtures cannot stand in for (read from the render log of 11/20).
-NEEDS_SEQUENCE = {"VectorDistort": "VectorDistort reads a SmartVector input over a frame range; the pack's vector fixture is one frame"}
+NEEDS_SEQUENCE = {"VectorDistort": "VectorDistort reads a SmartVector input over a frame range; the pack's vector fixture is one frame",
+                  "Root": "the project settings are nuke.root(), not a node a script can create and wire (the case is reported, not scored)"}
 STRING_KINDS = {"String_Knob", "File_Knob", "EvalString_Knob", "Multiline_Eval_String_Knob", "Channel_Knob", "ChannelMask_Knob",
                 "Input_Channel_Knob", "Pulldown_Knob", "Format_Knob", "Font_Knob", "Cascading_Enumeration_Knob",
                 "OneView_Knob", "MultiView_Knob", "ViewView_Knob", "CascadingEnumeration_Knob", "EditableEnumeration_Knob",

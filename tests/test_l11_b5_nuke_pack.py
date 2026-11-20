@@ -117,6 +117,7 @@ class PackScriptTests(unittest.TestCase):
         self.assertIn("Non-commercial does not offer Primatte", " ".join(reasons.values()))
         self.assertIn("no menu entry 'lin'", reasons["ocio_colorspace_gain"])
         self.assertIn("SmartVector input over a frame range", reasons["vectordistort_follows_the_vectors"])
+        self.assertIn("nuke.root()", reasons["root_project_settings"])
         self.assertFalse(any((self.root / "scripts" / f"{s}.py").exists() for s in reasons))
 
     def test_time_cases_build_the_frame_stamp_in_nuke_and_render_their_frame(self):
