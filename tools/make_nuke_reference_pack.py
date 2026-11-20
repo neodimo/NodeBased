@@ -48,7 +48,10 @@ CHANNELS = "RGBA"
 NUKE17_CLASS = {"OFlow": "OFlow2", "CrossTalk": "CCrosstalk", "ScreenKeyer": "Keylight", "IBKColor": "IBKColourV3",
                 "DirBlur2": "DirBlurWrapper", "Exposure": "EXPTool", "Denoise": "Denoise2", "Toe": "Toe2", "AdjustBBox": "AdjBBox",
                 "Stabilize": "Stabilize2D", "TVIScale": "TVIscale2", "Backdrop": "BackdropNode", "Grain": "Grain2",
-                "ZDefocus": "ZDefocus2", "LensDistortion": "LensDistortion2", "IBKGizmo": "IBKGizmoV3"}
+                "ZDefocus": "ZDefocus2", "LensDistortion": "LensDistortion2", "IBKGizmo": "IBKGizmoV3", "Shuffle": "Shuffle2"}
+# The guide's Shuffle is Nuke 17's toolbar Shuffle, class Shuffle2 (two inputs, a mappings knob); nuke.nodes.Shuffle() makes the legacy
+# one-input node. ShuffleCopy keeps its legacy class, which the guide still describes. Neither has knobs a case can list one by one, so
+# the pack writes their routing from NodeBased's parameters (ROUTING_WRITERS below; read in Nuke 17.0v6 on 11/20).
 # Knob names the cases spell differently from Nuke 17, keyed by the case's class. A name with "#2" is the guide's second knob of that name.
 NUKE17_KNOB = {("Bilateral", "size"): "Size", ("Bilateral", "colourSigma"): "ColorSigma", ("Bilateral", "positionalSigma"): "PositionalSigma",
                ("Colorspace", "illuninant_in"): "illuminant_in", ("Colorspace", "illuninant_out"): "illuminant_out",
@@ -185,6 +188,69 @@ def knob_statement(cls, knob, value, table, files=()):
     return f"node[{knob!r}].setValue({float(value)!r})"
 
 
+_SHUFFLE_CHANNEL = {"R": "rgba.red", "G": "rgba.green", "B": "rgba.blue", "A": "rgba.alpha"}
+_SHUFFLE_OUT = (("red_from", "rgba.red"), ("green_from", "rgba.green"), ("blue_from", "rgba.blue"), ("alpha_from", "rgba.alpha"))
+
+
+def shuffle2_lines(case):
+    """NodeBased's Shuffle routing as Nuke 17's Shuffle2: in1 reads input 0 and, with a second input, in2 reads input 1 (the 'A' entry
+    of fromInput2, whose menu a script only gets by setting it). Each mapping is (slot, source, destination); slot -1 with 'black' or
+    'white' is a constant. NodeBased's '0' and '1' are black and white, 'R2' is the second input's red."""
+    p = case.nb_params or {}
+    two = len(case.nuke_inputs) > 1
+    mappings = []
+    for param, dest in _SHUFFLE_OUT:
+        route = str(p.get(param, param[0].upper()))
+        if route in ("0", "1"):
+            mappings.append((-1, "black" if route == "0" else "white", dest))
+        elif route.endswith("2") and route[0] in _SHUFFLE_CHANNEL:
+            mappings.append((1, _SHUFFLE_CHANNEL[route[0]], dest))
+        elif route in _SHUFFLE_CHANNEL:
+            mappings.append((0, _SHUFFLE_CHANNEL[route], dest))
+        else:
+            raise ValueError(f"NodeBased's Shuffle route {route!r} has no Shuffle2 mapping in the pack")
+    lines = ["node['in1'].setValue('rgba')"]
+    if two:
+        lines += ["node['in2'].setValue('rgba')", "node['fromInput2'].setValues(['B', 'A'])", "node['fromInput2'].setValue(1)  # A: input 1"]
+    lines.append(f"node['mappings'].setValue({mappings!r})")
+    return lines
+
+
+def shufflecopy_lines(case):
+    """NodeBased's ShuffleCopy routing as Nuke 17's ShuffleCopy. Nuke's input 0 is the node's '2' input (the red2, green2... entries) and
+    input 1 its '1' input (red, green...); the pack wires NodeBased's in1 to input 0, so NodeBased's 'in1.r' is Nuke's 'red2' and
+    'in2.r' is Nuke's 'red'. Read in Nuke 17.0v6 on 11/20: the default is red2 green2 blue2 alpha, colour from input 0, alpha from 1."""
+    p = case.nb_params or {}
+    names = {"r": "red", "g": "green", "b": "blue", "a": "alpha"}
+    lines = ["node['in'].setValue('rgba')", "node['in2'].setValue('rgba')"]
+    for c in "rgba":
+        route = str(p.get(f"out1_{c}", f"in1.{c}"))
+        if route in ("0", "1"):
+            value = "black" if route == "0" else "white"
+        elif route[:4] in ("in1.", "in2.") and route[4:] in names:
+            value = names[route[4:]] + ("2" if route.startswith("in1.") else "")
+        else:
+            raise ValueError(f"NodeBased's ShuffleCopy route {route!r} has no ShuffleCopy entry in the pack")
+        lines.append(f"node[{names[c]!r}].setValue({value!r})")
+    return lines
+
+
+# Nodes whose settings the pack writes from NodeBased's parameters, because the case lists no Nuke knobs for them.
+ROUTING_WRITERS = {"Shuffle": shuffle2_lines, "ShuffleCopy": shufflecopy_lines}
+
+
+def unwritten_settings(case):
+    """NodeBased parameters a case sets away from the node's defaults while giving Nuke no knob at all: the render would show Nuke's
+    defaults. Underscored keys are the pack's own (fixtures, stamps) and legacy_* flags pick NodeBased's old behaviour, not a setting
+    Nuke has. Empty when the case lists knobs or the pack writes the node's settings itself."""
+    if case.nuke_knobs or case.nuke_class in ROUTING_WRITERS:
+        return []
+    from nodebased import core
+    defaults = core.SPECS.get(case.nb_kind, {}).get("params", {})
+    return [k for k, v in (case.nb_params or {}).items()
+            if not k.startswith("_") and not k.startswith("legacy_") and k in defaults and defaults[k] != v]
+
+
 def _stamp(case):
     return (case.nb_params or {}).get("_stamp")
 
@@ -218,9 +284,15 @@ def unrenderable(case, table):
             return "the stamped case also reads fixture pictures, which the pack does not combine yet"
     elif any(name not in FIXTURE_NAMES for name in case.nuke_inputs):
         return "the case reads a picture the pack does not write: " + ", ".join(n for n in case.nuke_inputs if n not in FIXTURE_NAMES)
+    unwritten = unwritten_settings(case)
+    if unwritten:
+        return (f"the case sets NodeBased's {', '.join(unwritten[:4])} and lists no Nuke knob for them (curves, grids or files the pack "
+                "does not write into Nuke yet), so a render would show Nuke's defaults")
     try:
         for knob, value in case.nuke_knobs:
             knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table, case_files(case))
+        if case.nuke_class in ROUTING_WRITERS:
+            ROUTING_WRITERS[case.nuke_class](case)
     except ValueError as exc:
         return str(exc)
     return ""
@@ -293,6 +365,8 @@ def py_script(case, table=None):
         lines.append(f"node[{knob!r}].setValue(node.input(0).{end}())          # as the GUI sets it on creation")
     files = case_files(case)
     lines += [knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table, files) for knob, value in case.nuke_knobs]
+    if case.nuke_class in ROUTING_WRITERS:
+        lines += ROUTING_WRITERS[case.nuke_class](case)
     for param, (interpolation, keys) in (stamp or {}).get("curves", {}).items():
         knob = CURVE_KNOB[(case.nuke_class, param)]
         lines.append(f"node[{knob!r}].setAnimated()")
