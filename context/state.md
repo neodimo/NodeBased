@@ -1,5 +1,25 @@
 ## Lane 9 step X6 (11/19): the last open marks in Filter and Draw
 
+## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (1:37 PM on 2026-11-20 PDT)
+
+`main` moved `0b5dceec` -> `e24e4149` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `e24e4149` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1120-1257.log`, started 12:57 PM): **Ran 10580 tests in 2121.412 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D on the GPU, GPT-5.6 Terra), GPU playback step (Fri 11/20): the on-card display path steps aside when the comp has a processor-only node, so the switch is never slower.** Commits:
+  - `c43e63cf` Display-only fallback test compares displayed pixels: to_qimage takes the Raster's display array, not the Raster
+  - `c759eb39` Playback: bypass display-only after CPU boundary
+  Diff: 3 files changed, 92 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) (11:57 AM on 2026-11-20 PDT)
 
 `main` moved `f5b3295f` -> `89f0ef49` (lane commits cherry-picked onto main in lane order) and then to this
