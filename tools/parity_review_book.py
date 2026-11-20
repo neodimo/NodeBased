@@ -897,7 +897,9 @@ def nuke_pixel_section(owner, data=None):
          f"{s['nodes_all_pass']} nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and "
          "its worst pixel (row, column). \"Nuke vs guide\" is Nuke's render against the result the guide states; **guide** marks a "
          "case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. "
-         "Up to 40 rows per lane; all of them are in `nuke_pixels.json`.", ""]
+         "Before changing a kernel for a row, open its script from `tools/make_nuke_reference_pack.py`: the pack's scripts "
+         "first ran on 11/20, and a row can still come from the pack (a legacy node class kept under the guide's name, or a knob "
+         "the case sets differently) rather than from NodeBased. Up to 40 rows per lane; all of them are in `nuke_pixels.json`.", ""]
     for lane in sorted({r["lane"] for r in data["rows"]}):
         rows = [r for r in data["rows"] if r["lane"] == lane and r["status"] != "pass"]
         w += [f"### Lane {lane} ({owner.get(lane, '')}): {len(rows)} cases", ""]
