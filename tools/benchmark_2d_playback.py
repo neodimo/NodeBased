@@ -224,18 +224,18 @@ def run_window(args):
         win.evaluator.clear(); win.decode_pool.bump_epoch(); gpu_backend.release_all()
         original_island=gpu_backend.run
         original_display_island=gpu_backend.run_display
-        def measured_island(call,*args,**kwargs):
+        def measured_island(operation, call,*args,**kwargs):
             before=gpu_backend.counters.snapshot(); t0=time.perf_counter()
             try: return call(*args,**kwargs)
             finally:
                 delta=gpu2d.Counters.delta(gpu_backend.counters.snapshot(),before)
-                row={'t_ms':round((t0-trace_origin)*1000,3),'wall_ms':round((time.perf_counter()-t0)*1000,3),
+                row={'operation':operation,'t_ms':round((t0-trace_origin)*1000,3),'wall_ms':round((time.perf_counter()-t0)*1000,3),
                      **{k:(round(v,3) if isinstance(v,float) else v) for k,v in delta.items() if k not in ('nodes_on_gpu','cpu_boundaries','live_bytes','peak_bytes')},
                      'cpu_boundaries':delta['cpu_boundaries']}
-                island_rows.append(row); mark('gpu2d_island',wall_ms=row['wall_ms'],gpu_ms=row['gpu_ms'])
-        gpu_backend.run=lambda root,cancel=None: measured_island(original_island,root,cancel)
+                island_rows.append(row); mark('gpu2d_island',operation=operation,wall_ms=row['wall_ms'],gpu_ms=row['gpu_ms'])
+        gpu_backend.run=lambda root,cancel=None: measured_island('island',original_island,root,cancel)
         gpu_backend.run_display=lambda root,settings,key,cancel=None: measured_island(
-            original_display_island,root,settings,key,cancel)
+            'on-card display',original_display_island,root,settings,key,cancel)
     # Keep the cached run's scene-linear frames warm before the measured playback interval.
     if args.cache_mode=='cached':
         # The normal display-cache budget can retain the complete 48-frame HD sequence but only
