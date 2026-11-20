@@ -6607,12 +6607,57 @@ class Evaluator:
         """Merge's arrays: the old arithmetic while the step-E knobs (video colorspace, alpha masking, channel sets) are off,
         else `mergeknobs.merge_arrays`. The evaluator and the tile executor both call this."""
         from . import mergeknobs
+        merge_op = Evaluator._merge_op if p.get("legacy_merge_blend", 1) else Evaluator._merge_op_nuke17
         if mergeknobs.array_default(p):
-            return Evaluator._merge_gated(p.get("operation", "over"), a, b, p["mix"], mask)
-        return mergeknobs.merge_arrays(p, a, b, mask, Evaluator._merge_op)
+            return Evaluator._merge_gated(p.get("operation", "over"), a, b, p["mix"], mask, merge_op)
+        return mergeknobs.merge_arrays(p, a, b, mask, merge_op)
+
+    # Merge operations whose Nuke 17 render differs from the guide's formula (lane 11 step B6, read from Nuke 17.0v6 Non-commercial
+    # on 11/20 over a 12 x 12 grid of A and B from -0.5 to 12). `_merge_op_nuke17` computes these; every other operation is `_merge_op`.
+    NUKE17_MERGE_OPS = frozenset({"overlay", "soft-light", "hard-light", "color-burn", "color-dodge", "exclusion", "matte"})
 
     @staticmethod
-    def _merge_gated(op, a, b, mix, mask=None):
+    def _merge_op_nuke17(op, a, b):
+        """Merge's blend operations as Nuke 17 renders them, which `legacy_merge_blend` 0 selects. Measured, per channel (alpha too):
+
+        overlay: with A and B below 0 read as 0, 2AB where B < 0.5 (no upper clamp), else 1-2(1-A)(1-B) with A and B clamped to
+        0..1, so A = B = 12 gives 1 where the guide's formula gives -241. hard-light: the same with A and B swapped. soft-light:
+        with A and B below 0 read as 0, B(2A + B(1-AB)) where AB < 1, else 2AB. color-dodge: 1 where A >= 1, else
+        min(1, B/(1-A)) with A clamped to 0..1 and B below 0 read as 0. color-burn: 0 where A <= 0, else max(0, 1-(1-B)/A) with
+        B below 0 read as 0. exclusion: A+B-2AB where A and B are both above 0, else A+B. matte: the guide's colour, Aa+B(1-a),
+        and over's alpha, a+b(1-a)."""
+        if op not in Evaluator.NUKE17_MERGE_OPS:
+            return Evaluator._merge_op(op, a, b)
+        zero = np.float32(0.0)
+        one = np.float32(1.0)
+        two = np.float32(2.0)
+        pa = np.maximum(a, zero)
+        pb = np.maximum(b, zero)
+        if op in ("overlay", "hard-light"):
+            low, other = (pb, pa) if op == "overlay" else (pa, pb)
+            screen = one - two * (one - np.minimum(pa, one)) * (one - np.minimum(pb, one))
+            return np.where(low < 0.5, two * pa * pb, screen).astype(np.float32)
+        if op == "soft-light":
+            ab = pa * pb
+            return np.where(ab < 1, pb * (two * pa + pb * (one - ab)), two * ab).astype(np.float32)
+        if op == "color-dodge":
+            ca = np.clip(a, zero, one)
+            gap = one - ca
+            safe = np.where(gap > 0, gap, one)
+            return np.where(ca >= 1, one, np.minimum(one, pb / safe)).astype(np.float32)
+        if op == "color-burn":
+            safe = np.where(a > 0, a, one)
+            return np.where(a > 0, np.maximum(zero, one - (one - pb) / safe), zero).astype(np.float32)
+        if op == "exclusion":
+            return np.where((a > 0) & (b > 0), a + b - two * a * b, a + b).astype(np.float32)
+        # matte
+        aa = a[..., 3:4]
+        out = (a * aa + b * (one - aa)).astype(np.float32)
+        out[..., 3:4] = aa + b[..., 3:4] * (one - aa)
+        return out
+
+    @staticmethod
+    def _merge_gated(op, a, b, mix, mask=None, merge_op=None):
         """Merge A onto B, gated by `mix` and, when wired, by the mask's alpha per pixel.
 
         gate = mix * mask.a (a scalar `mix` when the mask is unwired). `over` scales A by the gate
@@ -6639,7 +6684,7 @@ class Evaluator:
             background = np.multiply(b, remaining)
             np.add(foreground, background, out=foreground)
             return foreground
-        full = Evaluator._merge_op(op, a, b)
+        full = (merge_op or Evaluator._merge_op)(op, a, b)
         return full * gate + b * (1 - gate)
 
     @staticmethod

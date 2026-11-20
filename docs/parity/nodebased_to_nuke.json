@@ -3425,7 +3425,8 @@
     {"nodebased": ["Achannels"], "nuke": ["Achannels"], "kind": "same"},
     {"nodebased": ["Bchannels"], "nuke": ["Bchannels"], "kind": "same"},
     {"nodebased": ["merge_output"], "nuke": ["output"], "kind": "renamed", "reason": "`output` is already the image / stmap choice of the warp nodes in the shared CHOICES; Merge's is a channel set"},
-    {"nodebased": ["also_merge"], "nuke": ["also_merge"], "kind": "same"}
+    {"nodebased": ["also_merge"], "nuke": ["also_merge"], "kind": "same"},
+    {"nodebased": ["legacy_merge_blend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Merge's blend modes matched Nuke 17's render keep the guide's formulas; lane 11 step B6"}
    ]
   },
   "Premult": {

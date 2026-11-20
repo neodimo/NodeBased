@@ -1595,7 +1595,10 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("Bchannels",), label="B channels", help="The channels of B that are merged."),
         KnobGroup("string", ("merge_output",), label="Output", help="The channels the merge is written to; the rest are B's."),
         KnobGroup("string", ("also_merge",), label="Also merge", help="Layers merged in the same way, or all of them."),
-        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
+        KnobGroup("bool", ("legacy_merge_blend",), label="Legacy blend modes",
+                  help="Overlay, soft light, hard light, colour burn, colour dodge, exclusion and matte as the guide writes them, without "
+                       "Nuke's clamps. Set on graphs saved before Merge matched Nuke 17's own render.")),
     "Dissolve": _groups(
         KnobGroup("float_slider", ("which",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
@@ -3015,7 +3018,8 @@ NUKE_LABELS.setdefault("SplineWarp", {})["boundary_bbox"] = "Bbox boundary curve
 # order or wording (docs/parity/review/WORKLIST.md). Labels only and order only: every param stays, so documents load and
 # render as before. Write's per-format knobs keep their place under File type (the guide lists them under a stray tab).
 NUKE_LAYOUT_LANE11 = {
-    "Merge": ("operation", "sRGB", "screen_alpha", "merge_bbox", "metainput", "rangeinput", "Achannels", "Bchannels", "merge_output", "also_merge"),
+    "Merge": ("operation", "sRGB", "screen_alpha", "merge_bbox", "metainput", "rangeinput", "Achannels", "Bchannels", "merge_output", "also_merge",
+              "legacy_merge_blend"),
     "Dissolve": ("channels", "which"),
     "Blend": ("channels", *(f"weight{i}" for i in range(16)), "normalize", "mask_channel", "inject", "invert_mask", "fringe"),
     "Premult": ("channels", "premult_by", "invert"),

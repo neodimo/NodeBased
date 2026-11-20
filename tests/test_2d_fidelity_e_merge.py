@@ -35,7 +35,8 @@ class OperationFormulaTests(unittest.TestCase):
                 continue
             with self.subTest(op=op):
                 reference, valid = merge_reference(op, fx["A"], fx["B"])
-                got = Evaluator._kernel("Merge", {**SPECS["Merge"]["params"], "operation": op}, [fx["A"], fx["B"]])
+                # The guide's formulas are the legacy reading since lane 11 step B6 (tests/test_l11_b6_merge_nuke17.py: Nuke 17's render).
+                got = Evaluator._kernel("Merge", {**SPECS["Merge"]["params"], "operation": op, "legacy_merge_blend": 1}, [fx["A"], fx["B"]])
                 np.testing.assert_allclose(got[valid], reference[valid], rtol=1e-5, atol=1e-5)
                 self.assertTrue(np.isfinite(got).all(), op)
 

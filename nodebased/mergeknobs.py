@@ -28,8 +28,9 @@ SCREEN_ALPHA_SKIPS = frozenset({"over", "under", "atop", "in", "out", "mask", "s
                                 "disjoint-over", "copy"})
 # What a new node gets and what an older document's node gets (they are the same: every one of these leaves the old Merge as it was).
 NEW = {"sRGB": 0, "screen_alpha": 0, "merge_bbox": "union", "metainput": "B", "rangeinput": "B", "Achannels": "rgba",
-       "Bchannels": "rgba", "merge_output": "rgba", "also_merge": "none"}
-OLD = dict(NEW)
+       "Bchannels": "rgba", "merge_output": "rgba", "also_merge": "none", "legacy_merge_blend": 0}
+# An older document's Merge keeps the guide's blend formulas (`legacy_merge_blend` 1); a new one gets Nuke 17's measured ones.
+OLD = {**NEW, "legacy_merge_blend": 1}
 ARRAY_KNOBS = ("sRGB", "screen_alpha", "Achannels", "Bchannels", "merge_output")
 
 

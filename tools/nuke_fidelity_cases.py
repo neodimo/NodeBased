@@ -290,6 +290,41 @@ def merge_reference(op, a, b):
     return r, valid
 
 
+# Operations whose Nuke 17.0v6 render contradicts the guide's formula (lane 11 step B6, a 12 x 12 grid of A and B from -0.5 to 12 rendered
+# in Non-commercial on 11/20). Their cases expect what Nuke renders, stated here from those measurements and independent of NodeBased.
+MERGE_RENDER_RULES = {
+    "overlay": "values below 0 read as 0; 2AB where B < 0.5, else 1-2(1-A)(1-B) with A and B clamped to 0..1",
+    "hard-light": "values below 0 read as 0; 2AB where A < 0.5, else 1-2(1-A)(1-B) with A and B clamped to 0..1",
+    "soft-light": "values below 0 read as 0; B(2A+B(1-AB)) where AB < 1, else 2AB",
+    "color-dodge": "1 where A >= 1, else min(1, B/(1-A)), A clamped to 0..1 and B below 0 read as 0",
+    "color-burn": "0 where A <= 0, else max(0, 1-(1-B)/A), B below 0 read as 0",
+    "exclusion": "A+B-2AB where A and B are both above 0, else A+B",
+}
+
+
+def merge_render_reference(op, a, b):
+    """Nuke 17's rendered result for an operation in MERGE_RENDER_RULES, per channel (alpha too). Returns (reference, valid)."""
+    A, B = a.astype(np.float64), b.astype(np.float64)
+    pa, pb = np.maximum(A, 0.0), np.maximum(B, 0.0)
+    ca, cb = np.minimum(pa, 1.0), np.minimum(pb, 1.0)
+    with np.errstate(all="ignore"):
+        if op == "overlay":
+            r = np.where(pb < 0.5, 2 * pa * pb, 1 - 2 * (1 - ca) * (1 - cb))
+        elif op == "hard-light":
+            r = np.where(pa < 0.5, 2 * pa * pb, 1 - 2 * (1 - ca) * (1 - cb))
+        elif op == "soft-light":
+            r = np.where(pa * pb < 1, pb * (2 * pa + pb * (1 - pa * pb)), 2 * pa * pb)
+        elif op == "color-dodge":
+            r = np.where(ca >= 1, 1.0, np.minimum(1.0, pb / np.where(ca < 1, 1 - ca, 1.0)))
+        elif op == "color-burn":
+            r = np.where(A > 0, np.maximum(0.0, 1 - (1 - pb) / np.where(A > 0, A, 1.0)), 0.0)
+        elif op == "exclusion":
+            r = np.where((A > 0) & (B > 0), A + B - 2 * A * B, A + B)
+        else:
+            raise ValueError(op)
+    return r, np.isfinite(r)
+
+
 # ----------------------------------------------------------------------------------------------------------- cases
 @dataclass(frozen=True)
 class Case:
@@ -337,6 +372,13 @@ def radial_fixture_for_audit(fx):
 def _cases():
     out = []
     for op in MERGE_OPERATIONS_GUIDE:
+        if op in MERGE_RENDER_RULES:
+            out.append(Case(
+                id=f"merge_{op}", nuke="Merge", nuke_class="Merge2", nuke_knobs=(("operation", op),), nuke_inputs=("B", "A"),
+                nb_kind="Merge", nb_params={"operation": op}, nb_inputs=("A", "B"),
+                expected=(lambda fx, op=op: merge_render_reference(op, fx["A"], fx["B"])), source="render",
+                statement=f"Merge {op}: Nuke 17's render, which differs from the guide's formula ({MERGE_RENDER_RULES[op]})"))
+            continue
         out.append(Case(
             id=f"merge_{op}", nuke="Merge", nuke_class="Merge2", nuke_knobs=(("operation", op),), nuke_inputs=("B", "A"),
             nb_kind="Merge", nb_params={"operation": op}, nb_inputs=("A", "B"),
