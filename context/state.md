@@ -1,5 +1,36 @@
 ## Lane 6 step Fluids 18 B (11/20): the solver is sound; the shot's one substep per frame removes the large-scale swirl on finer grids
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5), Lane 11 (Review book, Claude Opus 5.5) (2:27 PM on 2026-11-20 PDT)
+
+`main` moved `bdd2c563` -> `9070d01f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `9070d01f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1120-1347.log`, started 1:49 PM): **Ran 10604 tests in 1747.015 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), Fluids 18 step B (Fri 11/20): why a finer grid makes less swirl, and what is damping the rolls.** Commits:
+  - `cb8a63c7` Fluids 18 B: TASKLOG and state notes
+  - `4adacd43` Fluids 18 B: diagnose why finer grids curl less (world-unit ruler, vortex ring test, substep sweep); the solver is sound, the shot's one substep per frame is not, 96 cells bakes on the CPU
+  Diff: 12 files changed, 3326 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 11 (Review book, Claude Opus 5.5), step B5 (Fri 11/20): every reference case renders in real Nuke, and the book scores NodeBased against Nuke's own pixels.** Commits:
+  - `d5ae6255` Review book: a case NodeBased fails to run shows Nuke's render with the error instead of stopping the book
+  - `c72449ed` Worklist: the cases where NodeBased differs from Nuke 17's own render, per lane, from the first full Non-commercial pass
+  - `3b7ab99c` Reference pack: braced number lists go in as numbers, Time nodes get the input range the GUI gives them, a NodeBased error scores as an error
+  - `452880de` Reference pack lists the Root case as not renderable: the project settings are nuke.root(), not a node to wire
+  - `d228bd26` Reference pack: Keyer's range and other number-holding knob kinds get numbers; VectorDistort listed as needing a vector sequence
+  - `3bda3f9d` Review book README: rendering under Nuke Non-commercial goes through the Python pack with nuke -t
+  - `cdf4cced` Reference pack writes the cases' own LUT files, W H formats and mask channels; mismatches against Nuke's pixels sorted by lane
+  - `381b8593` Nuke reference pack renders in Nuke 17 Non-commercial: real class and knob names, knobs set by kind, alpha kept, Time stamps built in Nuke
+  Diff: 11 files changed, 2143 insertions(+), 56 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #11.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Vortex-ring test (`tests/test_fluid_vortex.py`) and a grid-independent curl ruler (`nodebased/fluid_diagnostics.py`) are in; no solver change.
 Details and numbers: docs/FLUIDS_SPIKE.md "Fluids 18 B". Open: automatic substep rule and the `GPU_AUTO_CELLS` threshold (both Gonzo's call).
 

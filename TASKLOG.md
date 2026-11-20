@@ -1,3 +1,9 @@
+## 2026-11-20 — continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5) Fluids 18 step B (Fri 11/20): why a finer grid makes less swirl, and what is damping the rolls, Lane 11 (Review book, Claude Opus 5.5) step B5 (Fri 11/20): every reference case renders in real Nuke, and the book scores NodeBased against Nuke's own pixels (integrator tick)
+
+- **What was done:** `main` `bdd2c563` -> `9070d01f` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `9070d01f`: Ran 10604 tests in 1747.015 s, OK (skipped=39), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-20 — Lane 6 (Fluids, Claude Sonnet 5.5) Fluids 18 step B: why a finer grid makes less swirl
 
 - **What was done (measured):** diagnosis only, solver untouched. Vortex ring in still air: finer grid keeps more of its peak vorticity (CPU 32/48/64 cells 16.5/20.0/23.8 %; GPU 64/96/128 cells 23.8/29.0/31.5 % after 48 frames), so the solver is sound. The fire shot's 6 cm world-space swirl falls with finer cells at 1 substep (0.49/0.44/0.39 at 64/96/128, CPU and RTX agree) and holds at 2 substeps (0.51/0.53/0.53); confinement is a cell-scale term and doubling it at 128 cells only adds noise; the 18 A 2 cm image-plane ruler falls with finer grids even at confinement 0. 96 cells bakes slowly because `pressure=auto` uses the CPU below `GPU_AUTO_CELLS` (1,000,000 cells); forced resident it bakes in 1.1 s.
