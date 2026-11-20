@@ -47,6 +47,12 @@ VARIANTS = {
     # Fluids 17 C's best up-res swirl (factor 2, swirl 0.5, life 2) on top of the finer main grids
     'r2_upresC': dict(division_size=DIVISION / 2, smoke_upres=UPRES_C),
     'r1.5_upresC': dict(division_size=DIVISION / 1.5, smoke_upres=UPRES_C),
+    # Fluids 18 B: more substeps per frame (the node's own `substeps`, 1 today) so the travel per step stays the shot's 64-cell value on finer grids
+    's2': dict(substeps=2),
+    's4': dict(substeps=4),
+    'r1.5_s2': dict(division_size=DIVISION / 1.5, substeps=2),
+    'r2_s2': dict(division_size=DIVISION / 2, substeps=2),
+    'r2_s3': dict(division_size=DIVISION / 2, substeps=3),
     't1_s3': dict(turbulence=1.0, swirl_size=3.0),
     't3_s3': dict(turbulence=3.0, swirl_size=3.0),
     't3_s6': dict(turbulence=3.0, swirl_size=6.0),

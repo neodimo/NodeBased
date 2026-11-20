@@ -2524,6 +2524,58 @@ Neither was built.
 
 **Not verified.** The 128-sample frame times, structure and grain of the up-res rows on 96 and 128 cells (the 128-cell timing run was stopped after about 20 minutes at the time box, with stills but no timings; the 96-cell one was measured for the field only); Windows and the real display (stills read from saved images); the hot-pour scene (not run: no setting curled the fire shot's smoke); vorticity values between 2.0 and 3.0; resolution above 128 cells; why the 96-cell bake is slow; anything with a different camera or lighting that might read the smoke's structure better (the smoke in this shot is a thin haze, and the curl measure and the pictures were read at its brightness).
 
+### Fluids 18 B: why a finer grid makes less swirl, and what is damping the rolls (2026-11-20)
+
+Fluids 18 A found that the curl share of the fire shot falls as the grid gets finer (18.6 % at 64 cells, 16.1 % at 96, 13.9 % at 128). This step finds out why. **Result: the solver itself is sound (a lone vortex lives longer on a finer grid); the shot loses large-scale swirl on finer grids because it takes one substep per frame while its smoke moves 8 to 16 cells per step, and the longer the travel per step, the more the advection scrambles any rotation larger than a few cells; part of the drop in 18 A was also the ruler.** Nothing in the solver was changed.
+Tools: `nodebased/fluid_diagnostics.py` (world-unit vorticity, kinetic energy, ring seed, curl share), `examples/fire_shot/vortex_decay.py` (the ring test), `examples/fire_shot/curl_ruler.py` (the shot read with a grid-independent ruler), `examples/fire_shot/base_sweep.py` (new variants `s2`, `s4`, `r1.5_s2`, `r2_s2`, `r2_s3`), tests `tests/test_fluid_vortex.py`;
+numbers in `benchmarks/fire_shot/fire-18b-diagnosis-2026-11-20.json` and `fire-base-sweep-2026-11-20-18b.json`, stills in `docs/images/fire_shot/fire-substeps-contact-2026-11-20.png` (rows: 64 cells with 1 substep, 64 with 2, 128 with 1, 128 with 2; columns: frames 8, 16, 24).
+
+**1. The ruler.** The solver stores velocity in cells per frame and `volume_from_state` converts it to metres per second (voxel size times frame rate), so the 30 per second threshold is already in world units. What depends on the grid is the 18 A measure's step of averaging velocity into 2 cm image cells: with the confinement off it still falls with finer grids (share 0.157, 0.130, 0.123 at 64, 96 and 128 cells), while the world-space curl of the same fields rises.
+The new ruler is the share of smoke cells whose world vorticity is above 30 per second after a 6.25 cm box blur (the same physical scale on every grid); read over frames 8, 16 and 24 on the CPU pressure solve:
+
+| Setting | 64 cells | 96 cells | 128 cells |
+|---|---|---|---|
+| Confinement 0 | 0.311 | 0.343 | 0.356 |
+| Shot today (confinement 1, 1 substep) | 0.492 | 0.436 | 0.392 |
+| Confinement 1, 2 substeps | 0.508 | 0.526 | 0.528 |
+| Confinement 2, 1 substep | 0.616 | (1.5: 0.459) | 0.418 |
+| Confinement 2, 2 substeps | | | 0.520 |
+
+The resident GPU solver (RTX 3080 Ti) gives the same: 0.490, 0.437, 0.389 with 1 substep and 0.505, 0.531, 0.527 with 2. So the finer grids do have less swirl at the 6 cm scale in the shot as it is set up, and without confinement they have more.
+
+**2. What damps rotation, one by one.**
+- *Velocity dissipation and viscosity:* the smoke solver has none (`dissipation` is on density only, 0 in the shot; `cooling_rate` is on temperature). The only loss is numerical, in the semi-Lagrangian velocity advection.
+- *Pressure solve:* the shot sets `max_iterations` 200. The CPU conjugate gradient stops at that cap with a largest residual of 0.0035 at 64 cells (tolerance 0.001), 0.056 at 96 and 0.30 at 128; at 64 cells a converged solve (tolerance 1e-5) moves the 6 cm share from 0.492 to 0.487, so this does not carry the effect. The resident GPU multigrid reaches the tolerance in 3 to 4 cycles at 64, 96 and 128 cells (divergence left at most 0.024 per second, which is the tolerance at 24 frames per second).
+- *Confinement:* the force is `epsilon * dx * N x omega` in cell units, the standard form with dx included, so its physical strength falls as the cells shrink. It also acts at the cell scale: at 128 cells confinement 2 gives the same 6 cm share as 1 (0.418 against 0.392 with 1 substep, 0.520 against 0.528 with 2) and triples the cell-scale noise (peak vorticity 451, 1334 and 2274 per second at confinement 0, 1 and 2). At 64 cells it raises the 6 cm share from 0.31 to 0.49 to 0.62. Doubling epsilon on a finer grid does not bring the swirl back.
+- *Advection and the step:* the shot's smoke moves at 5.6 m/s on average (up to 25), which is 7.5 cells per substep at 64 cells and 15 at 128, and MacCormack is faded out above one cell of travel. A rotation of 60 to 90 per second turns the backtrace by 2.5 to 3.7 radians per step. More substeps raise the 6 cm share and cut the cell-scale noise: at 64 cells 1, 2 and 4 substeps give 0.492, 0.508 and 0.547 and peak vorticity 557, 398 and 354 per second.
+- *Emitter:* it injects velocity, not only smoke and heat: `src_vel_y` 0.2 is metres per frame (4.8 m/s), blended in each substep with a weight of 1 at the centre of a 0.22 m sphere that falls to 0.5 at its edge (`src_falloff` 0.5) and then drops to zero, so the edge is a step in velocity from about 2.4 m/s to still air. The sphere is 14 cells wide at 64 cells and 28 at 128, so that shear layer is resolved on every grid and the emitter does not explain the trend (it does make the plume's first shear layer sharp).
+
+**3. The vortex test.** One vortex ring in still air (radius 0.3 m, core 0.1 m, peak speed 0.5 m/s, a 2 m closed box, no emitter, node defaults, 48 frames at 24 per second, confinement 0), measured from the face velocities in world units. Peak vorticity and kinetic energy left after 48 frames:
+
+| Cells | Solver | Peak vorticity left | Energy left | Decay rate of the peak (per second) |
+|---|---|---|---|---|
+| 32 | CPU | 16.5 % | 8.5 % | 0.75 |
+| 48 | CPU | 20.0 % | 12.8 % | 0.71 |
+| 64 | CPU | 23.8 % | 16.4 % | 0.64 |
+| 64 | GPU (RTX) | 23.8 % | 16.5 % | 0.64 |
+| 96 | GPU | 29.0 % | 23.4 % | 0.56 |
+| 128 | GPU | 31.5 % | 29.4 % | 0.52 |
+
+A finer grid keeps the vortex alive longer, as it should; the solver is not the cause. With confinement 1 the same ring in still air gains energy instead (GPU: energy ends 121 times, 42 times and 18 times its start at 64, 96 and 128 cells, peak vorticity 5.1, 8.0 and 9.8 times), which is the unclamped confinement the 3.0 and 4.0 rows of 18 A ran into, and the gain shrinks with finer grids because of the dx factor.
+The ring at 5 m/s (the shot's speeds) for 12 frames keeps 5.6 %, 6.8 % and 8.3 % of its peak at 32, 48 and 64 cells with 1 substep, and at 48 cells 6.8 %, 8.8 %, 9.4 % and 9.8 % with 1, 2, 4 and 8 substeps: the damping grows steeply with speed, and the substep helps but does not remove it.
+`tests/test_fluid_vortex.py` keeps the test with these bounds (peak vorticity left above 12 % at 32 cells, 16 % at 48 cells on the CPU, above 15 % at 48 cells and between 18 % and 40 % at 64 cells on the GPU, energy never growing at confinement 0, a finer grid never keeping less, GPU within 0.03 of the CPU); it passes on the RTX 3080 Ti, the Radeon 8060S and llvmpipe.
+
+**4. Why 96 cells bakes four times slower than 128.** `pressure = auto` picks the resident GPU solver only from `GPU_AUTO_CELLS` (1,000,000 cells). 128 cubed is 2.1 million cells and bakes on the card; 96 cubed is 884,736 and 64 cubed 262,144, so both bake on the CPU conjugate gradient. Forcing `pressure = resident` (RTX 3080 Ti, shot, frames 1 to 24) bakes 64 cells in 1.0 s (8.4 s on the CPU path today), 96 cells in 1.1 s (36 to 47 s) and 128 cells in 4.1 s (3.4 to 4.1 s); with 2 substeps 1.3, 1.4 and 3.5 s.
+It is the backend threshold, not an iteration count or a substep rule. The CPU and GPU solves agree on the numbers above to within a few percent, so a lower threshold would speed the 64 and 96 cell shots by 8 to 40 times; it changes which solver saved scenes bake with (the backend is part of the run identity, so their caches would re-bake), so it was not changed.
+
+**5. The fire shot with 2 substeps.** Judged on the stills: with 2 substeps the plume stands as a narrower column that leans and bulges, with larger lumps in the smoke, and the round puff of smoke at the top at frame 8 is gone; there are still no tight roll-ups or mushroom curls, and the edge is soft and grainy on every row.
+The 6 cm share is 0.505 and 0.527 at 64 and 128 cells (frame-16 image-plane curl 27.3 % and 20.5 % against 29.9 % and 14.4 % with 1 substep). It is not a free swap: the flame changes (top over bottom falls from 0.74 to 0.24, a bottom-heavy white-hot core), and render grain rises to 0.0116 and 0.0109 against the 0.0071 gate (0.0065 and 0.0067 with 1 substep).
+Bake times are 17.4 s and 7.2 s through the default path (CPU at 64 cells, GPU at 128) against 8.4 s and 3.4 s.
+Frame times and card memory are the same as with 1 substep (1.36 to 1.57 s per 128-sample frame and 685 MiB at 128 cells).
+
+**Proposal.** An automatic substep rule (substeps chosen so smoke travels at most 2 to 3 cells per step, behind a switch off by default so saved scenes bake as before) is the change the evidence names; it needs a node parameter and registration, a flame re-tune (the flame goes bottom-heavy at 2 substeps) and a grain fix, so it was not built here. The solver, node defaults and shot are unchanged. Separately, lowering `GPU_AUTO_CELLS` to about 250,000 would speed 64 and 96 cell bakes by 8 to 40 times.
+**Not verified.** Windows; the hot-pour and smoke-column scenes; 3 and 4 substeps on 96 and 128 cells; the CPU solver's 128-cell residual (0.30 at the cap of 200) was measured only on the CPU path, which `auto` never uses at that size.
+
 ## K2 rigid bodies — finish 1
 
 `RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
