@@ -1582,7 +1582,9 @@ def centre_of_mass(density):
 
 CHAIN_KINDS = ("FluidSource3D", "FluidForce3D", "FluidCollide3D")
 MAX_CELLS = 16_777_216              # 256 cubed: the CPU reference is a bake-and-scrub tool, and memory is the wall
-GPU_AUTO_CELLS = 1_000_000          # `pressure = auto` uses the wgpu solve at or above this many cells (and only when an adapter exists)
+GPU_AUTO_CELLS = 32_768             # `pressure = auto` uses the resident wgpu solver at or above this many cells (32 cubed, and only when it fits an adapter);
+#                                     Fluids 18 C measured the card winning from 24 cubed on the RTX 3080 Ti and the Radeon 8060S (docs/FLUIDS_SPIKE.md)
+GPU_HOOK_CELLS = 1_000_000          # the older wgpu pressure-only hook, used by `auto` only when the resident solver does not fit
 NODE_LIFT = 0.08                    # built-in buoyancy of a solver node, world units per frame squared per unit temperature
 NODE_SETTLE = 0.005                 # and per unit density (downward)
 CHANNEL_SETS = {"density": ("density",), "density_temperature": ("density", "temperature"),
@@ -1934,7 +1936,7 @@ def resolve_backend(params, cells, shape=None):
         if not fluid_gpu3d.available():
             raise ValueError("FluidSolver3D: pressure is gpu but no wgpu adapter can be opened here")
         return "gpu"
-    return "gpu" if cells >= GPU_AUTO_CELLS and fluid_gpu3d.available() else "cpu"
+    return "gpu" if cells >= GPU_HOOK_CELLS and fluid_gpu3d.available() else "cpu"
 
 
 def proxy_solver_params(params, tier):

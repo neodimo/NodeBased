@@ -50,7 +50,7 @@ def main():
         for backend in args.backends:
             if backend == 'cpu' and cells > args.cpu_max:
                 continue
-            best = None
+            best, every = None, []
             for repeat in range(args.repeats):
                 document = build_document(320, 180, division_size=2.0 / cells, auto_substeps=0, substeps=args.substeps, pressure=backend)
                 work = Path(tempfile.mkdtemp(prefix='xover-', dir=args.scratch))
@@ -59,10 +59,11 @@ def main():
                 evaluator.evaluate_raster(document, 'cache', frame=24, typed=True)
                 seconds = time.perf_counter() - started
                 shutil.rmtree(work, ignore_errors=True)
+                every.append(round(seconds, 3))
                 best = seconds if best is None else min(best, seconds)
                 if seconds > 60:
                     break
-            rows.append({'cells': cells, 'backend': backend, 'seconds': round(best, 3)})
+            rows.append({'cells': cells, 'backend': backend, 'seconds': round(best, 3), 'all': every})
             print(json.dumps(rows[-1]), flush=True)
     args.out.write_text(json.dumps({'adapter': device, 'kind': kind, 'rows': rows}, indent=1))
 

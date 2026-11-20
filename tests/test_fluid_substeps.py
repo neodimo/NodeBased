@@ -194,17 +194,34 @@ class GpuTests(unittest.TestCase):
 
 
 class BackendTests(unittest.TestCase):
-    def test_the_automatic_choice_follows_the_threshold(self):
-        params = dict(SPECS["FluidSolver3D"]["params"])
-        threshold = fluid3d.GPU_AUTO_CELLS
-        self.assertEqual(fluid3d.resolve_backend({**params, "pressure": "cpu"}, threshold * 10), "cpu")
-        self.assertEqual(fluid3d.resolve_backend({**params, "pressure": "auto"}, 1000, (10, 10, 10)), "cpu")
-        shape = (32, 32, 32)
-        cells = threshold
-        resolved = fluid3d.resolve_backend({**params, "pressure": "auto"}, cells, shape)
-        self.assertIn(resolved, ("resident", "gpu", "cpu"))
-        below = fluid3d.resolve_backend({**params, "pressure": "auto"}, threshold - 1, shape)
-        self.assertEqual(below, "cpu")
+    """`pressure = auto` takes the resident GPU solver from `GPU_AUTO_CELLS` (32 cubed, from the Fluids 18 C crossover table) and the processor below."""
+    PARAMS = dict(SPECS["FluidSolver3D"]["params"], pressure="auto")
+
+    def test_the_threshold_is_the_measured_crossover(self):
+        self.assertEqual(fluid3d.GPU_AUTO_CELLS, 32 ** 3)
+        self.assertLess(fluid3d.GPU_AUTO_CELLS, 64 ** 3, "a 64 cell shot bakes on the card")
+
+    def test_below_the_threshold_the_processor_is_chosen(self):
+        for cells in (1000, 24 ** 3, fluid3d.GPU_AUTO_CELLS - 1):
+            self.assertEqual(fluid3d.resolve_backend(self.PARAMS, cells, (30, 30, 30)), "cpu", cells)
+
+    def test_an_explicit_choice_is_never_overridden(self):
+        self.assertEqual(fluid3d.resolve_backend({**self.PARAMS, "pressure": "cpu"}, 128 ** 3, (128, 128, 128)), "cpu")
+
+    @unittest.skipUnless(HAVE_GPU, "no wgpu adapter")
+    def test_at_and_above_the_threshold_the_card_is_chosen(self):
+        for shape in ((32, 32, 32), (64, 64, 64), (96, 96, 96)):
+            cells = shape[0] * shape[1] * shape[2]
+            self.assertEqual(fluid3d.resolve_backend(self.PARAMS, cells, shape), "resident", shape)
+        self.assertEqual(fluid3d.resolve_backend(self.PARAMS, fluid3d.GPU_AUTO_CELLS - 1, (31, 32, 32)), "cpu")
+
+    @unittest.skipUnless(HAVE_GPU, "no wgpu adapter")
+    def test_a_64_cell_stream_bakes_on_the_card(self):
+        from nodebased.core import Dispatcher
+        d = node_plume(division_size=2.0 / 64, bounds_min_x=-1.0, bounds_max_x=1.0, bounds_min_z=-1.0, bounds_max_z=1.0,
+                       bounds_min_y=0.0, bounds_max_y=2.0, pressure="auto")
+        volume = at(Evaluator(), d, "c", 1)
+        self.assertEqual(volume.stream.backend, "resident")
 
 
 if __name__ == "__main__":

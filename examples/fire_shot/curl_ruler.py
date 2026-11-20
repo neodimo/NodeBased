@@ -51,6 +51,10 @@ def measure(cells, pressure="auto", overrides=None, scratch=None, frames=FRAMES,
     out["pressure_trace"] = {"iterations_max": max((t[1] for t in trace), default=0), "iterations_mean": round(float(np.mean([t[1] for t in trace])), 1) if trace else 0,
                              "residual_max": max((t[2] for t in trace), default=0.0), "steps": len(trace),
                              "step_seconds_mean": round(float(np.mean([t[3] for t in trace])), 4) if trace else 0}
+    per_frame = {}
+    for entry in trace:
+        per_frame[entry[0]] = per_frame.get(entry[0], 0) + 1
+    out["substeps_by_frame"] = [per_frame[f] for f in sorted(per_frame)]       # Fluids 18 C: what the automatic rule chose, frame by frame
     camera = document["nodes"]["camera"]["params"]
     cam, target = (camera["tx"], camera["ty"], camera["tz"]), (0.0, camera["target_y"], 0.0)
     rows = {}

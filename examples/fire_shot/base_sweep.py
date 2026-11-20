@@ -30,7 +30,7 @@ UPRES_C = {'swirl': .5, 'swirl_scale': 6.0, 'swirl_life': 2.0}      # Fluids 17 
 # 64 cells, MacCormack. The brief's vorticity list is 0.3 (the node's default), 0.6, 1.0 and 2.0; the resolution list is the shot's size and
 # 1.5 and 2 times finer.
 VARIANTS = {
-    'shot': {},
+    'shot': dict(auto_substeps=0),      # the shot as it was before Fluids 18 C: one substep a frame (a new node has the automatic rule on)
     'v0.3': dict(vorticity=.3),
     'v0.6': dict(vorticity=.6),
     'v2.0': dict(vorticity=2.0),
@@ -53,6 +53,9 @@ VARIANTS = {
     'r1.5_s2': dict(division_size=DIVISION / 1.5, substeps=2),
     'r2_s2': dict(division_size=DIVISION / 2, substeps=2),
     'r2_s3': dict(division_size=DIVISION / 2, substeps=3),
+    # Fluids 18 C: the automatic substep rule (`auto_substeps`) against the old one substep a frame, at the shot's three grid sizes
+    'off96': dict(division_size=DIVISION / 1.5, auto_substeps=0), 'off128': dict(division_size=DIVISION / 2, auto_substeps=0),
+    'auto64': dict(auto_substeps=1), 'auto96': dict(division_size=DIVISION / 1.5, auto_substeps=1), 'auto128': dict(division_size=DIVISION / 2, auto_substeps=1),
     't1_s3': dict(turbulence=1.0, swirl_size=3.0),
     't3_s3': dict(turbulence=3.0, swirl_size=3.0),
     't3_s6': dict(turbulence=3.0, swirl_size=6.0),

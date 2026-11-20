@@ -1,0 +1,49 @@
+{
+ "date": "2026-11-20",
+ "what": "bake of the fire shot, frames 1-24, one substep a frame, pressure forced to cpu (NumPy CG, 200 iterations) or resident (GPU multigrid); seconds, best of 2 (llvmpipe 1)",
+ "cells_per_side": {
+  "16": {
+   "cpu": 0.13,
+   "llvmpipe": 0.714,
+   "radeon": 0.124,
+   "rtx": 0.12
+  },
+  "24": {
+   "cpu": 0.349,
+   "llvmpipe": 0.686,
+   "radeon": 0.158,
+   "rtx": 0.153
+  },
+  "32": {
+   "cpu": 0.837,
+   "llvmpipe": 0.847,
+   "radeon": 0.188,
+   "rtx": 0.195
+  },
+  "48": {
+   "cpu": 3.605,
+   "llvmpipe": 1.47,
+   "radeon": 0.267,
+   "rtx": 0.495
+  },
+  "64": {
+   "cpu": 9.291,
+   "llvmpipe": 2.276,
+   "radeon": 0.422,
+   "rtx": 0.407
+  },
+  "96": {
+   "cpu": 39.294,
+   "llvmpipe": 7.13,
+   "radeon": 0.96,
+   "rtx": 0.997
+  },
+  "128": {
+   "radeon": 2.885,
+   "rtx": 2.881,
+   "cpu": 139.263
+  }
+ },
+ "threshold_set": "GPU_AUTO_CELLS = 32768 (32 cubed)",
+ "note": "the 128-cell processor bake (139 s) was a single pass with the machine at load 6"
+}
