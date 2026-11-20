@@ -1,3 +1,10 @@
+## 2026-11-20 — Lane 6 (Fluids, Claude Sonnet 5.5) Fluids 18 step B: why a finer grid makes less swirl
+
+- **What was done (measured):** diagnosis only, solver untouched. Vortex ring in still air: finer grid keeps more of its peak vorticity (CPU 32/48/64 cells 16.5/20.0/23.8 %; GPU 64/96/128 cells 23.8/29.0/31.5 % after 48 frames), so the solver is sound. The fire shot's 6 cm world-space swirl falls with finer cells at 1 substep (0.49/0.44/0.39 at 64/96/128, CPU and RTX agree) and holds at 2 substeps (0.51/0.53/0.53); confinement is a cell-scale term and doubling it at 128 cells only adds noise; the 18 A 2 cm image-plane ruler falls with finer grids even at confinement 0. 96 cells bakes slowly because `pressure=auto` uses the CPU below `GPU_AUTO_CELLS` (1,000,000 cells); forced resident it bakes in 1.1 s.
+- **Artifacts:** committed: `nodebased/fluid_diagnostics.py`, `tests/test_fluid_vortex.py` (CPU, RTX, Radeon, llvmpipe pass), `examples/fire_shot/{vortex_decay,curl_ruler}.py`, new `base_sweep.py` variants, `benchmarks/fire_shot/fire-18b-diagnosis-2026-11-20.json`, `fire-base-sweep-2026-11-20-18b.json`, `docs/images/fire_shot/fire-substeps-contact-2026-11-20.png`, docs section "Fluids 18 B" in `docs/FLUIDS_SPIKE.md` (bundled copy identical). Scratch only: bake caches (deleted).
+- **State:** done. Unverified: Windows, hot-pour and smoke-column scenes, 3 and 4 substeps on 96 and 128 cells.
+- **Next owner / failure mode:** Gonzo: automatic substep rule (travel per step, switch off by default, node param + flame re-tune + grain fix) and whether to lower `GPU_AUTO_CELLS`. 2 substeps changes the flame (top over bottom 0.74 -> 0.24) and raises grain to 0.011 against the 0.0071 gate.
+
 ## 2026-11-20 — continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) GPU playback step (Fri 11/20): the on-card display path steps aside when the comp has a processor-only node, so the switch is never slower (integrator tick)
 
 - **What was done:** `main` `0b5dceec` -> `e24e4149` plus this docs commit. Evidence and per-lane commit

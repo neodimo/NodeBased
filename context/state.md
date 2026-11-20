@@ -1,3 +1,8 @@
+## Lane 6 step Fluids 18 B (11/20): the solver is sound; the shot's one substep per frame removes the large-scale swirl on finer grids
+
+Vortex-ring test (`tests/test_fluid_vortex.py`) and a grid-independent curl ruler (`nodebased/fluid_diagnostics.py`) are in; no solver change.
+Details and numbers: docs/FLUIDS_SPIKE.md "Fluids 18 B". Open: automatic substep rule and the `GPU_AUTO_CELLS` threshold (both Gonzo's call).
+
 ## Lane 9 step X6 (11/19): the last open marks in Filter and Draw
 
 ## Continuous mode merge: Lane 8 (2D on the GPU, GPT-5.6 Terra) (1:37 PM on 2026-11-20 PDT)
