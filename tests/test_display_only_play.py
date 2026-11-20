@@ -82,6 +82,37 @@ class DisplayOnlyCardTests(unittest.TestCase):
         self.assertIsInstance(fallback, Raster)
         np.testing.assert_array_equal(fallback.pixels, ordinary.pixels)
 
+    def test_processor_colorcorrect_keeps_playback_on_the_ordinary_float_path(self):
+        """A CPU node after a GPU island must not trigger an RGBA8 terminal pass."""
+        if self.backend is None:
+            self.skipTest(gpu2d.GPU2D.open_error)
+        from nodebased.core import demo_document
+        from nodebased.imaging import Evaluator
+        document = demo_document()
+        document["nodes"]["plate"]["params"].update(width=32, height=24)
+        document["nodes"]["colorcorrect"] = {
+            "type": "ColorCorrect", "name": "ColorCorrect",
+            "params": {**SPECS["ColorCorrect"]["params"], "mix_luminance": 1.0},
+            "inputs": {"image": "grade", "mask": None}, "pos": [0, 0], "disabled": False,
+        }
+        document["view"] = "colorcorrect"
+        evaluator = Evaluator()
+        evaluator.gpu2d = self.backend
+        before = self.backend.counters.snapshot()
+        result = evaluator.evaluate_raster(
+            document, display_only=(carddisplay.settings_from(view="sRGB"), (11, 1, self.backend.epoch)))
+        delta = gpu2d.Counters.delta(self.backend.counters.snapshot(), before)
+        self.assertIsInstance(result, Raster)
+        self.assertTrue(any("display-only fallback after GPU island" in row for row in delta["cpu_boundaries"]))
+        evaluator.clear()
+        ordinary = evaluator.evaluate_raster(document)
+        np.testing.assert_allclose(result.pixels, ordinary.pixels, rtol=2e-5, atol=2e-5)
+        expected = to_qimage(ordinary, view="sRGB")
+        actual = to_qimage(result, view="sRGB")
+        delta_codes = np.abs(np.frombuffer(actual.bits(), np.uint8).astype(np.int16) -
+                             np.frombuffer(expected.bits(), np.uint8).astype(np.int16))
+        self.assertLessEqual(int(delta_codes.max()), 1)
+
     def test_viewer_fixtures(self):
         if self.backend is None:
             self.skipTest(gpu2d.GPU2D.open_error)

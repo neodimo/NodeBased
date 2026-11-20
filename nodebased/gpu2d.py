@@ -462,6 +462,29 @@ def map_transform(p, src: Region, dst: Region):
                          np.ascontiguousarray(tables, np.float32), mix, weighted)
 
 
+def parameter_support(kind, params):
+    """Return static GPU eligibility before a display-only playback request starts.
+
+    ``stage`` also checks image windows and mask layouts.  This early check covers
+    parameter-only CPU boundaries; Transform's remaining checks need its input
+    window and therefore stay in ``stage``.
+    """
+    try:
+        if kind == "Grade":
+            map_grade(params)
+        elif kind == "ColorCorrect":
+            map_color_correct(params)
+        elif kind == "Blur":
+            map_blur(params)
+        elif kind == "Merge":
+            map_merge(params)
+        elif kind != "Transform":
+            return False, f"{kind} has no GPU kernel"
+    except Unsupported as exc:
+        return False, exc.reason
+    return True, None
+
+
 # ----------------------------------------------------------------------------------------------
 # Windows: the same rectangles the evaluator computes for the CPU nodes.
 

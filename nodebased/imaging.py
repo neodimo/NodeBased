@@ -1580,6 +1580,36 @@ class Evaluator:
             images = [self._gpu2d_cpu(image, frame, cancel, done) for image in images]
         return None, images
 
+    @staticmethod
+    def _display_only_processor_boundary(nodes, order):
+        """Name a processor step after a GPU island, if the terminal pass must step aside.
+
+        A display-only pass saves a float readback only when the path from the
+        last GPU node to the Viewer stays on the card.  Sending that picture
+        across a processor boundary merely turns it back into a full float
+        upload before the terminal display pass, which is slower on a discrete
+        card than the ordinary float path.
+        """
+        from .core import bypass_slot
+
+        gpu_outputs = set()
+        for key in order:
+            node = nodes[key]
+            if node["disabled"]:
+                slot = bypass_slot(node)
+                source = None if slot is None else node["inputs"].get(slot)
+                if source in gpu_outputs:
+                    gpu_outputs.add(key)
+                continue
+            sources = [source for source in node["inputs"].values() if source is not None]
+            has_gpu_input = any(source in gpu_outputs for source in sources)
+            supported, reason = gpu2d.parameter_support(node["type"], node["params"])
+            if supported:
+                gpu_outputs.add(key)
+            elif has_gpu_input:
+                return key, reason
+        return None
+
     def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None, tier=1):
         """Evaluate `target` and return its **display window** as an array.
 
@@ -1702,6 +1732,14 @@ class Evaluator:
         # Opt-in GPU island (nodebased/gpu2d.py): Grade/Transform/Blur/Merge whose readers are all island nodes
         # stay on the device; None (the default) leaves every node on the CPU kernels below.
         gpu_interior = gpu2d.island_interior(nodes, order, target) if self.gpu2d is not None else frozenset()
+        if display_only is not None and self.gpu2d is not None:
+            boundary = self._display_only_processor_boundary(nodes, order)
+            if boundary is not None:
+                key, reason = boundary
+                self.gpu2d.boundary(
+                    nodes[key]["type"],
+                    f"display-only fallback after GPU island: {reason}")
+                display_only = None
         self._launch_sources(scope, doc, order, nodes, cancel, frame, tier, cache_fractional)
         from . import fluid3d, flip3d, particles
 
