@@ -63,6 +63,8 @@ class Nuke17TableTests(unittest.TestCase):
         self.assertRegex(pack.knob_statement("Saturation", "mode", "average", t), r"setValue\(2\)  # Average$")
         self.assertRegex(pack.knob_statement("Defocus", "method", "fullprecision", t), r"# full precision$")   # spaces and case ignored
         self.assertRegex(pack.knob_statement("Colorspace", "colorspace_out", "Gamma2.2", t), r"# 2\.20$")
+        self.assertEqual(pack.knob_statement("Keyer", "range", "{0.05 0.4 0.75 1.5}", t),           # Keyer_Knob holds numbers
+                         "node['range'].fromScript('{0.05 0.4 0.75 1.5}')")
         with self.assertRaisesRegex(ValueError, "has no knob"):
             pack.knob_statement("Bilateral", "filter", "median", t)
         with self.assertRaisesRegex(ValueError, "no menu entry 'lin'"):
@@ -114,6 +116,7 @@ class PackScriptTests(unittest.TestCase):
         self.assertTrue(all(reasons.values()))
         self.assertIn("Non-commercial does not offer Primatte", " ".join(reasons.values()))
         self.assertIn("no menu entry 'lin'", reasons["ocio_colorspace_gain"])
+        self.assertIn("SmartVector input over a frame range", reasons["vectordistort_follows_the_vectors"])
         self.assertFalse(any((self.root / "scripts" / f"{s}.py").exists() for s in reasons))
 
     def test_time_cases_build_the_frame_stamp_in_nuke_and_render_their_frame(self):

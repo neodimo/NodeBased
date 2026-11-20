@@ -62,9 +62,12 @@ NUKE17_ENUM = {("Colorspace", "colorspace_in"): {"Gamma1.8": "1.80", "Gamma2.2":
                ("Bokeh", "outputType"): {"Focus Mattes": "Focus Matte"},
                ("Vectorfield", "interpolation"): {"trilinear": "trilinear field"}}
 NOT_IN_NC = {"Primatte", "Ultimatte", "GenerateLUT"}            # Nuke Non-commercial refuses to create these nodes
+# Nodes whose input the pack's one-frame fixtures cannot stand in for (read from the render log of 11/20).
+NEEDS_SEQUENCE = {"VectorDistort": "VectorDistort reads a SmartVector input over a frame range; the pack's vector fixture is one frame"}
 STRING_KINDS = {"String_Knob", "File_Knob", "EvalString_Knob", "Multiline_Eval_String_Knob", "Channel_Knob", "ChannelMask_Knob",
                 "Input_Channel_Knob", "Pulldown_Knob", "Format_Knob", "Font_Knob", "Cascading_Enumeration_Knob",
-                "Keyer_Knob", "OneView_Knob", "MultiView_Knob", "ViewView_Knob", "CascadingEnumeration_Knob"}
+                "OneView_Knob", "MultiView_Knob", "ViewView_Knob", "CascadingEnumeration_Knob", "EditableEnumeration_Knob",
+                "Radio_Knob", "FreeType_Knob"}
 INT_KINDS = {"Int_Knob", "Frame_Knob"}
 SKIPPED_SUFFIXES = ("_not_a_pixel_behaviour", "_not_in_nodebased")
 # Curves on the node under test in the Time cases, keyed by NodeBased's parameter: the Nuke knob they animate.
@@ -175,6 +178,8 @@ def unrenderable(case, table):
     cls = nuke17_class(case)
     if case.nuke_class in NOT_IN_NC:
         return f"Nuke Non-commercial does not offer {case.nuke_class}"
+    if case.nuke_class in NEEDS_SEQUENCE:
+        return NEEDS_SEQUENCE[case.nuke_class]
     params = case.nb_params or {}
     for key, what in (("_shapes", "Roto shapes"), ("_items", "RotoPaint strokes"), ("_tracks", "Tracker tracks")):
         if key in params:
