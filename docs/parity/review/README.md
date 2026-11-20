@@ -48,24 +48,41 @@ So far every expectation is what Nuke's guide states. With Nuke you can render t
 
    - **Nuke, NukeX or Nuke Studio (commercial licence):** `nuke -t docs/parity/review/out/nuke_scripts/render_all.py`
      renders every script in one pass. A single one: `nuke -x path/to/case.nk`.
-   - **Nuke Indie or Non-commercial:** these licences restrict command-line rendering (Non-commercial renders only
-     encrypted `.nknc` scripts from the command line; check what your Indie licence allows). Open a case's `.nk` in the
-     GUI and render its `Write_render` node for frame 1. For a whole pass under Non-commercial, the older Python pack
-     (`tools/make_nuke_reference_pack.py`, run with `nuke -t`) renders the same cases, and
-     `tools/audit_nuke_fidelity.py --reference-dir` scores those renders directly; copy them into
-     `docs/parity/nuke_renders/` for the book.
+   - **Nuke Non-commercial:** terminal mode runs Python files only. It refuses the `.nk` scripts above ("Please specify
+     an existing .nknc script or a Python file"), so use the Python pack instead, which renders the same cases:
+
+         python tools/make_nuke_reference_pack.py PACK_DIR
+         NUKE=/path/to/nuke-nc.sh PACK_DIR/render_all.sh RENDER_DIR     # nuke-nc.sh runs Nuke17.0 --nc "$@"
+
+     Each case is one script run with `nuke -t` (about 2 seconds each; several can run side by side). Non-commercial's
+     other limits shape the scripts: at most 10 nodes reachable from Python per script, and output at most 1920x1080
+     (each script crops the node's output to its format before the Write). The pack builds the Time group's frame
+     stamp inside Nuke (an Expression node whose red is the frame) and renders each case at its own frame.
+     Knob values are written for each knob's kind in Nuke 17, read from `tools/nuke17_knobs.json`; rerun
+     `python tools/nuke17_knob_table.py --nuke /path/to/nuke-nc.sh` after a Nuke upgrade to refresh it.
+     `MANIFEST.json` lists the cases left out (`skipped`: not pixel behaviours, or nodes NodeBased does not have) and
+     the cases Nuke Non-commercial cannot render, each with its reason (`not_renderable`: Primatte, Ultimatte and
+     GenerateLUT are not offered; Roto shapes, RotoPaint strokes, Tracker tracks and DustBust spots are not written
+     into Nuke yet; OCIO cases whose colourspaces are not in Nuke's default config; fractional frames).
+     Score the renders with `python tools/audit_nuke_fidelity.py --reference-dir RENDER_DIR` and copy the EXRs into
+     `docs/parity/nuke_renders/` for the book. A failed case leaves a `.log` beside its render that says why; fix the
+     generator, delete that case's log and EXR, and run its script again.
+   - **Nuke Indie:** check what your licence allows from the command line; the GUI can render a case's `.nk`
+     (`Write_render`, frame 1).
 
 3. Collect the renders where the book looks for them, and rebuild:
 
        python tools/nuke_script_export.py --collect docs/parity/review/out/nuke_scripts
        python tools/parity_review_book.py
 
-   `--collect` copies each `nuke_render.exr` to `docs/parity/nuke_renders/<case>.exr`. Each page then adds a "Nuke
-   rendered" column and NodeBased's difference against it (pass within 1e-4), and the index counts the nodes verified
-   against Nuke's own pixels. Do not commit the renders without asking first: the repository is public.
+   `--collect` copies each `nuke_render.exr` to `docs/parity/nuke_renders/<case>.exr` (the Python pack's renders go
+   there directly). Each page then adds a "Nuke rendered" column and NodeBased's difference against it (pass within
+   1e-4), and the index counts the nodes verified against Nuke's own pixels. `docs/parity/nuke_renders/` is ignored by
+   git: the repository is public, so the renders stay on the machine that made them.
 
-These scripts have not yet been opened in Nuke. Before trusting a whole folder, render one Merge case and check by eye
-that input 0 is B and input 1 is A, and that the colours match the plates.
+Before trusting a whole folder, render one Merge case and check that input 0 is B and input 1 is A, and that the
+colours match the plates. Checked on 11/20 with Nuke 17.0v6 Non-commercial: Merge `over` of the fixtures A and B came
+out exactly A + B(1 - a) in all four channels, negative and HDR values untouched.
 
 ## The worklist
 
