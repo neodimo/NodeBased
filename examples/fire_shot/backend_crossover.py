@@ -30,6 +30,7 @@ def main():
     parser.add_argument('--cpu-max', type=int, default=128)
     parser.add_argument('--repeats', type=int, default=2)
     parser.add_argument('--substeps', type=int, default=1)
+    parser.add_argument('--auto', type=int, default=0, help='1 turns the automatic substep rule on (Fluids 18 C)')
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--scratch', type=Path, required=True)
     args = parser.parse_args()
@@ -52,7 +53,7 @@ def main():
                 continue
             best, every = None, []
             for repeat in range(args.repeats):
-                document = build_document(320, 180, division_size=2.0 / cells, auto_substeps=0, substeps=args.substeps, pressure=backend)
+                document = build_document(320, 180, division_size=2.0 / cells, auto_substeps=args.auto, substeps=args.substeps, pressure=backend)
                 work = Path(tempfile.mkdtemp(prefix='xover-', dir=args.scratch))
                 evaluator = Evaluator(sim=simcache.SimCache(root=work, memory_budget=1 << 30, disk_budget=8 << 30))
                 started = time.perf_counter()
@@ -63,7 +64,7 @@ def main():
                 best = seconds if best is None else min(best, seconds)
                 if seconds > 60:
                     break
-            rows.append({'cells': cells, 'backend': backend, 'seconds': round(best, 3), 'all': every})
+            rows.append({'cells': cells, 'backend': backend, 'auto_substeps': args.auto, 'seconds': round(best, 3), 'all': every})
             print(json.dumps(rows[-1]), flush=True)
     args.out.write_text(json.dumps({'adapter': device, 'kind': kind, 'rows': rows}, indent=1))
 

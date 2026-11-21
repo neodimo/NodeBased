@@ -1,0 +1,71 @@
+{
+ "date": "2026-11-20",
+ "what": "resident-solver bake of the fire shot, frames 1-24, exclusive lock, quiet machine; best of 2-3 in one process",
+ "auto_substeps_0": [
+  {
+   "cells": 64,
+   "backend": "resident",
+   "auto_substeps": 0,
+   "seconds": 0.398,
+   "all": [
+    0.595,
+    0.398,
+    0.405
+   ]
+  },
+  {
+   "cells": 96,
+   "backend": "resident",
+   "auto_substeps": 0,
+   "seconds": 1.058,
+   "all": [
+    1.142,
+    1.099,
+    1.058
+   ]
+  },
+  {
+   "cells": 128,
+   "backend": "resident",
+   "auto_substeps": 0,
+   "seconds": 2.47,
+   "all": [
+    11.665,
+    2.709,
+    2.47
+   ]
+  }
+ ],
+ "auto_substeps_1": [
+  {
+   "cells": 64,
+   "backend": "resident",
+   "auto_substeps": 1,
+   "seconds": 1.684,
+   "all": [
+    1.745,
+    1.684
+   ]
+  },
+  {
+   "cells": 96,
+   "backend": "resident",
+   "auto_substeps": 1,
+   "seconds": 3.32,
+   "all": [
+    3.554,
+    3.32
+   ]
+  },
+  {
+   "cells": 128,
+   "backend": "resident",
+   "auto_substeps": 1,
+   "seconds": 6.314,
+   "all": [
+    6.314,
+    7.001
+   ]
+  }
+ ]
+}

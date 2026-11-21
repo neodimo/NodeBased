@@ -128,7 +128,9 @@ class ReinjectionEvaluatorTests(unittest.TestCase):
             import make_shot
         finally:
             sys.path.pop(0)
-        document = make_shot.build_document(width=64, height=36, division_size=.125, pt_samples=4,
+        # The coarse solver keeps one substep a frame (auto_substeps 0): this test is about the up-res node's flame bookkeeping, and the
+        # automatic rule (Fluids 18 C) changes the coarse flame it is measured against.
+        document = make_shot.build_document(width=64, height=36, division_size=.125, pt_samples=4, auto_substeps=0,
                                             smoke_upres=dict(upres_backend="cpu"))
         with tempfile.TemporaryDirectory() as root:
             evaluator = Evaluator(sim=simcache.SimCache(root=root, memory_budget=1 << 28, disk_budget=1 << 30))
