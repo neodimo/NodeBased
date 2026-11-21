@@ -620,11 +620,12 @@ def cases():
                {"interpolation": "motion", "timing": "speed", "speed": 0.5, "input_end": 8.0}, 2, motion_plate_half, "convention",
                f"{node} method Motion at speed 0.5, output frame 2, on a plate moving 4 whole pixels per frame shows the plate moved 2 pixels (half the "
                f"translation). Compared away from the edges (8 rows and 16 columns left out each side), on red, green and blue, with an absolute tolerance "
-               f"of 0.01 (the estimated field is not exact). " + motion_note,
+               f"of 0.02 (the estimated field is not exact: the worst pixel measures 0.0014 here and 0.0105 on GitHub's runners, where float noise in the window "
+               f"match moves a few pixels; an estimate a pixel off gives 0.09). " + motion_note,
                stamp={"plate": {"type": "Noise", "params": {"size": 16, "octaves": 3}}, "size": (MOTION_W, MOTION_H), "time": (1, 8),
                       "chain": [("Transform", {"filter": "nearest"}, {"translate_x": ("linear", tuple((f, float(MOTION_SHIFT * (f - 1)))
                                                                                                     for f in range(-5, 30)))})]},
-               tolerance=0.01)
+               tolerance=0.02)
         for what, reason in (("vector detail and smoothness", "the guide describes them as trade-offs (density of the vector field; detail against spurious "
                               "vectors) and gives no number to check"),
                              ("occlusions", "the guide says nothing about what an interpolated frame shows where something is uncovered"),

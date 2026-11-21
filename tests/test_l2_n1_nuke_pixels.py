@@ -218,7 +218,8 @@ class SchemaMigrationNegativesTests(unittest.TestCase):
     def test_a_schema_38_document_keeps_its_pixels(self):
         g = Graph()
         g.add("src", "Ramp", dict(width=20, height=12, p1_x=19.0, color0_red=-0.5, color1_red=2.0, color0_green=0.1, color1_green=0.9,
-                                  color0_alpha=0.3, color1_alpha=1.0))
+                                  color0_alpha=0.3, color1_alpha=1.0,
+                                  legacy_draw_blend=1))      # the older Ramp (before lane 9's Draw change, schema 40) keeps the negative red this test needs
         for kind, params in self.KINDS.items():
             g.add(kind.lower(), kind, params, image="src")
         doc = copy.deepcopy(g.doc)

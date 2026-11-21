@@ -100,14 +100,15 @@ def picture(g, frame=2, last=8):
 INTERIOR = (slice(8, -8), slice(16, -16), slice(0, 3))
 
 
-def half_shift_error(pixels):
-    """The largest difference from frame 1's Noise moved half the translation (2 pixels), away from the edges, on red, green and blue."""
+def half_shift_error(pixels, statistic="max"):
+    """The largest (or, with statistic "mean", the mean) difference from frame 1's Noise moved half the translation (2 pixels), away from the edges, on red, green and blue."""
     g = Graph()
     g.add("p", "Noise", dict(width=WIDTH, height=HEIGHT, size=16, octaves=3))
     base = Evaluator().evaluate_raster(dict(g.doc, view="p"), target="p", frame=1).pixels
     ref = np.zeros_like(base)
     ref[:, SHIFT // 2:] = base[:, :-(SHIFT // 2)]
-    return float(np.max(np.abs(pixels - ref)[INTERIOR]))
+    error = np.abs(pixels - ref)[INTERIOR]
+    return float(np.mean(error) if statistic == "mean" else np.max(error))
 
 
 def kronos(g, params, **inputs):
@@ -267,7 +268,11 @@ class FlickerTests(unittest.TestCase):
             kronos(g, {"flicker_compensation": int(compensate)}, image="plate")
             return picture(g)
         flat = half_shift_error(moved(False, 0.0))
-        self.assertLess(flat, 0.01)
+        # The worst pixel measures 0.0014 here and 0.0105 on GitHub's runners (float noise in the flow's window match moves a few pixels of the
+        # noise texture; the estimator itself did not change). An estimate that is a pixel off gives a worst pixel of 0.09 and a mean of 0.02 on this
+        # plate, so the worst-pixel bound sits at 0.02, with the mean (0.00013 here) held at 0.002 to catch a widespread drift.
+        self.assertLess(flat, 0.02)
+        self.assertLess(half_shift_error(moved(False, 0.0), statistic="mean"), 0.002)
         steady = moved(True, 0.0)
         self.assertEqual(float(np.max(np.abs(steady - moved(False, 0.0)))), 0.0)           # no flicker, nothing to compensate
         off, on = moved(False, 0.5), moved(True, 0.5)

@@ -97,17 +97,17 @@ class CasesTests(unittest.TestCase):
         motion = [c for c in RETIME_CASES if "motion_method_half_translation" in c.id]
         self.assertEqual(len(motion), 2)
         for case in motion:
-            self.assertEqual(case.tolerance, 0.01)
+            self.assertEqual(case.tolerance, 0.02)
             self.assertIn("tolerance", case.statement)
 
     def test_the_motion_case_tells_motion_from_blend(self):
-        """The 0.01 tolerance would pass a plain blend if a blend were close to half the translation; it is not (its error is several times larger)."""
+        """The 0.02 tolerance would pass a plain blend if a blend were close to half the translation; it is not (its error is several times larger)."""
         case = [c for c in RETIME_CASES if c.id == "oflow_motion_method_half_translation"][0]
         reference, valid = case.expected(None)
         for method, passes in (("motion", True), ("blend", False)):
             got = moving_plate_picture("OFlow", dict(interpolation=method, speed=0.5, output_start=1.0), 2)
             error = float(np.max(np.abs(got - reference)[valid]))
-            self.assertEqual(error <= 0.01, passes, (method, error))
+            self.assertEqual(error <= 0.02, passes, (method, error))
 
 
 class PlanTests(unittest.TestCase):
