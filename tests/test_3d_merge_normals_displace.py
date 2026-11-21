@@ -237,7 +237,7 @@ class DisplaceGeo3DTests(unittest.TestCase):
             _make(d, img=("Constant", {"width": 16, "height": 16, "red": 1.0, "green": 1.0, "blue": 1.0}))
             _wire(d, "disp", "image", "img")
         elif image == "ramp":
-            _make(d, img=("Ramp", {"width": 64, "height": 16, "p1_x": 63.0}))
+            _make(d, img=("Ramp", {"width": 64, "height": 16, "p1_x": 63.0, "legacy_draw_blend": 1}))
             _wire(d, "disp", "image", "img")
         return d
 

@@ -177,7 +177,7 @@ class GridWarpTests(unittest.TestCase):
 
     def test_mask_strip_acts(self):
         g = Dispatcher(empty_document())
-        g.execute({"op": "create", "id": "plate", "type": "Ramp", "params": {"width": 16, "height": 12}})
+        g.execute({"op": "create", "id": "plate", "type": "Ramp", "params": {"width": 16, "height": 12, "legacy_draw_blend": 1}})
         g.execute({"op": "create", "id": "matte", "type": "Constant", "params": {"width": 16, "height": 12, "red": 1, "green": 1, "blue": 1, "alpha": 0.5}})
         g.execute({"op": "create", "id": "n", "type": "GridWarp", "params": {"rows": 2, "columns": 2, "bbox": "source", "filter": "bilinear"}})
         g.execute({"op": "connect", "id": "n", "input": "image", "source": "plate"})

@@ -268,7 +268,7 @@ W, H = 40, 12
 def ramp_plate():
     """A horizontal ramp, opaque: a linear picture, so a symmetric streak leaves it alone and a shifted one moves it by the shift."""
     g = Graph()
-    g.add("plate", "Ramp", dict(width=W, height=H, p0_x=0.0, p0_y=0.0, p1_x=float(W - 1), p1_y=0.0,
+    g.add("plate", "Ramp", dict(width=W, height=H, legacy_draw_blend=1, p0_x=0.0, p0_y=0.0, p1_x=float(W - 1), p1_y=0.0,
                                 color0_red=0.0, color0_green=0.0, color0_blue=0.0, color0_alpha=1.0,
                                 color1_red=1.0, color1_green=1.0, color1_blue=1.0, color1_alpha=1.0))
     return g

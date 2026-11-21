@@ -41,7 +41,7 @@ def square():
 
 class SharpenSoftenTests(unittest.TestCase):
     def test_sharpen_overshoots_either_side_of_a_step_and_leaves_the_flat_parts(self):
-        out = kern("Sharpen", step(), sharpen_size=1.0, kernel_filter="box", sharpen_amount=1.0, minimum=-1e6, maximum=1e6)
+        out = kern("Sharpen", step(), sharpen_size=1.0, kernel_filter="box", sharpen_amount=1.0, minimum=-1e6, maximum=1e6, legacy_kernel=1)
         row = out[5, :, 0]
         self.assertLess(row[7], 0.2)                    # the dark side next to the edge goes darker
         self.assertGreater(row[8], 0.8)                 # the bright side goes brighter
@@ -49,7 +49,7 @@ class SharpenSoftenTests(unittest.TestCase):
         np.testing.assert_allclose(row[10:], 0.8, atol=1e-6)
 
     def test_soften_moves_the_two_sides_toward_each_other_and_never_past(self):
-        out = kern("Soften", step(), soften_size=1.0, kernel_filter="box", amount=1.0, minimum=-1e6, maximum=1e6)
+        out = kern("Soften", step(), soften_size=1.0, kernel_filter="box", amount=1.0, minimum=-1e6, maximum=1e6, legacy_kernel=1)
         row = out[5, :, 0]
         self.assertGreater(row[7], 0.2)
         self.assertLess(row[7], 0.8)
@@ -57,8 +57,8 @@ class SharpenSoftenTests(unittest.TestCase):
         self.assertGreater(row[8], 0.2)
 
     def test_sharpen_amount_grows_the_overshoot(self):
-        small = kern("Sharpen", step(), sharpen_size=1.0, kernel_filter="box", sharpen_amount=0.5, minimum=-1e6, maximum=1e6)
-        large = kern("Sharpen", step(), sharpen_size=1.0, kernel_filter="box", sharpen_amount=1.5, minimum=-1e6, maximum=1e6)
+        small = kern("Sharpen", step(), sharpen_size=1.0, kernel_filter="box", sharpen_amount=0.5, minimum=-1e6, maximum=1e6, legacy_kernel=1)
+        large = kern("Sharpen", step(), sharpen_size=1.0, kernel_filter="box", sharpen_amount=1.5, minimum=-1e6, maximum=1e6, legacy_kernel=1)
         self.assertLess(large[5, 7, 0], small[5, 7, 0])
         self.assertGreater(large[5, 8, 0], small[5, 8, 0])
 

@@ -28,12 +28,13 @@ SHAPES = {
 def make(kind, **params):
     g = Graph()
     g.add("bg", "Constant", dict(width=W, height=H, red=0.2, green=0.3, blue=0.4, alpha=0.6))
-    g.add("matte", "Radial", dict(width=W, height=H, box_x=10, box_y=10, box_width=100, box_height=60, softness=0.7))
+    g.add("matte", "Radial", dict(width=W, height=H, legacy_draw_blend=1, box_x=10, box_y=10, box_width=100, box_height=60, softness=0.7))
     return g
 
 
 def shape_of(kind, **params):
     p = dict(SPECS[kind]["params"], width=W, height=H, **SHAPES[kind])
+    p.update(dict(legacy_draw_blend=1) if "legacy_draw_blend" in p else {})   # these tests describe the older premultiplied draw
     p.update(params)
     return Evaluator._draw_shape(kind, p, 0, 0, W, H, 1)
 
@@ -45,7 +46,7 @@ def drawn(kind, params=None, bg=False, mask=False):
         wires["image"] = "bg"
     if mask:
         wires["mask"] = "matte"
-    g.add("node", kind, dict(width=W, height=H, **SHAPES[kind], **(params or {})), **wires)
+    g.add("node", kind, dict(width=W, height=H, **({"legacy_draw_blend": 1} if kind != "Text" else {}), **SHAPES[kind], **(params or {})), **wires)
     return g
 
 
@@ -54,6 +55,7 @@ class DefaultsTests(unittest.TestCase):
         for kind in chrome.DRAW_KINDS_WITH_CHROME:
             with self.subTest(kind=kind):
                 p = dict(SPECS[kind]["params"], width=W, height=H, **SHAPES[kind])
+                p["legacy_draw_blend"] = 1                        # the older premultiplied draw
                 self.assertFalse(chrome.draw_config(kind, p).active)
                 self.assertIs(chrome.shape_chrome(kind, p, np.ones((3, 3, 4), np.float32)).dtype, np.dtype("float32"))
                 raw = Evaluator._draw_shape_raw(kind, p, 0, 0, W, H, 1)
@@ -72,8 +74,8 @@ class DefaultsTests(unittest.TestCase):
 
     def test_an_old_document_without_the_knobs_loads_with_the_defaults_and_renders_the_same(self):
         g = Graph()
-        g.add("a", "Rectangle", dict(width=64, height=48, box_x=4, box_y=4, box_width=40, box_height=30))
-        g.add("b", "Ramp", dict(width=64, height=48), image="a")
+        g.add("a", "Rectangle", dict(width=64, height=48, legacy_draw_blend=1, box_x=4, box_y=4, box_width=40, box_height=30))
+        g.add("b", "Ramp", dict(width=64, height=48, legacy_draw_blend=1), image="a")
         before = evaluator_pixels(g.doc, "b")
         old = copy.deepcopy(g.doc)
         for node in old["nodes"].values():

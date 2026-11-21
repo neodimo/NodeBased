@@ -2066,7 +2066,7 @@ def _tracker_cases(Case, out):
     track's own pixel coordinates); match-move applies that motion to the plate, stabilise removes it. The plate is a ramp, so a bilinear
     resample of it is exact; pixels whose source falls outside the plate are not scored. (Finding the track in footage is tested in
     tests/test_2d_behaviour_filter_f.py: a case here has one frame and no footage to follow.)"""
-    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0}}
+    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0, "legacy_draw_blend": 1}}
     track = {1: (8.0, 6.0), 2: (10.5, 7.5)}
     xx = np.arange(16)[None, :]
     yy = np.arange(12)[:, None]
@@ -2508,7 +2508,7 @@ def _vectorcornerpin_cases(Case, out):
     bottom right, 3 the top right, 4 the top left). With no SmartVector wired the pins do not move, so the picture is the corner pin of the From
     quad onto the user pins. The plate is a ramp (a bilinear resample of a ramp is exact), the moves are whole pixels, and a pixel whose source
     falls outside the plate is not scored. Points are in Nuke's pixel space (y up from the bottom edge)."""
-    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0}}
+    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0, "legacy_draw_blend": 1}}
     w, h = 16, 12
 
     def pins(points, side="user"):
@@ -2562,7 +2562,7 @@ def _warp_cases(Case, out):
     pixels under it by that offset, the controls left alone stay, and mix 0 is the input. The plate is a ramp (a bilinear resample of a ramp is exact),
     the moves are whole pixels, and only the pixels the statement is about are scored (the field around a control is the interpolant's, which the guide
     does not give). Payload coordinates are pixel centres, rows counted from the top."""
-    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0}}
+    plate = {"type": "Ramp", "params": {"p0_x": 0.0, "p0_y": 0.0, "p1_x": 15.0, "p1_y": 11.0, "legacy_draw_blend": 1}}
     w, h = 16, 12
     xs, ys = (0.5, 7.5, 15.5), (0.5, 5.5, 11.5)
     grid = [[{"x": x, "y": y} for x in xs] for y in ys]

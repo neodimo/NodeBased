@@ -319,7 +319,7 @@ class VectorBlurKnobTests(unittest.TestCase):
 
     def test_blur_uv_changes_the_picture_where_the_vectors_change(self):
         g = ramp_plate()
-        g.add("uvs", "Ramp", dict(width=W, height=H, p0_x=0.0, p0_y=0.0, p1_x=float(W - 1), p1_y=0.0, color0_red=0.0, color0_green=0.0,
+        g.add("uvs", "Ramp", dict(width=W, height=H, legacy_draw_blend=1, p0_x=0.0, p0_y=0.0, p1_x=float(W - 1), p1_y=0.0, color0_red=0.0, color0_green=0.0,
                                   color0_blue=0.0, color0_alpha=1.0, color1_red=8.0, color1_green=0.0, color1_blue=0.0, color1_alpha=1.0))
         g.add("none", "VectorBlur", dict(blur_uv="none", vector_scale=1.0), image="plate", uv="uvs")
         g.add("soft", "VectorBlur", dict(blur_uv="linear", vector_scale=1.0), image="plate", uv="uvs")

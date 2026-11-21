@@ -241,10 +241,10 @@ class PathTests(unittest.TestCase):
     def document(self, kind, **knobs):
         d = Dispatcher(empty_document())
         d.execute({"op": "create", "id": "a", "type": "Ramp", "params": {
-            "width": W, "height": H, "p0_x": 0.0, "p0_y": 0.0, "p1_x": W - 1.0, "p1_y": 0.0, "color0_red": 0.1, "color0_green": 0.8,
+            "legacy_draw_blend": 1, "width": W, "height": H, "p0_x": 0.0, "p0_y": 0.0, "p1_x": W - 1.0, "p1_y": 0.0, "color0_red": 0.1, "color0_green": 0.8,
             "color0_blue": 0.2, "color0_alpha": 0.9, "color1_red": 0.8, "color1_green": 0.4, "color1_blue": 0.5, "color1_alpha": 0.4}})
         d.execute({"op": "create", "id": "b", "type": "Ramp", "params": {
-            "width": W, "height": H, "p0_x": 0.0, "p0_y": 0.0, "p1_x": 0.0, "p1_y": H - 1.0, "color0_red": 0.3, "color0_green": 0.2,
+            "legacy_draw_blend": 1, "width": W, "height": H, "p0_x": 0.0, "p0_y": 0.0, "p1_x": 0.0, "p1_y": H - 1.0, "color0_red": 0.3, "color0_green": 0.2,
             "color0_blue": 0.6, "color0_alpha": 1.0, "color1_red": 0.6, "color1_green": 0.7, "color1_blue": 0.1, "color1_alpha": 0.6}})
         d.execute({"op": "create", "id": "n", "type": kind, "params": knobs})
         if SPECS[kind]["inputs"] == ["image"]:

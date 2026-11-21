@@ -31,7 +31,7 @@ def graph(crop_box=None, crop_params=None, **shape):
                    "params": {"x": crop_box[0], "y": crop_box[1], "width": crop_box[2], "height": crop_box[3], **(crop_params or {})}})
         d.execute({"op": "connect", "id": "crop", "input": "image", "source": "plate"})
         source = "crop"
-    params = {"width": W, "height": H, **RECT, **shape}
+    params = {"width": W, "height": H, "legacy_draw_blend": 1, **RECT, **shape}
     d.execute({"op": "create", "id": "rect", "type": "Rectangle", "params": params})
     d.execute({"op": "connect", "id": "rect", "input": "image", "source": source})
     d.execute({"op": "view", "id": "rect"})
@@ -85,7 +85,7 @@ class IncomingBoxSmallerThanFormatTests(unittest.TestCase):
                 raster = render(doc)
                 self.assertEqual(raster.data, window)
                 self.assertEqual(raster.display, FORMAT)
-                params = {**SPECS["Rectangle"]["params"], "width": W, "height": H, **RECT}
+                params = {**SPECS["Rectangle"]["params"], "legacy_draw_blend": 1, "width": W, "height": H, **RECT}
                 np.testing.assert_allclose(raster.pixels, expected_over(doc, window, params), atol=1e-6)
 
     def test_bbox_drops_the_shape_outside_the_incoming_box(self):
@@ -121,7 +121,7 @@ class IncomingBoxLargerThanFormatTests(unittest.TestCase):
         shape = dict(box_x=-6, box_y=-4, box_width=W + 14, box_height=H + 9)
         doc = self.doc("bbox", **shape)
         raster = render(doc)
-        params = {**SPECS["Rectangle"]["params"], "width": W, "height": H, **RECT, **shape}
+        params = {**SPECS["Rectangle"]["params"], "legacy_draw_blend": 1, "width": W, "height": H, **RECT, **shape}
         np.testing.assert_allclose(raster.pixels, expected_over(doc, Region(*self.BOX), params), atol=1e-6)
         self.assertGreater(float(raster.pixels[0, 0, 3]), 0.99)                 # drawn out in the overscan
         self.assertEqual(float(render(self.doc("format", **shape)).pixels[0, 0, 3]), 1.0)
