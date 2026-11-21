@@ -294,18 +294,22 @@ class MatchGradeTests(unittest.TestCase):
 class GenerateLutFileTests(unittest.TestCase):
     """The file knobs only shape what the Generate button writes; each file is written and read back through the existing readers."""
 
-    def lut_doc(self, tmp, suffix, **params):
+    def lut_doc(self, tmp, suffix, grade=None, **params):
         g = Graph()
         g.add("src", "Constant", dict(width=8, height=8))
-        g.add("grade", "Grade", dict(multiply=1.6, offset=0.02, gamma=0.8), image="src")
+        g.add("grade", "Grade", dict(multiply=1.6, offset=0.02, gamma=0.8, **(grade or {})), image="src")
         g.add("lut", "GenerateLUT", dict(lut_path=str(Path(tmp) / f"out{suffix}"), lut_size=17, **params), source="grade")
         return g.doc
 
     @staticmethod
-    def expected(rgb):
-        """The Grade the document holds (multiply 1.6, offset 0.02, gamma 0.8) on straight colour values."""
-        rgb = np.asarray(rgb, np.float64)
-        return np.power(np.clip(rgb * 1.6 + 0.02, 0.0, None), 1.0 / 0.8)
+    def expected(rgb, legacy=False):
+        """The Grade the document holds (multiply 1.6, offset 0.02, gamma 0.8) on straight colour values. Nuke 17.0v6 continues the gamma
+        curve along its tangent above 1 (Grade gamma cases, 1121 renders), so a value of 1.62 gives 1 + 0.62 / 0.8; a Grade saved before
+        (`legacy_gamma_power` 1) keeps the plain power."""
+        rgb = np.maximum(np.asarray(rgb, np.float64) * 1.6 + 0.02, 0.0)
+        if legacy:
+            return np.power(rgb, 1.0 / 0.8)
+        return np.where(rgb <= 1.0, np.power(rgb, 1.0 / 0.8), 1.0 + (rgb - 1.0) / 0.8)
 
     def probe_colours(self):
         return np.array([[[0.0, 0.0, 0.0, 1.0], [0.02, 0.05, 0.1, 1.0], [0.2, 0.4, 0.1, 1.0], [0.5, 0.3, 0.7, 1.0], [0.9, 0.8, 0.1, 1.0], [1.0, 1.0, 1.0, 1.0]]], np.float32)
@@ -319,6 +323,16 @@ class GenerateLutFileTests(unittest.TestCase):
         probe = self.probe_colours()
         mapped = lutio.apply_cube(probe, lut, "trilinear")
         np.testing.assert_allclose(mapped[..., :3], self.expected(probe[..., :3]), atol=0.03)
+
+    def test_a_cube_of_a_grade_saved_before_reads_back_the_plain_power(self):
+        from nodebased import lutio
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = self.lut_doc(tmp, ".cube", grade={"legacy_gamma_power": 1}, lut_file_type="cube")
+            path = lutio.export_graph_cube(doc, "lut", doc["nodes"]["lut"]["params"]["lut_path"], 17)
+            lut = lutio.read_cube(path)
+        probe = self.probe_colours()
+        mapped = lutio.apply_cube(probe, lut, "trilinear")
+        np.testing.assert_allclose(mapped[..., :3], self.expected(probe[..., :3], legacy=True), atol=0.03)
 
     def test_a_3dl_round_trips_through_the_3dl_reader_for_every_style_and_depth(self):
         from nodebased import lutio

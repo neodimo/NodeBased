@@ -207,18 +207,36 @@ class ExposureColorspaceTests(unittest.TestCase):
         out = kernel("Exposure", src, red=1.0, gang=1, exposure_colorspace="Linear")
         np.testing.assert_allclose(out[..., :3], src[..., :3] * 2.0, atol=1e-6)
 
+    # Nuke 17.0v6 renders a Cineon stop as 90 code values (cases exposure_cineon_stops and exposure_cineon_ungang in the 1121 renders; the guide's
+    # figure is 0.6 / (0.002 x 1023) x log10(2) = 90.3). A node saved before (`older_exposure_maths` 1) keeps the guide's figure.
+    NUKE_STOP = 90.0 / 1023.0
+    GUIDE_STOP = np.log10(2.0) * 0.6 / (0.002 * 1023.0)
+
     def test_cineon_adds_instead_of_multiplying(self):
         src = plate()
         out = kernel("Exposure", src, red=1.0, gang=1, exposure_colorspace="Cineon")
-        shift = np.log10(2.0) * 0.6 / (0.002 * 1023.0)
-        np.testing.assert_allclose(out[..., :3], src[..., :3] + shift, atol=1e-6)
+        np.testing.assert_allclose(out[..., :3], src[..., :3] + self.NUKE_STOP, atol=1e-6)
         np.testing.assert_array_equal(out[..., 3], src[..., 3])
 
-    def test_cineon_through_log2lin_at_gamma_06_with_ignore_matches_linear_exactly(self):
-        # The guide: "You can match Linear exactly if you set gamma to 0.6 and enable ignore in the Log2Lin node".
+    def test_an_older_cineon_exposure_adds_the_guides_figure(self):
+        src = plate()
+        out = kernel("Exposure", src, red=1.0, gang=1, exposure_colorspace="Cineon", older_exposure_maths=1)
+        np.testing.assert_allclose(out[..., :3], src[..., :3] + self.GUIDE_STOP, atol=1e-6)
+
+    def test_cineon_through_log2lin_at_gamma_06_with_ignore_stays_within_a_third_of_a_percent_of_linear(self):
+        # The guide: "You can match Linear exactly if you set gamma to 0.6 and enable ignore in the Log2Lin node". Nuke's 90-code stop is
+        # 10 ** 0.3 = 1.995 of gain a stop, so the match is within about 0.4%, not exact (1121 renders, exposure_cineon_stops).
         src = plate()
         cineon = kernel("Exposure", src, red=1.5, gang=1, exposure_colorspace="Cineon")
         linear = kernel("Exposure", src, red=1.5, gang=1, exposure_colorspace="Linear")
+        through = kernel("Log2Lin", cineon, gamma=0.6, ignore_black=1)
+        reference = kernel("Log2Lin", src, gamma=0.6, ignore_black=1)
+        np.testing.assert_allclose(through[..., :3], reference[..., :3] * linear[..., :3] / src[..., :3], rtol=5e-3)
+
+    def test_an_older_cineon_exposure_through_log2lin_matches_linear_exactly(self):
+        src = plate()
+        cineon = kernel("Exposure", src, red=1.5, gang=1, exposure_colorspace="Cineon", older_exposure_maths=1)
+        linear = kernel("Exposure", src, red=1.5, gang=1, exposure_colorspace="Linear", older_exposure_maths=1)
         through = kernel("Log2Lin", cineon, gamma=0.6, ignore_black=1)
         reference = kernel("Log2Lin", src, gamma=0.6, ignore_black=1)
         np.testing.assert_allclose(through[..., :3], reference[..., :3] * linear[..., :3] / src[..., :3], rtol=2e-4)
@@ -226,9 +244,11 @@ class ExposureColorspaceTests(unittest.TestCase):
     def test_each_channel_has_its_own_addition_when_not_ganged(self):
         src = plate()
         out = kernel("Exposure", src, gang=0, red=-1.0, green=2.0, blue=0.0, exposure_colorspace="Cineon")
-        step = 0.6 / (0.002 * 1023.0)
         for channel, stops in enumerate((-1.0, 2.0, 0.0)):
-            np.testing.assert_allclose(out[..., channel], src[..., channel] + np.log10(2.0 ** stops) * step, atol=1e-6)
+            np.testing.assert_allclose(out[..., channel], src[..., channel] + stops * self.NUKE_STOP, atol=1e-6)
+        older = kernel("Exposure", src, gang=0, red=-1.0, green=2.0, blue=0.0, exposure_colorspace="Cineon", older_exposure_maths=1)
+        for channel, stops in enumerate((-1.0, 2.0, 0.0)):
+            np.testing.assert_allclose(older[..., channel], src[..., channel] + stops * self.GUIDE_STOP, atol=1e-6)
 
     def test_a_node_saved_before_is_linear(self):
         g = Graph()

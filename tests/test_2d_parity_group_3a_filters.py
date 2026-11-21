@@ -118,9 +118,17 @@ class ExposurePixelTests(unittest.TestCase):
         np.testing.assert_allclose(exposure(image, red=1.0, green=-3.0, blue=5.0, gang=1),
                                    px(1.0, 1.0, 1.0, 1.0), atol=1e-7)
 
-    def test_blackpoint_pixel_becomes_black_and_the_rest_scales_about_it(self):
+    def test_blackpoint_is_lifted_by_the_gain_as_nuke_renders_it(self):
+        # Nuke 17.0v6 (case exposure_stops_blackpoint, 1121 renders): out = gain * in + black * (gain - 1) / (1 - black), so a pixel at the black
+        # point no longer becomes 0. Here gain 2, black 0.1: 2 * in + 0.1 / 0.9.
         image = px(0.1, 0.5, 0.3, 1.0)
         out = exposure(image, blackpoint=0.1, red=1.0, green=1.0, blue=1.0, gang=0)
+        lift = 0.1 / 0.9
+        np.testing.assert_allclose(out, px(2 * 0.1 + lift, 2 * 0.5 + lift, 2 * 0.3 + lift, 1.0), atol=1e-6)
+
+    def test_an_older_exposure_node_makes_the_blackpoint_pixel_black_and_scales_about_it(self):
+        image = px(0.1, 0.5, 0.3, 1.0)
+        out = exposure(image, blackpoint=0.1, red=1.0, green=1.0, blue=1.0, gang=0, older_exposure_maths=1)
         # (in - 0.1) * 2: red at the black point is exactly 0, green 0.8, blue 0.4
         np.testing.assert_allclose(out, px(0.0, 0.8, 0.4, 1.0), atol=1e-7)
 
