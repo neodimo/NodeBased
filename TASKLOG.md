@@ -1,3 +1,9 @@
+## 2026-11-21 — continuous mode merge: Lane 11 (Review book, Claude Opus 5.5) step B6 (Fri 11/20): pack-side mismatches out of the way, the next 96 cases renderable, and Merge and Transform match real Nuke (finish 1) (integrator tick)
+
+- **What was done:** `main` `0e2e07c8` -> `450b0551` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `450b0551`: Ran 10660 tests in 1732.511 s, OK (skipped=39), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-21 — Lane 11 (Review book, Claude Opus 5.5) step B6 finish: the rest of the reference pack, Reformat ties and Transform edge filters match Nuke 17
 
 - **What was done (evidence, rendered in Nuke 17.0v6 Non-commercial at 12:10 to 12:20 AM):** the pack now renders fractional frames (a TimeWarp with filter none and the fractional lookup after the node, probed: lookup 0.5 reads 0.5), moving plates and upstream Transform chains (NodeBased writes the plate as an EXR sequence with three frames of margin each side; the node's input range is set to the project's), the OCIO cases on the fixture config (root colorManagement OCIO, OCIO_config custom), NodeBased's D60 and DCI whites (Nuke's ACES and DCI-P3 illuminants). Pack-side fixes found by re-rendering: NodeBased's filter was never sent to Nuke (52 cases ran Nuke's cubic), CornerPin2D's from corners are 0 0 in a script-made node, STMap takes the source on input 0, IDistort needs its vectors on a layer of the source (Copy into `nbv`). Kronos's three FgVecs cases stay not renderable: Nuke's Python has no input labels. Kernels: Reformat impulse ties take the upper row on screen (`legacy_reformat_ties`), Transform's guide filters read the edge pixel beyond the picture (`legacy_transform_filters`); both default 1 for saved nodes in upgrade_document, no schema bump. Cubic left as Keys because gpu2d renders it.

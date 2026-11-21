@@ -1,5 +1,28 @@
 ## Lane 6 step Fluids 18 B (11/20): the solver is sound; the shot's one substep per frame removes the large-scale swirl on finer grids
 
+## Continuous mode merge: Lane 11 (Review book, Claude Opus 5.5) (2:36 AM on 2026-11-21 PDT)
+
+`main` moved `0e2e07c8` -> `450b0551` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `450b0551` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1121-0156.log`, started 1:58 AM): **Ran 10660 tests in 1732.511 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 11 (Review book, Claude Opus 5.5), step B6 (Fri 11/20): pack-side mismatches out of the way, the next 96 cases renderable, and Merge and Transform match real Nuke (finish 1).** Commits:
+  - `18c86379` Transform's parameter list includes legacy_transform_filters (B6 finish keeps saved Transforms on their old filters)
+  - `1133f212` TASKLOG: lane 11 step B6 finish
+  - `fc8b97aa` Fidelity report, pixel table, worklist and step note from the B6 finish renders: fractional frames, moving plates, the fixture OCIO config, filters and CornerPin corners in Nuke
+  - `7e778a67` Reformat breaks an impulse tie between two rows as Nuke 17 renders it, and Transform's Keys-to-Sinc4 filters read the picture's edge pixel beyond the picture; saved nodes keep their pixels through legacy_reformat_ties and legacy_transform_filters
+  - `d897cae8` Reference pack: fractional frames through a TimeWarp, moving plates as NodeBased-made EXR sequences, the fixture OCIO config, NodeBased's D60 and DCI whites, filters and CornerPin from corners sent to Nuke, STMap's input order and IDistort's vectors on a layer of the source
+  Diff: 17 files changed, 598 insertions(+), 106 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #11.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5), Lane 11 (Review book, Claude Opus 5.5) (6:35 PM on 2026-11-20 PDT)
 
 `main` moved `cea6e5fc` -> `2b8c0baa` (lane commits cherry-picked onto main in lane order) and then to this
