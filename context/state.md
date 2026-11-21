@@ -1,5 +1,29 @@
 ## Lane 6 step Fluids 18 B (11/20): the solver is sound; the shot's one substep per frame removes the large-scale swirl on finer grids
 
+## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:35 AM on 2026-11-21 PDT)
+
+`main` moved `02568e1d` -> `9bbd04cd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `9bbd04cd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1121-0955.log`, started 9:57 AM): **Ran 10684 tests in 1728.972 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 9 (2D behaviour B, Claude Sonnet 5.5), step N1 (Fri 11/20): Filter and Draw nodes match what real Nuke renders, starting with the high-use nodes (resume).** Commits:
+  - `ff2d908a` TASKLOG: lane 9 step N1 resume
+  - `5a1aa2b7` Fidelity report, worklist and Nuke-pixel rows rebuilt after the filter and draw kernels moved to Nuke 17's own behaviour
+  - `85da84db` Tests and fidelity plates that draw with the Draw nodes as image sources pin legacy_draw_blend, Sharpen/Soften step tests pin legacy_kernel
+  - `967ee0c5` test_animation: read the animated Blur's contrast at the Blur, since Nuke's box is radius wide
+  - `6fd86cee` Draw nodes (Rectangle, Radial, Ramp, Grid, Noise) mix their colour in by the matte as Nuke 17 renders it: softness in pixels, Ramp curves and sample position, Grid line spacing and crossings; older nodes keep the premultiplied over through legacy_draw_blend (schema 40)
+  - `4b6088b9` Blur, Sharpen, Soften and Laplacian use Nuke 17's own filter kernels (box width, triangle, quadratic, gaussian FWHM), Sharpen/Soften limits and Laplacian sign as Nuke renders them; older nodes keep their kernels through legacy_kernel (schema 40)
+  Diff: 30 files changed, 1163 insertions(+), 331 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #9.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 11 (Review book, Claude Opus 5.5) (2:36 AM on 2026-11-21 PDT)
 
 `main` moved `0e2e07c8` -> `450b0551` (lane commits cherry-picked onto main in lane order) and then to this

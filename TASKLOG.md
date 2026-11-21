@@ -1,3 +1,9 @@
+## 2026-11-21 — continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) step N1 (Fri 11/20): Filter and Draw nodes match what real Nuke renders, starting with the high-use nodes (resume) (integrator tick)
+
+- **What was done:** `main` `02568e1d` -> `9bbd04cd` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `9bbd04cd`: Ran 10684 tests in 1728.972 s, OK (skipped=39), exit 0.
+- **Not done:** visual QA; CI not read; no Windows run.
+
 ## 2026-11-21 — Lane 9 (2D behaviour B, Claude Sonnet 5.5) step N1 resume: Blur family, Matrix, Laplacian and the Draw nodes match Nuke 17's renders
 
 - **What was done (evidence, scored against Nuke 17.0v6 Non-commercial renders):** two earlier workers' uncommitted work reviewed, committed in groups and rebased onto main; migration steps 39 to 40 (schema now 40, `legacy_kernel` 1 on saved Blur, Sharpen, Soften and Laplacian, `legacy_draw_blend` 1 on saved Rectangle, Radial, Ramp, Grid and Noise). Blur, Sharpen, Soften and Laplacian use Nuke's own kernels (`blurknobs.nuke_weights`: box as a width in pixels, triangle, quadratic, gaussian with size as full width at half maximum; Sharpen/Soften minimum and maximum as `sign(d) * min(hi, max(|d| - lo, 0))`; Laplacian is picture minus blur and passes the picture through where the blur is the identity). Matrix no longer clips. The Draw nodes mix by the matte (`drawbehaviour.nuke_blend`), Rectangle softness is a width in pixels, Ramp curves and sample position, Grid lines. Lane 9 rows matching Nuke: 39 of 254 before, 84 of 254 after (Blur 2 to 7 of 8, Sharpen 1 to 6, Soften 1 to 6, Laplacian 0 to 2, Matrix 0 to 3, Rectangle 0 to 12, Ramp 0 to 9, Grid 0 to 2). Overall with Nuke's pixels: 86.6 at the step's start, 90.1 now.
