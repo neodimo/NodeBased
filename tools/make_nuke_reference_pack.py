@@ -64,6 +64,8 @@ NUKE17_ENUM = {("Colorspace", "colorspace_in"): {"Gamma1.8": "1.80", "Gamma2.2":
                ("Colorspace", "colorspace_out"): {"Gamma1.8": "1.80", "Gamma2.2": "2.20", "Gamma2.4": "2.40", "Gamma2.6": "2.60"},
                # Nuke's Colorspace keeps the white apart (illuminant_in/out, D65 by default): P3-D65 is the DCI-P3 primaries on a D65 white.
                ("Colorspace", "primary_in"): {"P3-D65": "DCI-P3"}, ("Colorspace", "primary_out"): {"P3-D65": "DCI-P3"},
+               # NodeBased's D60 is the ACES white (0.32168, 0.33767), Nuke's ACES illuminant; its DCI white (0.314, 0.351) is Nuke's DCI-P3.
+               ("Colorspace", "illuminant_in"): {"D60": "ACES", "DCI": "DCI-P3"}, ("Colorspace", "illuminant_out"): {"D60": "ACES", "DCI": "DCI-P3"},
                ("Bokeh", "outputType"): {"Focus Mattes": "Focus Matte"},
                ("Vectorfield", "interpolation"): {"trilinear": "trilinear field"}}
 NOT_IN_NC = {"Primatte", "Ultimatte", "GenerateLUT"}            # Nuke Non-commercial refuses to create these nodes
@@ -85,6 +87,14 @@ CURVE_INTERPOLATION = {"linear": "nuke.LINEAR", "constant": "nuke.CONSTANT", "sm
 GUI_INPUT_RANGE = {"Retime": ("input.first", "input.last", "output.first", "output.last"), "TimeClip": ("first", "last", "origfirst", "origlast"),
                    "Kronos": ("input.first", "input.last"), "OFlow2": ("input.first", "input.last")}
 STAMP_BLUE = 0.5                                               # tools/nuke_fidelity_cases.py: the stamped plate's green 0.25 and blue 0.5
+# OCIO nodes whose case names a config file of its own (the fixture config in tools/nuke_fidelity_cases.py): the script loads it as Nuke's
+# custom OCIO config (root colorManagement OCIO, OCIO_config custom, read in Nuke 17.0v6 on 11/21), and these menu knobs take the config's
+# names as text, since the knob table holds the menus of Nuke's default config.
+OCIO_MENU_KNOBS = {"in_colorspace", "out_colorspace", "colorspace", "display", "view", "look"}
+# A moving plate, an upstream Transform chain or a generator on an extra input is rendered by NodeBased into an EXR sequence beside the
+# fixtures and read back in Nuke, so the render tests the node under test on the very frames NodeBased shows it. PLATE_MARGIN frames are
+# written on each side of the project range for the nodes that look past it (Kronos and OFlow read neighbouring frames).
+PLATE_MARGIN = 3
 
 
 def nuke17_class(case):
@@ -121,7 +131,8 @@ CHANNEL_VALUE = {"mask.a": "rgba.alpha", "mask.r": "rgba.red", "mask.g": "rgba.g
 
 
 def case_files(case):
-    """{file name: path} for the files a case made for itself (a .cube LUT in a temporary folder), found in its NodeBased params."""
+    """{file name: path} for the files a case made for itself (a .cube LUT in a temporary folder), found in its NodeBased params. An
+    OCIO config brings the files beside it (its LUTs), which its transforms name relative to the config's folder."""
     found = {}
 
     def walk(v):
@@ -133,8 +144,125 @@ def case_files(case):
                 walk(x)
         elif isinstance(v, str) and len(v) < 4096 and os.path.isabs(v) and os.path.isfile(v):
             found[os.path.basename(v)] = v
+            if v.endswith(".ocio"):
+                folder = os.path.dirname(v)
+                for name in sorted(os.listdir(folder)):
+                    if os.path.isfile(os.path.join(folder, name)):
+                        found.setdefault(name, os.path.join(folder, name))
     walk(case.nb_params or {})
     return found
+
+
+def ocio_config(case):
+    """The file name of the OCIO config an OCIO case brings (copied beside the fixtures), or None."""
+    config = (case.nb_params or {}).get("config")
+    if case.nuke_class.startswith("OCIO") and isinstance(config, str) and config.endswith(".ocio") and os.path.isfile(config):
+        return os.path.basename(config)
+    return None
+
+
+def case_knob_statement(case, knob, value, table):
+    """knob_statement for one of the case's knobs, with the case's own names: the Nuke knob name, its files, and an OCIO config's menus."""
+    cls = nuke17_class(case)
+    knob = NUKE17_KNOB.get((case.nuke_class, knob), knob)
+    if ocio_config(case) and knob in OCIO_MENU_KNOBS:
+        if knob not in table.get(cls, {}).get("knobs", {}):
+            raise ValueError(f"Nuke 17's {cls} has no knob {knob}")
+        return f"node[{knob!r}].setValue({str(value)!r})  # a name in the case's own OCIO config"
+    return knob_statement(cls, knob, value, table, case_files(case))
+
+
+# NodeBased's filter names where Nuke 17's filter menu says it another way; the rest match by name (enum_value ignores case).
+NUKE17_FILTER = {"nearest": "impulse", "bilinear": "linear", "box": "impulse"}
+
+
+def implied_knobs(case, table):
+    """Knobs a case sets in NodeBased and leaves off its Nuke list, which the script writes so Nuke does not fall back to its default:
+    the resampling filter (11/21: 52 Transform, Reformat, CornerPin2D, LensDistortion, IDistort, STMap and Tile cases ran NodeBased's
+    nearest or bilinear against Nuke's cubic)."""
+    listed = {k for k, _ in case.nuke_knobs}
+    p = case.nb_params or {}
+    knobs = table.get(nuke17_class(case), {}).get("knobs", {})
+    out = []
+    if "filter" in knobs and "filter" not in listed and isinstance(p.get("filter"), str):
+        out.append(("filter", NUKE17_FILTER.get(p["filter"], p["filter"])))
+    # CornerPin2D's from corners: the GUI fills them from the input's format on creation, a script's node keeps 0 0 on all four (11/21:
+    # every CornerPin case rendered black), so the script writes NodeBased's own, which number the corners the way its to corners do.
+    for n in range(1, 5):
+        if case.nuke_class == "CornerPin2D" and f"from{n}" in knobs and f"from{n}" not in listed and f"from{n}_x" in p:
+            out.append((f"from{n}", [float(p[f"from{n}_x"]), float(p[f"from{n}_y"])]))
+    return out
+
+
+# Nuke 17's input order where a case lists its pictures in another: STMap's input 0 is the source and 1 the map (11/21, probed: the
+# identity map on input 1 returns the source; the cases list the map first).
+NUKE17_INPUT_ORDER = {"STMap": (1, 0)}
+VECTOR_LAYER = "nbv"
+
+
+def vectors_on_the_source(case):
+    """True for an IDistort case that lists only its vector picture: Nuke's IDistort reads the vectors from channels of its one input,
+    so the script copies the vector fixture's four channels into a layer of their own (nbv) on the source and points uv at that layer
+    (probed in Nuke 17.0v6 on 11/21: the guide's u -1 v 5 then reads the pixel one left and five up)."""
+    return case.nuke_class == "IDistort" and len(case.nuke_inputs) == 1 and len(case.nb_inputs) == 2 and case.nb_inputs[1] == case.nuke_inputs[0]
+
+
+def fractional_frame(case):
+    """The case's frame when it is fractional, else None. Nuke's terminal mode renders whole frames, so the script renders frame 1 through
+    a TimeWarp after the node under test whose lookup is the fractional frame and whose filter is none: it asks the node for exactly that
+    frame (probed in Nuke 17.0v6 on 11/21: lookup 0.5 on a frame-stamped plate reads 0.5, and NoTimeBlur under lookup 2.4 rounds as
+    NodeBased's does)."""
+    stamp = _stamp(case)
+    if stamp is None:
+        return None
+    frame = float(stamp.get("frame", 1))
+    return frame if frame != int(frame) else None
+
+
+def sequence_plate(case):
+    """True when the case's picture comes from NodeBased as an EXR sequence: a moving plate, or an upstream chain with more than FrameRange."""
+    stamp = _stamp(case)
+    if stamp is None or "clips" in stamp:
+        return False
+    return "plate" in stamp or any(step[0] != "FrameRange" for step in stamp.get("chain", ()))
+
+
+def plate_range(case):
+    stamp = _stamp(case)
+    first, last = stamp.get("time") or (1, max(1, int(float(stamp.get("frame", 1)))))
+    return int(first) - PLATE_MARGIN, int(last) + PLATE_MARGIN
+
+
+def plate_sequences(case):
+    """{file name: (H, W, 4) array} of the pictures the case's node reads, made by NodeBased: the plate (after its chain) on every frame of
+    plate_range as `<case>_plate.<frame>.exr`, and each extra input's generator once as `<case>_<slot>.exr`. The plate is the case's chain
+    run with its last step as the node shown, so it is built by the same document code the case's own answer is."""
+    from dataclasses import replace
+    from nuke_fidelity_cases import _run_stamped_document
+    stamp = dict(_stamp(case))
+    chain = list(stamp.get("chain", ()))
+    out = {}
+    if chain:
+        kind, params, *curves = chain[-1]
+        base = dict(stamp, chain=chain[:-1], curves=curves[0] if curves else {})
+    else:                                        # the plate alone: a pass-through Dot-like step NodeBased has (FrameRange over the range)
+        kind, params = "FrameRange", {"first_frame": -10000, "last_frame": 10000}
+        base = dict(stamp, chain=[], curves={})
+    base.pop("inputs", None)
+    first, last = plate_range(case)
+    for frame in range(first, last + 1):
+        step = replace(case, nb_kind=kind, nb_params=dict(params, _stamp=dict(base, frame=frame)))
+        out[f"{case.id}_plate.{frame}.exr"] = np.asarray(_run_stamped_document(step), np.float32)
+    if stamp.get("inputs"):
+        from nodebased.core import Dispatcher, empty_document
+        from nodebased.imaging import Evaluator
+        width, height = stamp.get("size", (W, H))
+        for slot, (gen, gparams) in stamp["inputs"].items():
+            d = Dispatcher(empty_document())
+            d.execute({"op": "create", "id": "g", "type": gen, "params": {"width": width, "height": height, **gparams}})
+            raster = Evaluator().evaluate_raster(dict(d.document, view="g"), target="g", frame=1)
+            out[f"{case.id}_{slot}.exr"] = np.asarray(raster.pixels, np.float32)
+    return out
 
 
 def _number_list(text):
@@ -270,13 +398,12 @@ def unrenderable(case, table):
             return f"the {what} live in the node's curve data, which the pack does not write into Nuke yet"
     stamp = _stamp(case)
     if stamp is not None:
-        if float(stamp.get("frame", 1)) != int(stamp.get("frame", 1)):
-            return f"the case shows fractional frame {stamp['frame']}; Nuke's terminal mode renders whole frames"
-        if "plate" in stamp or any(step[0] != "FrameRange" for clip in ([stamp.get("chain", ())] + list(stamp.get("clips", ())))
-                                   for step in clip):
-            return "the plate upstream of the node (a moving picture or a Transform/Shuffle chain) is not built in Nuke yet"
-        if "inputs" in stamp:
-            return "the node's extra inputs (Kronos's vectors) are not built in Nuke yet"
+        if fractional_frame(case) is not None and (sequence_plate(case) or stamp.get("curves")):
+            return f"the case shows fractional frame {stamp['frame']} on a moving plate or a curve, which the pack's TimeWarp does not combine yet"
+        if any(step[0] != "FrameRange" for clip in stamp.get("clips", ()) for step in clip):
+            return "an AppendClip input upstream of the node carries a Transform/Shuffle chain, which the pack does not build in Nuke yet"
+        if "inputs" in stamp:       # Nuke 17's Python has no input labels (no Node.inputLabel, 11/21), so the FgVecs index needs a probe in the GUI
+            return "the node's extra inputs (Kronos's vectors on FgVecs) are not wired in Nuke yet: the input's index is not known from Python"
         if "spots" in stamp:
             return "DustBust's spots live in the node's paint data, which the pack does not write into Nuke yet"
         for param in stamp.get("curves", {}):
@@ -291,8 +418,8 @@ def unrenderable(case, table):
         return (f"the case sets NodeBased's {', '.join(unwritten[:4])} and lists no Nuke knob for them (curves, grids or files the pack "
                 "does not write into Nuke yet), so a render would show Nuke's defaults")
     try:
-        for knob, value in case.nuke_knobs:
-            knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table, case_files(case))
+        for knob, value in tuple(case.nuke_knobs) + tuple(implied_knobs(case, table)):
+            case_knob_statement(case, knob, value, table)
         if case.nuke_class in ROUTING_WRITERS:
             ROUTING_WRITERS[case.nuke_class](case)
     except ValueError as exc:
@@ -334,9 +461,11 @@ def py_script(case, table=None):
         raise ValueError(f"{case.id}: {reason}")
     cls = nuke17_class(case)
     stamp = _stamp(case)
-    frame = int(stamp.get("frame", 1)) if stamp else 1
+    fractional = fractional_frame(case)
+    frame = 1 if fractional is not None else (int(stamp.get("frame", 1)) if stamp else 1)
     first, last = (stamp.get("time") or (min(1, frame), max(1, frame))) if stamp else (1, 1)
     first, last = min(int(first), frame), max(int(last), frame)
+    width, height = (stamp or {}).get("size", (W, H))
     lines = ["# One case of the NodeBased fidelity pack, written by tools/make_nuke_reference_pack.py. Run: nuke -t THIS_FILE",
              f"# {case.id}: {case.nuke} ({cls} in Nuke 17)  ({case.source})",
              "import os", "import sys", "import nuke", "",
@@ -349,24 +478,59 @@ def py_script(case, table=None):
              "",
              "# Non-commercial Nuke reaches at most 10 nodes per script from Python, so every node is kept as the handle",
              "# nuke.nodes.X() returns; nothing is looked up with nuke.toNode or nuke.allNodes.",
-             f"nuke.addFormat('{W} {H} 1 nb_fixture')",
+             f"nuke.addFormat('{width} {height} 1 nb_fixture')",
              "nuke.root()['format'].setValue('nb_fixture')",
              f"nuke.root()['first_frame'].setValue({first})", f"nuke.root()['last_frame'].setValue({last})"]
-    if stamp is not None:
+    config = ocio_config(case)
+    if config:
+        lines += ["nuke.root()['colorManagement'].setValue('OCIO')", "nuke.root()['OCIO_config'].setValue('custom')",
+                  f"nuke.root()['customOCIOConfigPath'].setValue(os.path.join(fixtures, {config!r}).replace(os.sep, '/'))"]
+    gui_range = None
+    if stamp is not None and sequence_plate(case):
+        p0, p1 = plate_range(case)
+        lines.append(f"plate0 = nuke.nodes.Read(file=os.path.join(fixtures, {case.id + '_plate.####.exr'!r}).replace(os.sep, '/'), "
+                     f"first={p0}, last={p1}, origfirst={p0}, origlast={p1}, raw=True)")
+        plates = ["plate0"]
+        gui_range = (first, last)        # the node's input range is the project's, as NodeBased's is, not the margin the sequence carries
+    elif stamp is not None:
         plate_lines, plates = _stamp_lines(case, stamp)
         lines += plate_lines
     else:
-        for name in dict.fromkeys(case.nuke_inputs):
+        names = tuple(case.nb_inputs) if vectors_on_the_source(case) else tuple(case.nuke_inputs)
+        for name in dict.fromkeys(names):
             lines.append(f"read_{name} = nuke.nodes.Read(file=os.path.join(fixtures, {name + '.exr'!r}).replace(os.sep, '/'), "
                          "first=1, last=1, origfirst=1, origlast=1, raw=True)")
         plates = [f"read_{name}" for name in case.nuke_inputs]
+        if case.nuke_class in NUKE17_INPUT_ORDER:
+            plates = [plates[i] for i in NUKE17_INPUT_ORDER[case.nuke_class]]
+        if vectors_on_the_source(case):
+            v = VECTOR_LAYER
+            lines.append(f"nuke.Layer({v!r}, [{', '.join(repr(f'{v}.{c}') for c in ('red', 'green', 'blue', 'alpha'))}])")
+            lines.append("vectors = nuke.nodes.Copy(" + ", ".join(f"from{i}='rgba.{c}', to{i}='{v}.{c}'"
+                                                            for i, c in enumerate(('red', 'green', 'blue', 'alpha'))) + ")")
+            lines += [f"vectors.setInput(0, read_{case.nb_inputs[0]})", f"vectors.setInput(1, read_{case.nb_inputs[1]})"]
+            plates = ["vectors"]
     lines.append(f"node = nuke.nodes.{cls}()")
     lines += [f"node.setInput({index}, {plate})" for index, plate in enumerate(plates)]
+    if stamp is not None and sequence_plate(case):
+        for slot in (stamp.get("inputs") or {}):
+            lines.append(f"read_{slot} = nuke.nodes.Read(file=os.path.join(fixtures, {case.id + '_' + slot + '.exr'!r}).replace(os.sep, '/'), "
+                         "first=1, last=1, origfirst=1, origlast=1, raw=True)")
+            lines.append(f"node.setInput(next(i for i in range(node.maxInputs()) if "
+                         f"node.inputLabel(i).lower().replace(' ', '') == {slot.lower()!r}), read_{slot})")
     for knob in GUI_INPUT_RANGE.get(cls, ()) if plates else ():
         end = "firstFrame" if knob.endswith("first") else "lastFrame"
-        lines.append(f"node[{knob!r}].setValue(node.input(0).{end}())          # as the GUI sets it on creation")
-    files = case_files(case)
-    lines += [knob_statement(cls, NUKE17_KNOB.get((case.nuke_class, knob), knob), value, table, files) for knob, value in case.nuke_knobs]
+        if gui_range is not None:
+            lines.append(f"node[{knob!r}].setValue({gui_range[0] if end == 'firstFrame' else gui_range[1]})          # the project range")
+        else:
+            lines.append(f"node[{knob!r}].setValue(node.input(0).{end}())          # as the GUI sets it on creation")
+    statements = [case_knob_statement(case, knob, value, table) for knob, value in tuple(case.nuke_knobs) + tuple(implied_knobs(case, table))]
+    if vectors_on_the_source(case):
+        statements = [s.replace("'rgba.", f"'{VECTOR_LAYER}.").replace(" rgba.", f" {VECTOR_LAYER}.") if s.startswith("node['uv']") else s
+                      for s in statements]
+        if not any(s.startswith("node['uv']") for s in statements):
+            statements.append(f"node['uv'].setValue('{VECTOR_LAYER}.red {VECTOR_LAYER}.green')")
+    lines += statements
     if case.nuke_class in ROUTING_WRITERS:
         lines += ROUTING_WRITERS[case.nuke_class](case)
     for param, (interpolation, keys) in (stamp or {}).get("curves", {}).items():
@@ -375,11 +539,16 @@ def py_script(case, table=None):
         lines += [f"node[{knob!r}].setValueAt({float(v)!r}, {float(f)!r})" for f, v in keys]
         lines.append(f"node[{knob!r}].animation(0).changeInterpolation(node[{knob!r}].animation(0).keys(), "
                      f"{CURVE_INTERPOLATION.get(interpolation, 'nuke.LINEAR')})")
+    shown = "node"
+    if fractional is not None:
+        lines += ["warp = nuke.nodes.TimeWarp()          # asks the node for the case's fractional frame; Nuke renders whole frames",
+                  "warp.setInput(0, node)", f"warp['lookup'].setValue({fractional!r})", "warp['filter'].setValue('none')"]
+        shown = "warp"
     lines += ["crop = nuke.nodes.Crop()",
               "crop['box'].setValue([0, 0, 0, 0])",
               "crop['box'].setExpression('input.format.x', 0)", "crop['box'].setExpression('input.format.y', 1)",
               "crop['box'].setExpression('input.format.r', 2)", "crop['box'].setExpression('input.format.t', 3)",
-              "crop.setInput(0, node)",
+              f"crop.setInput(0, {shown})",
               f"write = nuke.nodes.Write(file=os.path.join(out_dir, {case.id + '.exr'!r}).replace(os.sep, '/'), "
               "file_type='exr', datatype='32 bit float', compression='none', channels='rgba', raw=True)",
               "write.setInput(0, crop)",
@@ -460,6 +629,13 @@ def write_pack(pack, table=None):
         (pack / "scripts" / f"{case.id}.py").write_text(py_script(case, table), encoding="utf-8")
         for name, path in case_files(case).items():           # a LUT the case made for itself, beside the fixtures
             shutil.copyfile(path, pack / "fixtures" / name)
+        if sequence_plate(case):                              # the moving plate and extra inputs, as NodeBased makes them
+            for name, arr in plate_sequences(case).items():
+                frame_name = name
+                if "_plate." in name:
+                    stem, number, ext = name.rsplit(".", 2)
+                    frame_name = f"{stem}.{int(number):04d}.{ext}" if int(number) >= 0 else f"{stem}.-{abs(int(number)):03d}.{ext}"
+                write_exr(pack / "fixtures" / frame_name, arr, bits="float", compression="none")
         manifest["cases"].append({"id": case.id, "nuke": case.nuke, "nuke_class": nuke17_class(case),
                                   "nuke_knobs": [[k, v] for k, v in case.nuke_knobs], "nuke_inputs": list(case.nuke_inputs),
                                   "nodebased_kind": case.nb_kind, "nodebased_params": case.nb_params, "source": case.source})

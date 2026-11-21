@@ -118,7 +118,7 @@ class PackScriptTests(unittest.TestCase):
         reasons = {s["id"]: s["reason"] for s in self.manifest["not_renderable"]}
         self.assertTrue(all(reasons.values()))
         self.assertIn("Non-commercial does not offer Primatte", " ".join(reasons.values()))
-        self.assertIn("no menu entry 'lin'", reasons["ocio_colorspace_gain"])
+        self.assertIn("FgVecs", reasons["kronos_resampling_bilinear_half_pixel_step"])
         self.assertIn("SmartVector input over a frame range", reasons["vectordistort_follows_the_vectors"])
         self.assertIn("nuke.root()", reasons["root_project_settings"])
         self.assertFalse(any((self.root / "scripts" / f"{s}.py").exists() for s in reasons))

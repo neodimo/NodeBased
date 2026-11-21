@@ -33,8 +33,9 @@ class EverySettingReachesTheScriptTests(unittest.TestCase):
             script = pack.py_script(case, self.table)
             cls = pack.nuke17_class(case)
             for knob, value in case.nuke_knobs:
-                statement = pack.knob_statement(cls, pack.NUKE17_KNOB.get((case.nuke_class, knob), knob), value, self.table,
-                                                pack.case_files(case))
+                statement = pack.case_knob_statement(case, knob, value, self.table)
+                if knob == "uv" and pack.vectors_on_the_source(case):     # the vectors are copied to a layer of their own on the source
+                    statement = statement.replace("rgba.", pack.VECTOR_LAYER + ".")
                 with self.subTest(case=case.id, knob=knob):
                     self.assertIn(statement, script)
 
