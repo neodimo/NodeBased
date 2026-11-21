@@ -1,5 +1,29 @@
 ## Lane 2 step N1 (11/20): Color, Keyer and Channel nodes follow Nuke 17.0v6's renders; schema 39
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (11:55 AM on 2026-11-21 PDT)
+
+`main` moved `8669e0fe` -> `a0c072bc` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `a0c072bc` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1121-1115.log`, started 11:17 AM): **Ran 10718 tests in 1749.573 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step N1 fix (Fri 11/20): five older tests against the Nuke-matched kernels, and the project-file version renumbered.** Commits:
+  - `80968ee1` TASKLOG: lane 2 step N1 fix
+  - `5b09eb70` Motion half-translation case and flicker test bound read the estimator's float noise across platforms (0.02, with a mean check); schema 41 test keeps its negative-red Ramp; Nuke pixel numbers and worklist regenerated from the 1121 renders
+  - `5b1af909` Kronos and OFlow saved-picture test compares float32 golden pictures with a float-noise tolerance instead of an exact sha256 that differs between platforms
+  - `e0bf3f94` Tests for Exposure's Cineon stop and black point and for the GenerateLUT cube follow Nuke 17.0v6's renders; saved nodes keep the old numbers (checked)
+  - `052a81fc` Rebuild the 2D fidelity report, the Nuke pixel numbers and the worklist after lane 2 step N1; Exposure cases follow Nuke's black point and Cineon stop; GPU Grade tests mark their gamma cases legacy; step notes
+  - `c228ebee` Grade gamma, ChannelMerge union/xor/multiply/divide, Gamma and Toe negatives, Exposure black point, PLogLin alpha, Keyer falling edge and Expression blank rows follow Nuke 17.0v6's own renders; saved nodes keep their pixels through legacy flags set by the schema 39 migration
+  Diff: 34 files changed, 776 insertions(+), 255 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Lane 2 rows matching Nuke: 249 to 281 of 566. Overall fidelity 87.5. Seven kernels changed behind legacy flags (see TASKLOG.md of the same date); the migration `v38 -> v39` sets `legacy_gamma_power`, `older_channel_maths`, `older_negatives`, `older_exposure_maths`, `older_alpha`, `older_unclamped_range`, `older_blank_expression` and PLogLin's channels `all` on saved nodes. Grade gamma with the new curve has no GPU kernel (`map_grade` raises `Unsupported`, so it runs on the processor).
 
 ## Lane 6 step Fluids 18 B (11/20): the solver is sound; the shot's one substep per frame removes the large-scale swirl on finer grids
