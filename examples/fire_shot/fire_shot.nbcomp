@@ -1,5 +1,5 @@
 {
-  "version": 28,
+  "version": 39,
   "nodes": {
     "fuel": {
       "type": "FluidSource3D",
@@ -68,6 +68,9 @@
         "seed": 0,
         "advection": "maccormack",
         "vorticity": 1.0,
+        "auto_substeps": 0,
+        "substep_target": 2.0,
+        "substep_cap": 8,
         "dissipation": 0.0,
         "cooling_rate": 1.0,
         "boundary_x": "closed",
