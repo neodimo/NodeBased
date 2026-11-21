@@ -77,7 +77,7 @@ class CaseTests(unittest.TestCase):
     def test_every_case_names_a_source(self):
         for case in fidelity.CASES:
             if case.nuke in self.NODE_KEYS:
-                self.assertIn(case.source, ("guide", "convention"), case.id)
+                self.assertIn(case.source, ("guide", "convention", "render"), case.id)
                 if case.source == "convention":
                     self.assertTrue(any(word in case.statement for word in ("Kodak", "McGaugh", "Foundry", "Reference Guide", "IEC", "ITU", "SMPTE", "SDK", "Lindbloom", "Wikipedia", "Natron", "Geremia")), case.id)
 

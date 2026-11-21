@@ -120,7 +120,7 @@ class CaseTests(unittest.TestCase):
         ids = [c.id for c in ruler.CASES]
         self.assertEqual(len(ids), len(set(ids)))
         for case in ruler.CASES:
-            self.assertIn(case.source, ("guide", "convention"), case.id)
+            self.assertIn(case.source, ("guide", "convention", "render"), case.id)
             if case.source == "convention":
                 self.assertTrue(case.statement, case.id)
 

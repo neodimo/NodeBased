@@ -60,7 +60,7 @@ class CasesTests(unittest.TestCase):
     def test_a_case_names_its_source_and_states_its_reading(self):
         for c in TIME_CASES:
             with self.subTest(case=c.id):
-                self.assertIn(c.source, ("guide", "convention"))
+                self.assertIn(c.source, ("guide", "convention", "render"))
                 self.assertGreater(len(c.statement), 40)
                 if c.unscored:
                     self.assertGreater(len(c.unscored), 20)

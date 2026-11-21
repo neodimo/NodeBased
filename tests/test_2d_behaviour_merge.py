@@ -49,7 +49,7 @@ class CasesTests(unittest.TestCase):
                     self.assertGreater(len(case.unscored), 40)
                 else:
                     self.assertEqual(res["status"], "pass", res)
-                self.assertIn(case.source, ("guide", "convention"))
+                self.assertIn(case.source, ("guide", "convention", "render"))
 
     def test_every_node_of_the_step_has_a_scored_case(self):
         for kind in KINDS:

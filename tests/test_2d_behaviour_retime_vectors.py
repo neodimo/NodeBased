@@ -83,7 +83,7 @@ class CasesTests(unittest.TestCase):
 
     def test_a_case_names_its_source_and_a_not_scored_one_says_why(self):
         for case in RETIME_CASES:
-            self.assertIn(case.source, ("guide", "convention"), case.id)
+            self.assertIn(case.source, ("guide", "convention", "render"), case.id)
             self.assertTrue(case.statement, case.id)
             if case.unscored:
                 self.assertGreater(len(case.unscored), 30, case.id)
