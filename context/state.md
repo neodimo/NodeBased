@@ -1,5 +1,37 @@
 ## Lane 6 step Fluids 18 B (11/20): the solver is sound; the shot's one substep per frame removes the large-scale swirl on finer grids
 
+## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5), Lane 11 (Review book, Claude Opus 5.5) (6:35 PM on 2026-11-20 PDT)
+
+`main` moved `cea6e5fc` -> `2b8c0baa` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: pending. Full suite on
+the stacked tip `2b8c0baa` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1120-1755.log`, started 5:57 PM): **Ran 10640 tests in 1835.690 s, OK (skipped=39), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, Claude Sonnet 5.5), Fluids 18 step C (Fri 11/20): substeps from the flow's speed, the card from a lower size, then the up-res swirl again on a base that keeps its rolls.** Commits:
+  - `d9226836` Fire shot keeps its stored substeps until the shot moves to the speed-based rule: make_shot pins auto_substeps 0, committed graph regenerated
+  - `d75e922e` Fluids 18 C: the cap at 128 cells measured
+  - `90c03ed1` Fluids 18 C: clean bake times for the substep rule, up-res reinjection test pinned to one substep, docs corrected
+  - `937c6b1b` Fluids 18 C parts 3 and 4: the fire shot with the substep rule (curl, flame, grain, bake, frames), the knob that restores the grain, and the up-res swirl on the new base; docs, benchmarks, stills and tools
+  - `6f00c713` Fluids 18 C part 2: pressure auto takes the resident GPU solver from 32 cubed (measured crossover table), with tests; timing tools for the sweep
+  - `cb51657b` Fluids 18 C part 1: FluidSolver3D picks each frame's substeps from the flow's speed (schema 39, legacy nodes keep their stored count)
+  Diff: 61 files changed, 3313 insertions(+), 15 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 11 (Review book, Claude Opus 5.5), step B6 (Fri 11/20): pack-side mismatches out of the way, the next 96 cases renderable, and Merge and Transform match real Nuke.** Commits:
+  - `b8604591` Case-source tests accept render: a case checked against Nuke 17's own render is sourced like guide and convention cases
+  - `00cc7dde` Fidelity report, worklist and pixel table from the B6 renders: Shuffle routing, the re-rendered B5 cases and Merge's measured blend modes
+  - `234dd9f8` Merge: overlay, soft-light, hard-light, color-burn, color-dodge, exclusion and matte match Nuke 17's own render; saved Merges keep the guide's formulas through legacy_merge_blend
+  - `39cab38d` Reference pack: Colorspace's P3-D65 is Nuke 17's DCI-P3 primaries on its D65 illuminant
+  - `6a75a19d` Reference pack: Shuffle is Nuke 17's Shuffle2 and ShuffleCopy gets its routing written, and a case whose settings have no Nuke knob is listed as not renderable instead of rendering Nuke's defaults
+  Diff: 25 files changed, 525 insertions(+), 158 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #11.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, Claude Sonnet 5.5), Lane 11 (Review book, Claude Opus 5.5) (2:27 PM on 2026-11-20 PDT)
 
 `main` moved `bdd2c563` -> `9070d01f` (lane commits cherry-picked onto main in lane order) and then to this
