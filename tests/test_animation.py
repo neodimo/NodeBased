@@ -658,7 +658,10 @@ class AnimationThroughTileExecutorTests(unittest.TestCase):
         last = executor.compose(d.document, "grade", frame=10).pixels
         # Exposure 0 -> 2 must brighten, and radius 0 -> 24 must reduce checker contrast.
         self.assertGreater(last[..., 0].mean(), first[..., 0].mean() * 1.5)
-        self.assertLess(float(last[..., :3].std()), float(first[..., :3].std()))
+        # The contrast check reads the Blur's own output: Nuke 17's box is `radius` wide (not twice that), and the grade's x4 would hide a smaller drop.
+        blur_first = executor.compose(d.document, "blur", frame=1).pixels
+        blur_last = executor.compose(d.document, "blur", frame=10).pixels
+        self.assertLess(float(blur_last[..., :3].std()), float(blur_first[..., :3].std()))
 
     def test_animated_canvas_size_reaches_the_tile_canvas_query(self):
         """`canvas_size` reads the generator's params on its own path, separate from compose."""
