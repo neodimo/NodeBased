@@ -185,30 +185,42 @@ class OldDocumentTests(unittest.TestCase):
 
 
 # The pictures documents saved before this step rendered, measured on the code of commit f2472402 (the last one before the estimator
-# change): sha256 of the float32 pixels. Kronos and OFlow share them because the fixture is the same plate and a motion retime.
+# change). Kronos and OFlow share them because the fixture is the same plate and a motion retime. The pictures are kept as float32 arrays
+# in tests/data/golden (an exact sha256 of float pixels differs between platforms, as GitHub's Linux and Windows runs showed), and compared with
+# a tolerance of float noise; their sha256 on the machine they were measured on is listed beside them. A real change in the old estimate moves the
+# interpolated picture by far more than the tolerance (the Regularized method moves it by a few percent).
 SAVED_PICTURE_DIGESTS = {1.0: "a7eb221e9b9578122ba5946b6433a52aacf80598f3105f88c6dc1c16e6fd745e",
                          0.5: "547f54b696f20cfce9a9ba2a80cd19352af2afc3e62ad8e0ae663516f623d3f0"}
+SAVED_PICTURE_GOLDEN = Path(__file__).parent / "data" / "golden"
+
+
+def saved_picture(kind, density):
+    g = Graph()
+    g.add("plate", "Noise", dict(width=96, height=64, size=16, octaves=3))
+    g.add("move", "Transform", dict(filter="nearest"), image="plate")
+    g.d.execute(dict(op="set_curve", id="move", param="translate_x",
+                     curve=dict(interpolation="linear", keys=[dict(frame=f, value=float(4 * (f - 1))) for f in range(-5, 30)])))
+    g.add("node", kind, dict(input_start=1.0, input_end=8.0, interpolation="motion", speed=1.0, timing="frame", frame=1.5,
+                             vector_density=density, smoothness=0.8), image="move")
+    g.d.execute(dict(op="time", first=1, last=8, current=1))
+    doc = copy.deepcopy(g.doc)
+    for name in ("motion_method", "motion_strength"):
+        doc["nodes"]["node"]["params"].pop(name, None)           # an older document holds neither
+    doc = upgrade_document(dict(doc, view="node"))
+    return np.ascontiguousarray(render(doc))
 
 
 class SavedPictureDigestTests(unittest.TestCase):
     def test_old_documents_render_the_pixels_the_old_code_gave(self):
-        import hashlib
         for kind in ("Kronos", "OFlow"):
-            for density, digest in SAVED_PICTURE_DIGESTS.items():
-                g = Graph()
-                g.add("plate", "Noise", dict(width=96, height=64, size=16, octaves=3))
-                g.add("move", "Transform", dict(filter="nearest"), image="plate")
-                g.d.execute(dict(op="set_curve", id="move", param="translate_x",
-                                 curve=dict(interpolation="linear", keys=[dict(frame=f, value=float(4 * (f - 1))) for f in range(-5, 30)])))
-                g.add("node", kind, dict(input_start=1.0, input_end=8.0, interpolation="motion", speed=1.0, timing="frame", frame=1.5,
-                                         vector_density=density, smoothness=0.8), image="move")
-                g.d.execute(dict(op="time", first=1, last=8, current=1))
-                doc = copy.deepcopy(g.doc)
-                for name in ("motion_method", "motion_strength"):
-                    doc["nodes"]["node"]["params"].pop(name, None)           # an older document holds neither
-                doc = upgrade_document(dict(doc, view="node"))
+            for density in SAVED_PICTURE_DIGESTS:
+                golden = np.load(SAVED_PICTURE_GOLDEN / f"retime_saved_picture_density_{density}.npy")
                 with self.subTest(kind=kind, density=density):
-                    self.assertEqual(hashlib.sha256(np.ascontiguousarray(render(doc)).tobytes()).hexdigest(), digest)
+                    pixels = saved_picture(kind, density)
+                    self.assertEqual(pixels.shape, golden.shape)
+                    # float noise between platforms is far below 1e-3; the interpolated picture of another estimate differs by far more
+                    np.testing.assert_allclose(pixels, golden, atol=1e-3)
+                    self.assertLess(float(np.mean(np.abs(pixels - golden))), 2e-5)
 
 
 class TilePathTests(unittest.TestCase):
