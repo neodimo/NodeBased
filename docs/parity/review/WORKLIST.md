@@ -51,9 +51,9 @@ No open panel or behaviour items.
 
 ## Differences from Nuke's own pixels
 
-Rendered in Nuke 17.0v6 Non-commercial: 976 cases of 147 nodes, 391 match within 1e-4 and 28 nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and its worst pixel (row, column). "Nuke vs guide" is Nuke's render against the result the guide states; **guide** marks a case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. Before changing a kernel for a row, open its script from `tools/make_nuke_reference_pack.py`: the pack's scripts first ran on 11/20, and a row can still come from the pack (a legacy node class kept under the guide's name, or a knob the case sets differently) rather than from NodeBased. Up to 40 rows per lane; all of them are in `nuke_pixels.json`.
+Rendered in Nuke 17.0v6 Non-commercial: 1007 cases of 152 nodes, 430 match within 1e-4 and 30 nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and its worst pixel (row, column). "Nuke vs guide" is Nuke's render against the result the guide states; **guide** marks a case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. Before changing a kernel for a row, open its script from `tools/make_nuke_reference_pack.py`: the pack's scripts first ran on 11/20, and a row can still come from the pack (a legacy node class kept under the guide's name, or a knob the case sets differently) rather than from NodeBased. Up to 40 rows per lane; all of them are in `nuke_pixels.json`.
 
-### Lane 2 (Color, Keyer, Channel, Time): 286 cases
+### Lane 2 (Color, Keyer, Channel, Time): 297 cases
 
 | Node | Case | Largest error | Channel | Worst pixel | Nuke vs guide | |
 |---|---|---|---|---|---|---|
@@ -62,6 +62,7 @@ Rendered in Nuke 17.0v6 Non-commercial: 976 cases of 147 nodes, 391 match within
 | ChannelMerge | `channelmerge_xor` | 264 | R | 6, 2 | 264 | **guide** |
 | OCIOLogConvert | `ocio_logconvert_log_to_lin` | 200.6 | B | 0, 4 | 1.359 | **guide** |
 | ChannelMerge | `channelmerge_union` | 121 | R | 6, 2 | 121 | **guide** |
+| OCIOLookTransform | `ocio_look_invert` | 116.1 | B | 0, 4 | 0.4237 | **guide** |
 | Kronos | `kronos_timing_frame_keyed_half_speed_at_100` | 50 | R | 0, 0 | 50 | **guide** |
 | OFlow | `oflow_timing_frame_keyed_half_speed_at_100` | 50 | R | 0, 0 | 50 | **guide** |
 | TimeClip | `timeclip_expression_frameplus49_at_1` | 49 | R | 0, 0 | 49 | **guide** |
@@ -96,9 +97,8 @@ Rendered in Nuke 17.0v6 Non-commercial: 976 cases of 147 nodes, 391 match within
 | HueCorrect | `huecorrect_g_sup_0` | 11.95 | G | 0, 7 | 11.95 | **guide** |
 | HueCorrect | `huecorrect_r_sup_0` | 11.95 | R | 0, 10 | 11.95 | **guide** |
 | MinColor | `mincolor_sets_the_darkest_value_to_the_target` | 11.9 | B | 0, 4 | 11.9 | **guide** |
-| Vectorfield | `vectorfield_trilinear_applies_the_lut_0.9_0.1_0.4` | 11.9 | G | 0, 7 | 11.9 | **guide** |
 
-246 more in nuke_pixels.json.
+257 more in nuke_pixels.json.
 
 ### Lane 9 (Filter, Draw): 215 cases
 
@@ -147,52 +147,52 @@ Rendered in Nuke 17.0v6 Non-commercial: 976 cases of 147 nodes, 391 match within
 
 175 more in nuke_pixels.json.
 
-### Lane 11 (Image, Merge, Metadata, Other, Transform): 84 cases
+### Lane 11 (Image, Merge, Metadata, Other, Transform): 65 cases
 
 | Node | Case | Largest error | Channel | Worst pixel | Nuke vs guide | |
 |---|---|---|---|---|---|---|
-| IDistort | `idistort_guide_example_u_minus_1_v_5` | 13 | R | 5, 11 | 13 | **guide** |
-| IDistort | `idistort_u_and_v_channels_choose_what_is_read` | 13 | R | 0, 0 | 13 | **guide** |
 | AdjustBBox | `adjustbbox_grows_and_repeats_the_edge` | 12.5 | G | 1, 2 | 12.5 | **guide** |
 | AdjustBBox | `adjustbbox_width_and_height_split` | 12.5 | G | 3, 3 | 12.5 | **guide** |
 | CopyBBox | `copybbox_keeps_the_b_stream_pixels` | 12.5 | G | 2, 9 | 12.5 | **guide** |
 | CopyRectangle | `copyrectangle_channels` | 12.5 | G | 2, 9 | 12.5 | **guide** |
 | CopyRectangle | `copyrectangle_default_channels` | 12.5 | G | 2, 9 | 12.5 | **guide** |
-| CornerPin2D | `cornerpin_black_outside_off_takes_edge_pixels` | 12.5 | R | 4, 0 | 12.5 | **guide** |
+| CornerPin2D | `cornerpin_black_outside_off_takes_edge_pixels` | 12.5 | R | 0, 0 | 12.5 | **guide** |
+| CornerPin2D | `cornerpin_perspective` | 12.5 | G | 2, 4 | 12.5 | **guide** |
 | Crop | `crop_black_outside_off_takes_edge_pixels` | 12.5 | G | 4, 10 | 12.5 | **guide** |
+| IDistort | `idistort_u_and_v_channels_choose_what_is_read` | 12.5 | R | 0, 0 | 12.5 | **guide** |
 | Position | `position_moves_a_partial_picture_and_fills_the_gap` | 12.5 | G | 1, 6 | 12.5 | **guide** |
+| STMap | `stmap_u_and_v_channels_choose_what_is_read` | 12.5 | B | 1, 10 | 12.5 | **guide** |
 | TimeDissolve | `timedissolve_after_out` | 12.5 | G | 2, 9 | 12.5 | **guide** |
 | ZMerge | `zmerge_backwards_larger_z_is_nearer` | 12.5 | G | 3, 3 | 12.5 | **guide** |
 | ZMerge | `zmerge_smaller_z_is_nearer` | 12.5 | G | 2, 9 | 12.5 | **guide** |
-| CornerPin2D | `cornerpin_from_points_choose_the_part_that_is_pinned` | 12.25 | B | 6, 6 | 12.25 | **guide** |
+| STMap | `stmap_swapped_channels_read_green_as_u_and_red_as_v` | 12.36 | G | 5, 15 | 12.27 | **guide** |
 | TimeDissolve | `timedissolve_before_in` | 12.21 | G | 3, 3 | 12.21 | **guide** |
-| CornerPin2D | `cornerpin_perspective` | 12.17 | B | 10, 6 | 12.17 | **guide** |
 | ZMerge | `zmerge_alpha_blends_nearer_over_farther` | 12.12 | G | 2, 9 | 12.12 | **guide** |
 | AddMix | `addmix_premultiplied` | 12 | G | 5, 4 | 12 | **guide** |
 | AdjustBBox | `adjustbbox_negative_crops_the_box` | 12 | G | 0, 2 | 12 | **guide** |
 | BlackOutside | `blackoutside_fills_outside_the_box_with_black` | 12 | B | 0, 4 | 12 | **guide** |
-| CornerPin2D | `cornerpin_identity` | 12 | B | 0, 4 | 12 | **guide** |
 | CornerPin2D | `cornerpin_invert` | 12 | B | 0, 2 | 12 | **guide** |
-| CornerPin2D | `cornerpin_scale_two` | 12 | B | 0, 8 | 12 | **guide** |
-| CornerPin2D | `cornerpin_translation` | 12 | B | 2, 7 | 12 | **guide** |
-| IDistort | `idistort_uv_offset_is_subtracted` | 12 | G | 0, 3 | 12 | **guide** |
-| IDistort | `idistort_uv_scale_multiplies_the_vectors` | 12 | B | 2, 2 | 12 | **guide** |
-| IDistort | `idistort_zero_vectors_return_the_source` | 12 | B | 0, 4 | 12 | **guide** |
+| CornerPin2D | `cornerpin_translation` | 12 | R | 0, 3 | 12 | **guide** |
 | LensDistortion | `lensdistortion_centre_moves_the_fixed_point` | 12 | G | 1, 0 | 10.43 | **guide** |
 | Mirror | `mirror_reflects_a_partial_picture_about_the_format_centre` | 12 | B | 0, 0 | 12 | **guide** |
-| Reformat | `reformat_center_off_lines_up_the_lower_left` | 12 | B | 0, 31 | 12 | **guide** |
-| Reformat | `reformat_fit_letterboxes` | 12 | B | 0, 31 | 12 | **guide** |
+| Reformat | `reformat_center_off_lines_up_the_lower_left` | 12 | B | 0, 8 | 12 | **guide** |
+| Reformat | `reformat_fit_letterboxes` | 12 | B | 0, 8 | 12 | **guide** |
 | Reformat | `reformat_none_does_not_resize` | 12 | B | 0, 8 | 12 | **guide** |
-| STMap | `stmap_u_and_v_channels_choose_what_is_read` | 11.97 | R | 1, 5 | 11.97 | **guide** |
-| STMap | `stmap_identity_map_returns_the_source` | 11.6 | B | 0, 15 | 11.6 | **guide** |
+| CornerPin2D | `cornerpin_scale_two` | 11.95 | R | 0, 4 | 11.95 | **guide** |
 | Viewer | `viewer_passes_input_unchanged` | 11 | R | 0, 10 | 11 | **guide** |
 | LensDistortion | `lensdistortion_classic_two_terms` | 10.85 | B | 11, 15 | 5.158 | **guide** |
-| STMap | `stmap_swapped_channels_read_green_as_u_and_red_as_v` | 9.337 | G | 0, 8 | 9.337 | **guide** |
-| Reformat | `reformat_scale_split_scales_each_direction` | 9.242 | B | 2, 4 | 9.242 | **guide** |
 | LensDistortion | `lensdistortion_classic_undistort` | 9.205 | B | 0, 15 | 5.06 | **guide** |
 | LensDistortion | `lensdistortion_spherical_ignores_the_squeeze` | 9.205 | B | 0, 15 | 5.06 | **guide** |
+| CopyRectangle | `copyrectangle_softness` | 8.756 | G | 9, 10 | 8.756 | **guide** |
+| Tile | `tile_one_by_one_is_the_picture` | 7.855 | B | 0, 4 | 7.855 | **guide** |
+| LensDistortion | `lensdistortion_backward_model_is_used_directly` | 6.551 | B | 0, 15 | 6.551 | **guide** |
+| Transform | `transform_filter_cubic_half_pixel` | 5.219 | R | 2, 0 | 0.9375 | **guide** |
+| LensDistortion | `lensdistortion_anamorphic_squeeze_scales_x` | 5.124 | B | 0, 15 | 2.576 | **guide** |
+| LensDistortion | `lensdistortion_custom_numerator` | 2.837 | B | 0, 15 | 2.837 | **guide** |
+| Blend | `blend_all_zero_weights` | 1 | R | 0, 0 | 1 | **guide** |
+| Constant | `constant_channels_rgb` | 1 | A | 0, 0 | 1 | **guide** |
 
-44 more in nuke_pixels.json.
+25 more in nuke_pixels.json.
 
 ## Accepted default differences
 
