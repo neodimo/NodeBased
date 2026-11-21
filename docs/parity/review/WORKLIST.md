@@ -51,7 +51,7 @@ No open panel or behaviour items.
 
 ## Differences from Nuke's own pixels
 
-Rendered in Nuke 17.0v6 Non-commercial: 1007 cases of 152 nodes, 430 match within 1e-4 and 30 nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and its worst pixel (row, column). "Nuke vs guide" is Nuke's render against the result the guide states; **guide** marks a case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. Before changing a kernel for a row, open its script from `tools/make_nuke_reference_pack.py`: the pack's scripts first ran on 11/20, and a row can still come from the pack (a legacy node class kept under the guide's name, or a knob the case sets differently) rather than from NodeBased. Up to 40 rows per lane; all of them are in `nuke_pixels.json`.
+Rendered in Nuke 17.0v6 Non-commercial: 1007 cases of 152 nodes, 475 match within 1e-4 and 37 nodes match in every case. Each row is a case beyond the tolerance: the largest error, its channel and its worst pixel (row, column). "Nuke vs guide" is Nuke's render against the result the guide states; **guide** marks a case where NodeBased does what the guide says and Nuke does not, so the guide, our only reference until now, is wrong there. Before changing a kernel for a row, open its script from `tools/make_nuke_reference_pack.py`: the pack's scripts first ran on 11/20, and a row can still come from the pack (a legacy node class kept under the guide's name, or a knob the case sets differently) rather than from NodeBased. Up to 40 rows per lane; all of them are in `nuke_pixels.json`.
 
 ### Lane 2 (Color, Keyer, Channel, Time): 297 cases
 
@@ -100,52 +100,52 @@ Rendered in Nuke 17.0v6 Non-commercial: 1007 cases of 152 nodes, 430 match withi
 
 257 more in nuke_pixels.json.
 
-### Lane 9 (Filter, Draw): 215 cases
+### Lane 9 (Filter, Draw): 170 cases
 
 | Node | Case | Largest error | Channel | Worst pixel | Nuke vs guide | |
 |---|---|---|---|---|---|---|
-| Matrix | `matrix_edge_detect_example` | 88.77 | G | 1, 2 | 88.77 | **guide** |
-| Laplacian | `laplacian_box_1` | 21.97 | G | 1, 2 | 21.97 | **guide** |
-| Sharpen | `sharpen_unsharp_mask_amount_2.0` | 19.95 | G | 1, 2 | 19.95 | **guide** |
-| Soften | `soften_amount_2.0` | 19.95 | G | 1, 2 | 19.95 | **guide** |
-| Laplacian | `laplacian_box_2` | 18.77 | R | 10, 4 | 18.13 | **guide** |
 | Denoise | `denoise_amount_0_noise_output_is_nothing` | 12 | B | 0, 4 | 12 | **guide** |
 | DropShadow | `dropshadow_inherit_input_colour` | 12 | R | 1, 8 | 12 | **guide** |
-| EdgeDetect | `edgedetect_prewitt_flat_regions_give_no_edge` | 12 | B | 0, 4 | 12 | **guide** |
-| EdgeDetect | `edgedetect_prewitt_response` | 12 | B | 0, 4 | 12 | **guide** |
-| EdgeDetect | `edgedetect_sobel_flat_regions_give_no_edge` | 12 | B | 0, 4 | 12 | **guide** |
-| EdgeDetect | `edgedetect_sobel_response` | 12 | B | 0, 4 | 12 | **guide** |
-| Erode (filter) | `erode_filter_negative_1_grows_the_square` | 12 | G | 0, 1 | 12 | **guide** |
-| Erode (filter) | `erode_filter_negative_2_grows_the_square` | 12 | R | 0, 0 | 12 | **guide** |
-| Sharpen | `sharpen_flat_region_unchanged` | 12 | G | 0, 7 | 11.8 | **guide** |
-| Sharpen | `sharpen_step_edge_overshoots` | 12 | G | 0, 7 | 12 | **guide** |
-| Ramp | `ramp_linear` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Ramp | `ramp_plinear_ends_are_the_two_colours` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Ramp | `ramp_smooth0_curve` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Ramp | `ramp_smooth0_ends_are_the_two_colours` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Ramp | `ramp_smooth1_curve` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Ramp | `ramp_smooth1_ends_are_the_two_colours` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Ramp | `ramp_smooth_ends_are_the_two_colours` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Ramp | `ramp_smooth_is_even_at_the_middle` | 11.9 | R | 11, 10 | 7.013 | **guide** |
-| Rectangle | `rectangle_ramp_linear` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Rectangle | `rectangle_ramp_smooth0_curve` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Rectangle | `rectangle_ramp_smooth0_ends_are_the_two_colours` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Rectangle | `rectangle_ramp_smooth1_curve` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Rectangle | `rectangle_ramp_smooth1_ends_are_the_two_colours` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Rectangle | `rectangle_ramp_smooth_ends_are_the_two_colours` | 11.9 | R | 11, 10 | 11.9 | **guide** |
-| Rectangle | `rectangle_ramp_smooth_is_even_at_the_middle` | 11.9 | R | 11, 10 | 11.6 | **guide** |
-| EdgeDetect | `edgedetect_output_channel_keeps_the_other_channels` | 11.8 | B | 0, 4 | 11.8 | **guide** |
-| Soften | `soften_flat_region_unchanged` | 11.8 | B | 0, 4 | 11.8 | **guide** |
-| Soften | `soften_step_edge_rounds_the_step` | 11.8 | B | 0, 4 | 11.8 | **guide** |
-| Radial | `radial_ramp_linear` | 11.77 | R | 9, 9 | 11.77 | **guide** |
+| Radial | `radial_invert` | 11.69 | R | 1, 5 | 11.69 | **guide** |
+| Radial | `radial_softness_zero_is_a_hard_ellipse` | 11.69 | R | 1, 5 | 11.69 | **guide** |
+| Radial | `radial_ramp_linear` | 11.44 | B | 1, 10 | 11.44 | **guide** |
 | MarkerRemoval | `markerremoval_radial_disc` | 11.43 | R | 8, 9 | 5.654 | **guide** |
-| Radial | `radial_invert` | 10.95 | R | 1, 5 | 10.95 | **guide** |
 | DirBlur | `dirblur_zoom_and_radial_formulas` | 10.8 | B | 0, 4 | 10.8 | **guide** |
 | Median | `median_ignore_top_line` | 10.5 | B | 11, 15 | 0.825 | **guide** |
-| Sharpen | `sharpen_unsharp_mask_amount_1.0` | 9.974 | G | 1, 2 | 9.974 | **guide** |
-| Blur | `blur_box_1` | 9.974 | G | 1, 2 | 9.974 | **guide** |
+| EdgeExtend | `edgeextend_solid_matte_keeps_its_colour` | 9.289 | B | 0, 15 | 9.289 | **guide** |
+| DirBlur | `dirblur_linear_length_5_along_x` | 9.284 | B | 10, 15 | 4.12 | **guide** |
+| Emboss | `emboss_traditional_width_zero_is_the_input` | 8.184 | B | 11, 15 | 8.184 | **guide** |
+| DirBlur | `dirblur_linear_angle_90_runs_down_the_columns` | 7.7 | R | 2, 0 | 7.583 | **guide** |
+| DirBlur | `dirblur_linear_length_3_along_x` | 7.7 | B | 10, 15 | 7.617 | **guide** |
+| EdgeExtend | `edgeextend_premultiply_multiplies_by_alpha` | 6.967 | B | 0, 15 | 6.967 | **guide** |
+| Radial | `radial_opacity` | 5.846 | R | 1, 5 | 5.846 | **guide** |
+| ZDefocus | `zdefocus_bladed_aspect_ratio_below_one_squeezes_x` | 5.025 | B | 11, 15 | 5.025 | **guide** |
+| ZDefocus | `zdefocus_bladed_aspect_ratio_above_one_squeezes_y` | 5.002 | B | 0, 15 | 5.002 | **guide** |
+| ZDefocus | `zdefocus_bladed_four_blades_roundness_zero_is_a_square` | 4.93 | B | 0, 15 | 4.93 | **guide** |
+| ZDefocus | `zdefocus_direct_is_clamped_to_maximum` | 4.864 | G | 1, 2 | 4.864 | **guide** |
+| ZDefocus | `zdefocus_direct_size_zero_is_no_blur` | 4.864 | G | 1, 2 | 4.864 | **guide** |
+| ZDefocus | `zdefocus_bladed_roundness_one_is_a_disc` | 4.722 | B | 0, 15 | 4.722 | **guide** |
+| ZDefocus | `zdefocus_bladed_inner_brightness_scales_the_inner_polygon` | 4.623 | B | 0, 15 | 4.623 | **guide** |
+| ZDefocus | `zdefocus_bladed_inner_feather_below_half_feathers_inward` | 4.587 | B | 0, 15 | 4.587 | **guide** |
+| ZDefocus | `zdefocus_bladed_inner_feather_above_half_feathers_outward` | 4.546 | B | 0, 15 | 4.546 | **guide** |
+| ZDefocus | `zdefocus_bladed_inner_size_sets_the_hole` | 4.504 | B | 0, 15 | 4.504 | **guide** |
+| Defocus | `defocus_scaling_scales_both_axes` | 4.475 | G | 9, 0 | 1.14 | **guide** |
+| ZDefocus | `zdefocus_bladed_inner_brightness_zero_leaves_a_ring` | 4.473 | B | 0, 15 | 4.473 | **guide** |
+| Median | `median_size_3` | 3.5 | R | 3, 0 | 1.1 | **guide** |
+| Defocus | `defocus_channels_limit_the_effect` | 3.116 | R | 3, 0 | 2.348 | **guide** |
+| Defocus | `defocus_disc_average` | 3.116 | R | 3, 0 | 2.348 | **guide** |
+| Median | `median_size_5` | 3 | B | 11, 15 | 0.5 | **guide** |
+| Defocus | `defocus_scaling_split_into_width_and_height` | 2.813 | R | 3, 0 | 1.621 | **guide** |
+| Defocus | `defocus_aspect_ratio_widens_the_disc` | 2.615 | R | 3, 0 | 1.058 | **guide** |
+| EdgeDetect | `edgedetect_output_channel_keeps_the_other_channels` | 2.4 | A | 0, 7 | 2.4 | **guide** |
+| EdgeDetect | `edgedetect_sobel_flat_regions_give_no_edge` | 2.2 | R | 0, 7 | 0.8 | **guide** |
+| EdgeDetect | `edgedetect_sobel_response` | 2.2 | R | 0, 7 | 2.2 | **guide** |
+| Convolve | `convolve_impulse_raw` | 2 | R | 6, 12 | 2 | **guide** |
+| GodRays | `godrays_from_and_to_colour_at_the_ends` | 1.761 | R | 6, 8 | 1.761 | **guide** |
+| EdgeDetect | `edgedetect_prewitt_flat_regions_give_no_edge` | 1.6 | R | 0, 7 | 0.8 | **guide** |
+| EdgeDetect | `edgedetect_prewitt_response` | 1.6 | R | 0, 7 | 1.6 | **guide** |
 
-175 more in nuke_pixels.json.
+130 more in nuke_pixels.json.
 
 ### Lane 11 (Image, Merge, Metadata, Other, Transform): 65 cases
 

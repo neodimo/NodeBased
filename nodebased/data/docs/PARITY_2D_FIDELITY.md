@@ -118,8 +118,8 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Roto | `Roto` | supported | 98.8 | 98.5 | 96 (72/75) | - | 100 | 100 | 100 | 100 (36/36) | 100 | - | unmeasured |
 | 2 | Text | `Text` | supported | 100.0 | 100.0 | 100 (41/41) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
-| 3 | Rectangle | `Rectangle` | supported | 99.3 | 99.3 | 100 (13/13) | - | 93 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
-| 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (6/6) | 100 | - | unmeasured |
+| 3 | Rectangle | `Rectangle` | supported | 99.3 | 99.3 | 100 (13/13) | - | 93 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
+| 4 | Ramp | `Ramp` | supported | 98.4 | 98.5 | 100 (10/10) | - | 85 | 100 | 100 | 100 (9/9) | 100 | - | unmeasured |
 | 5 | Radial | `Radial` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
 | 6 | Noise | `Noise` | supported | 99.7 | 99.6 | 100 (26/26) | - | 96 | 100 | 100 | 100 (2/2) | 100 | 100 (1/1) | unmeasured |
 | 7 | RotoPaint | `RotoPaint` | supported | 99.9 | 100.0 | 100 (88/88) | - | 100 | 100 | 100 | 100 (5/5) | 99 | - | unmeasured |
@@ -132,7 +132,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 11 | Glint | `Glint` | supported | 100.0 | 100.0 | 100 (13/13) | 100 (13/13) | 100 | 100 | 100 | 100 (12/12) | 100 | - | unmeasured |
 | 11 | Sparkles | `Sparkles` | supported | 97.1 | 95.4 | 91 (28/32) | 100 (20/20) | 96 | 100 | - | 100 (9/9) | 100 | - | unmeasured |
 | 12 | Dither | `Dither` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
-| 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
+| 13 | Grid | `Grid` | supported | 99.3 | 99.4 | 100 (14/14) | - | 94 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 
 ### Time
 
@@ -206,7 +206,7 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 
 | Rank | Nuke node | NodeBased | Row status | Fidelity | Prev. | knobs | acts | defaults | sockets | chrome | math | layout | splits | pixels |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Blur | `Blur` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (4/4) | 100 | 100 (1/1) | unmeasured |
+| 1 | Blur | `Blur` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (3/3) | 100 | 100 | 100 | 100 (11/11) | 100 | 100 (1/1) | unmeasured |
 | 2 | Sharpen | `Sharpen` | supported | 100.0 | 100.0 | 100 (7/7) | 100 (5/5) | 100 | 100 | 100 | 100 (6/6) | 100 | 100 (1/1) | unmeasured |
 | 3 | Erode (filter) | `ErodeFilter` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (5/5) | 100 | 100 (1/1) | unmeasured |
 | 4 | Median | `Median` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
@@ -227,11 +227,11 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 13 | VectorBlur | `VectorBlur` | supported | 95.0 | 93.7 | 88 (14/15) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 14 | Bilateral | `Bilateral` | supported | 100.0 | 100.0 | 100 (5/5) | - | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 15 | Convolve | `Convolve` | supported | 100.0 | 100.0 | 100 (4/4) | - | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
-| 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 15 | Matrix | `Matrix` | supported | 100.0 | 100.0 | 100 (2/2) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 16 | BumpBoss | `BumpBoss` | supported | 100.0 | 100.0 | 100 (6/6) | 100 (6/6) | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 16 | EdgeDetect | `EdgeDetect` | supported | 100.0 | 100.0 | 100 (7/7) | 100 (6/6) | 100 | 100 | 100 | 100 (5/5) | 100 | - | unmeasured |
 | 16 | Emboss | `Emboss` | supported | 100.0 | 100.0 | 100 (13/13) | 100 (12/12) | 100 | 100 | 100 | 100 (4/4) | 100 | - | unmeasured |
-| 16 | Laplacian | `Laplacian` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (2/2) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
+| 16 | Laplacian | `Laplacian` | supported | 100.0 | 100.0 | 100 (4/4) | 100 (2/2) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 17 | Inpaint | `Inpaint` | supported | 100.0 | 100.0 | 100 (11/11) | - | 100 | 100 | 100 | - | 100 | - | unmeasured |
 | 18 | GodRays | `GodRays` | supported | 99.4 | 99.3 | 100 (10/10) | 100 (10/10) | 93 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 18 | LevelSet | `LevelSet` | supported | 100.0 | 100.0 | 100 (8/8) | - | 100 | 100 | - | - | 100 | - | unmeasured |
@@ -958,11 +958,15 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `blur_size_zero_is_identity` | guide | pass | within tolerance | - |
 | `blur_box_1` | convention | pass | within tolerance | - |
 | `blur_box_2` | convention | pass | within tolerance | - |
+| `blur_box_2.5` | convention | pass | within tolerance | - |
 | `blur_box_quality_not_limiting` | guide | pass | within tolerance | - |
-| `blur_gaussian_weights` | convention | not scored: the guide does not state the gaussian's sigma for a given size (only that gaussian is the default and the smoothest), so its weights cannot be written down without guessing; the shape facts (separable, normalised, symmetric, size 0 the identity) are tested in tests/test_2d_behaviour_filter_a.py | - | - |
-| `blur_triangle_weights` | convention | not scored: the guide names the triangle filter but not its weights or how size maps to its width; shape facts are tested instead | - | - |
-| `blur_quadratic_weights` | convention | not scored: the guide names the quadratic filter but not its weights or how size maps to its width; shape facts are tested instead | - | - |
-| `blur_quality_scaled` | guide | not scored: the guide does not give the scale factor, the down-scaling filter or the block alignment, so the pixels cannot be written down; tests check that the result is smooth, bounded and tile-exact | - | - |
+| `blur_gaussian_weights` | convention | pass | within tolerance | - |
+| `blur_gaussian_weights_3.5` | convention | pass | within tolerance | - |
+| `blur_triangle_weights` | convention | pass | within tolerance | - |
+| `blur_triangle_weights_3.5` | convention | pass | within tolerance | - |
+| `blur_quadratic_weights` | convention | pass | within tolerance | - |
+| `blur_quadratic_weights_3.5` | convention | pass | within tolerance | - |
+| `blur_quality_scaled` | guide | not scored: the guide does not give the scale factor, the down-scaling filter or the block alignment, and Nuke's render of it varies with the pixel's position, so the pixels cannot be written down; tests check that the result is smooth, bounded and tile-exact | - | - |
 | `erode_fast_positive_1_grows_light` | convention | pass | within tolerance | - |
 | `erode_fast_negative_1_grows_dark` | convention | pass | within tolerance | - |
 | `erode_fast_positive_2_grows_light` | convention | pass | within tolerance | - |
@@ -1000,9 +1004,10 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `convolve_orientation` | convention | not scored: the guide's description does not say whether the filter is flipped (correlation) or not (convolution), so only a symmetric filter is scored | - | - |
 | `matrix_edge_detect_example` | guide | pass | within tolerance | - |
 | `matrix_normalize_box` | guide | pass | within tolerance | - |
-| `matrix_asymmetric_orientation` | convention | not scored: the guide's description ('multiplying each pixel by the matching matrix value') does not say whether the weights are flipped, so only symmetric matrices are scored | - | - |
-| `laplacian_box_1` | guide | pass | within tolerance | - |
-| `laplacian_box_2` | guide | pass | within tolerance | - |
+| `matrix_asymmetric_orientation` | convention | pass | within tolerance | - |
+| `laplacian_box_2` | convention | pass | within tolerance | - |
+| `laplacian_box_3` | convention | pass | within tolerance | - |
+| `laplacian_box_1` | convention | pass | within tolerance | - |
 | `edgedetect_sobel_response` | convention | pass | within tolerance | - |
 | `edgedetect_prewitt_response` | convention | pass | within tolerance | - |
 | `edgedetect_simple_response` | convention | not scored: the guide lists simple beside sobel and prewitt and gives no kernel for it; NodeBased's Edge Detector menu has no simple entry (its third entry is Laplacian), so the detector cannot even be chosen; tests/test_2d_behaviour_filter_q.py checks what every detector shares | - | - |
@@ -1093,9 +1098,9 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `rectangle_ramp_smooth1_ends_are_the_two_colours` | guide | pass | within tolerance | - |
 | `rectangle_ramp_smooth_ends_are_the_two_colours` | guide | pass | within tolerance | - |
 | `rectangle_ramp_smooth_is_even_at_the_middle` | convention | pass | within tolerance | - |
-| `rectangle_ramp_smooth0_curve` | convention | not scored: the page says only which end smooth0 eases into ('colors in the point 0 end are spread wider') and gives no curve; tests/test_2d_behaviour_draw.py checks the end it favours and that it keeps both end colours | - | - |
-| `rectangle_ramp_smooth1_curve` | convention | not scored: the page says only which end smooth1 eases into ('colors in the point 1 end are spread wider') and gives no curve; tests/test_2d_behaviour_draw.py checks the end it favours and that it keeps both end colours | - | - |
-| `rectangle_softness_falloff` | convention | not scored: the page says only that softness 'sets the softness of the rectangle edges where 0 is a hard edge' (default 1); it gives neither the unit nor the curve, so the soft edge is not scored; tests/test_2d_behaviour_draw.py checks that 0 is a hard edge, that more softness widens the fade and that the fade is symmetric | - | - |
+| `rectangle_ramp_smooth0_curve` | convention | pass | within tolerance | - |
+| `rectangle_ramp_smooth1_curve` | convention | pass | within tolerance | - |
+| `rectangle_softness_falloff` | convention | pass | within tolerance | - |
 | `radial_softness_zero_is_a_hard_ellipse` | guide | pass | within tolerance | - |
 | `radial_invert` | guide | pass | within tolerance | - |
 | `radial_opacity` | guide | pass | within tolerance | - |
@@ -1108,15 +1113,15 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `ramp_smooth_ends_are_the_two_colours` | guide | pass | within tolerance | - |
 | `ramp_plinear_ends_are_the_two_colours` | guide | pass | within tolerance | - |
 | `ramp_smooth_is_even_at_the_middle` | convention | pass | within tolerance | - |
-| `ramp_smooth0_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
-| `ramp_smooth1_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
-| `ramp_plinear_curve` | convention | not scored: the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear | - | - |
+| `ramp_smooth0_curve` | convention | pass | within tolerance | - |
+| `ramp_smooth1_curve` | convention | pass | within tolerance | - |
+| `ramp_plinear_curve` | convention | pass | within tolerance | - |
 | `noise_opacity_zero_is_the_input` | guide | pass | within tolerance | - |
 | `noise_replace_coverage_stays_between_0_and_1` | convention | pass | within tolerance | - |
 | `noise_fbm_values` | convention | not scored: the page says the node is 'based on the Perlin noise function' and how octaves, lacunarity, gain and gamma combine it, but not the function's values (its gradient table and permutation are Foundry's), so the pixels cannot be written down; tests/test_2d_behaviour_draw.py checks what the page states: gain 0 leaves one octave, gamma is the output power, translate, rotate and scale move the pattern as the transform tab says, the x and y sizes stretch it, zoffset moves through it smoothly and the same settings give the same pixels | - | - |
 | `noise_turbulence_values` | convention | not scored: the page says the node is 'based on the Perlin noise function' and how octaves, lacunarity, gain and gamma combine it, but not the function's values (its gradient table and permutation are Foundry's), so the pixels cannot be written down; tests/test_2d_behaviour_draw.py checks what the page states: gain 0 leaves one octave, gamma is the output power, translate, rotate and scale move the pattern as the transform tab says, the x and y sizes stretch it, zoffset moves through it smoothly and the same settings give the same pixels | - | - |
 | `grid_number_makes_squares_with_empty_middles` | guide | pass | within tolerance | - |
-| `grid_line_positions` | convention | not scored: the page gives the number of squares, the line thickness in pixels and a translate but not where in a square a line of a given thickness sits (starting at the grid position, centred on it or ending at it) or what the last line does at the frame's edge; tests/test_2d_behaviour_draw.py checks the spacing (the frame divided by the number), the thickness, that translate moves the whole grid and that lines are drawn in the colour and the ramp | - | - |
+| `grid_line_positions` | convention | pass | within tolerance | - |
 | `grain_minimum_rgb_is_the_floor` | convention | pass | within tolerance | - |
 | `grain_apply_only_through_alpha_leaves_empty_alpha_alone` | guide | pass | within tolerance | - |
 | `grain_invert_alpha_leaves_full_alpha_alone` | guide | pass | within tolerance | - |
