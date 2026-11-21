@@ -297,6 +297,8 @@ def map_blur(p):
     # The step-E knobs: only the box filter, within the quality limit and without a growing window, has a kernel here.
     if blurknobs._get("Blur", p, "kernel_filter") != "box":
         raise Unsupported(f"Blur filter {p['kernel_filter']!r} has no GPU kernel yet")
+    if blurknobs.nuke_kernel("Blur", p):
+        raise Unsupported("Blur with Nuke 17's own kernels has no GPU kernel yet")
     if blurknobs.scale_factor("Blur", p) > 1:
         raise Unsupported("Blur wider than its quality limit is scaled down, which has no GPU kernel yet")
     if not blurknobs._get("Blur", p, "crop"):

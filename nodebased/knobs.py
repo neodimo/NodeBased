@@ -230,6 +230,8 @@ KNOB_LAYOUT = {
                   help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
         KnobGroup("bool", ("crop",), label="Crop to format",
                   help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
+        KnobGroup("bool", ("legacy_kernel",), label="Legacy kernel",
+                  help="Use the integer-radius filters graphs saved before Nuke 17's own Blur filters used (and, for Laplacian, blur minus picture)."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Invert": _groups(
         KnobGroup("enum", ("channels",)), KnobGroup("bool", ("clamp",)),
@@ -283,6 +285,8 @@ KNOB_LAYOUT = {
                   help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
         KnobGroup("bool", ("crop",), label="Crop to format",
                   help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
+        KnobGroup("bool", ("legacy_kernel",), label="Legacy kernel",
+                  help="Use the integer-radius filters graphs saved before Nuke 17's own Blur filters used (and, for Laplacian, blur minus picture)."),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Matrix": _groups(
         KnobGroup("enum", ("matrix_size",), label="Size"),
@@ -315,6 +319,8 @@ KNOB_LAYOUT = {
                   help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
         KnobGroup("bool", ("legacy_laplacian",), label="Legacy kernel",
                   help="Run the older fixed three by three cross (the original minus its neighbours' average) instead of the blur. Set on graphs saved before the size, filter and quality existed."),
+        KnobGroup("bool", ("legacy_kernel",), label="Legacy kernel",
+                  help="Use the integer-radius filters graphs saved before Nuke 17's own Blur filters used (and, for Laplacian, blur minus picture)."),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "EdgeDetect": _groups(
         KnobGroup("enum", ("edge_type",)), KnobGroup("float_slider", ("threshold",), soft_range=(0, 1)),
@@ -376,6 +382,8 @@ KNOB_LAYOUT = {
                   help="The largest filter size worked at full size: a wider blur is made on a scaled-down picture and scaled back up."),
         KnobGroup("bool", ("crop",), label="Crop to format",
                   help="Keep the bounding box as it comes in. Off lets it grow by the size of the blur."),
+        KnobGroup("bool", ("legacy_kernel",), label="Legacy kernel",
+                  help="Use the integer-radius filters graphs saved before Nuke 17's own Blur filters used (and, for Laplacian, blur minus picture)."),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Defocus": _groups(
         KnobGroup("enum", ("channels",)),
@@ -1486,7 +1494,8 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("gain",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
         KnobGroup("int", ("seed",)), KnobGroup("enum", ("type",)), KnobGroup("bool", ("nyquist",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"), KnobGroup("xy", ("rotate_x", "rotate_y"), label="Rotate"), KnobGroup("float", ("scaling",), label="Scale"), KnobGroup("float", ("skew",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("float", ("xrotate",)), KnobGroup("float", ("yrotate",)), KnobGroup("color", ("red", "green", "blue", "alpha")), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"), KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
-                  help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+                  help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Text": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("multiline", ("message",)), KnobGroup("string", ("font",)),

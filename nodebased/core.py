@@ -76,7 +76,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 # Per-channel ("split") knobs, Nuke's AColor and WH breakouts. A param listed in SPLITTABLE holds either one number (as every
 # param always did) or a list of numbers, one per channel of its split set: "rgba" is r, g, b, a, "rgb" is r, g, b and "wh" is w, h. A list is the
 # only thing that needs schema 29; a document whose values are all scalars is unchanged. `split_values` is how a kernel reads one.
@@ -1861,7 +1861,7 @@ LIMITS = {"input_number": (1, 64), "enabled": (0, 1), "splat_write_overwrite": (
           "frame": (-1000000.0, 1000000.0), "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000), "reanchor_interval": (1, 100),
           "input_start": (-1000000.0, 1000000.0), "input_end": (-1000000.0, 1000000.0), "output_start": (-1000000.0, 1000000.0), "shutter_time": (0.0, 100.0),
           "vector_detail": (1, 6), "shutter_samples": (1, 32), "samples": (1, 64), "speed": (-100.0, 100.0), "fade_frames": (0, 10000), "temporal_frames": (1, 16), "blur_size": (0.0, 100.0),
-          "power": (-8, 8), "reload": (0, 1000000), "legacy_scale": (0, 1), "preview_enabled": (0, 1),
+          "power": (-8, 8), "reload": (0, 1000000), "legacy_scale": (0, 1), "legacy_kernel": (0, 1), "preview_enabled": (0, 1),
           "tvi_iterations": (0, 200), "tvi_lambda": (0.0, 10000.0), "tvi_a": (0.0, 1.0),
           **{f"corner{i}_{axis}": (-8192.0, 8192.0) for i in range(1, 5) for axis in ("x", "y")},
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
@@ -3272,6 +3272,23 @@ def upgrade_document(document):
         if isinstance(doc.get("nodes"), dict):
             _fluid_auto_substeps(doc["nodes"])
         doc["version"] = 39
+    if isinstance(doc, dict) and doc.get("version") == 39:
+        # v39 -> v40 (lane 9 step N1): Blur, Sharpen, Soften and Laplacian use Nuke 17's own filters (box as a width in pixels, triangle, quadratic and
+        # gaussian with Nuke's size-to-weight mapping, measured from its renders: blurknobs.nuke_weights). A node of those kinds saved before keeps
+        # the integer-radius kernels (and Laplacian its sign) through `legacy_kernel` 1; a node made since carries 0. Group graphs too.
+        def _blur_kernel(scope):
+            for current in scope.values():
+                if not isinstance(current, dict):
+                    continue
+                params = current.get("params")
+                if isinstance(params, dict) and current.get("type") in ("Blur", "Sharpen", "Soften", "Laplacian"):
+                    params.setdefault("legacy_kernel", 1)
+                graph = current.get("graph")
+                if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
+                    _blur_kernel(graph["nodes"])
+        if isinstance(doc.get("nodes"), dict):
+            _blur_kernel(doc["nodes"])
+        doc["version"] = 40
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

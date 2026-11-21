@@ -17,6 +17,14 @@ from nodebased.tiers import Region
 N = 21
 
 
+def _older(kind):
+    """The node's SPECS defaults read as a document saved before Nuke's own filters (`legacy_kernel` 1): this module tests those kernels."""
+    params = dict(SPECS[kind]["params"])
+    if "legacy_kernel" in params:
+        params["legacy_kernel"] = 1
+    return params
+
+
 def impulse(n=N):
     pixels = np.zeros((n, n, 4), np.float32)
     pixels[n // 2, n // 2] = 1.0
@@ -24,7 +32,7 @@ def impulse(n=N):
 
 
 def run(kind, pixels, **knobs):
-    return Evaluator._windowed_kernel(kind, {**SPECS[kind]["params"], **knobs}, [Raster.of(np.asarray(pixels, np.float32))]).pixels
+    return Evaluator._windowed_kernel(kind, {**_older(kind), **knobs}, [Raster.of(np.asarray(pixels, np.float32))]).pixels
 
 
 def blur(pixels, **knobs):
@@ -147,20 +155,20 @@ class CropToFormatTests(unittest.TestCase):
     def test_crop_on_keeps_the_window_off_grows_it_by_the_reach(self):
         for kind, knob in (("Blur", "radius"), ("Sharpen", "sharpen_size"), ("Soften", "soften_size")):
             with self.subTest(kind=kind):
-                on = Evaluator._windowed_kernel(kind, {**SPECS[kind]["params"], knob: 3.0, "crop": 1}, [self.raster()])
-                off = Evaluator._windowed_kernel(kind, {**SPECS[kind]["params"], knob: 3.0, "crop": 0}, [self.raster()])
+                on = Evaluator._windowed_kernel(kind, {**_older(kind), knob: 3.0, "crop": 1}, [self.raster()])
+                off = Evaluator._windowed_kernel(kind, {**_older(kind), knob: 3.0, "crop": 0}, [self.raster()])
                 self.assertEqual(on.data, Region(10, 8, 10, 8))
                 self.assertEqual(off.data, Region(7, 5, 16, 14))
 
     def test_the_grown_edge_is_transparent_black_blurred_in(self):
-        out = Evaluator._windowed_kernel("Blur", {**SPECS["Blur"]["params"], "radius": 3.0, "crop": 0, "kernel_filter": "box"}, [self.raster()])
+        out = Evaluator._windowed_kernel("Blur", {**_older("Blur"), "radius": 3.0, "crop": 0, "kernel_filter": "box"}, [self.raster()])
         corner = out.pixels[0, 0]
         self.assertGreater(float(corner[3]), 0.0)
         self.assertLess(float(corner[3]), 0.2)                                        # a sliver of the picture reached the new edge
         np.testing.assert_allclose(out.pixels[7, 8], 1.0, atol=1e-6)                   # deep inside it is untouched
 
     def test_a_picture_the_filter_does_not_change_is_not_grown_when_it_does_nothing(self):
-        out = Evaluator._windowed_kernel("Blur", {**SPECS["Blur"]["params"], "radius": 0.3, "crop": 0}, [self.raster()])
+        out = Evaluator._windowed_kernel("Blur", {**_older("Blur"), "radius": 0.3, "crop": 0}, [self.raster()])
         self.assertEqual(out.data, Region(10, 8, 10, 8))
 
 

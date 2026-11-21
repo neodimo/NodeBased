@@ -37,19 +37,19 @@ WIDE = 1000000.0
 NO_QUALITY_LIMIT = 1000.0       # larger than any size the nodes accept (500), so an older node never scales the picture
 
 NEW = {
-    "Blur": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1},
-    "Sharpen": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "minimum": 0.0, "maximum": 1.0},
-    "Soften": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "minimum": 0.0, "maximum": 1.0, "amount": 1.0},
+    "Blur": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "legacy_kernel": 0},
+    "Sharpen": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "minimum": 0.0, "maximum": 1.0, "legacy_kernel": 0},
+    "Soften": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "minimum": 0.0, "maximum": 1.0, "amount": 1.0, "legacy_kernel": 0},
     "Glow": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1},                    # fidelity step H
-    "Laplacian": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1},               # lane 9 step A (filterbehaviour.py)
+    "Laplacian": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1, "legacy_kernel": 0},   # lane 9 step A (filterbehaviour.py)
     "EdgeBlur": {"kernel_filter": "gaussian", "quality": 15.0, "crop": 1},                # lane 2 step G (effectbehaviour.py)
 }
 OLD = {
-    "Blur": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1},
-    "Sharpen": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1, "minimum": -WIDE, "maximum": WIDE},
-    "Soften": {"kernel_filter": "gaussian", "quality": NO_QUALITY_LIMIT, "crop": 1, "minimum": -WIDE, "maximum": WIDE, "amount": 1.0},
+    "Blur": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1, "legacy_kernel": 1},
+    "Sharpen": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1, "minimum": -WIDE, "maximum": WIDE, "legacy_kernel": 1},
+    "Soften": {"kernel_filter": "gaussian", "quality": NO_QUALITY_LIMIT, "crop": 1, "minimum": -WIDE, "maximum": WIDE, "amount": 1.0, "legacy_kernel": 1},
     "Glow": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1},
-    "Laplacian": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1},
+    "Laplacian": {"kernel_filter": "box", "quality": NO_QUALITY_LIMIT, "crop": 1, "legacy_kernel": 1},
     "EdgeBlur": {"kernel_filter": "gaussian", "quality": NO_QUALITY_LIMIT, "crop": 1},    # the Gaussian it always had
 }
 
@@ -83,17 +83,28 @@ def _largest(size):
     return max(abs(float(v)) for v in size) if isinstance(size, (tuple, list)) else abs(float(size))
 
 
+def nuke_kernel(kind, p):
+    """True when the node's kernels are Nuke 17's own (`legacy_kernel` 0, see `nuke_weights`); a node saved before, or a kind that
+    has not moved over, keeps the integer-radius kernels above."""
+    return "legacy_kernel" in NEW.get(kind, {}) and not int(p.get("legacy_kernel", 1))
+
+
 def reach(kind, p):
     """How many pixels each way the filter reads: 0 below half a pixel (the filter is the identity there), else `ceil(size)`
-    (of the larger entry, for a size split into a width and a height)."""
+    (of the larger entry, for a size split into a width and a height). A Nuke-kernel node reads `support(filter, size)`."""
     size = _largest(size_value(p, SIZE_PARAM[kind]))
+    if nuke_kernel(kind, p):
+        return support(_get(kind, p, "kernel_filter"), size)
     return 0 if size < 0.5 else int(math.ceil(size))
 
 
 def scale_factor(kind, p):
     """The whole-number factor `quality` scales the picture down by, or 1 when the filter already fits within it."""
-    r = reach(kind, p)
     quality = float(_get(kind, p, "quality"))
+    if nuke_kernel(kind, p):
+        size = _largest(size_value(p, SIZE_PARAM[kind]))
+        return 1 if size <= quality else int(math.ceil(size / quality))
+    r = reach(kind, p)
     return 1 if r <= quality else int(math.ceil(r / quality))
 
 
@@ -138,6 +149,54 @@ def weights(shape, size):
     else:
         raise ValueError(f"Unknown blur filter {shape!r}; choose one of {', '.join(FILTERS)}")
     return w / w.sum()
+
+
+def support(shape, size):
+    """Pixels each way Nuke's `shape` filter of `size` reads (0 where it is the identity): box `ceil(size / 2 - 1/2)`, triangle
+    `ceil(size) - 1` (weight 0 at `size`), quadratic `ceil(1.5 size) - 1`, gaussian `floor(1.5 size)`."""
+    size = abs(float(size))
+    if shape == "box":
+        return max(0, int(math.ceil(size / 2.0 - 0.5 - 1e-9)))
+    if shape == "triangle":
+        return max(0, int(math.ceil(size - 1e-9)) - 1)
+    if shape == "quadratic":
+        return max(0, int(math.ceil(1.5 * size - 1e-9)) - 1)
+    if shape == "gaussian":
+        return int(math.floor(1.5 * size + 1e-9))
+    raise ValueError(f"Unknown blur filter {shape!r}; choose one of {', '.join(FILTERS)}")
+
+
+def nuke_weights(shape, size):
+    """The 1-D kernel of Nuke 17's Blur (float64, sums to 1) over offsets `-support .. support`, measured from real renders of an
+    impulse (Nuke 17.0v6): `size` is the filter's full width. box: the exact overlap of a box `size` wide with each pixel (size 1
+    or less is the identity); triangle: `1 - |k| / size`; quadratic: the quadratic B-spline of `u = k / size` (zero from 1.5);
+    gaussian: sigma = size / (2 sqrt(2 ln 2)) (size is the full width at half maximum), cut off past `floor(1.5 size)`."""
+    size = abs(float(size))
+    r = support(shape, size)
+    k = np.arange(-r, r + 1, dtype=np.float64)
+    if shape == "box":
+        w = np.maximum(np.minimum(k + 0.5, size / 2.0) - np.maximum(k - 0.5, -size / 2.0), 0.0) if size > 1.0 else np.ones(1)
+    elif shape == "triangle":
+        w = np.maximum(0.0, 1.0 - np.abs(k) / size) if r else np.ones(1)
+    elif shape == "quadratic":
+        u = np.abs(k) / size
+        w = np.where(u <= 0.5, 0.75 - u * u, np.where(u < 1.5, 0.5 * (1.5 - u) ** 2, 0.0)) if r else np.ones(1)
+    else:
+        sigma = size / (2.0 * math.sqrt(2.0 * math.log(2.0)))
+        w = np.exp(-0.5 * (k / sigma) ** 2) if r else np.ones(1)
+    return w / w.sum()
+
+
+def _nuke_pass(image, size, shape, axis):
+    """One separable pass of Nuke's blur along `axis` (1 across, 0 down), edge pixels repeated past the border."""
+    if support(shape, size) == 0:
+        return image
+    return _weighted_axis(image, nuke_weights(shape, size), axis=axis)
+
+
+def _nuke_direct_wh(image, width, height, shape):
+    out = _nuke_pass(_nuke_pass(image, width, shape, 1), height, shape, 0)
+    return image.copy() if out is image else out
 
 
 def _weighted_axis(frame, w, axis):
@@ -203,11 +262,31 @@ def _upsample(small, factor, height, width, lead_y=0, lead_x=0):
     return (rows[:, x0] * (1 - fx)[None, :, None] + rows[:, x1] * fx[None, :, None]).astype(np.float32)
 
 
-def filtered(image, size, shape="box", quality=NO_QUALITY_LIMIT, origin=(0, 0)):
+def _scaled_nuke(image, wh, shape, quality, origin):
+    """The Nuke blur at (width, height) sizes `wh` with `quality` applied: a filter wider than `quality` runs on the picture averaged
+    down by `ceil(size / quality)`, then scales back up with linear interpolation (the blocks on the canvas pixel grid)."""
+    top = max(wh)
+    if top <= quality:
+        return _nuke_direct_wh(image, wh[0], wh[1], shape)
+    factor = int(math.ceil(top / quality))
+    height, width = image.shape[:2]
+    lead_y, lead_x = int(origin[1]) % factor, int(origin[0]) % factor
+    pad_y, pad_x = (-(lead_y + height)) % factor, (-(lead_x + width)) % factor
+    padded = np.pad(image, ((lead_y, pad_y), (lead_x, pad_x), (0, 0)), mode="edge") if (lead_y or lead_x or pad_y or pad_x) else image
+    h2, w2 = padded.shape[0] // factor, padded.shape[1] // factor
+    small = padded.reshape(h2, factor, w2, factor, image.shape[2]).mean(axis=(1, 3), dtype=np.float64).astype(np.float32)
+    return _upsample(_nuke_direct_wh(small, wh[0] / factor, wh[1] / factor, shape), factor, height, width, lead_y, lead_x)
+
+
+def filtered(image, size, shape="box", quality=NO_QUALITY_LIMIT, origin=(0, 0), nuke=False):
     """`image` blurred by `size` with filter `shape`. Below half a pixel it is the identity; when the filter would be wider than
     `quality` the picture is averaged down by a whole factor, filtered at the smaller size and scaled back up with linear
     interpolation (the guide's description of `quality`). `origin` is the picture's top-left pixel on the canvas: the blocks of
-    the scaling start on multiples of the factor from canvas pixel 0, so a tile and the whole picture agree."""
+    the scaling start on multiples of the factor from canvas pixel 0, so a tile and the whole picture agree. `nuke` selects Nuke 17's own
+    kernels (`nuke_weights`)."""
+    if nuke:
+        wh = (abs(float(size[0])), abs(float(size[1]))) if isinstance(size, (tuple, list)) else (abs(float(size)),) * 2
+        return _scaled_nuke(image, wh, shape, float(quality), origin)
     if isinstance(size, (tuple, list)):
         wh = (abs(float(size[0])), abs(float(size[1])))
         if wh[0] == wh[1]:
@@ -249,7 +328,8 @@ def filtered(image, size, shape="box", quality=NO_QUALITY_LIMIT, origin=(0, 0)):
 # ---------------------------------------------------------------------------------------------------------- the nodes
 def blur(image, p, origin=(0, 0)):
     """Blur's kernel; `origin` is the picture's top-left canvas pixel."""
-    return filtered(image, size_value(p, "radius"), _get("Blur", p, "kernel_filter"), _get("Blur", p, "quality"), origin)
+    return filtered(image, size_value(p, "radius"), _get("Blur", p, "kernel_filter"), _get("Blur", p, "quality"), origin,
+                    nuke=nuke_kernel("Blur", p))
 
 
 def _confined(image, result, channel, lo, hi):
@@ -260,15 +340,27 @@ def _confined(image, result, channel, lo, hi):
     return np.where((value >= lo) & (value <= hi), result, value).astype(np.float32)
 
 
+def _limited(delta, lo, hi):
+    """Nuke 17's `minimum` / `maximum` on Sharpen and Soften, measured from renders: the change `delta` keeps its sign, loses `lo` of its
+    size (nothing below `lo` passes) and is held at `hi`: sign(d) * min(hi, max(|d| - lo, 0))."""
+    mag = np.minimum(np.maximum(np.abs(delta) - lo, 0.0), hi)
+    return np.where(delta < 0, -mag, mag).astype(np.float32)
+
+
 def sharpen(image, p, channel_sets, origin=(0, 0)):
     """Sharpen's kernel (the unsharp mask): `channel_sets` maps the channels knob to the channel indices it names."""
     amount = p.get("sharpen_amount", 0.5)
-    blurred = filtered(image, size_value(p, "sharpen_size", 1.0), _get("Sharpen", p, "kernel_filter"), _get("Sharpen", p, "quality"), origin)
+    nuke = nuke_kernel("Sharpen", p)
+    blurred = filtered(image, size_value(p, "sharpen_size", 1.0), _get("Sharpen", p, "kernel_filter"), _get("Sharpen", p, "quality"), origin,
+                       nuke=nuke)
     detail = image - blurred
     lo, hi = float(_get("Sharpen", p, "minimum")), float(_get("Sharpen", p, "maximum"))
     out = image.copy()
     for c in channel_sets[p.get("channels", "rgb")]:
-        out[..., c] = _confined(image, image[..., c] + detail[..., c] * amount, c, lo, hi)
+        if nuke:
+            out[..., c] = image[..., c] + amount * _limited(detail[..., c], lo, hi)
+        else:
+            out[..., c] = _confined(image, image[..., c] + detail[..., c] * amount, c, lo, hi)
     return out
 
 
@@ -277,11 +369,15 @@ def soften(image, p, channel_sets, origin=(0, 0)):
     size = size_value(p, "soften_size", 4.0)
     if _largest(size) < 0.5:
         return image.copy()
-    soft = filtered(image, size, _get("Soften", p, "kernel_filter"), _get("Soften", p, "quality"), origin)
+    soft = filtered(image, size, _get("Soften", p, "kernel_filter"), _get("Soften", p, "quality"), origin, nuke=nuke_kernel("Soften", p))
     amount = float(_get("Soften", p, "amount"))
     lo, hi = float(_get("Soften", p, "minimum")), float(_get("Soften", p, "maximum"))
     out = image.copy()
+    nuke = nuke_kernel("Soften", p)
     for c in channel_sets[p.get("channels", "rgba")]:
+        if nuke:
+            out[..., c] = image[..., c] + amount * _limited(soft[..., c] - image[..., c], lo, hi)
+            continue
         mixed = soft[..., c] if amount == 1.0 else image[..., c] + amount * (soft[..., c] - image[..., c])
         out[..., c] = _confined(image, mixed, c, lo, hi)
     return out

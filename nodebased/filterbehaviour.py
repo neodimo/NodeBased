@@ -178,10 +178,10 @@ def median_support(p):
 
 # ------------------------------------------------------------------------------------------------------------ Matrix
 def matrix_clip(image, p):
-    """`image` clipped to 0 .. 1 for the Matrix of the new reading (the guide's note); unchanged for an older node."""
-    if is_legacy("Matrix", p, "legacy_matrix_unclipped"):
-        return image
-    return np.clip(image, 0.0, 1.0).astype(np.float32)
+    """`image` as the Matrix leaves it. The guide notes that 'Matrix results that fall outside the 0-1 range are clipped'; Nuke 17.0v6's own render
+    of the guide's edge-detect matrix keeps -1 to 8 and 12 times its input (nothing is clipped), so the node no longer clips. An older document
+    never clipped either (`legacy_matrix_unclipped`), so the flag stays and changes nothing."""
+    return image
 
 
 # --------------------------------------------------------------------------------------------------------- Laplacian
@@ -190,13 +190,18 @@ def laplacian_is_legacy(p):
 
 
 def laplacian(image, p, channel_sets, origin=(0, 0)):
-    """Nuke's Laplacian: the blur of `laplacian_size` with the node's filter and quality, minus the original, on the channels named."""
+    """Nuke's Laplacian: the picture minus the blur of `laplacian_size` with the node's filter and quality, on the channels named (an older
+    node: the blur minus the picture)."""
     from . import blurknobs
+    nuke = blurknobs.nuke_kernel("Laplacian", p)
     blurred = blurknobs.filtered(image, p.get("laplacian_size", 3.0), blurknobs._get("Laplacian", p, "kernel_filter"),
-                                 blurknobs._get("Laplacian", p, "quality"), origin)
+                                 blurknobs._get("Laplacian", p, "quality"), origin, nuke=nuke)
     out = image.copy()
+    if nuke and blurknobs.reach("Laplacian", p) == 0:
+        return out                      # Nuke 17 passes the picture through where its blur is the identity (size 1 box), it does not return zero
     for c in channel_sets[p.get("channels", "rgba")]:
-        out[..., c] = blurred[..., c] - image[..., c]
+        # Nuke 17 subtracts the blur from the picture (an impulse comes out positive at its centre); an older node did blur minus picture.
+        out[..., c] = (image[..., c] - blurred[..., c]) if nuke else (blurred[..., c] - image[..., c])
     return out.astype(np.float32)
 
 
