@@ -47,6 +47,52 @@ def box_mean(a, r):
     return total / float((2 * r + 1) ** 2)
 
 
+def nuke_blur_weights(shape, size):
+    """Nuke 17.0v6's Blur kernel (float64, over -R..R, sums to 1), as its renders of an impulse show it, written here without blurknobs:
+    `size` is the full width. box: the overlap of a box `size` wide with each pixel; triangle: 1 - |k| / size; quadratic: the quadratic
+    B-spline of k / size, zero from 1.5; gaussian: sigma = size / 2.3548 (size is the full width at half maximum), cut off past
+    floor(1.5 size)."""
+    r = {"box": math.ceil(size / 2 - 0.5 - 1e-9), "triangle": math.ceil(size - 1e-9) - 1, "quadratic": math.ceil(1.5 * size - 1e-9) - 1,
+         "gaussian": math.floor(1.5 * size + 1e-9)}[shape]
+    r = max(int(r), 0)
+    k = np.arange(-r, r + 1, dtype=np.float64)
+    if r == 0:
+        return np.ones(1)
+    if shape == "box":
+        w = np.clip(np.minimum(k + 0.5, size / 2) - np.maximum(k - 0.5, -size / 2), 0, None)
+    elif shape == "triangle":
+        w = 1 - np.abs(k) / size
+    elif shape == "quadratic":
+        u = np.abs(k) / size
+        w = np.where(u <= 0.5, 0.75 - u * u, 0.5 * (1.5 - u) ** 2)
+    else:
+        w = np.exp(-0.5 * (k / (size / (2 * math.sqrt(2 * math.log(2))))) ** 2)
+    return w / w.sum()
+
+
+def nuke_limited(d, lo=0.0, hi=1.0):
+    """Sharpen's and Soften's `minimum` / `maximum` as Nuke 17.0v6 renders them: the change keeps its sign, loses `lo` of its size and is held
+    at `hi`: sign(d) * min(hi, max(|d| - lo, 0))."""
+    return np.sign(d) * np.minimum(np.maximum(np.abs(d) - lo, 0.0), hi)
+
+
+def nuke_blur(a, shape, size):
+    """`a` blurred by Nuke's filter, edge pixels repeated past the border (what its renders do), rows then columns."""
+    w = nuke_blur_weights(shape, size)
+    r = len(w) // 2
+    out = a.astype(np.float64)
+    if r:
+        for axis in (0, 1):
+            pad = [(0, 0)] * 3
+            pad[axis] = (r, r)
+            p = np.pad(out, pad, mode="edge")
+            acc = np.zeros_like(out)
+            for i, wi in enumerate(w):
+                acc += wi * (p[i:i + out.shape[0]] if axis == 0 else p[:, i:i + out.shape[1]])
+            out = acc
+    return out
+
+
 def box_extreme(a, r, use_max):
     a = a.astype(np.float64)
     stack = np.stack([_shifted(a, dy, dx, r) for dy in range(-r, r + 1) for dx in range(-r, r + 1)])
@@ -239,24 +285,38 @@ def _nuke_xy(shape):
 
 
 def _ramp_t(shape, p0, p1):
-    """Where each pixel's centre lies from point 0 (0) to point 1 (1), clamped."""
+    """Where each pixel lies from point 0 (0) to point 1 (1), clamped. Nuke 17.0v6's renders measure from the pixel's index (x across, y up from
+    the bottom row), not its centre: with point 0 at y 1 and point 1 at y 10 the row of index 1 is exactly the point 0 colour."""
     xs, ys = _nuke_xy(shape)
     dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-    return np.clip(((xs + 0.5 - p0[0]) * dx + (ys + 0.5 - p0[1]) * dy) / (dx * dx + dy * dy), 0.0, 1.0)
+    return np.clip(((xs - p0[0]) * dx + (ys - p0[1]) * dy) / (dx * dx + dy * dy), 0.0, 1.0)
+
+
+def _eased_menu(t, kind):
+    """The `ramp` menu of Rectangle, Radial and Grid in Nuke 17.0v6's renders: smooth0 t^2, smooth1 1 - (1 - t)^2, smooth the smoothstep."""
+    return {"linear": t, "smooth0": t * t, "smooth1": 1.0 - (1.0 - t) ** 2, "smooth": t * t * (3.0 - 2.0 * t)}[kind]
 
 
 def _eased(t, kind):
     """The five ramp types. The page gives the words (smooth0 eases into point 0, smooth1 into point 1, smooth into both) and not the curves."""
-    return {"linear": t, "smooth0": t * t, "smooth1": 1.0 - (1.0 - t) ** 2, "smooth": t * t * (3.0 - 2.0 * t)}[kind]
+    # Nuke 17.0v6's renders: smooth0 is 2 t^2 - t^3 (its slope is 0 at point 0 and 1 at point 1), smooth1 mirrors it, smooth is the smoothstep, plinear is t^3.
+    return {"linear": t, "plinear": t ** 3, "smooth0": 2.0 * t * t - t ** 3, "smooth1": 1.0 - (2.0 * (1.0 - t) ** 2 - (1.0 - t) ** 3),
+            "smooth": t * t * (3.0 - 2.0 * t)}[kind]
 
 
 def _blend(c0, c1, w):
     return np.asarray(c0, np.float64)[None, None, :] * (1.0 - w[..., None]) + np.asarray(c1, np.float64)[None, None, :] * w[..., None]
 
 
-def _over_input(fx, shape):
-    """The shape drawn over the input (premultiplied over), the Draw nodes' compositing."""
-    return shape + fx["A"].astype(np.float64) * (1.0 - shape[..., 3:4])
+def _over_input(fx, shape, alpha=1.0, replace=False):
+    """The shape drawn into the input as Nuke 17.0v6 renders the Draw nodes: every channel, the alpha too, goes from the input to the colour by
+    the matte m, `in * (1 - m) + colour * m` (the colour's alpha, `alpha` here, is a value drawn into the alpha channel and not a second
+    coverage). `shape` is the premultiplied shape (colour * alpha * coverage, alpha * coverage); the matte is its alpha over `alpha`."""
+    a = fx["A"].astype(np.float64)
+    m = shape[..., 3:4] / alpha
+    straight = np.where(shape[..., 3:4] > 1e-12, shape[..., :3] / np.where(shape[..., 3:4] > 1e-12, shape[..., 3:4], 1.0), 0.0)
+    keep = 0.0 if replace else 1.0 - m
+    return np.concatenate([straight * m + a[..., :3] * keep, shape[..., 3:4] + a[..., 3:4] * keep], axis=-1)
 
 
 def _in_box(shape, x, y, w, h):
@@ -299,37 +359,33 @@ def cases():
             return ref, (_interior(src.shape, reach) if valid is None else valid(src))
         return expected
 
-    blur_note = ("the guide calls size 'the radius within which pixels are compared' and lists box among the filters, taken as the plain "
-                 "average of the (2 * size + 1) x (2 * size + 1) pixels within that radius; edge pixels are not compared (the guide does not "
-                 "say what lies past the edge)")
+    blur_note = ("Nuke 17.0v6's own render (the guide does not give the kernel): `size` is the filter's full width, so a box of size 1 is the "
+                 "picture itself and a box of size 2 weighs the pixel and its two neighbours 1/2 : 1 : 1/2; edge pixels are repeated past "
+                 "the border")
     # ------------------------------------------------------------------------------------------------------------ Blur
     case("blur_size_zero_is_identity", "Blur", "Blur", (("size", 0.0), ("filter", "box")), "Blur",
          {"radius": 0.0, "kernel_filter": "box", "quality": 15.0, "crop": 1}, interior(0, lambda s: s), "guide",
          "Blur: size 0 (the guide's default) compares no neighbours, so the picture is unchanged")
-    for r in (1, 2):
-        case(f"blur_box_{r}", "Blur", "Blur", (("size", float(r)), ("filter", "box")), "Blur",
-             {"radius": float(r), "kernel_filter": "box", "quality": 15.0, "crop": 1}, interior(r, lambda s, r=r: box_mean(s, r)),
-             "convention", f"Blur box at size {r}: {blur_note}")
+    for size in (1.0, 2.0, 2.5):
+        case(f"blur_box_{size:g}", "Blur", "Blur", (("size", size), ("filter", "box")), "Blur",
+             {"radius": size, "kernel_filter": "box", "quality": 15.0, "crop": 1}, interior(0, lambda s, size=size: nuke_blur(s, "box", size)),
+             "convention", f"Blur box at size {size:g}: {blur_note}")
     case("blur_box_quality_not_limiting", "Blur", "Blur", (("size", 3.0), ("filter", "box"), ("quality", 3.0)), "Blur",
-         {"radius": 3.0, "kernel_filter": "box", "quality": 3.0, "crop": 1}, interior(3, lambda s: box_mean(s, 3)), "guide",
+         {"radius": 3.0, "kernel_filter": "box", "quality": 3.0, "crop": 1}, interior(0, lambda s: nuke_blur(s, "box", 3.0)), "guide",
          "Blur: 'the image is scaled down so the blur filter is no larger than' quality, so a filter that already fits (size 3, quality 3) "
          "is not scaled and equals the direct box blur; " + blur_note)
-    gaussian_reason = ("the guide does not state the gaussian's sigma for a given size (only that gaussian is the default and the smoothest), "
-                       "so its weights cannot be written down without guessing; the shape facts (separable, normalised, symmetric, "
-                       "size 0 the identity) are tested in tests/test_2d_behaviour_filter_a.py")
-    case("blur_gaussian_weights", "Blur", "Blur", (("size", 2.0), ("filter", "gaussian")), "Blur",
-         {"radius": 2.0, "kernel_filter": "gaussian", "quality": 15.0, "crop": 1}, interior(2, lambda s: box_mean(s, 2)), "convention",
-         "Blur gaussian: the weights for a given size", unscored=gaussian_reason)
-    for shape in ("triangle", "quadratic"):
-        case(f"blur_{shape}_weights", "Blur", "Blur", (("size", 2.0), ("filter", shape)), "Blur",
-             {"radius": 2.0, "kernel_filter": shape, "quality": 15.0, "crop": 1}, interior(2, lambda s: box_mean(s, 2)), "convention",
-             f"Blur {shape}: the weights for a given size",
-             unscored=f"the guide names the {shape} filter but not its weights or how size maps to its width; shape facts are tested instead")
+    for shape in ("gaussian", "triangle", "quadratic"):
+        for size in (2.0, 3.5):
+            case(f"blur_{shape}_weights" if size == 2.0 else f"blur_{shape}_weights_{size:g}", "Blur", "Blur", (("size", size), ("filter", shape)), "Blur",
+                 {"radius": size, "kernel_filter": shape, "quality": 15.0, "crop": 1},
+                 interior(0, lambda s, shape=shape, size=size: nuke_blur(s, shape, size)), "convention",
+                 f"Blur {shape} at size {size:g}: weights as Nuke 17.0v6 renders them (triangle 1 - |k| / size, quadratic the B-spline of k / size, "
+                 "gaussian sigma = size / 2.3548 cut off past 1.5 size); edge pixels are repeated past the border")
     case("blur_quality_scaled", "Blur", "Blur", (("size", 6.0), ("filter", "box"), ("quality", 2.0)), "Blur",
-         {"radius": 6.0, "kernel_filter": "box", "quality": 2.0, "crop": 1}, interior(6, lambda s: box_mean(s, 6)), "guide",
+         {"radius": 6.0, "kernel_filter": "box", "quality": 2.0, "crop": 1}, interior(6, lambda s: nuke_blur(s, "box", 6.0)), "guide",
          "Blur: a size above quality scales the image down, filters, and scales up with linear interpolation",
-         unscored="the guide does not give the scale factor, the down-scaling filter or the block alignment, so the pixels cannot be "
-                  "written down; tests check that the result is smooth, bounded and tile-exact")
+         unscored="the guide does not give the scale factor, the down-scaling filter or the block alignment, and Nuke's render of it varies with "
+                  "the pixel's position, so the pixels cannot be written down; tests check that the result is smooth, bounded and tile-exact")
 
     # ----------------------------------------------------------------------------------------------- Erode (fast)
     erode_note = ("Erode (fast) guide: 'Positive values increase the light pixels and vice versa' (positive size grows light pixels, "
@@ -399,41 +455,39 @@ def cases():
          "Median: ignore top line leaves the top row of the filter box out of the sort (the median of the other six pixels at size 3)")
 
     # ---------------------------------------------------------------------------------------- Sharpen and Soften
-    laplacian_note = ("the guide says Sharpen and Soften 'use Laplacian' and the Laplacian page defines that as 'applies a blur, and then "
-                      "subtracts the original from the blurred input', so Soften adds amount times (blur - original) and Sharpen subtracts it "
-                      "(the unsharp mask, long-established as original + k * (original - blurred): Gonzalez and Woods, Digital Image "
-                      "Processing, 'unsharp masking and highboost filtering'); the guide gives amount no description, so the scale and sign "
-                      "are this reading's; box blur of size 1 is the plain 3 x 3 average (see the Blur cases); compared inside the picture, "
-                      "one pixel in from the edge")
-    wide = {"minimum": -1e6, "maximum": 1e6}
+    laplacian_note = ("Nuke 17.0v6's own render: Sharpen is the unsharp mask original + amount * (original - blur) and Soften is original + amount * "
+                      "(blur - original), the change limited by minimum and maximum (it keeps its sign, loses `minimum` of its size and is held at `maximum`: "
+                      "sign(d) * min(maximum, max(|d| - minimum, 0)), so at the defaults 0 and 1 a change of 2 comes out as 1), with Nuke's blur (a box filter of size 3 is a plain 3-pixel average each way; see the Blur cases); at size 1 "
+                      "a box blur is the identity, so the cases use size 3; edge pixels are repeated past the border")
+    wide = {"minimum": 0.0, "maximum": 1.0}          # Nuke's own defaults, which the Nuke scripts leave in place
     for amount in (0.5, 1.0, 2.0):
-        case(f"sharpen_unsharp_mask_amount_{amount}", "Sharpen", "Sharpen", (("size", 1.0), ("filter", "box"), ("amount", amount)), "Sharpen",
-             {"sharpen_size": 1.0, "kernel_filter": "box", "channels": "rgb", "sharpen_amount": amount, **wide},
-             on("A", 1, lambda s, a=amount: s + a * (s - box_mean(s, 1)), rgba=(0, 1, 2)), "convention",
+        case(f"sharpen_unsharp_mask_amount_{amount}", "Sharpen", "Sharpen", (("size", 3.0), ("filter", "box"), ("amount", amount)), "Sharpen",
+             {"sharpen_size": 3.0, "kernel_filter": "box", "channels": "rgba", "sharpen_amount": amount, **wide},
+             on("A", 0, lambda s, a=amount: s + a * nuke_limited(s - nuke_blur(s, "box", 3.0))), "convention",
              f"Sharpen at amount {amount}: original + amount * (original - blur); " + laplacian_note, nb_inputs=("A",))
-        case(f"soften_amount_{amount}", "Soften", "Soften", (("size", 1.0), ("filter", "box"), ("amount", amount)), "Soften",
-             {"soften_size": 1.0, "kernel_filter": "box", "channels": "rgba", "amount": amount, **wide},
-             on("A", 1, lambda s, a=amount: s + a * (box_mean(s, 1) - s)), "convention",
+        case(f"soften_amount_{amount}", "Soften", "Soften", (("size", 3.0), ("filter", "box"), ("amount", amount)), "Soften",
+             {"soften_size": 3.0, "kernel_filter": "box", "channels": "rgba", "amount": amount, **wide},
+             on("A", 0, lambda s, a=amount: s + a * nuke_limited(nuke_blur(s, "box", 3.0) - s)), "convention",
              f"Soften at amount {amount}: original + amount * (blur - original); " + laplacian_note)
-    case("sharpen_step_edge_overshoots", "Sharpen", "Sharpen", (("size", 1.0), ("filter", "box"), ("amount", 1.0)), "Sharpen",
-         {"sharpen_size": 1.0, "kernel_filter": "box", "channels": "rgb", "sharpen_amount": 1.0, **wide},
-         on("S", 1, lambda s: s + (s - box_mean(s, 1)), rgba=(0, 1, 2)), "convention",
+    case("sharpen_step_edge_overshoots", "Sharpen", "Sharpen", (("size", 3.0), ("filter", "box"), ("amount", 1.0)), "Sharpen",
+         {"sharpen_size": 3.0, "kernel_filter": "box", "channels": "rgba", "sharpen_amount": 1.0, **wide},
+         on("S", 0, lambda s: s + nuke_limited(s - nuke_blur(s, "box", 3.0))), "convention",
          "Sharpen on a step edge (0.2 to 0.8): the dark side next to the edge goes below 0.2 and the bright side above 0.8 (the "
          "overshoot of an unsharp mask); " + laplacian_note, nb_inputs=("S",))
-    case("soften_step_edge_rounds_the_step", "Soften", "Soften", (("size", 1.0), ("filter", "box"), ("amount", 1.0)), "Soften",
-         {"soften_size": 1.0, "kernel_filter": "box", "channels": "rgba", "amount": 1.0, **wide},
-         on("S", 1, lambda s: box_mean(s, 1)), "convention",
+    case("soften_step_edge_rounds_the_step", "Soften", "Soften", (("size", 3.0), ("filter", "box"), ("amount", 1.0)), "Soften",
+         {"soften_size": 3.0, "kernel_filter": "box", "channels": "rgba", "amount": 1.0, **wide},
+         on("S", 0, lambda s: s + nuke_limited(nuke_blur(s, "box", 3.0) - s)), "convention",
          "Soften at amount 1 on a step edge: the pixels either side of the edge move toward each other and never past (the blur); "
          + laplacian_note, nb_inputs=("S",))
     for kind, nb_amount, name in (("Sharpen", "sharpen_amount", "sharpen"), ("Soften", "amount", "soften")):
         nb_size = "sharpen_size" if kind == "Sharpen" else "soften_size"
-        case(f"{name}_flat_region_unchanged", kind, kind, (("size", 1.0), ("filter", "box"), ("amount", 1.0)), kind,
-             {nb_size: 1.0, "kernel_filter": "box", nb_amount: 1.0, **wide},
+        case(f"{name}_flat_region_unchanged", kind, kind, (("size", 3.0), ("filter", "box"), ("amount", 1.0)), kind,
+             {nb_size: 3.0, "kernel_filter": "box", nb_amount: 1.0, **wide},
              on("S", 0, lambda s: s, valid=lambda src: np.broadcast_to(((np.arange(src.shape[1]) <= 6) | (np.arange(src.shape[1]) >= 9))[None, :, None], src.shape).copy()),
              "convention", f"{kind} on the flat parts of a step picture (more than the filter's reach from the edge): a flat region has "
              "no detail, so it comes back unchanged; " + laplacian_note, nb_inputs=("S",))
-        case(f"{name}_amount_zero_is_identity", kind, kind, (("size", 1.0), ("filter", "box"), ("amount", 0.0)), kind,
-             {nb_size: 1.0, "kernel_filter": "box", nb_amount: 0.0, **wide}, on("A", 0, lambda s: s), "convention",
+        case(f"{name}_amount_zero_is_identity", kind, kind, (("size", 3.0), ("filter", "box"), ("amount", 0.0)), kind,
+             {nb_size: 3.0, "kernel_filter": "box", nb_amount: 0.0, **wide}, on("A", 0, lambda s: s), "convention",
              f"{kind} at amount 0 adds none of the blur difference, so the picture is unchanged; " + laplacian_note)
 
     # ------------------------------------------------------------------------------------------------------- Glow
@@ -488,28 +542,34 @@ def cases():
     def matrix_nuke(rows, **extra):
         return (("matrix", "{" + " ".join("{" + " ".join(f"{v:g}" for v in row) + "}" for row in rows) + "}"),) + tuple(extra.items())
 
-    clip_note = "the guide's note: 'Matrix results that fall outside the 0-1 range are clipped'"
+    clip_note = ("the guide's note says 'Matrix results that fall outside the 0-1 range are clipped'; Nuke 17.0v6's own render keeps them (the guide's "
+                 "example comes out as -1 to 8 times its input, unclipped), so nothing is clipped; edge pixels are repeated past the border")
     case("matrix_edge_detect_example", "Matrix", "Matrix", matrix_nuke(edge_matrix), "Matrix", matrix_params(edge_matrix),
-         interior(1, lambda s: np.clip(correlate(s, edge_matrix), 0.0, 1.0)), "guide",
+         interior(0, lambda s: correlate(s, edge_matrix)), "guide",
          "Matrix: the guide's worked example (-1 all round, 8 in the middle) multiplies the centre by 8 and its neighbours by -1 and adds "
          "the nine values; " + clip_note)
     case("matrix_normalize_box", "Matrix", "Matrix", matrix_nuke(all_ones, normalize=True), "Matrix", matrix_params(all_ones, normalize=1),
-         interior(1, lambda s: np.clip(correlate(s, all_ones / all_ones.sum()), 0.0, 1.0)), "guide",
+         interior(0, lambda s: correlate(s, all_ones / all_ones.sum())), "guide",
          "Matrix normalize: the matrix is divided by a constant so its sum is 1, which keeps the brightness (all ones becomes the 3 x 3 "
          "average); " + clip_note)
-    case("matrix_asymmetric_orientation", "Matrix", "Matrix", matrix_nuke(np.array([[0, 0, 0], [0, 1, 0], [0, 1, 0]])), "Matrix",
-         matrix_params(np.array([[0, 0, 0], [0, 1, 0], [0, 1, 0]])), interior(1, lambda s: s), "convention",
-         "Matrix: whether an asymmetric matrix is applied as written or flipped",
-         unscored="the guide's description ('multiplying each pixel by the matching matrix value') does not say whether the weights are "
-                  "flipped, so only symmetric matrices are scored")
+    asym = np.array([[0, 0, 0], [0, 1, 0], [0, 1, 0]])
+    case("matrix_asymmetric_orientation", "Matrix", "Matrix", matrix_nuke(asym), "Matrix", matrix_params(asym),
+         interior(0, lambda s: correlate(s, asym)), "convention",
+         "Matrix: an asymmetric matrix is applied as written (no flip): Nuke 17.0v6's render of an impulse through the numbers 1 to 9 puts 9 8 7 / "
+         "6 5 4 / 3 2 1 around it in a top-first picture, so each output pixel is the sum of the matrix times the neighbours at the same offsets; "
+         "edge pixels are repeated past the border")
 
     # ------------------------------------------------------------------------------------------------------ Laplacian
-    for r in (1, 2):
+    for r in (2, 3):
         case(f"laplacian_box_{r}", "Laplacian", "Laplacian", (("size", float(r)), ("filter", "box")), "Laplacian",
              {"laplacian_size": float(r), "kernel_filter": "box", "quality": 15.0, "crop": 1, "channels": "rgba"},
-             interior(r, lambda s, r=r: box_mean(s, r) - s), "guide",
-             f"Laplacian at size {r}: 'applies a blur, and then subtracts the original from the blurred input' (the blur here the box "
-             "filter, whose weights are the plain average over the radius; see the Blur cases)")
+             interior(0, lambda s, r=r: s - nuke_blur(s, "box", float(r))), "convention",
+             f"Laplacian at size {r}: Nuke 17.0v6 renders the picture minus its blur (the guide says 'subtracts the original from the blurred "
+             "input', the opposite sign: an impulse comes out positive at its centre), on all four channels, with Nuke's box blur (see the Blur cases)")
+    case("laplacian_box_1", "Laplacian", "Laplacian", (("size", 1.0), ("filter", "box")), "Laplacian",
+         {"laplacian_size": 1.0, "kernel_filter": "box", "quality": 15.0, "crop": 1, "channels": "rgba"}, interior(0, lambda s: s), "convention",
+         "Laplacian at size 1 with the box filter: Nuke 17.0v6 renders the picture itself (its blur is the identity there and the node passes "
+         "the input through instead of returning zero)")
 
     # ---------------------------------------------------------------------------------------------------- EdgeDetect
     sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], np.float64)
@@ -965,6 +1025,53 @@ def cases():
         node = "Sparkles" if cid.startswith("sparkles_") else "Flare"
         case(cid, node, node, nuke_knobs, node, nb_params, None, "guide", statement, unscored=reason)
     _panel_step_cases(Case, case)
+    # The Nuke script reads the picture the case names: a one-picture filter node whose NodeBased case reads a fixture other than A (the step
+    # picture S, the square W) is fed that same fixture in Nuke (the pack had them read A, so Nuke filtered a different picture).
+    from dataclasses import replace
+    one_picture = {"Sharpen", "Soften", "EdgeDetect", "Emboss", "Erode (filter)"}
+    out[:] = [replace(c, nuke_inputs=tuple(c.nb_inputs)) if (c.nuke in one_picture and len(c.nb_inputs) == 1 and tuple(c.nb_inputs) != tuple(c.nuke_inputs)) else c
+              for c in out]
+
+    # The Draw cases set NodeBased's colours in `nb_params` only, so Nuke drew in its own defaults (white, and 0 to 1 for a ramp). Hand the same
+    # colours to Nuke's `color`, `color0` and `color1` knobs wherever the case did not name them.
+    def _colour(nb, prefix):
+        return " ".join(f"{float(nb[prefix + part]):g}" for part in ("red", "green", "blue", "alpha"))
+
+    def _geometry(c):
+        """Hand Nuke the area and ramp points the NodeBased case sets in `nb_params` where the case did not name them (Nuke's own defaults draw
+        nothing for a Rectangle's area, and a ramp between other points)."""
+        if c.nuke not in ("Rectangle", "Radial", "Ramp", "Grid") or c.unscored:
+            return c
+        knobs, nb, more = dict(c.nuke_knobs), c.nb_params, {}
+        if c.nuke in ("Rectangle", "Radial") and "area" not in knobs and "box_x" in nb:
+            x, y, w, h = (float(nb[k]) for k in ("box_x", "box_y", "box_width", "box_height"))
+            more["area"] = f"{x:g} {y:g} {x + w:g} {y + h:g}"
+        if "p0" not in knobs and "p0_x" in nb and ("ramp" in knobs or c.nuke == "Ramp"):
+            more["p0"] = f"{float(nb['p0_x']):g} {float(nb['p0_y']):g}"
+            more["p1"] = f"{float(nb['p1_x']):g} {float(nb['p1_y']):g}"
+        return replace(c, nuke_knobs=tuple(c.nuke_knobs) + tuple(more.items())) if more else c
+
+    def _edge_channels(c):
+        """EdgeDetect's NodeBased cases read the edge response into the picture's own channels; Nuke's EdgeDetectWrapper writes it to the alpha
+        (`output` alpha, `channels` rgb) unless told otherwise, so the cases hand it the same two settings."""
+        if c.nuke != "EdgeDetect" or c.unscored:
+            return c
+        knobs = dict(c.nuke_knobs)
+        more = {name: value for name, value in (("channels", "all"), ("output", "none")) if name not in knobs}
+        return replace(c, nuke_knobs=tuple(c.nuke_knobs) + tuple(more.items())) if more else c
+
+    def _with_colours(c):
+        if c.nuke not in ("Rectangle", "Radial", "Grid", "Ramp") or c.unscored:
+            return c
+        knobs, nb, more = dict(c.nuke_knobs), c.nb_params, {}
+        if c.nuke != "Ramp" and "color" not in knobs and "red" in nb:
+            more["color"] = _colour(nb, "")
+        if c.nuke != "Ramp" and "color0" not in knobs and "color0_red" in nb:
+            more["color0"] = _colour(nb, "color0_")
+        if c.nuke == "Ramp" and "color" not in knobs and "color1_red" in nb:
+            more["color"] = _colour(nb, "color1_")           # Nuke's Ramp has the one colour; NodeBased's colour 1 is it
+        return replace(c, nuke_knobs=tuple(c.nuke_knobs) + tuple(more.items())) if more else c
+    out[:] = [_edge_channels(_geometry(_with_colours(c))) for c in out]
     return out
 
 
@@ -1070,7 +1177,7 @@ def _draw_cases(Case, out):
         """A reference: the shape `make(shape_like)` (premultiplied float64 RGBA) over the input, valid where `only(shape_like)` says."""
         def expected(fx):
             like = fx["A"].astype(np.float64)
-            ref = _over_input(fx, make(like))
+            ref = _over_input(fx, make(like), getattr(make, "colour_alpha", 1.0))
             valid = np.ones(like.shape, bool) if only is None else np.broadcast_to(only(like)[..., None], like.shape).copy()
             return ref, valid
         return expected
@@ -1080,7 +1187,10 @@ def _draw_cases(Case, out):
     paint = {"red": colour[0], "green": colour[1], "blue": colour[2], "alpha": colour[3]}
 
     def solid(coverage):
-        return lambda like: np.concatenate([np.asarray(colour[:3]) * colour[3] * coverage(like)[..., None], (colour[3] * coverage(like))[..., None]], axis=-1)
+        def make(like):
+            return np.concatenate([np.asarray(colour[:3]) * colour[3] * coverage(like)[..., None], (colour[3] * coverage(like))[..., None]], axis=-1)
+        make.colour_alpha = colour[3]
+        return make
 
     def rect_in(like):
         return _in_box(like, 3, 2, 6, 5).astype(np.float64)
@@ -1099,7 +1209,7 @@ def _draw_cases(Case, out):
          "Rectangle: opacity 'sets the rectangle opacity where 0 is equal to transparent, and 1 is equal to opaque'")
     case("rectangle_replace_clears_the_input", "Rectangle", "Rectangle", (("area", "3 2 9 7"), ("replace", True)), "Rectangle",
          {**area, **paint, "softness": 0.0, "replace": 1},
-         lambda fx: (solid(rect_in)(fx["A"].astype(np.float64)), np.ones(fx["A"].shape, bool)), "guide",
+         lambda fx: (_over_input(fx, solid(rect_in)(fx["A"].astype(np.float64)), colour[3], replace=True), np.ones(fx["A"].shape, bool)), "guide",
          "Rectangle: replace 'existing channels are cleared to black before drawing into them'")
     low, high = (0.1, 0.2, 0.3, 1.0), (0.9, 0.7, 0.5, 1.0)
     ramp_knobs = {"p0_x": 0.0, "p0_y": 1.0, "p1_x": 0.0, "p1_y": 10.0, "color0_red": low[0], "color0_green": low[1], "color0_blue": low[2],
@@ -1108,7 +1218,7 @@ def _draw_cases(Case, out):
 
     def ramped(kind, only=None):
         def make(like):
-            weight = _eased(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), kind)
+            weight = _eased_menu(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), kind)
             straight = _blend(low, high, weight)
             return np.concatenate([straight[..., :3] * straight[..., 3:4], straight[..., 3:4]], axis=-1)
         return drawn(make, only)
@@ -1129,19 +1239,25 @@ def _draw_cases(Case, out):
              (("ramp", kind), ("p0", "0 1"), ("p1", "0 10")), "Rectangle", {**whole, **ramp_knobs, "ramp": kind}, ramped(kind, outside_ramp), "guide",
              f"Rectangle ramp {kind}: before point 0 the ramp is color 0 and past point 1 it is color, whatever the easing (compared outside the ramp only)")
     case("rectangle_ramp_smooth_is_even_at_the_middle", "Rectangle", "Rectangle", (("ramp", "smooth"), ("p0", "0 1"), ("p1", "0 10")), "Rectangle",
-         {**whole, **ramp_knobs, "ramp": "smooth"}, ramped("smooth", mid_row), "convention",
+         {**whole, **ramp_knobs, "ramp": "smooth"}, ramped("smooth"), "convention",
          "Rectangle ramp smooth: 'the ramp color gradually eases into both ends', so halfway between the points the two colours weigh the same "
          "(the row of pixels whose centres lie on the midpoint)")
     for kind in ("smooth0", "smooth1"):
         case(f"rectangle_ramp_{kind}_curve", "Rectangle", "Rectangle", (("ramp", kind),), "Rectangle", {**whole, **ramp_knobs, "ramp": kind},
-             ramped(kind), "convention", f"Rectangle ramp {kind}: the easing curve",
-             unscored=f"the page says only which end {kind} eases into ('colors in the point {kind[-1]} end are spread wider') and gives no curve; "
-                      "tests/test_2d_behaviour_draw.py checks the end it favours and that it keeps both end colours")
+             ramped(kind), "convention", f"Rectangle ramp {kind}: the easing curve as Nuke 17.0v6 renders it (smooth0 t^2, smooth1 1 - (1 - t)^2, "
+             "measured at the pixel's index from point 0; the Ramp node's own curves are different)")
+    def rect_soft(like, softness=2.0):
+        """Nuke 17.0v6's soft rectangle: `softness` is a width in pixels, each edge contributes smoothstep(d / (softness + 1)) with d the pixels
+        from the edge counting the pixel itself, and the matte is the product of the four."""
+        xs, ys = _nuke_xy(like)
+        def edge(d):
+            t = np.clip(d / (softness + 1.0), 0.0, 1.0)
+            return t * t * (3.0 - 2.0 * t)
+        return edge(xs - 3 + 1.0) * edge(9 - xs) * edge(ys - 2 + 1.0) * edge(7 - ys)
     case("rectangle_softness_falloff", "Rectangle", "Rectangle", (("area", "3 2 9 7"), ("softness", 2.0)), "Rectangle",
-         {**area, **paint, "softness": 0.5}, drawn(solid(rect_in)), "convention", "Rectangle: the soft edge's width and curve",
-         unscored="the page says only that softness 'sets the softness of the rectangle edges where 0 is a hard edge' (default 1); it gives neither "
-                  "the unit nor the curve, so the soft edge is not scored; tests/test_2d_behaviour_draw.py checks that 0 is a hard edge, that "
-                  "more softness widens the fade and that the fade is symmetric")
+         {**area, **paint, "softness": 2.0}, drawn(solid(rect_soft)), "convention",
+         "Rectangle softness 2: a width in pixels; each edge fades as smoothstep(d / (softness + 1)) with d the pixels from the edge counting the "
+         "pixel itself (the first pixel inside is 1), and the four edges multiply (Nuke 17.0v6's own render; the guide gives neither unit nor curve)")
 
     # ------------------------------------------------------------------------------------------------------------- Radial
     page = DRAW_GUIDE + "radial.html"
@@ -1164,7 +1280,7 @@ def _draw_cases(Case, out):
          "Radial: opacity 'sets the radial ramp opacity. 0 is equal to transparent and 1 is equal to opaque'")
 
     def radial_ramped(like):
-        weight = _eased(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), "linear")
+        weight = _eased_menu(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), "linear")
         straight = _blend(low, high, weight)
         alpha = straight[..., 3:4] * (radial_distance(like) < 1.0)[..., None]
         return np.concatenate([straight[..., :3] * alpha, alpha], axis=-1)
@@ -1188,9 +1304,11 @@ def _draw_cases(Case, out):
                    "color0_alpha": 1.0, "color1_red": c1[0], "color1_green": c1[1], "color1_blue": c1[2], "color1_alpha": 1.0}
 
     def ramp_ref(kind, only=None):
+        # Nuke's Ramp has the one `color`: the input goes to it along the ramp (no colour 0), so the matte is the ramp's weight.
         def make(like):
-            straight = _blend(c0, c1, _eased(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), kind))
-            return np.concatenate([straight[..., :3] * straight[..., 3:4], straight[..., 3:4]], axis=-1)
+            weight = _eased(_ramp_t(like, (0.0, 1.0), (0.0, 10.0)), kind)[..., None] * c1[3]
+            return np.concatenate([np.asarray(c1[:3])[None, None, :] * weight, weight], axis=-1)
+        make.colour_alpha = c1[3]
         return drawn(make, only)
     case("ramp_linear", "Ramp", "Ramp", (("type", "linear"), ("p0", "0 1"), ("p1", "0 10")), "Ramp", {**ramp_params, "ramp_type": "linear"},
          ramp_ref("linear"), "convention",
@@ -1198,16 +1316,15 @@ def _draw_cases(Case, out):
          "value at its centre, y counted from the bottom")
     for kind in ("smooth0", "smooth1", "smooth", "plinear"):
         case(f"ramp_{kind}_ends_are_the_two_colours", "Ramp", "Ramp", (("type", kind), ("p0", "0 1"), ("p1", "0 10")), "Ramp",
-             {**ramp_params, "ramp_type": kind}, ramp_ref("linear" if kind == "plinear" else kind, outside_ramp), "guide",
+             {**ramp_params, "ramp_type": kind}, ramp_ref(kind, outside_ramp), "guide",
              f"Ramp {kind}: before point 0 the ramp is the point 0 colour and past point 1 the point 1 colour, whatever the type (compared outside the ramp only)")
     case("ramp_smooth_is_even_at_the_middle", "Ramp", "Ramp", (("type", "smooth"), ("p0", "0 1"), ("p1", "0 10")), "Ramp",
-         {**ramp_params, "ramp_type": "smooth"}, ramp_ref("smooth", mid_row), "convention",
+         {**ramp_params, "ramp_type": "smooth"}, ramp_ref("smooth"), "convention",
          "Ramp smooth: 'the ramp gradually eases into both ends', so the middle weighs the two colours alike (the row on the midpoint)")
     for kind in ("smooth0", "smooth1", "plinear"):
-        case(f"ramp_{kind}_curve", "Ramp", "Ramp", (("type", kind),), "Ramp", {**ramp_params, "ramp_type": kind}, ramp_ref(kind if kind != "plinear" else "linear"),
-             "convention", f"Ramp {kind}: the curve between the points",
-             unscored="the page names the type and says in words which end it eases into (or, for plinear, that it looks more linear to the eye) "
-                      "but gives no curve; tests/test_2d_behaviour_draw.py checks the ends, the direction of the easing and that plinear differs from linear")
+        case(f"ramp_{kind}_curve", "Ramp", "Ramp", (("type", kind),), "Ramp", {**ramp_params, "ramp_type": kind}, ramp_ref(kind),
+             "convention", f"Ramp {kind}: the curve between the points as Nuke 17.0v6 renders it (smooth0 2 t^2 - t^3, smooth1 its mirror, smooth the "
+             "smoothstep 3 t^2 - 2 t^3, plinear t^3), at the pixel's index from point 0")
     _noise_grid_cases(Case, out, case)
     _defocus_cases(Case, out)
 
@@ -1251,14 +1368,29 @@ def _noise_grid_cases(Case, out, case):
                     expected=lambda fx: (square_centres(fx)[0], np.broadcast_to(square_centres(fx)[1][..., None], fx["A"].shape).copy()),
                     source="guide", statement=f"Grid: number 'sets the number of grid squares on the x and y axes' ({page}): on a 16 x 12 frame a number of 4 across and 3 up "
                     "makes squares four pixels across with lines one pixel thick, so the middle of each square (compared there only) is the input untouched"))
+    def grid_lines_ref(like, number=(4, 3), size=1.0):
+        """Nuke 17.0v6's Grid: `number` squares along an axis are bounded by number + 1 lines at k * (extent - 1) / number, each `size` pixels wide from its
+        position, a pixel [i, i + 1] taking the overlap; a row line and a column line combine as 1 - (1 - a)(1 - b); the colour mixes in by that matte."""
+        xs, ys = _nuke_xy(like)
+
+        def axis(index, extent, n):
+            step = (extent - 1.0) / n
+            total = np.zeros(index.shape)
+            for k in range(n + 1):
+                pos = k * step
+                total = total + np.clip(np.minimum(index + 1.0, pos + size) - np.maximum(index, pos), 0.0, 1.0)
+            return np.clip(total, 0.0, 1.0)
+        a, b = axis(xs, 16.0, number[0]), axis(ys, 12.0, number[1])
+        m = (1.0 - (1.0 - a) * (1.0 - b))[..., None]
+        colour = np.array([1.0, 0.5, 0.25, 1.0])
+        return like * (1.0 - m) + colour * m
+
     out.append(Case(id="grid_line_positions", nuke="Grid", nuke_class="Grid", nuke_knobs=(("number", "4 3"), ("size", 1.0)), nuke_inputs=("A",),
                     nb_kind="Grid", nb_params={"width": 16, "height": 12, **grid}, nb_inputs=("A",),
-                    expected=lambda fx: (fx["A"].astype(np.float64), np.ones(fx["A"].shape, bool)), source="convention",
-                    statement="Grid: where the lines of a grid with a given number, size and translate fall",
-                    unscored="the page gives the number of squares, the line thickness in pixels and a translate but not where in a square a line of a given "
-                             "thickness sits (starting at the grid position, centred on it or ending at it) or what the last line does at the frame's edge; "
-                             "tests/test_2d_behaviour_draw.py checks the spacing (the frame divided by the number), the thickness, that translate moves "
-                             "the whole grid and that lines are drawn in the colour and the ramp"))
+                    expected=lambda fx: (grid_lines_ref(fx["A"].astype(np.float64)), np.ones(fx["A"].shape, bool)), source="convention",
+                    statement="Grid: where the lines of a grid with a given number and size fall, as Nuke 17.0v6 renders them: number + 1 lines at k * (extent - 1) / "
+                    "number, each `size` pixels wide from its position with fractional coverage at its edges, a crossing the union of the two coverages "
+                    "(the guide gives the number of squares and the size but not where a line sits)"))
     _grain_dither_cases(Case, out, case)
 
 

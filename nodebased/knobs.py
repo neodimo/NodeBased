@@ -1464,6 +1464,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("ramp_type",), label="Type"),
         KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
                   help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
+        KnobGroup("bool", ("legacy_draw_blend",), label="Legacy blend",
+                  help="Draw the colour premultiplied over the picture, as graphs saved before the Draw nodes mixed it in by the matte the way Nuke 17 does."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Radial": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -1476,6 +1478,8 @@ KNOB_LAYOUT = {
         KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"),
         KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
                   help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
+        KnobGroup("bool", ("legacy_draw_blend",), label="Legacy blend",
+                  help="Draw the colour premultiplied over the picture, as graphs saved before the Draw nodes mixed it in by the matte the way Nuke 17 does."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Rectangle": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -1485,6 +1489,8 @@ KNOB_LAYOUT = {
         KnobGroup("color", ("red", "green", "blue", "alpha")), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"),
         KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
                   help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
+        KnobGroup("bool", ("legacy_draw_blend",), label="Legacy blend",
+                  help="Draw the colour premultiplied over the picture, as graphs saved before the Draw nodes mixed it in by the matte the way Nuke 17 does."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Noise": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -1495,7 +1501,8 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
         KnobGroup("int", ("seed",)), KnobGroup("enum", ("type",)), KnobGroup("bool", ("nyquist",)), KnobGroup("xy", ("translate_x", "translate_y"), label="Translate"), KnobGroup("xy", ("rotate_x", "rotate_y"), label="Rotate"), KnobGroup("float", ("scaling",), label="Scale"), KnobGroup("float", ("skew",)), KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("float", ("xrotate",)), KnobGroup("float", ("yrotate",)), KnobGroup("color", ("red", "green", "blue", "alpha")), KnobGroup("enum", ("ramp",)), KnobGroup("xy", ("p0_x", "p0_y"), label="Point 0"), KnobGroup("xy", ("p1_x", "p1_y"), label="Point 1"), KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"), KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
                   help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
-        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("bool", ("legacy_draw_blend",), label="Legacy blend",
+                  help="Draw the colour premultiplied over the picture, as graphs saved before the Draw nodes mixed it in by the matte the way Nuke 17 does."), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Text": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("multiline", ("message",)), KnobGroup("string", ("font",)),
@@ -1997,6 +2004,8 @@ KNOB_LAYOUT = {
         KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Color 0"),
         KnobGroup("bool", ("legacy_draw_axes",), label="Legacy axes",
                   help="Count y from the top of the format and sample a ramp at the pixel's index, as graphs saved before the Draw nodes followed Nuke do."),
+        KnobGroup("bool", ("legacy_draw_blend",), label="Legacy blend",
+                  help="Draw the colour premultiplied over the picture, as graphs saved before the Draw nodes mixed it in by the matte the way Nuke 17 does."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "NoOp": _groups(KnobGroup("multiline", ("note",))),
     "Profile": _groups(

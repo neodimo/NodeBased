@@ -9327,7 +9327,15 @@ class Evaluator:
     @staticmethod
     def _draw_shape(kind, p, x0, y0, w, h, frame):
         # Nuke's Draw chrome (invert, premult, opacity) is applied here, so both paths get it.
-        return _chrome.shape_chrome(kind, p, Evaluator._draw_shape_raw(kind, p, x0, y0, w, h, frame))
+        shape = _chrome.shape_chrome(kind, p, Evaluator._draw_shape_raw(kind, p, x0, y0, w, h, frame))
+        if _draw.nuke_blend(kind, p):
+            # Nuke mixes the colour in by the matte: the same shape drawn as an opaque white one, through the same chrome, is that matte, and it
+            # rides along as a fifth channel for `compose_draw` (a colour's alpha is a value to draw, not a coverage).
+            unit = {**p, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "ramp": "none", "color1_red": 1.0, "color1_green": 1.0,
+                    "color1_blue": 1.0, "color1_alpha": 1.0}
+            matte = _chrome.shape_chrome(kind, p, Evaluator._draw_shape_raw(kind, unit, x0, y0, w, h, frame))[..., 3:4]
+            shape = np.concatenate([shape, matte], axis=-1).astype(np.float32)
+        return shape
 
     @staticmethod
     def _draw_shape_raw(kind, p, x0, y0, w, h, frame):
@@ -9361,6 +9369,11 @@ class Evaluator:
             straight = _draw.ramp_colour({**p, "color0_red": p["color0_red"], "color0_green": p["color0_green"],
                                           "color0_blue": p["color0_blue"], "color0_alpha": p["color0_alpha"]},
                                          x0, y0, w, h, str(p.get("ramp_type", "linear")), c1)
+            if _draw.nuke_blend("Ramp", p):
+                # Nuke's Ramp has one colour: the picture goes to it along the ramp (the weight is the matte), so `color0` has no say.
+                weight = _draw.ramp_weight(p, x0, y0, w, h, str(p.get("ramp_type", "linear")), ramp_node=True)[..., None] * _draw.cover(p, np.ones((h, w, 1)))
+                alpha = weight * c1[3]
+                return np.concatenate([np.broadcast_to(np.asarray(c1[:3], np.float64), (h, w, 3)) * alpha, alpha], axis=-1).astype(np.float32)
             alpha = straight[..., 3:4] * _draw.cover(p, np.ones((h, w, 1)))
             return np.concatenate([straight[..., :3] * alpha, alpha], axis=-1).astype(np.float32)
         xs = np.arange(x0, x0 + w, dtype=np.float64)
@@ -9403,6 +9416,27 @@ class Evaluator:
 
     @staticmethod
     def _rectangle_shape(p, x0, y0, w, h):
+        if _draw.nuke_blend("Rectangle", p):
+            # Nuke 17.0v6: `softness` is a width in pixels; each of the four edges contributes smoothstep(d / (softness + 1)) with d the number of
+            # pixels from the edge counting the pixel itself (the first pixel inside is 1), and the matte is their product.
+            xs = np.arange(x0, x0 + w, dtype=np.float64)
+            ys = _draw.rows(p, y0, h)
+            bx, by = float(p["box_x"]), float(p["box_y"])
+            bw, bh = float(p["box_width"]), float(p["box_height"])
+            width = float(p.get("softness", 0.0)) + 1.0
+
+            def edge(d):
+                t = np.clip(d / width, 0.0, 1.0)
+                return t * t * (3.0 - 2.0 * t)
+            across = edge(xs - bx + 1.0) * edge(bx + bw - xs)
+            down = edge(ys - by + 1.0) * edge(by + bh - ys)
+            coverage = _draw.cover(p, down[:, None] * across[None, :])
+            ramp = p.get("ramp", "none")
+            if ramp != "none":
+                straight = _draw.ramp_colour(p, x0, y0, w, h, ramp, (p["red"], p["green"], p["blue"], p["alpha"]))
+                alpha = coverage * straight[..., 3]
+                return np.concatenate([straight[..., :3] * alpha[..., None], alpha[..., None]], axis=-1).astype(np.float32)
+            return Evaluator._paint_coverage(p, coverage)
         dist, bw, bh = Evaluator._box_edge_distance(p, x0, y0, w, h)
         softness = float(p.get("softness", 0.0)) * min(bw, bh) / 2.0
         coverage = (dist >= 0).astype(np.float64) if softness < 1e-9 else np.clip(dist / softness, 0.0, 1.0)
@@ -9443,12 +9477,36 @@ class Evaluator:
         return np.clip(float(line_width) - phase, 0.0, 1.0)
 
     @staticmethod
+    def _grid_lines_nuke(index, extent, spacing, number, offset, size):
+        """Line coverage (0..1) along one axis for pixel indices `index`, as Nuke 17.0v6 renders the Grid: lines at `offset + k * step` for
+        k = 0, 1, ... with `step = (extent - 1) / number` (so `number` squares are bounded by `number + 1` lines, the last one on the final
+        pixel), or `spacing` when `number` is 0. A line spans `size` pixels from its position and a pixel spans [i, i + 1]: its coverage is the
+        overlap."""
+        step = (float(extent) - 1.0) / float(number) if number > 0 else float(spacing)
+        count = int(number) + 1 if number > 0 else int(np.ceil(float(extent) / max(step, 1e-9))) + 2
+        index = np.asarray(index, dtype=np.float64)
+        total = np.zeros_like(index)
+        for k in range(count):
+            pos = float(offset) + k * step
+            total = total + np.clip(np.minimum(index + 1.0, pos + float(size)) - np.maximum(index, pos), 0.0, 1.0)
+        return np.clip(total, 0.0, 1.0)
+
+    @staticmethod
     def _grid_shape(p, x0, y0, w, h):
-        cols = Evaluator._grid_lines(np.arange(x0, x0 + w, dtype=np.float64), p["width"], p["spacing_x"],
-                                     p["number_x"], p["grid_offset_x"], p["line_width"])
-        rows = Evaluator._grid_lines(_draw.rows(p, y0, h), p["height"], p["spacing_y"],
-                                     p["number_y"], p["grid_offset_y"], p["line_width"])
-        coverage = _draw.cover(p, np.maximum(rows[:, None], cols[None, :]))
+        if _draw.nuke_blend("Grid", p):
+            cols = Evaluator._grid_lines_nuke(np.arange(x0, x0 + w, dtype=np.float64), p["width"], p["spacing_x"], p["number_x"],
+                                              p["grid_offset_x"], p["line_width"])
+            rows = Evaluator._grid_lines_nuke(_draw.rows(p, y0, h), p["height"], p["spacing_y"], p["number_y"], p["grid_offset_y"], p["line_width"])
+        else:
+            cols = Evaluator._grid_lines(np.arange(x0, x0 + w, dtype=np.float64), p["width"], p["spacing_x"],
+                                         p["number_x"], p["grid_offset_x"], p["line_width"])
+            rows = Evaluator._grid_lines(_draw.rows(p, y0, h), p["height"], p["spacing_y"],
+                                         p["number_y"], p["grid_offset_y"], p["line_width"])
+        if _draw.nuke_blend("Grid", p):
+            # where a row line crosses a column line Nuke 17.0v6 combines the two coverages as a union, 1 - (1 - a)(1 - b)
+            coverage = _draw.cover(p, 1.0 - (1.0 - rows[:, None]) * (1.0 - cols[None, :]))
+        else:
+            coverage = _draw.cover(p, np.maximum(rows[:, None], cols[None, :]))
         if str(p.get("ramp", "none")) != "none" and not _draw.is_legacy(p):
             straight = _draw.ramp_colour(p, x0, y0, w, h, p["ramp"], (p["red"], p["green"], p["blue"], p["alpha"]))
             alpha = coverage * straight[..., 3]

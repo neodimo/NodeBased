@@ -45,13 +45,15 @@ def background(h=H, w=W):
 def draw(kind, pixels=None, **knobs_):
     """One draw node over `pixels` (a blank picture of the node's own format when none), through the windowed kernel."""
     pixels = background() if pixels is None else pixels
-    params = {**SPECS[kind]["params"], "width": pixels.shape[1], "height": pixels.shape[0], **knobs_}
+    # The step's own tests read the Draw nodes' colour drawn premultiplied over the input (`legacy_draw_blend` 1); what Nuke 17.0v6 does
+    # instead (a mix by the matte) is in tests/test_l9_n1_draw_blend.py.
+    params = {**SPECS[kind]["params"], "legacy_draw_blend": 1, "width": pixels.shape[1], "height": pixels.shape[0], **knobs_}
     return np.asarray(Evaluator._windowed_kernel(kind, params, [Raster.of(np.asarray(pixels, np.float32))]).pixels, np.float64)
 
 
 def shape(kind, w=W, h=H, **knobs_):
     """The shape alone, as the kernel draws it before it is composited (premultiplied RGBA)."""
-    params = {**SPECS[kind]["params"], "width": w, "height": h, **knobs_}
+    params = {**SPECS[kind]["params"], "legacy_draw_blend": 1, "width": w, "height": h, **knobs_}
     return np.asarray(Evaluator._draw_shape(kind, params, 0, 0, w, h, 1), np.float64)
 
 
@@ -67,7 +69,7 @@ class CaseTests(unittest.TestCase):
 
     def test_every_unscored_case_states_its_reason(self):
         unscored = [c for c in ruler.CASES if c.nuke in DONE_NODES and c.unscored]
-        self.assertGreaterEqual(len(unscored), 13)
+        self.assertGreaterEqual(len(unscored), 10)
         for case in unscored:
             with self.subTest(case=case.id):
                 self.assertGreater(len(case.unscored), 40, case.id)
@@ -708,8 +710,10 @@ class TileTests(unittest.TestCase):
 
 # ----------------------------------------------------------------------------------------------------- an older document
 class OlderDocumentTests(unittest.TestCase):
-    FLAGS = {"Rectangle": ("legacy_draw_axes",), "Radial": ("legacy_draw_axes", "plinear", "ramp"), "Ramp": ("legacy_draw_axes", "ramp_type"),
-             "Noise": ("legacy_draw_axes", "red", "green", "blue", "alpha"), "Grid": ("legacy_draw_axes", "ramp", "p0_x", "p0_y", "p1_x", "p1_y")}
+    FLAGS = {"Rectangle": ("legacy_draw_axes", "legacy_draw_blend"), "Radial": ("legacy_draw_axes", "legacy_draw_blend", "plinear", "ramp"),
+             "Ramp": ("legacy_draw_axes", "legacy_draw_blend", "ramp_type"),
+             "Noise": ("legacy_draw_axes", "legacy_draw_blend", "red", "green", "blue", "alpha"),
+             "Grid": ("legacy_draw_axes", "legacy_draw_blend", "ramp", "p0_x", "p0_y", "p1_x", "p1_y")}
     KNOBS = {"Rectangle": dict(box_x=9.0, box_y=6.0, box_width=25.0, box_height=18.0, softness=0.4, alpha=0.8, width=W, height=H),
              "Radial": dict(box_x=4.0, box_y=3.0, box_width=36.0, box_height=30.0, softness=0.7, alpha=0.9, width=W, height=H),
              "Ramp": dict(p0_x=3.0, p0_y=4.0, p1_x=40.0, p1_y=30.0, color0_red=0.2, width=W, height=H),

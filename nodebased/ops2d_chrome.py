@@ -906,7 +906,16 @@ def shape_chrome(kind, p, shape):
 def compose_draw(kind, p, shape, background):
     """The shape over its background (or replacing it), written only to the `output` channels."""
     cfg = draw_config(kind, p)
-    over = shape if (cfg is not None and cfg.replace) else (shape + background * (1.0 - shape[..., 3:4])).astype(np.float32)
+    if shape.shape[-1] == 5:
+        # Nuke's mix (drawbehaviour.nuke_blend): the fifth channel is the matte; the colour is the straight rgb the shape was drawn in.
+        matte, shape = shape[..., 4:5], shape[..., :4]
+        alpha = shape[..., 3:4]
+        colour = np.where(alpha > 1e-9, shape[..., :3] / np.where(alpha > 1e-9, alpha, 1.0), 0.0)
+        drawn = np.concatenate([colour * matte, alpha], axis=-1)
+        keep = np.float32(0.0) if (cfg is not None and cfg.replace) else (1.0 - matte)
+        over = (drawn + background * keep).astype(np.float32)
+    else:
+        over = shape if (cfg is not None and cfg.replace) else (shape + background * (1.0 - shape[..., 3:4])).astype(np.float32)
     if cfg is None or cfg.output == "rgba":
         return over
     selected = parse_channels(cfg.output)

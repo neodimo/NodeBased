@@ -528,7 +528,8 @@
     {"nodebased": ["maskChannelInput"], "nuke": ["maskChannelInput"], "kind": "same"},
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
-    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"}
+    {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["legacy_draw_blend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes mixed their colour in by the matte as Nuke 17 does keep the premultiplied over; lane 9 step N1"}
    ],
    "skip_default": ["area"]
   },
@@ -559,6 +560,7 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["legacy_draw_blend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes mixed their colour in by the matte as Nuke 17 does keep the premultiplied over; lane 9 step N1"},
     {"nodebased": ["ramp_type"], "nuke": ["type"], "kind": "renamed", "reason": "the ramp type (linear, plinear, smooth0, smooth1, smooth)"}
    ]
   },
@@ -585,6 +587,7 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["legacy_draw_blend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes mixed their colour in by the matte as Nuke 17 does keep the premultiplied over; lane 9 step N1"},
     {"nodebased": ["plinear"], "nuke": ["plinear"], "kind": "same"},
     {"nodebased": ["ramp"], "nuke": ["ramp"], "kind": "same"},
     {"nodebased": ["p0_x", "p0_y"], "nuke": ["p0"], "kind": "components", "reason": "point stored as scalar coordinates"},
@@ -633,6 +636,7 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["legacy_draw_blend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes mixed their colour in by the matte as Nuke 17 does keep the premultiplied over; lane 9 step N1"},
     {"nodebased": ["red", "green", "blue", "alpha"], "nuke": ["color"], "kind": "components", "reason": "NodeBased stores the colour as scalar params; Nuke has one colour knob"}
    ]
   },
@@ -1067,6 +1071,7 @@
     {"nodebased": ["invert_mask"], "nuke": ["invert_mask"], "kind": "same"},
     {"nodebased": ["inject"], "nuke": ["inject"], "kind": "same"},
     {"nodebased": ["legacy_draw_axes"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes followed Nuke keep y counted from the top and a ramp sampled at the pixel index; lane 9 step C"},
+    {"nodebased": ["legacy_draw_blend"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Draw nodes mixed their colour in by the matte as Nuke 17 does keep the premultiplied over; lane 9 step N1"},
     {"nodebased": ["ramp"], "nuke": ["ramp"], "kind": "same"},
     {"nodebased": ["p0_x", "p0_y"], "nuke": ["p0"], "kind": "components", "reason": "point stored as scalar coordinates"},
     {"nodebased": ["p1_x", "p1_y"], "nuke": ["p1"], "kind": "components", "reason": "point stored as scalar coordinates"},
@@ -2321,6 +2326,7 @@
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "`filter` is already Transform's pixel-filter choice in the shared CHOICES; the blur's is box, triangle, quadratic or gaussian"},
     {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["legacy_kernel"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Blur, Sharpen, Soften and Laplacian used Nuke 17's own filter kernels keep the integer-radius ones (and Laplacian blur minus picture); lane 9 step N1"},
     {"nodebased": ["quality"], "nuke": ["quality"], "kind": "same"}
    ]
   },
@@ -2341,6 +2347,7 @@
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "`filter` is already Transform's pixel-filter choice in the shared CHOICES; the blur's is box, triangle, quadratic or gaussian"},
     {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["legacy_kernel"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Blur, Sharpen, Soften and Laplacian used Nuke 17's own filter kernels keep the integer-radius ones (and Laplacian blur minus picture); lane 9 step N1"},
     {"nodebased": ["quality"], "nuke": ["quailty"], "kind": "renamed", "reason": "the guide spells this knob `quailty`"},
     {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
     {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"}
@@ -2426,6 +2433,7 @@
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "`filter` is already Transform's pixel-filter choice in the shared CHOICES; the blur's is box, triangle, quadratic or gaussian"},
     {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["legacy_kernel"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Blur, Sharpen, Soften and Laplacian used Nuke 17's own filter kernels keep the integer-radius ones (and Laplacian blur minus picture); lane 9 step N1"},
     {"nodebased": ["quality"], "nuke": ["quailty"], "kind": "renamed", "reason": "the guide spells this knob `quailty`"},
     {"nodebased": ["minimum"], "nuke": ["minimum"], "kind": "same"},
     {"nodebased": ["maximum"], "nuke": ["maximum"], "kind": "same"},
@@ -2953,6 +2961,7 @@
     {"nodebased": ["kernel_filter"], "nuke": ["filter"], "kind": "renamed", "reason": "same control under another name; Nuke's scripting name is `filter`"},
     {"nodebased": ["quality"], "nuke": ["quailty"], "kind": "renamed", "reason": "the guide spells the scripting name `quailty`"},
     {"nodebased": ["crop"], "nuke": ["crop"], "kind": "same"},
+    {"nodebased": ["legacy_kernel"], "kind": "extra", "reason": "NodeBased-only: graphs saved before Blur, Sharpen, Soften and Laplacian used Nuke 17's own filter kernels keep the integer-radius ones (and Laplacian blur minus picture); lane 9 step N1"},
     {"nodebased": ["legacy_laplacian"], "kind": "extra", "reason": "NodeBased-only: graphs saved before the Laplacian had a size, filter and quality keep the fixed 3x3 cross; lane 9 step A"}
    ]
   },

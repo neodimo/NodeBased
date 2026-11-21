@@ -67,11 +67,13 @@ PLINEAR_GAMMA = 2.2
 RAMP_POINTS = {"p0_x": 100.0, "p0_y": 100.0, "p1_x": 100.0, "p1_y": 400.0,
                "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0}
 
-NEW = {kind: {FLAG: 0} for kind in KINDS}
-NEW["Ramp"] = {FLAG: 0, "ramp_type": "linear"}
-NEW["Radial"] = {FLAG: 0, "plinear": 0, "ramp": "none", **RAMP_POINTS}
-NEW["Grid"] = {FLAG: 0, "ramp": "none", **RAMP_POINTS}
-NEW["Noise"] = {FLAG: 0, **NOISE_COLOUR}
+BLEND = "legacy_draw_blend"       # lane 9 step N1: Nuke 17's own mix of the drawn colour with the input (see `nuke_blend`)
+
+NEW = {kind: {FLAG: 0, BLEND: 0} for kind in KINDS}
+NEW["Ramp"] = {FLAG: 0, BLEND: 0, "ramp_type": "linear"}
+NEW["Radial"] = {FLAG: 0, BLEND: 0, "plinear": 0, "ramp": "none", **RAMP_POINTS}
+NEW["Grid"] = {FLAG: 0, BLEND: 0, "ramp": "none", **RAMP_POINTS}
+NEW["Noise"] = {FLAG: 0, BLEND: 0, **NOISE_COLOUR}
 NEW["Dither"] = {"legacy_dither": 0, "monodither": 0, "static_seed": 0, "bits": 0, "dither_amount": 0.1}
 # The guide's presets list (Grain: `presets`): six film stocks and `other`. It gives no default ("N/A") and no values for any stock, so the list starts at
 # NodeBased's own `none` and choosing a stock sets no other knob (nothing is invented); lane 9 step X5.
@@ -84,7 +86,7 @@ NEW["EdgeExtend"] = {"legacy_edge_extend": 0, "source_premultiplied": 0, "premul
 NEW["Roto"] = {"legacy_roto_alpha": 0, "legacy_roto_shapes": 0}
 NEW["LightWrap"] = {"legacy_lightwrap_grade": 0, "legacy_lightwrap_luma": 0}
 NEW["RotoPaint"] = {"legacy_paint_replace": 0}
-LEGACY = {kind: {FLAG: 1} for kind in KINDS}
+LEGACY = {kind: {FLAG: 1, BLEND: 1} for kind in KINDS}
 LEGACY["Roto"] = {"legacy_roto_alpha": 1, "legacy_roto_shapes": 1}
 LEGACY["LightWrap"] = {"legacy_lightwrap_grade": 1, "legacy_lightwrap_luma": 1}
 LEGACY["RotoPaint"] = {"legacy_paint_replace": 1}
@@ -92,15 +94,15 @@ LEGACY["Defocus"] = {"legacy_defocus": 1, "scale": 1.0}
 LEGACY["ZDefocus"] = {"legacy_zdefocus": 1, "zdefocus_math": "depth", "size": 25.0, **_zdefocusknobs.UPGRADE}
 LEGACY["EdgeExtend"] = {"legacy_edge_extend": 1, "source_premultiplied": 1, "premultiply": 0, "erode": 0.0}
 ZDEFOCUS_MATH = ("direct", "depth", "far = 0", "-direct", "-depth", "far = -0")
-LEGACY["Ramp"] = {FLAG: 1, "ramp_type": "linear"}
-LEGACY["Radial"] = {FLAG: 1, "plinear": 0, "ramp": "none", **RAMP_POINTS}
-LEGACY["Grid"] = {FLAG: 1, "ramp": "none", **RAMP_POINTS}
-LEGACY["Noise"] = {FLAG: 1, **NOISE_COLOUR}
+LEGACY["Ramp"] = {FLAG: 1, BLEND: 1, "ramp_type": "linear"}
+LEGACY["Radial"] = {FLAG: 1, BLEND: 1, "plinear": 0, "ramp": "none", **RAMP_POINTS}
+LEGACY["Grid"] = {FLAG: 1, BLEND: 1, "ramp": "none", **RAMP_POINTS}
+LEGACY["Noise"] = {FLAG: 1, BLEND: 1, **NOISE_COLOUR}
 LEGACY["Dither"] = {"legacy_dither": 1, "monodither": 0, "static_seed": 0}
 LEGACY["Grain"] = {"legacy_grain": 1, "presets": "none", "red_i": 0.6, "green_i": 0.6, "blue_i": 0.6, "minimum_red": 0.0, "minimum_green": 0.0, "minimum_blue": 0.0,
                    "maskgrain": 0, "invert_mask": 0}
 LIMITS = {"legacy_roto_alpha": (0, 1), "legacy_roto_shapes": (0, 1), "legacy_lightwrap_grade": (0, 1), "legacy_lightwrap_luma": (0, 1), "legacy_paint_replace": (0, 1), "legacy_defocus": (0, 1), "legacy_zdefocus": (0, 1), "legacy_edge_extend": (0, 1), "source_premultiplied": (0, 1), "premultiply": (0, 1),
-          "erode": (-100.0, 100.0), FLAG: (0, 1), "plinear": (0, 1), "legacy_dither": (0, 1), "monodither": (0, 1), "static_seed": (0, 1), "legacy_grain": (0, 1),
+          "erode": (-100.0, 100.0), FLAG: (0, 1), BLEND: (0, 1), "plinear": (0, 1), "legacy_dither": (0, 1), "monodither": (0, 1), "static_seed": (0, 1), "legacy_grain": (0, 1),
           "red_i": (0.0, 1.0), "green_i": (0.0, 1.0), "blue_i": (0.0, 1.0), "minimum_red": (-1000.0, 1000.0), "minimum_green": (-1000.0, 1000.0),
           "minimum_blue": (-1000.0, 1000.0), "maskgrain": (0, 1), **_zdefocusknobs.LIMITS}
 GRAIN_SCALE = 0.12
@@ -144,6 +146,14 @@ def is_legacy(p):
 COVERAGE_KINDS = ("Rectangle", "Radial", "Ramp", "Grid", "Noise")
 
 
+def nuke_blend(kind, p):
+    """True when the Draw node mixes its colour into the picture the way Nuke 17.0v6 renders it: every channel (the alpha too) goes from the
+    input's value to the colour's by the matte (shape coverage times opacity, for a Ramp the ramp's weight), `out = in * (1 - m) + colour * m`.
+    The colour's own alpha is a value drawn into the alpha channel, not a second coverage (a colour of alpha 0.8 over an opaque shape gives rgb
+    equal to the colour and alpha 0.8 inside). An older node drew the colour premultiplied over the input."""
+    return kind in COVERAGE_KINDS and not int(p.get(BLEND, 1))
+
+
 def inverts_coverage(kind, p):
     """True when the node's `invert` is applied to the shape's coverage, before the colour and its alpha: the guide's "inverts the new
     rectangle and non-rectangle areas". An older node inverted the finished alpha instead (a colour with alpha 0.8 then gave 0.2 inside
@@ -165,12 +175,21 @@ def rows(p, y0, h):
     return index if is_legacy(p) else float(p["height"]) - 1.0 - index
 
 
-def ease(t, kind):
+def ease(t, kind, nuke=False):
     """The ramp's amount for a position `t` along it (0 at point 0, 1 at point 1, already clamped): the guide's five ramp types.
 
     `smooth0` eases into point 0 (the colours there are spread wider), `smooth1` into point 1 and `smooth` into both; the guide
     gives the words and not the curves, so these are the usual quadratic and smoothstep forms. `plinear` is the linear ramp seen
-    through a display gamma."""
+    through a display gamma. With `nuke` (the Ramp node, BLEND 0) the curves are the ones Nuke 17.0v6 renders for it (the `ramp` menu of Rectangle, Radial and Grid renders smooth0 as t^2, smooth1 as 1 - (1 - t)^2 and smooth as the smoothstep, as here without `nuke`): smooth0 `2 t^2 - t^3`, smooth1 its mirror
+    `1 - (2 u^2 - u^3)` with `u = 1 - t`, smooth the smoothstep `3 t^2 - 2 t^3` and plinear `t^3`."""
+    if nuke:
+        if kind == "smooth0":
+            return 2.0 * t * t - t * t * t
+        if kind == "smooth1":
+            u = 1.0 - t
+            return 1.0 - (2.0 * u * u - u * u * u)
+        if kind == "plinear":
+            return t * t * t
     if kind == "smooth0":
         return t * t
     if kind == "smooth1":
@@ -188,8 +207,8 @@ def ramp_position(p, x0, y0, w, h):
     legacy = is_legacy(p)
     xs = np.arange(x0, x0 + w, dtype=np.float64)
     ys = rows(p, y0, h)
-    if not legacy:
-        xs, ys = xs + 0.5, ys + 0.5
+    if not legacy and int(p.get(BLEND, 1)):
+        xs, ys = xs + 0.5, ys + 0.5                 # the pixel's centre; Nuke 17.0v6's own renders measure from the pixel's index (BLEND 0)
     xx, yy = np.meshgrid(xs, ys)
     p0x, p0y = float(p.get("p0_x", 0.0)), float(p.get("p0_y", 0.0))
     dx, dy = float(p.get("p1_x", 1.0)) - p0x, float(p.get("p1_y", 0.0)) - p0y
@@ -199,10 +218,11 @@ def ramp_position(p, x0, y0, w, h):
     return ((xx - p0x) * dx + (yy - p0y) * dy) / denom
 
 
-def ramp_weight(p, x0, y0, w, h, kind):
-    """The 0..1 weight of the high colour at each pixel for the ramp `kind` of the node's p0 and p1."""
+def ramp_weight(p, x0, y0, w, h, kind, ramp_node=False):
+    """The 0..1 weight of the high colour at each pixel for the ramp `kind` of the node's p0 and p1. `ramp_node` is the Ramp node itself, whose
+    smooth0, smooth1 and plinear curves differ from the ones Rectangle's, Radial's and Grid's `ramp` menu uses (see `ease`)."""
     t = np.clip(ramp_position(p, x0, y0, w, h), 0.0, 1.0)
-    return ease(t, kind)
+    return ease(t, kind, nuke=ramp_node and not int(p.get(BLEND, 1)))
 
 
 def ramp_colour(p, x0, y0, w, h, kind, high):

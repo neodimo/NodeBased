@@ -1950,7 +1950,7 @@ LIMITS = {"input_number": (1, 64), "enabled": (0, 1), "splat_write_overwrite": (
           "spacing_x": (1.0, 16384.0), "spacing_y": (1.0, 16384.0), "number_x": (0, 4096), "number_y": (0, 4096),
           "grid_offset_x": (-16384.0, 16384.0), "grid_offset_y": (-16384.0, 16384.0), "line_width": (0.0, 4096.0),
           # Shared fraction-of-the-box-radius softness for both Radial and Rectangle.
-          "softness": (0.0, 1.0),
+          "softness": (0.0, 1000.0),
           "z_slice": (-100000.0, 100000.0), "octaves": (1, 32), "lacunarity": (0.01, 8.0),
           "seed": (0, 2147483647), "font_size": (1.0, 2000.0),
           "fps": (0.01, 1000.0), "drop_frame": (0, 1), "margin": (0.0, 8192.0), "bar": (0, 1), "bar_opacity": (0.0, 1.0),
@@ -3273,9 +3273,11 @@ def upgrade_document(document):
             _fluid_auto_substeps(doc["nodes"])
         doc["version"] = 39
     if isinstance(doc, dict) and doc.get("version") == 39:
-        # v39 -> v40 (lane 9 step N1): Blur, Sharpen, Soften and Laplacian use Nuke 17's own filters (box as a width in pixels, triangle, quadratic and
+        # v39 -> v40 (lane 9 step N1): the Draw nodes (Rectangle, Radial, Ramp, Grid, Noise) mix their colour in by the matte as Nuke 17.0v6 renders it (`legacy_draw_blend` 1 keeps the older premultiplied over); Blur, Sharpen, Soften and Laplacian use Nuke 17's own filters (box as a width in pixels, triangle, quadratic and
         # gaussian with Nuke's size-to-weight mapping, measured from its renders: blurknobs.nuke_weights). A node of those kinds saved before keeps
         # the integer-radius kernels (and Laplacian its sign) through `legacy_kernel` 1; a node made since carries 0. Group graphs too.
+        _DRAW_BLEND_KINDS = ("Rectangle", "Radial", "Ramp", "Grid", "Noise")     # lane 9 step N1: the Draw nodes mix their colour in by the matte as Nuke 17 does
+
         def _blur_kernel(scope):
             for current in scope.values():
                 if not isinstance(current, dict):
@@ -3283,6 +3285,8 @@ def upgrade_document(document):
                 params = current.get("params")
                 if isinstance(params, dict) and current.get("type") in ("Blur", "Sharpen", "Soften", "Laplacian"):
                     params.setdefault("legacy_kernel", 1)
+                if isinstance(params, dict) and current.get("type") in _DRAW_BLEND_KINDS:
+                    params.setdefault("legacy_draw_blend", 1)           # the Draw nodes mixed the colour in premultiplied over the picture
                 graph = current.get("graph")
                 if isinstance(graph, dict) and isinstance(graph.get("nodes"), dict):
                     _blur_kernel(graph["nodes"])
