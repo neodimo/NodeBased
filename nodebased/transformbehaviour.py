@@ -21,6 +21,14 @@ document renders bit for bit as it did. A node created now gets the new reading 
   and their turn was the transpose (a reflection), not a rotation. A Reformat to a box with force this shape off makes the output
   "approximately the same shape as the original" (`reformat_box_shape`); older nodes always made it exactly the box (`box_fixed` 1
   on load). Black outside and clamp are the Transform ones, on the same filters.
+* Transform, filters at the picture's edge (`legacy_transform_filters`): measured against Nuke 17.0v6's own renders on 11/21, a filter
+  tap beyond the picture reads the picture's edge pixel, and black outside blanks only a sample whose position falls outside the
+  picture's pixels (transparent black), for the guide's filters (Keys to Sinc4). Older nodes read the taps beyond the picture as
+  black. Nuke's `cubic` is the B = 0, C = 0 cubic (at a half-pixel shift it averages the two neighbours); NodeBased's stays Keys',
+  because the GPU island renders cubic too and both must change together.
+* Reformat, impulse ties (`legacy_reformat_ties`): a scale that lands a sample exactly between two rows takes the row above in Nuke's
+  y-up count, the lower row index of NodeBased's top-down rows (measured against Nuke 17.0v6's own renders on 11/21: halving a
+  16x12 picture keeps rows 0, 2, 4...). Columns already matched. Older nodes took the higher row index.
 * Mirror (`legacy_mirror_window`): "flips the input image around the center of the format area". A picture whose data window is not the
   whole format is reflected to the other side of the format's centre, with its window; older nodes flipped it inside its own window.
 * Position (`legacy_position`): "Positive values move the image up or to the right" and it "fills the area between the original image
@@ -43,17 +51,19 @@ from __future__ import annotations
 import numpy as np
 
 LEGACY = {
-    "Transform": {"legacy_transform_edges": 1, "legacy_shutter_window": 1, "legacy_transform_axes": 1, "legacy_blur_samples": 1},
+    "Transform": {"legacy_transform_edges": 1, "legacy_shutter_window": 1, "legacy_transform_axes": 1, "legacy_blur_samples": 1,
+                  "legacy_transform_filters": 1},
     "CornerPin": {"legacy_shutter_window": 1, "legacy_transform_edges": 1, "legacy_blur_samples": 1},
-    "Reformat": {"legacy_reformat_layout": 1},
+    "Reformat": {"legacy_reformat_layout": 1, "legacy_reformat_ties": 1},
     "Mirror": {"legacy_mirror_window": 1},
     "Position": {"legacy_position": 1},
     "AdjustBBox": {"legacy_adjustbbox": 1},
 }
 NEW = {
-    "Transform": {"legacy_transform_edges": 0, "legacy_shutter_window": 0, "legacy_transform_axes": 0, "legacy_blur_samples": 0},
+    "Transform": {"legacy_transform_edges": 0, "legacy_shutter_window": 0, "legacy_transform_axes": 0, "legacy_blur_samples": 0,
+                  "legacy_transform_filters": 0},
     "CornerPin": {"legacy_shutter_window": 0, "legacy_transform_edges": 0, "legacy_blur_samples": 0},
-    "Reformat": {"legacy_reformat_layout": 0, "box_fixed": 0, "clamp": 0, "black_outside": 1},
+    "Reformat": {"legacy_reformat_layout": 0, "legacy_reformat_ties": 0, "box_fixed": 0, "clamp": 0, "black_outside": 1},
     "Mirror": {"legacy_mirror_window": 0},
     "Position": {"legacy_position": 0},
     "AdjustBBox": {"legacy_adjustbbox": 0},
@@ -186,12 +196,27 @@ def support(name):
     return SUPPORT.get(name, 2)
 
 
-def resample(src, sx, sy, name, edge=False):
+NUKE_CUBIC = (_mitchell(0.0, 0.0), 2)
+
+
+def nuke_resample(src, sx, sy, name, black_outside=True):
+    """Nuke 17's filtering in a Transform: taps beyond the picture read its edge pixel, and with black outside a sample whose position
+    falls outside the picture's pixels is transparent black. `cubic` here is Nuke's B = 0, C = 0 cubic (not used by Transform yet)."""
+    result = resample(src, sx, sy, name, edge=True, kernel=NUKE_CUBIC if name == "cubic" else None)
+    if black_outside:
+        h, w = src.shape[:2]
+        sx, sy = np.asarray(sx), np.asarray(sy)
+        outside = (sx < -0.5) | (sx > w - 0.5) | (sy < -0.5) | (sy > h - 0.5)
+        result[np.broadcast_to(outside, result.shape[:-1])] = 0.0
+    return result
+
+
+def resample(src, sx, sy, name, edge=False, kernel=None):
     """`src` sampled at the fractional pixel positions (`sx`, `sy`) (pixel i is at i) with the separable kernel `name`.
 
     The weights of the taps are divided by their sum, so a constant picture stays that constant at every position. Taps outside
     the picture read zero (black outside), or, with `edge`, the nearest edge pixel (the outermost pixels carried outwards)."""
-    weight, radius = KERNELS[name]
+    weight, radius = kernel or KERNELS[name]
     h, w = src.shape[:2]
     sx = np.asarray(sx, np.float64)
     sy = np.asarray(sy, np.float64)

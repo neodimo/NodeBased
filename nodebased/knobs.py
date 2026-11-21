@@ -1064,6 +1064,8 @@ KNOB_LAYOUT = {
                   help="Open and close the shutter the older way round. Set on graphs saved before the shutter followed Nuke."),
         KnobGroup("bool", ("legacy_transform_axes",), label="Legacy axes",
                   help="Move the picture down and turn it clockwise for a positive translate Y and rotate. Set on graphs saved before the directions followed Nuke."),
+        KnobGroup("bool", ("legacy_transform_filters",), label="Legacy edge filtering",
+                  help="Read black beyond the picture's edge while filtering. Set on graphs saved before Transform's filters matched Nuke's edges."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     # Nuke's Crop tab in Nuke's order: box (x, y, w, h), softness, reformat, intersect, black outside. The box counts rows from the top,
     # where Nuke counts y from the bottom (docs/PARITY_2D.md).
@@ -1110,6 +1112,8 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("preserve_bbox",), label="Preserve bounding box"),
         KnobGroup("bool", ("legacy_reformat_layout",), label="Legacy layout",
                   help="Line the top left corners up when center is off and turn by transposing. Set on graphs saved before they followed Nuke."),
+        KnobGroup("bool", ("legacy_reformat_ties",), label="Legacy sample ties",
+                  help="A sample exactly between two rows takes the lower one on screen. Set on graphs saved before Reformat matched Nuke's rows."),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     # Nuke's CornerPin2D tab in Nuke's order: the four to points each with its enable, extra matrix, invert, filter, clamp, black outside
     # and the motion blur knobs; the from points sit on a tab of their own in Nuke, so they come last here under a heading.

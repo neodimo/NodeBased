@@ -10246,8 +10246,8 @@ class Evaluator:
         sy_frac = sy - 0.5 - src_box.y
         # Nuke's black outside off carries the picture's outermost pixels over the area it does not cover; clamp keeps the filtered
         # result inside the range of the input. A node without the knobs (TVIScale, an older document) is black outside, unclamped.
-        result = Evaluator._resample(src, sx_frac, sy_frac, p["filter"],
-                                     clamp=not int(p.get("black_outside", 1))).astype(np.float32)
+        result = Evaluator._resample(src, sx_frac, sy_frac, p["filter"], clamp=not int(p.get("black_outside", 1)),
+                                     ties_up=not _transformbehaviour.is_legacy("Reformat", p, "legacy_reformat_ties")).astype(np.float32)
         if int(p.get("clamp", 0)):
             result = _transformbehaviour.value_clamp(result, src)
         return result
@@ -10337,7 +10337,10 @@ class Evaluator:
             return result
         forward = Evaluator._transform_forward_matrix(p)
         inverse = np.linalg.inv(forward)
-        separable_cubic = (filter == "cubic" and rotate % 360.0 == 0 and scale == 1.0
+        # Nuke 17's filters at the picture's edge (nodebased/transformbehaviour.py); a node without the flag reads the older way.
+        # Cubic stays Keys' on both: the GPU island (nodebased/gpu2d.py) renders it and must agree with this path.
+        nuke_filters = nuke_edges and filter in _TRANSFORM_KERNELS and not int(extras.get("legacy_transform_filters", 1))
+        separable_cubic = (not nuke_filters and filter == "cubic" and rotate % 360.0 == 0 and scale == 1.0
                            and p.get("scale_mode", "uniform") == "uniform"
                            and p.get("skew_x", 0.0) == 0.0 and p.get("skew_y", 0.0) == 0.0
                            and not p.get("invert", 0))
@@ -10371,6 +10374,9 @@ class Evaluator:
         # Translation-only cubic transforms have separable sample coordinates. Reuse four
         # horizontal and four vertical taps instead of constructing sixteen full-frame gathers.
         # Keep the general path for rotations, scale, skew and perspective-like transforms.
+        if nuke_filters:
+            result = _transformbehaviour.nuke_resample(src, sx_frac, sy_frac, filter, black_outside=not edge_pixels)
+            return _transformbehaviour.value_clamp(result, src) if clamp else result
         if nuke_edges:
             result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=edge_pixels).astype(np.float32)
             return _transformbehaviour.value_clamp(result, src) if clamp else result
@@ -10489,7 +10495,7 @@ class Evaluator:
         return axis_sample(horizontal, sy, axis=0)
 
     @staticmethod
-    def _resample(src, sx_frac, sy_frac, filter, clamp=False):
+    def _resample(src, sx_frac, sy_frac, filter, clamp=False, ties_up=False):
         h, w = src.shape[:2]
         if clamp:
             sx_frac = np.clip(sx_frac, 0.0, max(0.0, w - 1.0))
@@ -10499,7 +10505,8 @@ class Evaluator:
             return _transformbehaviour.resample(src, sx_frac, sy_frac, filter, edge=clamp)
         if filter in ("nearest", "impulse"):
             xi = np.floor(sx_frac + 0.5).astype(np.int32)
-            yi = np.floor(sy_frac + 0.5).astype(np.int32)
+            # ties_up: a sample exactly between two rows takes the upper one on screen, as Nuke's y-up impulse does (Reformat).
+            yi = (np.ceil(sy_frac - 0.5) if ties_up else np.floor(sy_frac + 0.5)).astype(np.int32)
             valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
             xi_c = np.clip(xi, 0, w - 1)
             yi_c = np.clip(yi, 0, h - 1)

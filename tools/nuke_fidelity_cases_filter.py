@@ -152,10 +152,11 @@ def _moved(fx, dx, dy, edge):
     return out, (np.ones(src.shape, bool) if edge else np.broadcast_to(inside[..., None], src.shape).copy()), inside
 
 
-def _placed(fx, out_w, out_h, scale_x, scale_y, offset_x, offset_y, edge=False, flip=False, flop=False, turn=False):
+def _placed(fx, out_w, out_h, scale_x, scale_y, offset_x, offset_y, edge=False, flip=False, flop=False, turn=False, ties_up=False):
     """The picture `fx["A"]` scaled by (`scale_x`, `scale_y`) with its upper left corner at (`offset_x`, `offset_y`) inside an
     `out_w` x `out_h` format, each output pixel taking the input pixel its centre lies in (impulse), then flipped, flopped or turned
-    counter-clockwise. Outside the picture the colour is zero (alpha not compared) or, with `edge`, the nearest edge pixel."""
+    counter-clockwise. Outside the picture the colour is zero (alpha not compared) or, with `edge`, the nearest edge pixel. With `ties_up`
+    a centre exactly on the line between two rows lies in the upper one, as in Nuke 17's render, which counts rows upwards (11/21)."""
     src = fx["A"].astype(np.float64)
     h, w = src.shape[:2]
     if turn:                                                   # work in the frame the picture is placed in, then turn it
@@ -165,7 +166,7 @@ def _placed(fx, out_w, out_h, scale_x, scale_y, offset_x, offset_y, edge=False, 
     for y in range(out_h):
         for x in range(out_w):
             i = int(math.floor((x + 0.5 - offset_x) / scale_x))
-            j = int(math.floor((y + 0.5 - offset_y) / scale_y))
+            j = int(math.ceil((y + 0.5 - offset_y) / scale_y)) - 1 if ties_up else int(math.floor((y + 0.5 - offset_y) / scale_y))
             if 0 <= i < w and 0 <= j < h:
                 ref[y, x] = src[j, i]
             elif edge:
@@ -741,17 +742,17 @@ def cases():
              "Reformat turn: 'rotates the image 90 degrees counter-clockwise' (the box is the turned picture's size)")
     case("reformat_scale_type_halves", "Reformat", "Reformat", (("type", "scale"), ("scale", 0.5), ("resize", "distort")), "Reformat",
          {"filter": "nearest", "reformat_type": "scale", "scale": 0.5, "resize_type": "distort"},
-         lambda fx: _placed(fx, 8, 6, 0.5, 0.5, 0.0, 0.0), "guide",
+         lambda fx: _placed(fx, 8, 6, 0.5, 0.5, 0.0, 0.0, ties_up=True), "guide",
          "Reformat scale 0.5: 'set the output width and height to a multiple of the input size' (a 16 x 12 picture becomes 8 x 6, each output "
-         f"pixel taking the input pixel its centre lies in) ({reformat_page})")
+         f"pixel taking the input pixel its centre lies in, the upper row where it lies on the line between two, as Nuke 17 renders it) ({reformat_page})")
     case("reformat_scale_split_scales_each_direction", "Reformat", "Reformat", (("type", "scale"), ("scale", "{0.5 0.25}"), ("resize", "distort")),
          "Reformat", {"filter": "nearest", "reformat_type": "scale", "scale": [0.5, 0.25], "resize_type": "distort"},
-         lambda fx: _placed(fx, 8, 3, 0.5, 0.25, 0.0, 0.0), "guide",
+         lambda fx: _placed(fx, 8, 3, 0.5, 0.25, 0.0, 0.0, ties_up=True), "guide",
          "Reformat scale: 'To scale each direction separately using different scale factors, click the 2 button' (0.5 across and 0.25 "
          f"down make a 16 x 12 picture 8 x 3) ({reformat_page})")
     reformat("reformat_force_this_shape_off_keeps_the_shape", (("type", "to box"), ("box_width", 40), ("box_height", 40), ("box_fixed", False),
                                                                  ("resize", "width")),
-             box(40, 40, resize_type="width", box_fixed=0), lambda fx: _placed(fx, 40, 30, 2.5, 2.5, 0.0, 0.0), "guide",
+             box(40, 40, resize_type="width", box_fixed=0), lambda fx: _placed(fx, 40, 30, 2.5, 2.5, 0.0, 0.0, ties_up=True), "guide",
              "Reformat force this shape off: 'the output image is approximately the same shape as the original, rounded to the nearest integer "
              "number of pixels' (a 16 x 12 picture to a 40 wide box at resize width makes 40 x 30)")
     reformat("reformat_black_outside_off_takes_edge_pixels", nk(32, 48, resize="fit", black_outside=False),
