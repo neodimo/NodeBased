@@ -1,3 +1,7 @@
+## Lane 2 step N1 (11/20): Color, Keyer and Channel nodes follow Nuke 17.0v6's renders; schema 39
+
+Lane 2 rows matching Nuke: 249 to 281 of 566. Overall fidelity 87.5. Seven kernels changed behind legacy flags (see TASKLOG.md of the same date); the migration `v38 -> v39` sets `legacy_gamma_power`, `older_channel_maths`, `older_negatives`, `older_exposure_maths`, `older_alpha`, `older_unclamped_range`, `older_blank_expression` and PLogLin's channels `all` on saved nodes. Grade gamma with the new curve has no GPU kernel (`map_grade` raises `Unsupported`, so it runs on the processor).
+
 ## Lane 6 step Fluids 18 B (11/20): the solver is sound; the shot's one substep per frame removes the large-scale swirl on finer grids
 
 ## Continuous mode merge: Lane 9 (2D behaviour B, Claude Sonnet 5.5) (10:35 AM on 2026-11-21 PDT)

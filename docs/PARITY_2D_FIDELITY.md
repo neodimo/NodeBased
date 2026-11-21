@@ -187,10 +187,10 @@ Columns: the Nuke node, the NodeBased kind paired with it, the row's PARITY_2D s
 | 14 | OCIOLogConvert | `OCIOLogConvert` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (2/2) | 100 | - | unmeasured |
 | 14 | OCIOLookTransform | `OCIOLookTransform` | supported | 100.0 | 100.0 | 100 (14/14) | 100 (4/4) | 100 | 100 | 100 | 100 (3/3) | 100 | - | unmeasured |
 | 15 | Log2Lin | `Log2Lin` | supported | 100.0 | 100.0 | 100 (5/5) | 100 (5/5) | 100 | 100 | 100 | 100 (8/8) | 100 | - | unmeasured |
-| 15 | PLogLin | `PLogLin` | supported | 97.1 | 96.7 | 100 (5/5) | 100 (5/5) | 100 | 67 | 100 | 100 (6/6) | 100 | - | unmeasured |
+| 15 | PLogLin | `PLogLin` | supported | 96.4 | 95.9 | 100 (5/5) | 100 (5/5) | 92 | 67 | 100 | 100 (6/6) | 100 | - | unmeasured |
 | 16 | ColorTransfer | `ColorTransfer` | supported | 100.0 | 100.0 | 100 (1/1) | - | - | 100 | - | 100 (4/4) | - | - | unmeasured |
 | 16 | MatchGrade | `MatchGrade` | supported | 99.6 | 100.0 | 100 (33/33) | - | 100 | 100 | - | - | 98 | - | unmeasured |
-| 17 | Expression | `Expression` | supported | 100.0 | 100.0 | 100 (16/16) | - | 100 | 100 | 100 | 100 (15/15) | 100 | - | unmeasured |
+| 17 | Expression | `Expression` | supported | 100.0 | 100.0 | 100 (16/16) | - | 100 | 100 | 100 | 100 (14/14) | 100 | - | unmeasured |
 | 18 | CrossTalk | `CrossTalk` | supported | 100.0 | 100.0 | 100 (1/1) | - | 100 | 100 | 100 | 100 (5/5) | - | - | unmeasured |
 | 19 | Posterize | `Posterize` | supported | 100.0 | 100.0 | 100 (1/1) | 100 (1/1) | 100 | 100 | 100 | 100 (1/1) | 100 | - | unmeasured |
 | 19 | SoftClip | `SoftClip` | supported | 100.0 | 100.0 | 100 (3/3) | 100 (2/2) | 100 | 100 | - | 100 (5/5) | 100 | - | unmeasured |
@@ -560,9 +560,9 @@ Ranked by `rank weight * (100 - fidelity)`, the share of the overall shortfall e
 | 24 | Blend (Merge #8) | `Blend` | 0.16 | 98.8 | nothing missing that the guide lists |
 | 25 | IBKGizmo (Keyer #7) | `IBKGizmo` | 0.14 | 98.1 | primary knobs missing: `autolevels` |
 | 26 | Radial (Draw #5) | `Radial` | 0.13 | 99.3 | nothing missing that the guide lists |
-| 27 | Flare (Draw #11) | `Flare` | 0.12 | 96.1 | 7 secondary knobs missing: `speedup`, `MultiPenta`, `LgRainbow`, `Bright`, `ManyBright` ... |
-| 28 | VectorBlur (Filter #13) | `VectorBlur` | 0.10 | 95.0 | primary knobs missing: `mv_presets` |
-| 29 | PLogLin (Color #15) | `PLogLin` | 0.10 | 97.1 | sockets missing: `` |
+| 27 | PLogLin (Color #15) | `PLogLin` | 0.12 | 96.4 | sockets missing: `` |
+| 28 | Flare (Draw #11) | `Flare` | 0.12 | 96.1 | 7 secondary knobs missing: `speedup`, `MultiPenta`, `LgRainbow`, `Bright`, `ManyBright` ... |
+| 29 | VectorBlur (Filter #13) | `VectorBlur` | 0.10 | 95.0 | primary knobs missing: `mv_presets` |
 | 30 | Sparkles (Draw #11) | `Sparkles` | 0.09 | 97.1 | 4 secondary knobs missing: `sparkle_crawl`, `motion`, `direction`, `fadeTolerance` |
 
 ## Formula cases
@@ -694,7 +694,7 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `hsv_masks` | convention | not scored: the masks are channel knobs of the node in Nuke and extra input sockets in NodeBased, and how a mask combines with the range weights is not published | - | - |
 | `hsv_hdr_values` | convention | not scored: the sources describe HSV for 0 to 1 colour; what Nuke does to hue, saturation and value outside it is not published | - | - |
 | `toe_black_to_lift_white_untouched` | guide | pass | within tolerance | - |
-| `toe_default_lift_is_none` | guide | pass | within tolerance | - |
+| `toe_default_lift_is_none` | convention | pass | within tolerance | - |
 | `toe_rolloff_shape` | guide | not scored: the guide says only that the lift fades toward the whites; the shape of the rolloff, where it ends, and what a negative value does are not published (NodeBased fades it by (1 - x / 0.2) squared up to 0.2, a width its own `toe` knob sets) | - | - |
 | `softclip_none` | guide | pass | within tolerance | - |
 | `softclip_log_endpoints` | guide | pass | within tolerance | - |
@@ -754,7 +754,7 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `colorlookup_smooth_keys` | guide | not scored: the page names the curve editor but not the spline Nuke fits through keys added there (smooth is its default); the cases above use linear segments, whose shape is the same in any editor, and NodeBased's smooth and Hermite segments cannot be compared without that spline | - | - |
 | `colorlookup_master_with_channel` | guide | not scored: the page says the master curve represents all channels but not how it combines with a channel's own curve (NodeBased runs the master first, then the channel) | - | - |
 | `colorlookup_precomputed_table_steps` | guide | not scored: the page says a table 'between 0 and the value specified in the range field' is used but not how many entries it holds, so its rounding cannot be reproduced (NodeBased evaluates the curves exactly, as Nuke does with the table off) | - | - |
-| `expression_blank_is_zero` | guide | pass | within tolerance | - |
+| `expression_blank_is_zero` | convention | not scored: a blank row changes nothing in Nuke 17.0v6, so the reference equals the input and the case can only be judged against Nuke's own render | - | - |
 | `expression_arithmetic_precedence` | convention | pass | within tolerance | - |
 | `expression_conditional` | convention | pass | within tolerance | - |
 | `expression_equality` | guide | pass | within tolerance | - |
@@ -885,10 +885,10 @@ Each case runs one node on the 16 x 12 float fixture (HDR values from -0.5 to 12
 | `channelmerge_min` | guide | pass | within tolerance | - |
 | `channelmerge_minus` | guide | pass | within tolerance | - |
 | `channelmerge_plus` | guide | pass | within tolerance | - |
-| `channelmerge_union` | guide | pass | within tolerance | - |
-| `channelmerge_xor` | guide | pass | within tolerance | - |
-| `channelmerge_multiply` | guide | pass | within tolerance | - |
-| `channelmerge_divide` | guide | pass | within tolerance | - |
+| `channelmerge_union` | convention | pass | within tolerance | - |
+| `channelmerge_xor` | convention | pass | within tolerance | - |
+| `channelmerge_multiply` | convention | pass | within tolerance | - |
+| `channelmerge_divide` | convention | pass | within tolerance | - |
 | `channelmerge_other_channels_selected` | guide | pass | within tolerance | - |
 | `channelmerge_other_channels_are_b` | convention | pass | within tolerance | - |
 | `channelmerge_in` | guide | not scored: the page writes a lower-case a or b, which in Merge are the alphas of A and B; ChannelMerge's A and B are one channel each with no alpha of their own, and the page does not say whether the lower-case letter then means the channel's own value or the alpha of its input (NodeBased reads the channel's own value) | - | - |

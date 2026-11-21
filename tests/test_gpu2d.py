@@ -115,7 +115,7 @@ class MappingTests(unittest.TestCase):
         self.assertFalse(only_exposure["use_multiply"] or only_exposure["use_offset"])
 
     def test_grade_step_e_mapping_carries_the_ramp_gamma_and_clamps(self):
-        m = gpu2d.map_grade(params("Grade", multiply=2.0, offset=0.1, blackpoint=0.25, black=0.5, gamma=2.0, white_clamp=1))
+        m = gpu2d.map_grade(params("Grade", multiply=2.0, offset=0.1, blackpoint=0.25, black=0.5, gamma=2.0, white_clamp=1, legacy_gamma_power=1))
         self.assertEqual(m["mode"], 1)
         slope, shift = gradeknobs.terms(params("Grade", multiply=2.0, offset=0.1, blackpoint=0.25, black=0.5))
         self.assertAlmostEqual(m["slope"], slope, places=6)
@@ -663,12 +663,12 @@ class KernelTests(DeviceTestCase):
         src, matte = self.data.image(37, 23, bands=True), self.data.matte(37, 23)
         for label, over in (("defaults (black clamp on)", {}),
                             ("levels", dict(blackpoint=0.1, whitepoint=1.7, black=0.05, white=0.9)),
-                            ("gamma", dict(gamma=1.8)), ("gamma below one", dict(gamma=0.45, black_clamp=0)),
+                            ("gamma", dict(gamma=1.8, legacy_gamma_power=1)), ("gamma below one", dict(gamma=0.45, black_clamp=0, legacy_gamma_power=1)),
                             ("both clamps", dict(multiply=1.6, offset=-0.1, white_clamp=1)),
                             ("no clamp", dict(multiply=0.7, black_clamp=0)),
                             ("alpha-scaled offset", dict(offset=0.2, offset_by_alpha=1, black_clamp=0)),
                             ("everything", dict(exposure=0.3, multiply=1.2, offset=0.05, blackpoint=0.1, whitepoint=2.0, black=0.1,
-                                                white=0.8, gamma=1.3, white_clamp=1))):
+                                                white=0.8, gamma=1.3, white_clamp=1, legacy_gamma_power=1))):
             for mask in (None, matte):
                 self.assert_matches("Grade", params("Grade", **over, mix=0.8 if mask is not None else 1.0),
                                     [src] + ([mask] if mask is not None else []), label)

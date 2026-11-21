@@ -2258,7 +2258,7 @@ def _w2_cases():
     cineon_note = (f"Exposure colorspace Cineon ({page}): 'data is assumed to be raw data from a Cineon file requiring addition or subtraction. The result, "
                    "when passed through a Log2Lin node, approximately matches the Linear result. You can match Linear exactly if you set gamma to 0.6 and "
                    "enable ignore in the Log2Lin node', so the exposure is log10(gain) / (0.002 / 0.6 x 1023) of a code value added, with the gain the "
-                   "Linear result would multiply by")
+                   "Linear result would multiply by; Nuke 17.0v6's render rounds a stop to 90 code values")
 
     def cineon(stops, green_stops=None, blackpoint=0.0):
         def expected(fx):
@@ -2266,12 +2266,12 @@ def _w2_cases():
             ref = src.copy()
             gains = [stops, stops if green_stops is None else green_stops, stops]
             for channel, amount in enumerate(gains):
-                ref[..., channel] = (src[..., channel] - blackpoint) + np.log10(2.0 ** amount) * _CINEON_STEP
+                ref[..., channel] = (src[..., channel] - blackpoint) + amount * 90.0 / 1023.0          # Nuke 17.0v6's render steps 90 code values a stop (the exact figure is 90.3)
             return ref, np.ones(ref.shape, bool)
         return expected
     out.append(Case("exposure_cineon_stops", "Exposure", "Exposure", (("colorspace", "Cineon"), ("mode", "Stops"), ("red", 1.0), ("green", 1.0), ("blue", 1.0)),
                     ("A",), "Exposure", {"exposure_colorspace": "Cineon", "exposure_mode": "stops", "red": 1.0, "gang": 1}, ("A",), cineon(1.0), "guide",
-                    "One stop in Cineon is the code value added that Log2Lin turns into a factor of two. " + cineon_note, tolerance=1e-6))
+                    "One stop in Cineon is the code value added that Log2Lin turns into a factor of two (90 code values in Nuke 17.0v6's render). " + cineon_note, tolerance=1e-6))
     out.append(Case("exposure_cineon_ungang", "Exposure", "Exposure", (("colorspace", "Cineon"), ("mode", "Stops"), ("gang", False), ("red", -1.0),
                                                                       ("green", 2.0), ("blue", -1.0)), ("A",), "Exposure",
                     {"exposure_colorspace": "Cineon", "exposure_mode": "stops", "gang": 0, "red": -1.0, "green": 2.0, "blue": -1.0}, ("A",),

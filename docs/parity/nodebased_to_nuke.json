@@ -2017,7 +2017,8 @@
     {"nodebased": ["fringe"], "nuke": ["fringe"], "kind": "same"},
     {"nodebased": ["older_log_maths"], "kind": "extra", "reason": "NodeBased-only: the older PLogLin arithmetic (a raw code value, no division by the negative gamma, alpha untouched, log to lin only); a new node follows Josh Pines' formula on a value over 1023, and a graph saved before keeps this on"},
     {"nodebased": ["older_alpha"], "kind": "extra", "reason": "NodeBased-only: an older document converts alpha with the colour; a new node leaves alpha as it was, as Nuke 17.0v6 renders it (schema 39)"}
-   ]
+   ],
+   "default_notes": {"channels": "Nuke 17.0v6's PLogLin node reports channels rgb (read from the node in Nuke) and renders alpha unchanged whichever channels are chosen; the guide's table lists all"}
   },
   "MatchGrade": {
    "nodebased": "MatchGrade",

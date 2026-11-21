@@ -505,8 +505,11 @@ def _cases():
                     grade(multiply=1.5, offset=0.1, blackpoint=0.05, gamma=1.8, reverse=True, black_clamp=False), "convention", grade_note))
 
     def exposure(stops, blackpoint=0.0):
-        return _rgb_only(lambda rgb: ((rgb - blackpoint) * 2.0 ** stops, np.ones(rgb.shape, bool)))
-    exp_note = "Exposure in Stops mode (convention, not stated in the 17.0 page): out = (in - blackpoint) * 2 ** stops"
+        gain = 2.0 ** stops
+        # Nuke 17.0v6's render lifts the black point by the gain: out = gain * in + blackpoint * (gain - 1) / (1 - blackpoint) (blackpoint 0 gives in * gain)
+        return _rgb_only(lambda rgb: (rgb * gain + blackpoint * (gain - 1.0) / (1.0 - blackpoint), np.ones(rgb.shape, bool)))
+    exp_note = ("Exposure in Stops mode (convention, not stated in the 17.0 page): out = gain * in + blackpoint * (gain - 1) / (1 - blackpoint) with gain = 2 ** stops, "
+                "as Nuke 17.0v6 renders it (read at two black points and two gains)")
     out.append(Case("exposure_stops", "Exposure", "Exposure", (("mode", "Stops"), ("red", 1.0), ("green", 1.0), ("blue", 1.0)), ("A",), "Exposure",
                     {"exposure_mode": "stops", "red": 1.0, "gang": 1}, ("A",), exposure(1.0), "convention", exp_note))
     out.append(Case("exposure_stops_blackpoint", "Exposure", "Exposure",
